@@ -60,7 +60,7 @@
 - Create: `docs_md/spec/`
 - Verify: `docs_md/weekly/01_week_foundation_skeleton.plan.md`
 
-- [ ] **Step 1: 创建目录**
+- [x] **Step 1: 创建目录**
 
 Run:
 
@@ -75,7 +75,7 @@ Expected:
 src 和 docs_md/spec 目录存在。
 ```
 
-- [ ] **Step 2: 验证目录**
+- [x] **Step 2: 验证目录**
 
 Run:
 
@@ -100,7 +100,7 @@ True
 - Create: `src/CSharpAiCli.Core/CSharpAiCli.Core.csproj`
 - Create: `src/CSharpAiCli.Tests/CSharpAiCli.Tests.csproj`
 
-- [ ] **Step 1: 创建 solution**
+- [x] **Step 1: 创建 solution**
 
 Run:
 
@@ -114,7 +114,7 @@ Expected:
 The template "Solution File" was created successfully.
 ```
 
-- [ ] **Step 2: 创建 Core class library**
+- [x] **Step 2: 创建 Core class library**
 
 Run:
 
@@ -128,7 +128,7 @@ Expected:
 The template "Class Library" was created successfully.
 ```
 
-- [ ] **Step 3: 创建 CLI console app**
+- [x] **Step 3: 创建 CLI console app**
 
 Run:
 
@@ -142,7 +142,7 @@ Expected:
 The template "Console App" was created successfully.
 ```
 
-- [ ] **Step 4: 创建 xUnit 测试项目**
+- [x] **Step 4: 创建 xUnit 测试项目**
 
 Run:
 
@@ -156,7 +156,7 @@ Expected:
 The template "xUnit Test Project" was created successfully.
 ```
 
-- [ ] **Step 5: 加入 solution**
+- [x] **Step 5: 加入 solution**
 
 Run:
 
@@ -179,7 +179,7 @@ Project ... added to the solution.
 - Modify: `src/CSharpAiCli.Cli/CSharpAiCli.Cli.csproj`
 - Modify: `src/CSharpAiCli.Tests/CSharpAiCli.Tests.csproj`
 
-- [ ] **Step 1: CLI 引用 Core**
+- [x] **Step 1: CLI 引用 Core**
 
 Run:
 
@@ -193,7 +193,7 @@ Expected:
 Reference ... added to the project.
 ```
 
-- [ ] **Step 2: Tests 引用 Core**
+- [x] **Step 2: Tests 引用 Core**
 
 Run:
 
@@ -214,7 +214,7 @@ Reference ... added to the project.
 - Create: `src/CSharpAiCli.Core/ProductInfo.cs`
 - Modify: `src/CSharpAiCli.Tests/UnitTest1.cs`
 
-- [ ] **Step 1: 写失败测试**
+- [x] **Step 1: 写失败测试**
 
 Replace `src/CSharpAiCli.Tests/UnitTest1.cs` with:
 
@@ -233,7 +233,7 @@ public sealed class ProductInfoTests
 }
 ```
 
-- [ ] **Step 2: 运行测试确认失败**
+- [x] **Step 2: 运行测试确认失败**
 
 Run:
 
@@ -247,7 +247,7 @@ Expected:
 测试失败，因为 ProductInfo 类型尚不存在。
 ```
 
-- [ ] **Step 3: 写最小实现**
+- [x] **Step 3: 写最小实现**
 
 Create `src/CSharpAiCli.Core/ProductInfo.cs`:
 
@@ -260,7 +260,7 @@ public static class ProductInfo
 }
 ```
 
-- [ ] **Step 4: 运行测试确认通过**
+- [x] **Step 4: 运行测试确认通过**
 
 Run:
 
@@ -280,7 +280,7 @@ Passed!  - Failed: 0, Passed: 1
 
 - Modify: `src/CSharpAiCli.Cli/Program.cs`
 
-- [ ] **Step 1: 更新 CLI 入口**
+- [x] **Step 1: 更新 CLI 入口**
 
 Replace `src/CSharpAiCli.Cli/Program.cs` with:
 
@@ -290,7 +290,7 @@ using CSharpAiCli.Core;
 Console.WriteLine($"{ProductInfo.CommandName} foundation skeleton");
 ```
 
-- [ ] **Step 2: 运行 CLI smoke check**
+- [x] **Step 2: 运行 CLI smoke check**
 
 Run:
 
@@ -313,7 +313,7 @@ caicli foundation skeleton
 - Verify: `src/CSharpAiCli.Core/CSharpAiCli.Core.csproj`
 - Verify: `src/CSharpAiCli.Tests/CSharpAiCli.Tests.csproj`
 
-- [ ] **Step 1: 构建 solution**
+- [x] **Step 1: 构建 solution**
 
 Run:
 
@@ -327,7 +327,7 @@ Expected:
 Build succeeded.
 ```
 
-- [ ] **Step 2: 运行全部测试**
+- [x] **Step 2: 运行全部测试**
 
 Run:
 
@@ -341,7 +341,7 @@ Expected:
 Passed!  - Failed: 0
 ```
 
-- [ ] **Step 3: 记录第 1 周回顾**
+- [x] **Step 3: 记录第 1 周回顾**
 
 Create `docs_md/weekly/01_week_review.md`:
 
