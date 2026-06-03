@@ -4,16 +4,21 @@ using System.Runtime.InteropServices;
 namespace CSharpAiCli.Core;
 
 public sealed record CliEnvironmentSnapshot(
-    string CurrentDirectory,
-    string UserConfigPath,
-    string WorkspaceConfigPath,
+    WorkspaceContext Workspace,
+    EffectiveConfiguration Configuration,
     string DotnetSdkVersion,
     string DotnetRuntime,
     string TargetFramework,
-    bool HasGlobalJson,
-    bool HasOpenAiApiKey)
+    bool HasGlobalJson)
 {
+    public string CurrentDirectory => Workspace.RootPath;
+    public string UserConfigPath => Configuration.UserConfigPath;
+    public string WorkspaceConfigPath => Configuration.WorkspaceConfigPath;
+    public WorkspaceStatus WorkspaceStatus => Workspace.Status;
+    public bool HasOpenAiApiKey => Configuration.HasApiKey;
+
     public static CliEnvironmentSnapshot Create(
+        string? workspacePath = null,
         string? currentDirectory = null,
         string? userProfile = null,
         string? dotnetSdkVersion = null,
@@ -22,21 +27,20 @@ public sealed record CliEnvironmentSnapshot(
         bool? hasGlobalJson = null)
     {
         currentDirectory ??= Environment.CurrentDirectory;
-        userProfile ??= Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
         dotnetSdkVersion ??= ReadDotnetSdkVersion();
         dotnetRuntime ??= RuntimeInformation.FrameworkDescription;
-        openAiApiKey ??= Environment.GetEnvironmentVariable("OPENAI_API_KEY");
-        hasGlobalJson ??= File.Exists(Path.Combine(currentDirectory, "global.json"));
+
+        WorkspaceContext workspace = WorkspaceContext.Detect(workspacePath, currentDirectory);
+        EffectiveConfiguration configuration = ConfigLoader.Load(workspace, userProfile, openAiApiKey);
+        hasGlobalJson ??= File.Exists(Path.Combine(workspace.RootPath, "global.json"));
 
         return new CliEnvironmentSnapshot(
-            CurrentDirectory: currentDirectory,
-            UserConfigPath: Path.Combine(userProfile, ".caicli", "config.json"),
-            WorkspaceConfigPath: Path.Combine(currentDirectory, ".caicli", "config.json"),
+            Workspace: workspace,
+            Configuration: configuration,
             DotnetSdkVersion: dotnetSdkVersion,
             DotnetRuntime: dotnetRuntime,
             TargetFramework: ProductInfo.TargetFramework,
-            HasGlobalJson: hasGlobalJson.Value,
-            HasOpenAiApiKey: !string.IsNullOrWhiteSpace(openAiApiKey));
+            HasGlobalJson: hasGlobalJson.Value);
     }
 
     private static string ReadDotnetSdkVersion()

@@ -7,9 +7,11 @@ public sealed record DoctorReport(IReadOnlyList<string> Lines)
         ArgumentNullException.ThrowIfNull(snapshot);
 
         string sdkLock = snapshot.HasGlobalJson ? "global.json found" : "not locked";
-        string apiKeyStatus = snapshot.HasOpenAiApiKey ? "present" : "missing";
+        string apiKeyStatus = snapshot.Configuration.HasApiKey
+            ? $"present ({snapshot.Configuration.ApiKeySource})"
+            : "missing";
 
-        return new DoctorReport(
+        List<string> lines =
         [
             $"{ProductInfo.DisplayName} doctor",
             $"command: {ProductInfo.CommandName}",
@@ -18,14 +20,33 @@ public sealed record DoctorReport(IReadOnlyList<string> Lines)
             $"dotnet runtime: {snapshot.DotnetRuntime}",
             $"sdk lock: {sdkLock}",
             $"workspace: {snapshot.CurrentDirectory}",
+            $"workspace status: {FormatWorkspaceStatus(snapshot.WorkspaceStatus)}",
             $"user config: {snapshot.UserConfigPath}",
             $"workspace config: {snapshot.WorkspaceConfigPath}",
             $"api key: {apiKeyStatus}"
-        ]);
+        ];
+
+        foreach (string warning in snapshot.Configuration.Warnings)
+        {
+            lines.Add($"config warning: {warning}");
+        }
+
+        return new DoctorReport(lines);
     }
 
     public string ToDisplayText()
     {
         return string.Join(Environment.NewLine, Lines);
+    }
+
+    private static string FormatWorkspaceStatus(WorkspaceStatus status)
+    {
+        return status switch
+        {
+            WorkspaceStatus.Ready => "ready",
+            WorkspaceStatus.Missing => "missing",
+            WorkspaceStatus.NotDirectory => "not directory",
+            _ => "unknown"
+        };
     }
 }

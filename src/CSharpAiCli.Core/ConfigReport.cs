@@ -6,21 +6,47 @@ public sealed record ConfigReport(IReadOnlyList<string> Lines)
     {
         ArgumentNullException.ThrowIfNull(snapshot);
 
-        string apiKeyStatus = snapshot.HasOpenAiApiKey ? "present" : "missing";
+        EffectiveConfiguration configuration = snapshot.Configuration;
+        string apiKeyStatus = configuration.HasApiKey ? "present" : "missing";
+        string loadedConfigPaths = configuration.LoadedConfigPaths.Count == 0
+            ? "none"
+            : string.Join("; ", configuration.LoadedConfigPaths);
 
-        return new ConfigReport(
+        List<string> lines =
         [
             $"{ProductInfo.DisplayName} effective configuration",
-            $"workspace: {snapshot.CurrentDirectory}",
-            $"userConfigPath: {snapshot.UserConfigPath}",
-            $"workspaceConfigPath: {snapshot.WorkspaceConfigPath}",
-            "model: not configured",
-            $"apiKey: {apiKeyStatus}"
-        ]);
+            $"workspace: {configuration.WorkspaceRoot}",
+            $"workspaceStatus: {FormatWorkspaceStatus(snapshot.WorkspaceStatus)}",
+            $"userConfigPath: {configuration.UserConfigPath}",
+            $"workspaceConfigPath: {configuration.WorkspaceConfigPath}",
+            $"model: {configuration.Model}",
+            $"modelSource: {configuration.ModelSource}",
+            $"apiKey: {apiKeyStatus}",
+            $"apiKeySource: {configuration.ApiKeySource}",
+            $"loadedConfigPaths: {loadedConfigPaths}"
+        ];
+
+        foreach (string warning in configuration.Warnings)
+        {
+            lines.Add($"configWarning: {warning}");
+        }
+
+        return new ConfigReport(lines);
     }
 
     public string ToDisplayText()
     {
         return string.Join(Environment.NewLine, Lines);
+    }
+
+    private static string FormatWorkspaceStatus(WorkspaceStatus status)
+    {
+        return status switch
+        {
+            WorkspaceStatus.Ready => "ready",
+            WorkspaceStatus.Missing => "missing",
+            WorkspaceStatus.NotDirectory => "not directory",
+            _ => "unknown"
+        };
     }
 }
