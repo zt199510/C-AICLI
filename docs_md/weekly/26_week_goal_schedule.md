@@ -6,7 +6,9 @@
 
 - 第 1 周已稳固：solution 骨架、仓库布局、文档目录和测试项目已建立。详见 `01_week_review.md`。
 - 第 2 周已稳固：`System.CommandLine` 根命令、`doctor`、`config get`、运行环境快照和配置报告测试已完成。详见 `02_week_review.md`。
-- 当前下一步是第 3 周：添加工作区检测、配置加载、配置优先级、密钥脱敏测试和 `--workspace <path>` 覆盖支持。
+- 第 3 周已稳固：工作区检测、配置加载、配置优先级、密钥脱敏和 `--workspace <path>` 覆盖支持已完成。详见 `03_week_review.md`。
+- 第 4 周已验收：日志、诊断、`chat` Phase 02 边界提示和阶段 01 文档已完成。详见 `04_week_review.md`。
+- 当前下一步是第 5 周：添加 model client 抽象和 OpenAI SDK Responses API 实现。
 - 运行时仍为 `net9.0`，本地 .NET SDK 为 `9.0.308`，当前没有 `global.json` SDK 锁定。
 
 ## 假设
@@ -26,8 +28,8 @@
 |---:|---|---|---|---|---|
 | 1 | 2024-06-03 至 2024-06-09 | 阶段 01 | 已稳固 | 创建 solution 骨架、仓库布局、第一批文档和测试项目。详见 `01_week_foundation_skeleton.plan.md` 和 `01_week_review.md`。 | 已验证：`dotnet build` 和 `dotnet test` 可在空骨架上运行。 |
 | 2 | 2024-06-10 至 2024-06-16 | 阶段 01 | 已稳固 | 添加 System.CommandLine 根命令、`doctor`、`config get` 和帮助输出。详见 `02_week_cli_commands_doctor_config.plan.md` 和 `02_week_review.md`。 | 已验证：CLI 帮助包含 `doctor` 和 `config`；无 API key 时 `doctor` 可用；`config get` 不打印密钥值。 |
-| 3 | 2024-06-17 至 2024-06-23 | 阶段 01 | 下一步 | 添加工作区检测器和配置加载器，并支持密钥遮蔽。 | 工作区覆盖和配置遮蔽测试通过。 |
-| 4 | 2024-06-24 至 2024-06-30 | 阶段 01 | 计划中 | 稳定基础能力、日志、诊断和阶段 01 文档。 | 阶段 01 验收清单通过。 |
+| 3 | 2024-06-17 至 2024-06-23 | 阶段 01 | 已稳固 | 添加工作区检测器和配置加载器，并支持密钥遮蔽。详见 `03_week_workspace_config.plan.md` 和 `03_week_review.md`。 | 已验证：工作区覆盖和配置遮蔽测试通过。 |
+| 4 | 2024-06-24 至 2024-06-30 | 阶段 01 | 已验收 | 稳定基础能力、日志、诊断、`chat` Phase 02 边界提示和阶段 01 文档。详见 `04_week_phase01_hardening_acceptance.plan.md` 和 `04_week_review.md`。 | 已验证：阶段 01 验收清单通过。 |
 | 5 | 2024-07-01 至 2024-07-07 | 阶段 02 | 计划中 | 添加 model client 抽象和 OpenAI SDK Responses API 实现。 | smoke 命令可以用已配置凭据调用模型；缺 key 错误清晰。 |
 | 6 | 2024-07-08 至 2024-07-14 | 阶段 02 | 计划中 | 添加用于 chat 输出的终端流式渲染器。 | `caicli chat` 可以流式输出响应。 |
 | 7 | 2024-07-15 至 2024-07-21 | 阶段 02 | 计划中 | 添加会话存储、版本化转录格式和工具调用占位 schema。 | 命名会话可以恢复，并写入可检查转录。 |
