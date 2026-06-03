@@ -1,3 +1,7 @@
-using CSharpAiCli.Core;
+using System.CommandLine;
+using CSharpAiCli.Cli;
 
-Console.WriteLine($"{ProductInfo.CommandName} foundation skeleton");
+return CliCommandFactory
+    .Create(Console.Out)
+    .Parse(args)
+    .Invoke();
