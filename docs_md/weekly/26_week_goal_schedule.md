@@ -8,7 +8,7 @@
 - 第 2 周已稳固：`System.CommandLine` 根命令、`doctor`、`config get`、运行环境快照和配置报告测试已完成。详见 `02_week_review.md`。
 - 第 3 周已稳固：工作区检测、配置加载、配置优先级、密钥脱敏和 `--workspace <path>` 覆盖支持已完成。详见 `03_week_review.md`。
 - 第 4 周已验收：日志、诊断、`chat` Phase 02 边界提示和阶段 01 文档已完成。详见 `04_week_review.md`。
-- 当前下一步是第 5 周：添加 model client 抽象和 OpenAI SDK Responses API 实现。
+- 第 5 周已稳固：model client 抽象、OpenAI SDK Responses API 实现和一次性 `chat "<prompt>"` 模型调用已完成。详见 `05_week_review.md`。
 - 运行时仍为 `net9.0`，本地 .NET SDK 为 `9.0.308`，当前没有 `global.json` SDK 锁定。
 
 ## 假设
@@ -30,7 +30,7 @@
 | 2 | 2024-06-10 至 2024-06-16 | 阶段 01 | 已稳固 | 添加 System.CommandLine 根命令、`doctor`、`config get` 和帮助输出。详见 `02_week_cli_commands_doctor_config.plan.md` 和 `02_week_review.md`。 | 已验证：CLI 帮助包含 `doctor` 和 `config`；无 API key 时 `doctor` 可用；`config get` 不打印密钥值。 |
 | 3 | 2024-06-17 至 2024-06-23 | 阶段 01 | 已稳固 | 添加工作区检测器和配置加载器，并支持密钥遮蔽。详见 `03_week_workspace_config.plan.md` 和 `03_week_review.md`。 | 已验证：工作区覆盖和配置遮蔽测试通过。 |
 | 4 | 2024-06-24 至 2024-06-30 | 阶段 01 | 已验收 | 稳定基础能力、日志、诊断、`chat` Phase 02 边界提示和阶段 01 文档。详见 `04_week_phase01_hardening_acceptance.plan.md` 和 `04_week_review.md`。 | 已验证：阶段 01 验收清单通过。 |
-| 5 | 2024-07-01 至 2024-07-07 | 阶段 02 | 计划中 | 添加 model client 抽象和 OpenAI SDK Responses API 实现。 | smoke 命令可以用已配置凭据调用模型；缺 key 错误清晰。 |
+| 5 | 2024-07-01 至 2024-07-07 | 阶段 02 | 已稳固 | 添加 model client 抽象和 OpenAI SDK Responses API 实现。详见 `05_week_model_client_responses_api.plan.md` 和 `05_week_review.md`。 | 已验证：`chat "<prompt>"` 在凭据和模型可用时可以调用已配置模型路径；缺 model/key 错误清晰；workspace config `apiKey` 会被拒绝用于真实调用。 |
 | 6 | 2024-07-08 至 2024-07-14 | 阶段 02 | 计划中 | 添加用于 chat 输出的终端流式渲染器。 | `caicli chat` 可以流式输出响应。 |
 | 7 | 2024-07-15 至 2024-07-21 | 阶段 02 | 计划中 | 添加会话存储、版本化转录格式和工具调用初始 schema。 | 命名会话可以恢复，并写入可检查转录。 |
 | 8 | 2024-07-22 至 2024-07-28 | 阶段 02 | 计划中 | 添加指令加载、配置优先级、密钥遮蔽和模型错误处理。 | 阶段 02 验收清单通过。 |
