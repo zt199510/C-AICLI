@@ -130,7 +130,7 @@ public sealed class CliCommandFactoryTests
     }
 
     [Fact]
-    public void Chat_command_sends_prompt_to_model_client_and_logs_command()
+    public void Chat_command_streams_prompt_to_model_client_and_logs_command()
     {
         using StringWriter output = new();
         string? receivedWorkspace = null;
@@ -150,16 +150,19 @@ public sealed class CliCommandFactoryTests
                     return CreateSnapshot(workspacePath, apiKey: "sk-test", apiKeySource: "OPENAI_API_KEY", model: "gpt-test");
                 },
                 (commandName, _) => loggedCommands.Add(commandName),
-                _ => chatClient)
+                _ => chatClient,
+                writer => new TerminalChatStreamingRenderer(writer))
             .Parse(["chat", "--workspace", "custom-root", "hello model"])
             .Invoke();
 
         Assert.Equal(0, exitCode);
         Assert.Equal("custom-root", receivedWorkspace);
         Assert.Equal(["chat"], loggedCommands);
-        Assert.Equal("hello model", chatClient.LastPrompt);
-        Assert.Contains("status: completed", output.ToString());
+        Assert.Equal("hello model", chatClient.LastStreamingPrompt);
+        Assert.Null(chatClient.LastNonStreamingPrompt);
+        Assert.Contains("status: streaming", output.ToString());
         Assert.Contains("fake model output", output.ToString());
+        Assert.Contains("status: completed", output.ToString());
     }
 
     private static CliEnvironmentSnapshot CreateSnapshot(string? workspacePath)
@@ -172,7 +175,7 @@ public sealed class CliCommandFactoryTests
     }
 
     [Fact]
-    public void Chat_command_returns_nonzero_for_model_error()
+    public void Chat_command_returns_nonzero_for_streaming_model_error()
     {
         using StringWriter output = new();
         FakeChatModelClient chatClient = new(ChatModelResult.Failure(new ModelError(
@@ -188,7 +191,8 @@ public sealed class CliCommandFactoryTests
                 output,
                 workspacePath => CreateSnapshot(workspacePath, apiKey: null, apiKeySource: "missing", model: "gpt-test"),
                 (_, _) => { },
-                _ => chatClient)
+                _ => chatClient,
+                writer => new TerminalChatStreamingRenderer(writer))
             .Parse(["chat", "hello model"])
             .Invoke();
 
@@ -232,11 +236,12 @@ public sealed class CliCommandFactoryTests
 
     private sealed class FakeChatModelClient(ChatModelResult result) : IChatModelClient
     {
-        public string? LastPrompt { get; private set; }
+        public string? LastNonStreamingPrompt { get; private set; }
+        public string? LastStreamingPrompt { get; private set; }
 
         public ChatModelResult Send(ChatRequest request, CancellationToken cancellationToken = default)
         {
-            LastPrompt = request.Prompt;
+            LastNonStreamingPrompt = request.Prompt;
             return result;
         }
 
@@ -245,7 +250,25 @@ public sealed class CliCommandFactoryTests
             IChatStreamingRenderer renderer,
             CancellationToken cancellationToken = default)
         {
-            LastPrompt = request.Prompt;
+            LastStreamingPrompt = request.Prompt;
+
+            if (result.Response is not null)
+            {
+                renderer.Start(CreateSnapshot(
+                    workspacePath: null,
+                    apiKey: "sk-test",
+                    apiKeySource: "OPENAI_API_KEY",
+                    model: result.Response.Model), result.Response.Provider, result.Response.Model);
+                renderer.WriteDelta(result.Response.Text);
+                renderer.Complete(result.Response);
+                return result;
+            }
+
+            renderer.Fail(CreateSnapshot(
+                workspacePath: null,
+                apiKey: null,
+                apiKeySource: "missing",
+                model: "gpt-test"), result.Error!);
             return result;
         }
     }

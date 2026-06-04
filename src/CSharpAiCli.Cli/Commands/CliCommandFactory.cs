@@ -11,7 +11,8 @@ public static class CliCommandFactory
             output,
             workspacePath => CliEnvironmentSnapshot.Create(workspacePath: workspacePath),
             (commandName, snapshot) => CommandLogger.Append(commandName, snapshot),
-            snapshot => OpenAiResponsesModelClient.Create(snapshot));
+            snapshot => OpenAiResponsesModelClient.Create(snapshot),
+            writer => new TerminalChatStreamingRenderer(writer));
     }
 
     public static RootCommand Create(TextWriter output, Func<string?, CliEnvironmentSnapshot> snapshotProvider)
@@ -20,7 +21,8 @@ public static class CliCommandFactory
             output,
             snapshotProvider,
             (_, _) => { },
-            snapshot => OpenAiResponsesModelClient.Create(snapshot));
+            snapshot => OpenAiResponsesModelClient.Create(snapshot),
+            writer => new TerminalChatStreamingRenderer(writer));
     }
 
     public static RootCommand Create(
@@ -32,7 +34,8 @@ public static class CliCommandFactory
             output,
             snapshotProvider,
             commandLogger,
-            snapshot => OpenAiResponsesModelClient.Create(snapshot));
+            snapshot => OpenAiResponsesModelClient.Create(snapshot),
+            writer => new TerminalChatStreamingRenderer(writer));
     }
 
     public static RootCommand Create(
@@ -41,10 +44,26 @@ public static class CliCommandFactory
         Action<string, CliEnvironmentSnapshot> commandLogger,
         Func<CliEnvironmentSnapshot, IChatModelClient> chatModelClientFactory)
     {
+        return Create(
+            output,
+            snapshotProvider,
+            commandLogger,
+            chatModelClientFactory,
+            writer => new TerminalChatStreamingRenderer(writer));
+    }
+
+    public static RootCommand Create(
+        TextWriter output,
+        Func<string?, CliEnvironmentSnapshot> snapshotProvider,
+        Action<string, CliEnvironmentSnapshot> commandLogger,
+        Func<CliEnvironmentSnapshot, IChatModelClient> chatModelClientFactory,
+        Func<TextWriter, IChatStreamingRenderer> streamingRendererFactory)
+    {
         ArgumentNullException.ThrowIfNull(output);
         ArgumentNullException.ThrowIfNull(snapshotProvider);
         ArgumentNullException.ThrowIfNull(commandLogger);
         ArgumentNullException.ThrowIfNull(chatModelClientFactory);
+        ArgumentNullException.ThrowIfNull(streamingRendererFactory);
 
         RootCommand rootCommand = new($"{ProductInfo.CommandName} - {ProductInfo.Description}");
         Option<string> workspaceOption = new("--workspace")
@@ -91,8 +110,8 @@ public static class CliCommandFactory
             TryWriteCommandLog(commandLogger, "chat", snapshot);
 
             IChatModelClient chatModelClient = chatModelClientFactory(snapshot);
-            ChatModelResult result = chatModelClient.Send(new ChatRequest(prompt));
-            output.WriteLine(ChatModelReport.Create(snapshot, result).ToDisplayText());
+            IChatStreamingRenderer renderer = streamingRendererFactory(output);
+            ChatModelResult result = chatModelClient.SendStreaming(new ChatRequest(prompt), renderer);
             return result.IsSuccess ? 0 : 1;
         });
 
