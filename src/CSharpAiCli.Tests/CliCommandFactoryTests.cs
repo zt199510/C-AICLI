@@ -239,5 +239,14 @@ public sealed class CliCommandFactoryTests
             LastPrompt = request.Prompt;
             return result;
         }
+
+        public ChatModelResult SendStreaming(
+            ChatRequest request,
+            IChatStreamingRenderer renderer,
+            CancellationToken cancellationToken = default)
+        {
+            LastPrompt = request.Prompt;
+            return result;
+        }
     }
 }

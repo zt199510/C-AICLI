@@ -207,6 +207,102 @@ public sealed class OpenAiResponsesModelClientTests
         Assert.DoesNotContain("raw sdk detail", result.Error?.SafeMessage, StringComparison.Ordinal);
     }
 
+    [Fact]
+    public void SendStreaming_writes_deltas_and_returns_completed_response()
+    {
+        FakeGateway gateway = new()
+        {
+            StreamingUpdates =
+            [
+                OpenAiStreamingResponseUpdate.OutputTextDelta("Hel"),
+                OpenAiStreamingResponseUpdate.OutputTextDelta("lo"),
+                OpenAiStreamingResponseUpdate.Completed("resp_stream", "gpt-test")
+            ]
+        };
+        FakeStreamingRenderer renderer = new();
+        OpenAiResponsesModelClient client = new(
+            CreateSnapshot(apiKey: "sk-test", apiKeySource: "OPENAI_API_KEY", model: "gpt-test"),
+            _ => gateway);
+
+        ChatModelResult result = client.SendStreaming(new ChatRequest("hello"), renderer);
+
+        Assert.True(result.IsSuccess);
+        Assert.Equal("Hello", result.Response?.Text);
+        Assert.Equal("resp_stream", result.Response?.ResponseId);
+        Assert.Equal(1, renderer.StartCount);
+        Assert.Equal(["Hel", "lo"], renderer.Deltas);
+        Assert.Equal(1, renderer.CompleteCount);
+        Assert.Null(renderer.Error);
+        Assert.Equal(1, gateway.StreamingCallCount);
+        Assert.Equal(0, gateway.CallCount);
+    }
+
+    [Fact]
+    public void SendStreaming_validation_error_writes_failure_without_calling_gateway()
+    {
+        FakeGateway gateway = new();
+        FakeStreamingRenderer renderer = new();
+        OpenAiResponsesModelClient client = new(
+            CreateSnapshot(apiKey: null, apiKeySource: "missing", model: "gpt-test"),
+            _ => gateway);
+
+        ChatModelResult result = client.SendStreaming(new ChatRequest("hello"), renderer);
+
+        Assert.False(result.IsSuccess);
+        Assert.Equal("missing-openai-api-key", result.Error?.LocalErrorCode);
+        Assert.Equal("missing-openai-api-key", renderer.Error?.LocalErrorCode);
+        Assert.Equal(0, renderer.StartCount);
+        Assert.Equal(0, gateway.StreamingCallCount);
+        Assert.Equal(0, gateway.CallCount);
+    }
+
+    [Fact]
+    public void SendStreaming_returns_retryable_error_when_stream_has_no_text()
+    {
+        FakeGateway gateway = new()
+        {
+            StreamingUpdates =
+            [
+                OpenAiStreamingResponseUpdate.Completed("resp_empty", "gpt-test")
+            ]
+        };
+        FakeStreamingRenderer renderer = new();
+        OpenAiResponsesModelClient client = new(
+            CreateSnapshot(apiKey: "sk-test", apiKeySource: "OPENAI_API_KEY", model: "gpt-test"),
+            _ => gateway);
+
+        ChatModelResult result = client.SendStreaming(new ChatRequest("hello"), renderer);
+
+        Assert.False(result.IsSuccess);
+        Assert.Equal("empty-model-response", result.Error?.LocalErrorCode);
+        Assert.True(result.Error?.Retryable);
+        Assert.Equal("empty-model-response", renderer.Error?.LocalErrorCode);
+        Assert.Equal(1, renderer.StartCount);
+        Assert.Equal(0, renderer.CompleteCount);
+    }
+
+    [Fact]
+    public void SendStreaming_maps_gateway_exception_to_safe_error_and_renderer_failure()
+    {
+        FakeGateway gateway = new()
+        {
+            ExceptionToThrow = new InvalidOperationException("raw sdk detail")
+        };
+        FakeStreamingRenderer renderer = new();
+        OpenAiResponsesModelClient client = new(
+            CreateSnapshot(apiKey: "sk-test", apiKeySource: "OPENAI_API_KEY", model: "gpt-test"),
+            _ => gateway);
+
+        ChatModelResult result = client.SendStreaming(new ChatRequest("hello"), renderer);
+
+        Assert.False(result.IsSuccess);
+        Assert.Equal("openai-client-error", result.Error?.LocalErrorCode);
+        Assert.Equal("openai-client-error", renderer.Error?.LocalErrorCode);
+        Assert.DoesNotContain("raw sdk detail", result.Error?.SafeMessage, StringComparison.Ordinal);
+        Assert.Equal(1, renderer.StartCount);
+        Assert.Equal(0, renderer.CompleteCount);
+    }
+
     private static ClientResultException CreateClientResultException(int status, string rawMessage)
     {
         return new ClientResultException(
@@ -245,6 +341,7 @@ public sealed class OpenAiResponsesModelClientTests
     private sealed class FakeGateway : IOpenAiResponsesGateway
     {
         public int CallCount { get; private set; }
+        public int StreamingCallCount { get; private set; }
         public string? LastModel { get; private set; }
         public string? LastPrompt { get; private set; }
         public Exception? ExceptionToThrow { get; init; }
@@ -252,6 +349,11 @@ public sealed class OpenAiResponsesModelClientTests
             ResponseId: "resp_fake",
             Model: "gpt-test",
             Text: "fake response");
+        public IReadOnlyList<OpenAiStreamingResponseUpdate> StreamingUpdates { get; init; } =
+        [
+            OpenAiStreamingResponseUpdate.OutputTextDelta("fake response"),
+            OpenAiStreamingResponseUpdate.Completed("resp_fake", "gpt-test")
+        ];
 
         public OpenAiResponseEnvelope CreateResponse(string model, string prompt, CancellationToken cancellationToken = default)
         {
@@ -265,6 +367,23 @@ public sealed class OpenAiResponsesModelClientTests
             }
 
             return Response;
+        }
+
+        public IEnumerable<OpenAiStreamingResponseUpdate> CreateResponseStreaming(
+            string model,
+            string prompt,
+            CancellationToken cancellationToken = default)
+        {
+            StreamingCallCount++;
+            LastModel = model;
+            LastPrompt = prompt;
+
+            if (ExceptionToThrow is not null)
+            {
+                throw ExceptionToThrow;
+            }
+
+            return StreamingUpdates;
         }
     }
 
@@ -316,6 +435,34 @@ public sealed class OpenAiResponsesModelClientTests
         {
             values = null;
             return false;
+        }
+    }
+
+    private sealed class FakeStreamingRenderer : IChatStreamingRenderer
+    {
+        public int StartCount { get; private set; }
+        public int CompleteCount { get; private set; }
+        public List<string> Deltas { get; } = [];
+        public ModelError? Error { get; private set; }
+
+        public void Start(CliEnvironmentSnapshot snapshot, string provider, string model)
+        {
+            StartCount++;
+        }
+
+        public void WriteDelta(string textDelta)
+        {
+            Deltas.Add(textDelta);
+        }
+
+        public void Complete(ChatResponse response)
+        {
+            CompleteCount++;
+        }
+
+        public void Fail(CliEnvironmentSnapshot snapshot, ModelError error)
+        {
+            Error = error;
         }
     }
 }
