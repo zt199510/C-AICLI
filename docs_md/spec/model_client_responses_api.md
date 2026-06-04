@@ -189,13 +189,14 @@ StreamingResponseCompletedUpdate
 
 缺少 key smoke：
 
-前置条件：该 smoke 需要没有 `OPENAI_API_KEY`、没有用户配置 `apiKey`，且传入的 workspace 不含 workspace config `apiKey`。建议使用一个临时 workspace，并确认其中没有 `.caicli/config.json` apiKey；不要移动或破坏真实用户配置。若 workspace config 含 `apiKey`，预期安全错误会是 `unsupported-api-key-source`；若用户配置含 `apiKey`，则不会触发 `missing-openai-api-key`，可能进入真实模型调用路径。
+前置条件：该 smoke 需要没有 `OPENAI_API_KEY`、没有用户配置 `apiKey`、没有 workspace config `apiKey`，并且需要从用户配置或临时 workspace config 获得已配置的 `model`。建议使用一个已配置 `model` 且不含 `.caicli/config.json` `apiKey` 的临时 workspace；不要为此删除或改动真实用户配置。若缺少 `model`，预期安全错误会是 `missing-model`；若 workspace config 含 `apiKey`，预期安全错误会是 `unsupported-api-key-source`；若用户配置含 `apiKey`，则不会触发 `missing-openai-api-key`，可能进入真实模型调用路径。
 
 ```powershell
 $oldOpenAiKey = $env:OPENAI_API_KEY
+$smokeWorkspace = "<temporary workspace with configured model and no apiKey>"
 try {
     Remove-Item Env:OPENAI_API_KEY -ErrorAction SilentlyContinue
-    dotnet run --project src/CSharpAiCli.Cli -- chat --workspace . "Reply with OK."
+    dotnet run --project src/CSharpAiCli.Cli -- chat --workspace $smokeWorkspace "Reply with OK."
     $exitCode = $LASTEXITCODE
 } finally {
     if ($null -eq $oldOpenAiKey) {
