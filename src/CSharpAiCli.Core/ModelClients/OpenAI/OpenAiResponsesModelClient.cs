@@ -78,10 +78,13 @@ public sealed class OpenAiResponsesModelClient : IChatModelClient
             return ChatModelResult.Failure(validationError);
         }
 
+        renderer.Start(snapshot, Provider, model);
+
+        ChatModelResult? failureResult = null;
+        ChatResponse? response = null;
+
         try
         {
-            renderer.Start(snapshot, Provider, model);
-
             IOpenAiResponsesGateway gateway = gatewayFactory(apiKey!.Value);
             StringBuilder text = new();
             string responseId = "unknown";
@@ -116,33 +119,37 @@ public sealed class OpenAiResponsesModelClient : IChatModelClient
                 }
             }
 
-            if (text.Length == 0)
+            string responseText = text.ToString();
+            if (string.IsNullOrWhiteSpace(responseText))
             {
-                ChatModelResult result = FailureResult(
+                failureResult = FailureResult(
                     statusCode: null,
                     localErrorCode: "empty-model-response",
                     safeMessage: "Model response did not include output text.",
                     retryable: true);
-
-                renderer.Fail(snapshot, result.Error!);
-                return result;
             }
-
-            ChatResponse response = new(
-                Provider: Provider,
-                Model: responseModel,
-                ResponseId: responseId,
-                Text: text.ToString());
-
-            renderer.Complete(response);
-            return ChatModelResult.Success(response);
+            else
+            {
+                response = new ChatResponse(
+                    Provider: Provider,
+                    Model: responseModel,
+                    ResponseId: responseId,
+                    Text: responseText);
+            }
         }
         catch (Exception exception)
         {
-            ChatModelResult result = MapException(exception);
-            renderer.Fail(snapshot, result.Error!);
-            return result;
+            failureResult = MapException(exception);
         }
+
+        if (failureResult is not null)
+        {
+            renderer.Fail(snapshot, failureResult.Error!);
+            return failureResult;
+        }
+
+        renderer.Complete(response!);
+        return ChatModelResult.Success(response!);
     }
 
     private ModelError? ValidateRequest(

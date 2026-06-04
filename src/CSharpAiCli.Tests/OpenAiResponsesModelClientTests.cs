@@ -282,6 +282,89 @@ public sealed class OpenAiResponsesModelClientTests
     }
 
     [Fact]
+    public void SendStreaming_returns_retryable_error_when_stream_text_is_whitespace_only()
+    {
+        FakeGateway gateway = new()
+        {
+            StreamingUpdates =
+            [
+                OpenAiStreamingResponseUpdate.OutputTextDelta("   "),
+                OpenAiStreamingResponseUpdate.Completed("resp_blank", "gpt-test")
+            ]
+        };
+        FakeStreamingRenderer renderer = new();
+        OpenAiResponsesModelClient client = new(
+            CreateSnapshot(apiKey: "sk-test", apiKeySource: "OPENAI_API_KEY", model: "gpt-test"),
+            _ => gateway);
+
+        ChatModelResult result = client.SendStreaming(new ChatRequest("hello"), renderer);
+
+        Assert.False(result.IsSuccess);
+        Assert.Equal("empty-model-response", result.Error?.LocalErrorCode);
+        Assert.True(result.Error?.Retryable);
+        Assert.Equal("empty-model-response", renderer.Error?.LocalErrorCode);
+        Assert.Equal(1, renderer.StartCount);
+        Assert.Equal(0, renderer.CompleteCount);
+        Assert.Equal(["   "], renderer.Deltas);
+    }
+
+    [Fact]
+    public void SendStreaming_does_not_fail_renderer_after_complete_throws()
+    {
+        FakeGateway gateway = new()
+        {
+            StreamingUpdates =
+            [
+                OpenAiStreamingResponseUpdate.OutputTextDelta("Hello"),
+                OpenAiStreamingResponseUpdate.Completed("resp_stream", "gpt-test")
+            ]
+        };
+        InvalidOperationException exception = new("renderer complete failed");
+        FakeStreamingRenderer renderer = new()
+        {
+            ThrowOnComplete = exception
+        };
+        OpenAiResponsesModelClient client = new(
+            CreateSnapshot(apiKey: "sk-test", apiKeySource: "OPENAI_API_KEY", model: "gpt-test"),
+            _ => gateway);
+
+        InvalidOperationException thrown = Assert.Throws<InvalidOperationException>(
+            () => client.SendStreaming(new ChatRequest("hello"), renderer));
+
+        Assert.Same(exception, thrown);
+        Assert.Equal(1, renderer.CompleteCount);
+        Assert.Equal(0, renderer.FailCount);
+    }
+
+    [Fact]
+    public void SendStreaming_does_not_retry_renderer_fail_when_fail_throws()
+    {
+        FakeGateway gateway = new()
+        {
+            StreamingUpdates =
+            [
+                OpenAiStreamingResponseUpdate.Completed("resp_empty", "gpt-test")
+            ]
+        };
+        InvalidOperationException exception = new("renderer fail failed");
+        FakeStreamingRenderer renderer = new()
+        {
+            ThrowOnFail = exception
+        };
+        OpenAiResponsesModelClient client = new(
+            CreateSnapshot(apiKey: "sk-test", apiKeySource: "OPENAI_API_KEY", model: "gpt-test"),
+            _ => gateway);
+
+        InvalidOperationException thrown = Assert.Throws<InvalidOperationException>(
+            () => client.SendStreaming(new ChatRequest("hello"), renderer));
+
+        Assert.Same(exception, thrown);
+        Assert.Equal(1, renderer.StartCount);
+        Assert.Equal(0, renderer.CompleteCount);
+        Assert.Equal(1, renderer.FailCount);
+    }
+
+    [Fact]
     public void SendStreaming_maps_gateway_exception_to_safe_error_and_renderer_failure()
     {
         FakeGateway gateway = new()
@@ -442,8 +525,12 @@ public sealed class OpenAiResponsesModelClientTests
     {
         public int StartCount { get; private set; }
         public int CompleteCount { get; private set; }
+        public int FailCount { get; private set; }
         public List<string> Deltas { get; } = [];
         public ModelError? Error { get; private set; }
+        public ChatResponse? CompletedResponse { get; private set; }
+        public Exception? ThrowOnComplete { get; init; }
+        public Exception? ThrowOnFail { get; init; }
 
         public void Start(CliEnvironmentSnapshot snapshot, string provider, string model)
         {
@@ -458,11 +545,23 @@ public sealed class OpenAiResponsesModelClientTests
         public void Complete(ChatResponse response)
         {
             CompleteCount++;
+            CompletedResponse = response;
+
+            if (ThrowOnComplete is not null)
+            {
+                throw ThrowOnComplete;
+            }
         }
 
         public void Fail(CliEnvironmentSnapshot snapshot, ModelError error)
         {
+            FailCount++;
             Error = error;
+
+            if (ThrowOnFail is not null)
+            {
+                throw ThrowOnFail;
+            }
         }
     }
 }
