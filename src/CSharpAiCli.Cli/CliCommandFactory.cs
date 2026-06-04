@@ -57,8 +57,20 @@ public static class CliCommandFactory
         });
 
         configCommand.Subcommands.Add(configGetCommand);
+
+        Command chatCommand = new("chat", "Explain the Phase 02 chat boundary for this build.");
+        chatCommand.SetAction(parseResult =>
+        {
+            string? workspacePath = parseResult.GetValue(workspaceOption);
+            CliEnvironmentSnapshot snapshot = snapshotProvider(workspacePath);
+            TryWriteCommandLog(commandLogger, "chat", snapshot);
+            output.WriteLine(ChatUnavailableReport.Create(snapshot).ToDisplayText());
+            return 2;
+        });
+
         rootCommand.Subcommands.Add(doctorCommand);
         rootCommand.Subcommands.Add(configCommand);
+        rootCommand.Subcommands.Add(chatCommand);
 
         return rootCommand;
     }

@@ -129,6 +129,34 @@ public sealed class CliCommandFactoryTests
         Assert.Contains("C# AI CLI doctor", output.ToString());
     }
 
+    [Fact]
+    public void Chat_command_returns_phase_02_boundary_message_and_logs_command()
+    {
+        using StringWriter output = new();
+        string? receivedWorkspace = null;
+        List<string> loggedCommands = [];
+
+        int exitCode = CliCommandFactory
+            .Create(
+                output,
+                workspacePath =>
+                {
+                    receivedWorkspace = workspacePath;
+                    return CreateSnapshot(workspacePath);
+                },
+                (commandName, _) => loggedCommands.Add(commandName))
+            .Parse(["chat", "--workspace", "custom-root"])
+            .Invoke();
+
+        Assert.Equal(2, exitCode);
+        Assert.Equal("custom-root", receivedWorkspace);
+        Assert.Equal(["chat"], loggedCommands);
+        Assert.Contains("C# AI CLI chat", output.ToString());
+        Assert.Contains("status: unavailable in Phase 01", output.ToString());
+        Assert.Contains("planned phase: Phase 02", output.ToString());
+        Assert.Contains("workspace: custom-root", output.ToString());
+    }
+
     private static CliEnvironmentSnapshot CreateSnapshot(string? workspacePath)
     {
         string workspaceRoot = string.IsNullOrWhiteSpace(workspacePath) ? "workspace-root" : workspacePath;
