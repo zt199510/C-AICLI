@@ -39,7 +39,7 @@ dotnet run --project src/CSharpAiCli.Cli -- chat --workspace .
 - `doctor` 输出 SDK、runtime、target framework、SDK lock、workspace、config path、log directory 和 API key 状态。
 - `config get --workspace .` 以 `0` 退出。
 - `config get` 输出 workspace、config path、log directory、model、model source、api key 状态和 api key source。
-- `chat --workspace .` 返回 Phase 02 边界提示，不调用模型。
+- `chat --workspace .` 以 `2` 退出，返回 Phase 02 边界提示，不调用模型。
 - `doctor`、`config get`、`chat`、命令日志和对象字符串不打印原始 API key。
 - 工作区缺失或不是目录时，诊断命令不崩溃。
 - 配置文件缺失时不产生 warning。
