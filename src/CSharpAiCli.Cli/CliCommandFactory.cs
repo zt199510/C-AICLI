@@ -10,12 +10,17 @@ public static class CliCommandFactory
         return Create(
             output,
             workspacePath => CliEnvironmentSnapshot.Create(workspacePath: workspacePath),
-            (commandName, snapshot) => CommandLogger.Append(commandName, snapshot));
+            (commandName, snapshot) => CommandLogger.Append(commandName, snapshot),
+            snapshot => OpenAiResponsesModelClient.Create(snapshot));
     }
 
     public static RootCommand Create(TextWriter output, Func<string?, CliEnvironmentSnapshot> snapshotProvider)
     {
-        return Create(output, snapshotProvider, (_, _) => { });
+        return Create(
+            output,
+            snapshotProvider,
+            (_, _) => { },
+            snapshot => OpenAiResponsesModelClient.Create(snapshot));
     }
 
     public static RootCommand Create(
@@ -23,9 +28,23 @@ public static class CliCommandFactory
         Func<string?, CliEnvironmentSnapshot> snapshotProvider,
         Action<string, CliEnvironmentSnapshot> commandLogger)
     {
+        return Create(
+            output,
+            snapshotProvider,
+            commandLogger,
+            snapshot => OpenAiResponsesModelClient.Create(snapshot));
+    }
+
+    public static RootCommand Create(
+        TextWriter output,
+        Func<string?, CliEnvironmentSnapshot> snapshotProvider,
+        Action<string, CliEnvironmentSnapshot> commandLogger,
+        Func<CliEnvironmentSnapshot, IChatModelClient> chatModelClientFactory)
+    {
         ArgumentNullException.ThrowIfNull(output);
         ArgumentNullException.ThrowIfNull(snapshotProvider);
         ArgumentNullException.ThrowIfNull(commandLogger);
+        ArgumentNullException.ThrowIfNull(chatModelClientFactory);
 
         RootCommand rootCommand = new($"{ProductInfo.CommandName} - {ProductInfo.Description}");
         Option<string> workspaceOption = new("--workspace")
@@ -58,14 +77,23 @@ public static class CliCommandFactory
 
         configCommand.Subcommands.Add(configGetCommand);
 
-        Command chatCommand = new("chat", "Explain the Phase 02 chat boundary for this build.");
+        Command chatCommand = new("chat", "Send one prompt to the configured model.");
+        Argument<string> promptArgument = new("prompt")
+        {
+            Description = "The user message to send to the model.",
+        };
+        chatCommand.Arguments.Add(promptArgument);
         chatCommand.SetAction(parseResult =>
         {
             string? workspacePath = parseResult.GetValue(workspaceOption);
+            string prompt = parseResult.GetValue(promptArgument) ?? string.Empty;
             CliEnvironmentSnapshot snapshot = snapshotProvider(workspacePath);
             TryWriteCommandLog(commandLogger, "chat", snapshot);
-            output.WriteLine(ChatUnavailableReport.Create(snapshot).ToDisplayText());
-            return 2;
+
+            IChatModelClient chatModelClient = chatModelClientFactory(snapshot);
+            ChatModelResult result = chatModelClient.Send(new ChatRequest(prompt));
+            output.WriteLine(ChatModelReport.Create(snapshot, result).ToDisplayText());
+            return result.IsSuccess ? 0 : 1;
         });
 
         rootCommand.Subcommands.Add(doctorCommand);

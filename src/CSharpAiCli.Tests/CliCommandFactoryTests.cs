@@ -130,11 +130,16 @@ public sealed class CliCommandFactoryTests
     }
 
     [Fact]
-    public void Chat_command_returns_phase_02_boundary_message_and_logs_command()
+    public void Chat_command_sends_prompt_to_model_client_and_logs_command()
     {
         using StringWriter output = new();
         string? receivedWorkspace = null;
         List<string> loggedCommands = [];
+        FakeChatModelClient chatClient = new(ChatModelResult.Success(new ChatResponse(
+            Provider: "openai",
+            Model: "gpt-test",
+            ResponseId: "resp_test",
+            Text: "fake model output")));
 
         int exitCode = CliCommandFactory
             .Create(
@@ -142,22 +147,61 @@ public sealed class CliCommandFactoryTests
                 workspacePath =>
                 {
                     receivedWorkspace = workspacePath;
-                    return CreateSnapshot(workspacePath);
+                    return CreateSnapshot(workspacePath, apiKey: "sk-test", apiKeySource: "OPENAI_API_KEY", model: "gpt-test");
                 },
-                (commandName, _) => loggedCommands.Add(commandName))
-            .Parse(["chat", "--workspace", "custom-root"])
+                (commandName, _) => loggedCommands.Add(commandName),
+                _ => chatClient)
+            .Parse(["chat", "--workspace", "custom-root", "hello model"])
             .Invoke();
 
-        Assert.Equal(2, exitCode);
+        Assert.Equal(0, exitCode);
         Assert.Equal("custom-root", receivedWorkspace);
         Assert.Equal(["chat"], loggedCommands);
-        Assert.Contains("C# AI CLI chat", output.ToString());
-        Assert.Contains("status: unavailable in Phase 01", output.ToString());
-        Assert.Contains("planned phase: Phase 02", output.ToString());
-        Assert.Contains("workspace: custom-root", output.ToString());
+        Assert.Equal("hello model", chatClient.LastPrompt);
+        Assert.Contains("status: completed", output.ToString());
+        Assert.Contains("fake model output", output.ToString());
     }
 
     private static CliEnvironmentSnapshot CreateSnapshot(string? workspacePath)
+    {
+        return CreateSnapshot(
+            workspacePath,
+            apiKey: null,
+            apiKeySource: "missing",
+            model: "not configured");
+    }
+
+    [Fact]
+    public void Chat_command_returns_nonzero_for_model_error()
+    {
+        using StringWriter output = new();
+        FakeChatModelClient chatClient = new(ChatModelResult.Failure(new ModelError(
+            Provider: "openai",
+            Operation: "responses.create",
+            StatusCode: null,
+            LocalErrorCode: "missing-openai-api-key",
+            SafeMessage: "OpenAI API key is missing. Set OPENAI_API_KEY or user config apiKey.",
+            Retryable: false)));
+
+        int exitCode = CliCommandFactory
+            .Create(
+                output,
+                workspacePath => CreateSnapshot(workspacePath, apiKey: null, apiKeySource: "missing", model: "gpt-test"),
+                (_, _) => { },
+                _ => chatClient)
+            .Parse(["chat", "hello model"])
+            .Invoke();
+
+        Assert.Equal(1, exitCode);
+        Assert.Contains("status: failed", output.ToString());
+        Assert.Contains("localErrorCode: missing-openai-api-key", output.ToString());
+    }
+
+    private static CliEnvironmentSnapshot CreateSnapshot(
+        string? workspacePath,
+        string? apiKey,
+        string apiKeySource,
+        string model)
     {
         string workspaceRoot = string.IsNullOrWhiteSpace(workspacePath) ? "workspace-root" : workspacePath;
 
@@ -170,10 +214,10 @@ public sealed class CliCommandFactoryTests
             WorkspaceRoot: workspaceRoot,
             UserConfigPath: Path.Combine("user-home", ".caicli", "config.json"),
             WorkspaceConfigPath: Path.Combine(workspaceRoot, ".caicli", "config.json"),
-            Model: "not configured",
-            ModelSource: "default",
-            ApiKey: null,
-            ApiKeySource: "missing",
+            Model: model,
+            ModelSource: model == "not configured" ? "default" : "workspace config",
+            ApiKey: SecretValue.From(apiKey),
+            ApiKeySource: apiKeySource,
             LoadedConfigPaths: [],
             Warnings: []);
 
@@ -184,5 +228,16 @@ public sealed class CliCommandFactoryTests
             DotnetRuntime: ".NET 9.0.0",
             TargetFramework: "net9.0",
             HasGlobalJson: false);
+    }
+
+    private sealed class FakeChatModelClient(ChatModelResult result) : IChatModelClient
+    {
+        public string? LastPrompt { get; private set; }
+
+        public ChatModelResult Send(ChatRequest request, CancellationToken cancellationToken = default)
+        {
+            LastPrompt = request.Prompt;
+            return result;
+        }
     }
 }
