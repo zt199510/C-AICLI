@@ -100,8 +100,16 @@ $exitCode
 真实模型 smoke：
 
 ```powershell
+$oldOpenAiKey = $env:OPENAI_API_KEY
 $env:OPENAI_API_KEY = "<real key from developer environment>"
 dotnet run --project src/CSharpAiCli.Cli -- chat --workspace . "Reply with the single word OK."
+$exitCode = $LASTEXITCODE
+if ($null -eq $oldOpenAiKey) {
+    Remove-Item Env:OPENAI_API_KEY -ErrorAction SilentlyContinue
+} else {
+    $env:OPENAI_API_KEY = $oldOpenAiKey
+}
+$exitCode
 ```
 
 预期：
