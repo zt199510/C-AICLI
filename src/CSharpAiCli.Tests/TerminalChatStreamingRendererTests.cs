@@ -37,6 +37,23 @@ public sealed class TerminalChatStreamingRendererTests
         Assert.DoesNotContain("sk-stream-secret", output, StringComparison.Ordinal);
     }
 
+    [Theory]
+    [InlineData(null, "gpt-test")]
+    [InlineData("", "gpt-test")]
+    [InlineData("openai", null)]
+    [InlineData("openai", "")]
+    public void Start_rejects_null_or_empty_provider_and_model(string? provider, string? model)
+    {
+        using StringWriter writer = new();
+        CliEnvironmentSnapshot snapshot = CreateSnapshot(
+            apiKey: "sk-stream-secret",
+            apiKeySource: "OPENAI_API_KEY");
+        TerminalChatStreamingRenderer renderer = new(writer);
+
+        Assert.ThrowsAny<ArgumentException>(() => renderer.Start(snapshot, provider!, model!));
+        Assert.Equal(string.Empty, writer.ToString());
+    }
+
     [Fact]
     public void Fail_before_start_writes_safe_error_report()
     {

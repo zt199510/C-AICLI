@@ -14,6 +14,8 @@ public sealed class TerminalChatStreamingRenderer : IChatStreamingRenderer
     public void Start(CliEnvironmentSnapshot snapshot, string provider, string model)
     {
         ArgumentNullException.ThrowIfNull(snapshot);
+        ArgumentException.ThrowIfNullOrEmpty(provider);
+        ArgumentException.ThrowIfNullOrEmpty(model);
 
         writer.WriteLine($"{ProductInfo.DisplayName} chat");
         writer.WriteLine($"workspace: {snapshot.CurrentDirectory}");
