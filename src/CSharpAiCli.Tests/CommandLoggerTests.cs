@@ -33,6 +33,7 @@ public sealed class CommandLoggerTests
 
             Assert.Contains("timestampUtc=2026-06-24T08:30:00.0000000Z", log);
             Assert.Contains("command=doctor", log);
+            Assert.Contains($"workspace={workspaceRoot}", log);
             Assert.Contains("workspaceStatus=ready", log);
             Assert.Contains("model=gpt-workspace", log);
             Assert.Contains("modelSource=workspace config", log);
@@ -104,11 +105,15 @@ public sealed class CommandLoggerTests
 
             string logPath = Path.Combine(workspaceRoot, ".caicli", "logs", "2026-06-24.log");
             string log = File.ReadAllText(logPath);
+            string[] nonEmptyLines = File.ReadAllLines(logPath)
+                .Where(line => !string.IsNullOrWhiteSpace(line))
+                .ToArray();
 
             Assert.Contains("command=doctor/config", log);
             Assert.Contains("model=gpt workspace", log);
             Assert.Contains("modelSource=workspace/config", log);
             Assert.Contains("warnings=first warning second warning", log);
+            Assert.Single(nonEmptyLines);
         }
         finally
         {
