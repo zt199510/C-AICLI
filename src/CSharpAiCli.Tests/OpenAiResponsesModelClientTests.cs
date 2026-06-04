@@ -1,3 +1,5 @@
+using System.ClientModel;
+using System.ClientModel.Primitives;
 using CSharpAiCli.Core;
 
 namespace CSharpAiCli.Tests;
@@ -93,6 +95,100 @@ public sealed class OpenAiResponsesModelClientTests
     }
 
     [Fact]
+    public void Send_allows_user_config_api_key_source_and_returns_response_text()
+    {
+        FakeGateway gateway = new()
+        {
+            Response = new OpenAiResponseEnvelope(
+                ResponseId: "resp_user_config",
+                Model: "gpt-test",
+                Text: "hello from user config key")
+        };
+
+        OpenAiResponsesModelClient client = new(
+            CreateSnapshot(apiKey: "sk-user-config", apiKeySource: "user config", model: "gpt-test"),
+            _ => gateway);
+
+        ChatModelResult result = client.Send(new ChatRequest("hello"));
+
+        Assert.True(result.IsSuccess);
+        Assert.Equal("hello from user config key", result.Response?.Text);
+        Assert.Equal(1, gateway.CallCount);
+        Assert.Equal("gpt-test", gateway.LastModel);
+        Assert.Equal("hello", gateway.LastPrompt);
+    }
+
+    [Fact]
+    public void Send_returns_retryable_error_when_response_text_is_empty()
+    {
+        FakeGateway gateway = new()
+        {
+            Response = new OpenAiResponseEnvelope(
+                ResponseId: "resp_empty",
+                Model: "gpt-test",
+                Text: "   ")
+        };
+
+        OpenAiResponsesModelClient client = new(
+            CreateSnapshot(apiKey: "sk-test", apiKeySource: "OPENAI_API_KEY", model: "gpt-test"),
+            _ => gateway);
+
+        ChatModelResult result = client.Send(new ChatRequest("hello"));
+
+        Assert.False(result.IsSuccess);
+        Assert.Equal("empty-model-response", result.Error?.LocalErrorCode);
+        Assert.True(result.Error?.Retryable);
+        Assert.Equal(1, gateway.CallCount);
+    }
+
+    [Fact]
+    public void Send_maps_operation_canceled_exception_to_safe_retryable_error()
+    {
+        FakeGateway gateway = new()
+        {
+            ExceptionToThrow = new OperationCanceledException("raw cancel detail")
+        };
+
+        OpenAiResponsesModelClient client = new(
+            CreateSnapshot(apiKey: "sk-test", apiKeySource: "OPENAI_API_KEY", model: "gpt-test"),
+            _ => gateway);
+
+        ChatModelResult result = client.Send(new ChatRequest("hello"));
+
+        Assert.False(result.IsSuccess);
+        Assert.Equal("model-call-canceled", result.Error?.LocalErrorCode);
+        Assert.True(result.Error?.Retryable);
+        Assert.DoesNotContain("raw cancel detail", result.Error?.SafeMessage, StringComparison.Ordinal);
+    }
+
+    [Theory]
+    [InlineData(429, true, "rate limit")]
+    [InlineData(401, false, "API key")]
+    public void Send_maps_client_result_exception_status_to_safe_http_error(
+        int status,
+        bool expectedRetryable,
+        string expectedSafeMessageFragment)
+    {
+        FakeGateway gateway = new()
+        {
+            ExceptionToThrow = CreateClientResultException(status, "raw http detail")
+        };
+
+        OpenAiResponsesModelClient client = new(
+            CreateSnapshot(apiKey: "sk-test", apiKeySource: "OPENAI_API_KEY", model: "gpt-test"),
+            _ => gateway);
+
+        ChatModelResult result = client.Send(new ChatRequest("hello"));
+
+        Assert.False(result.IsSuccess);
+        Assert.Null(result.Error?.LocalErrorCode);
+        Assert.Equal(status, result.Error?.StatusCode);
+        Assert.Equal(expectedRetryable, result.Error?.Retryable);
+        Assert.Contains(expectedSafeMessageFragment, result.Error?.SafeMessage, StringComparison.Ordinal);
+        Assert.DoesNotContain("raw http detail", result.Error?.SafeMessage, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void Send_maps_gateway_exception_to_safe_local_error()
     {
         FakeGateway gateway = new()
@@ -109,6 +205,14 @@ public sealed class OpenAiResponsesModelClientTests
         Assert.False(result.IsSuccess);
         Assert.Equal("openai-client-error", result.Error?.LocalErrorCode);
         Assert.DoesNotContain("raw sdk detail", result.Error?.SafeMessage, StringComparison.Ordinal);
+    }
+
+    private static ClientResultException CreateClientResultException(int status, string rawMessage)
+    {
+        return new ClientResultException(
+            rawMessage,
+            new FakePipelineResponse(status),
+            innerException: null);
     }
 
     private static CliEnvironmentSnapshot CreateSnapshot(string? apiKey, string apiKeySource, string model)
@@ -161,6 +265,57 @@ public sealed class OpenAiResponsesModelClientTests
             }
 
             return Response;
+        }
+    }
+
+    private sealed class FakePipelineResponse : PipelineResponse
+    {
+        private static readonly PipelineResponseHeaders EmptyHeaders = new FakePipelineResponseHeaders();
+
+        public FakePipelineResponse(int status)
+        {
+            Status = status;
+        }
+
+        public override int Status { get; }
+        public override string ReasonPhrase => string.Empty;
+        protected override PipelineResponseHeaders HeadersCore => EmptyHeaders;
+        public override Stream? ContentStream { get; set; }
+        public override BinaryData Content => BinaryData.FromString(string.Empty);
+        protected override bool IsErrorCore { get; set; }
+
+        public override BinaryData BufferContent(CancellationToken cancellationToken = default)
+        {
+            return Content;
+        }
+
+        public override ValueTask<BinaryData> BufferContentAsync(CancellationToken cancellationToken = default)
+        {
+            return ValueTask.FromResult(Content);
+        }
+
+        public override void Dispose()
+        {
+        }
+    }
+
+    private sealed class FakePipelineResponseHeaders : PipelineResponseHeaders
+    {
+        public override IEnumerator<KeyValuePair<string, string>> GetEnumerator()
+        {
+            return Enumerable.Empty<KeyValuePair<string, string>>().GetEnumerator();
+        }
+
+        public override bool TryGetValue(string name, out string? value)
+        {
+            value = null;
+            return false;
+        }
+
+        public override bool TryGetValues(string name, out IEnumerable<string>? values)
+        {
+            values = null;
+            return false;
         }
     }
 }
