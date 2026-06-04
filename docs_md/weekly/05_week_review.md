@@ -10,6 +10,7 @@
 - `caicli chat "<prompt>"` 已接入一次性非流式模型调用。
 - 缺 API key、缺 model、空 prompt、SDK failure、空模型响应和 cancellation 均有安全错误。
 - workspace config `apiKey` 不用于真实模型调用。
+- `CSharpAiCli.Cli` 和 `CSharpAiCli.Core` 的文件位置已按职责整理：CLI 命令接线放入 `Commands/`，Core 按 chat、configuration、diagnostics、OpenAI model client、product 和 workspace 分区。
 
 ## 验证
 
@@ -19,6 +20,9 @@
 - Full tests
   - 命令：`dotnet test src/CSharpAiCli.sln`
   - 结果：passed, Failed: 0, Passed: 52, Skipped: 0, Total: 52.
+- Source layout check
+  - 命令：`dotnet build src/CSharpAiCli.sln`；`dotnet test src/CSharpAiCli.sln`
+  - 结果：移动源码文件后 build succeeded；tests passed, Failed: 0, Passed: 52, Skipped: 0, Total: 52.
 - 当前 repo workspace 缺 key / 缺 model smoke
   - 命令：`dotnet run --project src/CSharpAiCli.Cli -- chat --workspace . "Reply with OK."`
   - 环境：无 `OPENAI_API_KEY`，无 configured model。
@@ -44,6 +48,7 @@
 - OpenAI package：`OpenAI` `2.10.0`。
 - Week 5 是一次性非流式 Responses API 调用。
 - Unit tests 使用 fake gateway，不进行真实网络调用。
+- 本次仅规范物理文件位置，公共 namespace 仍保持 `CSharpAiCli.Cli` 和 `CSharpAiCli.Core`，避免影响调用方。
 
 ## 风险与剩余范围
 

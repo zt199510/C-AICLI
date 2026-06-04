@@ -6,6 +6,56 @@
 
 流式输出、会话恢复和 transcript 文件仍归属第 6-7 周范围。
 
+## 源码布局
+
+Week 5 收尾时已把 `CSharpAiCli.Cli` 和 `CSharpAiCli.Core` 的物理文件位置按职责整理，项目名和公共 namespace 暂不改变。
+
+```text
+src/
+  CSharpAiCli.Cli/
+    Program.cs
+    Commands/
+      CliCommandFactory.cs
+  CSharpAiCli.Core/
+    Chat/
+      ChatRequest.cs
+      ChatResponse.cs
+      ChatModelResult.cs
+      ChatModelReport.cs
+      ChatUnavailableReport.cs
+      IChatModelClient.cs
+      ModelError.cs
+    Configuration/
+      CliConfigFile.cs
+      ConfigLoader.cs
+      ConfigReport.cs
+      EffectiveConfiguration.cs
+      SecretValue.cs
+    Diagnostics/
+      CliEnvironmentSnapshot.cs
+      CommandLogger.cs
+      DoctorReport.cs
+      LogPathResolver.cs
+    ModelClients/
+      OpenAI/
+        IOpenAiResponsesGateway.cs
+        OpenAiResponseEnvelope.cs
+        OpenAiResponsesModelClient.cs
+        SdkOpenAiResponsesGateway.cs
+    Product/
+      ProductInfo.cs
+    Workspace/
+      WorkspaceContext.cs
+      WorkspaceStatus.cs
+```
+
+整理原则：
+
+- `CSharpAiCli.Cli` 只保留入口和命令接线。
+- `CSharpAiCli.Core/Chat` 承载 provider-neutral chat contract、result 和 report。
+- `CSharpAiCli.Core/ModelClients/OpenAI` 承载 OpenAI Responses SDK adapter 和 gateway。
+- `Configuration`、`Diagnostics`、`Workspace` 分别承载配置、运行时诊断和工作区上下文。
+
 ## CLI 行为
 
 ```powershell
