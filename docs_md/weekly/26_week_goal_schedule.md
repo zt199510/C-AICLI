@@ -33,7 +33,7 @@
 | 4 | 2024-06-24 至 2024-06-30 | 阶段 01 | 已验收 | 稳定基础能力、日志、诊断、`chat` Phase 02 边界提示和阶段 01 文档。详见 `04_week_phase01_hardening_acceptance.plan.md` 和 `04_week_review.md`。 | 已验证：阶段 01 验收清单通过。 |
 | 5 | 2024-07-01 至 2024-07-07 | 阶段 02 | 已稳固 | 添加 model client 抽象和 OpenAI SDK Responses API 实现。详见 `05_week_model_client_responses_api.plan.md` 和 `05_week_review.md`。 | 已验证：`chat "<prompt>"` 在凭据和模型可用时可以调用已配置模型路径；缺 model/key 错误清晰；workspace config `apiKey` 会被拒绝用于真实调用。 |
 | 6 | 2024-07-08 至 2024-07-14 | 阶段 02 | 已稳固 | 添加用于 chat 输出的终端流式渲染器。详见 `06_week_chat_streaming_renderer.plan.md` 和 `06_week_review.md`。 | 已验证：`caicli chat` 默认走 streaming renderer；缺 key/model 和 workspace `apiKey` 禁用路径保持安全脱敏。 |
-| 7 | 2024-07-15 至 2024-07-21 | 阶段 02 | 计划中 | 添加会话存储、版本化转录格式和工具调用初始 schema。 | 命名会话可以恢复，并写入可检查转录。 |
+| 7 | 2024-07-15 至 2024-07-21 | 阶段 02 | 计划中 | 添加会话存储、版本化转录格式和工具调用初始 schema。详见 `07_week_session_transcript.plan.md`。 | 命名会话可以恢复，并写入可检查转录。 |
 | 8 | 2024-07-22 至 2024-07-28 | 阶段 02 | 计划中 | 添加指令加载、配置优先级、密钥遮蔽和模型错误处理。 | 阶段 02 验收清单通过。 |
 | 9 | 2024-07-29 至 2024-08-04 | 阶段 03 | 计划中 | 添加工具注册表、工具执行器和工具调用转录记录。 | fake model + fake test tool 可以通过离线 agent 循环调用。 |
 | 10 | 2024-08-05 至 2024-08-11 | 阶段 03 | 计划中 | 添加工作区保护、文件读取工具和搜索工具。 | 工作区外读取、`..`、大小写路径和 junction/symlink 越界在测试中被阻止。 |
