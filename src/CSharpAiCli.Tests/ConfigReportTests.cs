@@ -20,6 +20,7 @@ public sealed class ConfigReportTests
         Assert.Contains("workspaceStatus: ready", text);
         Assert.Contains("userConfigPath: " + Path.Combine("user-home", ".caicli", "config.json"), text);
         Assert.Contains("workspaceConfigPath: " + Path.Combine("workspace-root", ".caicli", "config.json"), text);
+        Assert.Contains("logDirectory: " + Path.Combine("workspace-root", ".caicli", "logs"), text);
         Assert.Contains("model: gpt-workspace", text);
         Assert.Contains("modelSource: workspace config", text);
         Assert.Contains("apiKey: missing", text);

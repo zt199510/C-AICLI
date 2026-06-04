@@ -23,6 +23,7 @@ public sealed record DoctorReport(IReadOnlyList<string> Lines)
             $"workspace status: {FormatWorkspaceStatus(snapshot.WorkspaceStatus)}",
             $"user config: {snapshot.UserConfigPath}",
             $"workspace config: {snapshot.WorkspaceConfigPath}",
+            $"log directory: {LogPathResolver.ResolveLogDirectory(snapshot)}",
             $"api key: {apiKeyStatus}"
         ];
 

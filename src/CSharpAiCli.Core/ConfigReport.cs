@@ -19,6 +19,7 @@ public sealed record ConfigReport(IReadOnlyList<string> Lines)
             $"workspaceStatus: {FormatWorkspaceStatus(snapshot.WorkspaceStatus)}",
             $"userConfigPath: {configuration.UserConfigPath}",
             $"workspaceConfigPath: {configuration.WorkspaceConfigPath}",
+            $"logDirectory: {LogPathResolver.ResolveLogDirectory(snapshot)}",
             $"model: {configuration.Model}",
             $"modelSource: {configuration.ModelSource}",
             $"apiKey: {apiKeyStatus}",

@@ -21,6 +21,7 @@ public sealed class DoctorReportTests
         Assert.Contains("workspace status: ready", text);
         Assert.Contains("user config: " + Path.Combine("user-home", ".caicli", "config.json"), text);
         Assert.Contains("workspace config: " + Path.Combine("workspace-root", ".caicli", "config.json"), text);
+        Assert.Contains("log directory: " + Path.Combine("workspace-root", ".caicli", "logs"), text);
         Assert.Contains("api key: missing", text);
     }
 
