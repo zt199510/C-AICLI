@@ -40,8 +40,10 @@ public sealed class TerminalChatStreamingRendererTests
     [Theory]
     [InlineData(null, "gpt-test")]
     [InlineData("", "gpt-test")]
+    [InlineData("   ", "gpt-test")]
     [InlineData("openai", null)]
     [InlineData("openai", "")]
+    [InlineData("openai", "   ")]
     public void Start_rejects_null_or_empty_provider_and_model(string? provider, string? model)
     {
         using StringWriter writer = new();
