@@ -2,7 +2,7 @@
 
 ## 状态
 
-`Planned`
+`Accepted`
 
 ## 目标
 
@@ -100,6 +100,14 @@ dotnet run --project src/CSharpAiCli.Cli -- config get
 - 第一批 CLI 命令
 - 测试框架
 - 配置和工作区基础能力
+
+## 阶段 01 验收记录
+
+阶段 01 在第 4 周完成验收。验收记录见：
+
+- `docs_md/spec/phase01_acceptance.md`
+- `docs_md/spec/runtime_logging_diagnostics.md`
+- `docs_md/weekly/04_week_review.md`
 
 ## 下一阶段输入
 
