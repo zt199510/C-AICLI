@@ -7,13 +7,25 @@ public static class CliCommandFactory
 {
     public static RootCommand Create(TextWriter output)
     {
-        return Create(output, workspacePath => CliEnvironmentSnapshot.Create(workspacePath: workspacePath));
+        return Create(
+            output,
+            workspacePath => CliEnvironmentSnapshot.Create(workspacePath: workspacePath),
+            (commandName, snapshot) => CommandLogger.Append(commandName, snapshot));
     }
 
     public static RootCommand Create(TextWriter output, Func<string?, CliEnvironmentSnapshot> snapshotProvider)
     {
+        return Create(output, snapshotProvider, (_, _) => { });
+    }
+
+    public static RootCommand Create(
+        TextWriter output,
+        Func<string?, CliEnvironmentSnapshot> snapshotProvider,
+        Action<string, CliEnvironmentSnapshot> commandLogger)
+    {
         ArgumentNullException.ThrowIfNull(output);
         ArgumentNullException.ThrowIfNull(snapshotProvider);
+        ArgumentNullException.ThrowIfNull(commandLogger);
 
         RootCommand rootCommand = new($"{ProductInfo.CommandName} - {ProductInfo.Description}");
         Option<string> workspaceOption = new("--workspace")
@@ -28,6 +40,7 @@ public static class CliCommandFactory
         {
             string? workspacePath = parseResult.GetValue(workspaceOption);
             CliEnvironmentSnapshot snapshot = snapshotProvider(workspacePath);
+            TryWriteCommandLog(commandLogger, "doctor", snapshot);
             output.WriteLine(DoctorReport.Create(snapshot).ToDisplayText());
             return 0;
         });
@@ -38,6 +51,7 @@ public static class CliCommandFactory
         {
             string? workspacePath = parseResult.GetValue(workspaceOption);
             CliEnvironmentSnapshot snapshot = snapshotProvider(workspacePath);
+            TryWriteCommandLog(commandLogger, "config get", snapshot);
             output.WriteLine(ConfigReport.Create(snapshot).ToDisplayText());
             return 0;
         });
@@ -47,5 +61,19 @@ public static class CliCommandFactory
         rootCommand.Subcommands.Add(configCommand);
 
         return rootCommand;
+    }
+
+    private static void TryWriteCommandLog(
+        Action<string, CliEnvironmentSnapshot> commandLogger,
+        string commandName,
+        CliEnvironmentSnapshot snapshot)
+    {
+        try
+        {
+            commandLogger(commandName, snapshot);
+        }
+        catch
+        {
+        }
     }
 }

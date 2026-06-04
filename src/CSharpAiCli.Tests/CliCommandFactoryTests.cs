@@ -76,6 +76,59 @@ public sealed class CliCommandFactoryTests
         Assert.Contains("workspace: custom-root", output.ToString());
     }
 
+    [Fact]
+    public void Doctor_command_writes_command_log_through_delegate()
+    {
+        using StringWriter output = new();
+        List<string> loggedCommands = [];
+
+        int exitCode = CliCommandFactory
+            .Create(
+                output,
+                CreateSnapshot,
+                (commandName, _) => loggedCommands.Add(commandName))
+            .Parse(["doctor"])
+            .Invoke();
+
+        Assert.Equal(0, exitCode);
+        Assert.Equal(["doctor"], loggedCommands);
+    }
+
+    [Fact]
+    public void Config_get_command_writes_command_log_through_delegate()
+    {
+        using StringWriter output = new();
+        List<string> loggedCommands = [];
+
+        int exitCode = CliCommandFactory
+            .Create(
+                output,
+                CreateSnapshot,
+                (commandName, _) => loggedCommands.Add(commandName))
+            .Parse(["config", "get"])
+            .Invoke();
+
+        Assert.Equal(0, exitCode);
+        Assert.Equal(["config get"], loggedCommands);
+    }
+
+    [Fact]
+    public void Command_logger_failure_does_not_block_doctor_report()
+    {
+        using StringWriter output = new();
+
+        int exitCode = CliCommandFactory
+            .Create(
+                output,
+                CreateSnapshot,
+                (_, _) => throw new IOException("log directory unavailable"))
+            .Parse(["doctor"])
+            .Invoke();
+
+        Assert.Equal(0, exitCode);
+        Assert.Contains("C# AI CLI doctor", output.ToString());
+    }
+
     private static CliEnvironmentSnapshot CreateSnapshot(string? workspacePath)
     {
         string workspaceRoot = string.IsNullOrWhiteSpace(workspacePath) ? "workspace-root" : workspacePath;
