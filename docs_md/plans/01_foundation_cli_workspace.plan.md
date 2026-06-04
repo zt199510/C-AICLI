@@ -29,7 +29,7 @@ C:\Users\Administrator\Desktop\C#AICLI
 - solution 和项目布局
 - `global.json` 或等价 SDK 锁定策略
 - CLI 根命令
-- `doctor`、`config`、`chat` 占位命令
+- `doctor`、`config`、`chat` Phase 02 边界命令
 - 工作区检测器
 - 配置加载器
 - 日志和诊断
@@ -60,7 +60,7 @@ CLI 应用应保持轻量。业务逻辑放在 `CSharpAiCli.Core` 中。测试�
 - `caicli --help` 打印命令帮助。
 - `caicli doctor` 检查 .NET runtime、工作目录、配置路径和模型 key 是否存在，但不打印密钥。
 - `caicli config get` 打印生效配置。
-- `caicli chat` 在接入模型之前启动一个占位交互循环。
+- `caicli chat` 在 Phase 01 仅输出 Phase 02 边界提示；真实 chat 和模型调用不在 Phase 01 范围内。
 - 工作区检测默认选择当前目录。
 - 工作区检测可以通过 `--workspace <path>` 覆盖。
 - 配置从用户配置和可选的工作区配置加载。
