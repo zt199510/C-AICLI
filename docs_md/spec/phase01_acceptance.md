@@ -1,6 +1,6 @@
 # Phase 01 验收清单
 
-状态：待第 4 周 smoke 验证后标记为 Accepted
+状态：已验收（Accepted）
 
 ## 范围
 
