@@ -1,17 +1,7 @@
 namespace CSharpAiCli.Core;
 
-public sealed record ConversationSessionName
+public sealed record ConversationSessionName(string Value, string FileSafeName)
 {
-    private ConversationSessionName(string value, string fileSafeName)
-    {
-        Value = value;
-        FileSafeName = fileSafeName;
-    }
-
-    public string Value { get; }
-
-    public string FileSafeName { get; }
-
     public static ConversationSessionName Parse(string? value)
     {
         if (string.IsNullOrWhiteSpace(value))
@@ -29,9 +19,9 @@ public sealed record ConversationSessionName
         }
 
         string fileSafeName = ToFileSafeName(trimmedValue);
-        if (!fileSafeName.Any(char.IsLetterOrDigit))
+        if (string.IsNullOrWhiteSpace(fileSafeName))
         {
-            throw new ArgumentException("Session name must include letters or numbers.", nameof(value));
+            throw new ArgumentException("Session name must produce a file-safe value.", nameof(value));
         }
 
         return new ConversationSessionName(trimmedValue, fileSafeName);
