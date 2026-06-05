@@ -93,4 +93,57 @@ public sealed class ConversationTranscriptRecorderTests
         Assert.DoesNotContain("sk-", error.SafeMessage);
         Assert.Equal(errorTime, transcript.UpdatedAtUtc);
     }
+
+    [Fact]
+    public void Record_success_appends_user_and_assistant_messages()
+    {
+        DateTimeOffset start = DateTimeOffset.Parse("2024-01-01T00:00:00Z");
+        DateTimeOffset writeTime = DateTimeOffset.Parse("2024-01-01T00:00:05Z");
+        ConversationTranscript transcript = ConversationTranscript.Create("smoke", start);
+        ChatModelResult result = ChatModelResult.Success(new ChatResponse(
+            Provider: "openai",
+            Model: "gpt-test",
+            ResponseId: "resp_123",
+            Text: "OK."));
+
+        ConversationTranscriptRecorder.RecordTurn(transcript, "Reply with OK.", result, writeTime);
+
+        Assert.Equal(2, transcript.Messages.Count);
+        Assert.Equal("user", transcript.Messages[0].Role);
+        Assert.Equal("Reply with OK.", transcript.Messages[0].Content);
+        Assert.Equal("assistant", transcript.Messages[1].Role);
+        Assert.Equal("OK.", transcript.Messages[1].Content);
+        Assert.Equal("openai", transcript.Messages[1].Provider);
+        Assert.Equal("gpt-test", transcript.Messages[1].Model);
+        Assert.Equal("resp_123", transcript.Messages[1].ResponseId);
+        Assert.Empty(transcript.Errors);
+        Assert.Equal(writeTime, transcript.UpdatedAtUtc);
+    }
+
+    [Fact]
+    public void Record_failure_appends_user_message_and_safe_error()
+    {
+        DateTimeOffset start = DateTimeOffset.Parse("2024-01-01T00:00:00Z");
+        DateTimeOffset writeTime = DateTimeOffset.Parse("2024-01-01T00:00:05Z");
+        ConversationTranscript transcript = ConversationTranscript.Create("smoke", start);
+        ChatModelResult result = ChatModelResult.Failure(new ModelError(
+            Provider: "openai",
+            Operation: "responses.create",
+            StatusCode: null,
+            LocalErrorCode: "missing-openai-api-key",
+            SafeMessage: "OpenAI API key is missing. Set OPENAI_API_KEY or user config apiKey.",
+            Retryable: false));
+
+        ConversationTranscriptRecorder.RecordTurn(transcript, "Reply with OK.", result, writeTime);
+
+        ConversationMessage message = Assert.Single(transcript.Messages);
+        Assert.Equal("user", message.Role);
+        Assert.Equal("Reply with OK.", message.Content);
+        ConversationError error = Assert.Single(transcript.Errors);
+        Assert.Equal("openai", error.Provider);
+        Assert.Equal("responses.create", error.Operation);
+        Assert.Equal("missing-openai-api-key", error.LocalErrorCode);
+        Assert.DoesNotContain("sk-", error.SafeMessage, StringComparison.Ordinal);
+        Assert.Equal(writeTime, transcript.UpdatedAtUtc);
+    }
 }
