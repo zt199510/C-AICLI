@@ -78,7 +78,11 @@ public sealed class FileConversationStore : IConversationStore
             ? fullSessionDirectory
             : fullSessionDirectory + Path.DirectorySeparatorChar;
 
-        if (!path.StartsWith(rootedSessionDirectory, StringComparison.OrdinalIgnoreCase))
+        StringComparison pathComparison = OperatingSystem.IsWindows()
+            ? StringComparison.OrdinalIgnoreCase
+            : StringComparison.Ordinal;
+
+        if (!path.StartsWith(rootedSessionDirectory, pathComparison))
         {
             throw new InvalidOperationException("Conversation transcript path must remain inside the session directory.");
         }
