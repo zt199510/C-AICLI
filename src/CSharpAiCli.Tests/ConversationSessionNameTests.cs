@@ -24,7 +24,7 @@ public sealed class ConversationSessionNameTests
         ConversationSessionName sessionName = ConversationSessionName.Parse(input);
 
         Assert.Equal(input.Trim(), sessionName.Value);
-        Assert.StartsWith($"{expectedPrefix}-", sessionName.FileSafeName, StringComparison.Ordinal);
+        Assert.StartsWith($"{expectedPrefix}~", sessionName.FileSafeName, StringComparison.Ordinal);
         string suffix = sessionName.FileSafeName[(expectedPrefix.Length + 1)..];
         Assert.Equal(8, suffix.Length);
         Assert.All(suffix, character => Assert.True(
@@ -39,6 +39,17 @@ public sealed class ConversationSessionNameTests
         ConversationSessionName lowerCaseName = ConversationSessionName.Parse("smoke");
 
         Assert.NotEqual(upperCaseName.FileSafeName, lowerCaseName.FileSafeName);
+    }
+
+    [Fact]
+    public void Parse_reserves_generated_suffix_namespace_for_normalized_names()
+    {
+        ConversationSessionName normalizedName = ConversationSessionName.Parse("Smoke");
+        ConversationSessionName alreadySafeName = ConversationSessionName.Parse("smoke");
+
+        Assert.Equal("smoke", alreadySafeName.FileSafeName);
+        Assert.StartsWith("smoke~", normalizedName.FileSafeName, StringComparison.Ordinal);
+        Assert.Throws<ArgumentException>(() => ConversationSessionName.Parse(normalizedName.FileSafeName));
     }
 
     [Fact]

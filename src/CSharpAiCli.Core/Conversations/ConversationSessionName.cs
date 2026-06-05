@@ -36,7 +36,7 @@ public sealed record ConversationSessionName(string Value, string FileSafeName)
 
         if (!string.Equals(fileSafeName, trimmedValue, StringComparison.Ordinal))
         {
-            fileSafeName = $"{fileSafeName}-{CreateStableHashSuffix(trimmedValue)}";
+            fileSafeName = $"{fileSafeName}~{CreateStableHashSuffix(trimmedValue)}";
         }
 
         return new ConversationSessionName(trimmedValue, fileSafeName);
