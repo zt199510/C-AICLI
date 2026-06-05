@@ -95,6 +95,26 @@ public sealed class OpenAiResponsesModelClientTests
     }
 
     [Fact]
+    public void Send_ignores_session_name_for_week_seven_model_call_payload()
+    {
+        FakeGateway gateway = new()
+        {
+            Response = new OpenAiResponseEnvelope(
+                ResponseId: "resp_session",
+                Model: "gpt-test",
+                Text: "hello from model")
+        };
+        OpenAiResponsesModelClient client = new(
+            CreateSnapshot(apiKey: "sk-test", apiKeySource: "OPENAI_API_KEY", model: "gpt-test"),
+            _ => gateway);
+
+        ChatModelResult result = client.Send(new ChatRequest("hello", SessionName: "smoke"));
+
+        Assert.True(result.IsSuccess);
+        Assert.Equal("hello", gateway.LastPrompt);
+    }
+
+    [Fact]
     public void Send_allows_user_config_api_key_source_and_returns_response_text()
     {
         FakeGateway gateway = new()
