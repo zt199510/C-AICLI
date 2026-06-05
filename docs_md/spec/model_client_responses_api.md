@@ -4,7 +4,7 @@
 
 第 5 周添加一次性非流式模型调用；第 6 周已将 `caicli chat` 的默认执行路径切换为 OpenAI Responses streaming path。`OpenAiResponsesModelClient.Send(...)` 继续保留，供测试和后续非流式调用复用。
 
-会话恢复和 transcript 文件仍归属第 7 周范围。
+第 7 周已添加命名 session transcript 持久化和恢复追加；当前仍不会把历史消息发送给模型。
 
 ## 源码布局
 
@@ -248,3 +248,15 @@ $exitCode
 输出包含 responseId:。
 输出不包含任何 API key 值。
 ```
+
+## Week 7 session and transcript behavior
+
+- `caicli chat --session <name> "<prompt>"` resumes or creates a named transcript.
+- Session transcripts are stored under `<user profile>/.caicli/sessions/<safe-session-name>.transcript.json`.
+- Transcript JSON uses `schemaVersion: 1`.
+- Successful turns append one `user` message and one `assistant` message.
+- Failed turns append one `user` message and one safe error entry.
+- `toolCalls` is present as an empty array in Week 7 and reserved for Week 9 tool-call recording.
+- Week 7 does not send historical transcript messages back to the model; model requests still use the current prompt only.
+- Without `--session`, `chat` keeps the Week 6 streaming behavior and does not create a transcript.
+- Transcript files must not contain raw API keys.
