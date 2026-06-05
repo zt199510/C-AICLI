@@ -146,4 +146,20 @@ public sealed class ConversationTranscriptRecorderTests
         Assert.DoesNotContain("sk-", error.SafeMessage, StringComparison.Ordinal);
         Assert.Equal(writeTime, transcript.UpdatedAtUtc);
     }
+
+    [Fact]
+    public void Record_malformed_result_throws_without_mutating_transcript()
+    {
+        DateTimeOffset start = DateTimeOffset.Parse("2024-01-01T00:00:00Z");
+        DateTimeOffset writeTime = DateTimeOffset.Parse("2024-01-01T00:00:05Z");
+        ConversationTranscript transcript = ConversationTranscript.Create("smoke", start);
+        ChatModelResult result = new(null, null);
+
+        Assert.Throws<InvalidOperationException>(
+            () => ConversationTranscriptRecorder.RecordTurn(transcript, "Reply with OK.", result, writeTime));
+
+        Assert.Empty(transcript.Messages);
+        Assert.Empty(transcript.Errors);
+        Assert.Equal(start, transcript.UpdatedAtUtc);
+    }
 }
