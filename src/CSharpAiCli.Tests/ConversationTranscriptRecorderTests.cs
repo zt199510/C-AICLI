@@ -39,4 +39,58 @@ public sealed class ConversationTranscriptRecorderTests
         Assert.Null(message.ResponseId);
         Assert.Equal(messageTime, transcript.UpdatedAtUtc);
     }
+
+    [Fact]
+    public void Add_assistant_message_appends_message_and_updates_timestamp()
+    {
+        ConversationTranscript transcript = ConversationTranscript.Create(
+            "smoke",
+            DateTimeOffset.Parse("2024-01-01T00:00:00Z"));
+        ChatResponse response = new(
+            Provider: "openai",
+            Model: "gpt-4.1",
+            ResponseId: "resp_123",
+            Text: "OK.");
+        DateTimeOffset messageTime = DateTimeOffset.Parse("2024-01-01T00:00:02Z");
+
+        transcript.AddAssistantMessage(response, messageTime);
+
+        ConversationMessage message = Assert.Single(transcript.Messages);
+        Assert.Equal("assistant", message.Role);
+        Assert.Equal("OK.", message.Content);
+        Assert.Equal(messageTime, message.CreatedAtUtc);
+        Assert.Equal("openai", message.Provider);
+        Assert.Equal("gpt-4.1", message.Model);
+        Assert.Equal("resp_123", message.ResponseId);
+        Assert.Equal(messageTime, transcript.UpdatedAtUtc);
+    }
+
+    [Fact]
+    public void Add_error_copies_safe_model_error_fields_and_updates_timestamp()
+    {
+        ConversationTranscript transcript = ConversationTranscript.Create(
+            "smoke",
+            DateTimeOffset.Parse("2024-01-01T00:00:00Z"));
+        ModelError modelError = new(
+            Provider: "openai",
+            Operation: "responses.create",
+            StatusCode: 429,
+            LocalErrorCode: "rate_limited",
+            SafeMessage: "Request was rate limited. Retry later.",
+            Retryable: true);
+        DateTimeOffset errorTime = DateTimeOffset.Parse("2024-01-01T00:00:03Z");
+
+        transcript.AddError(modelError, errorTime);
+
+        ConversationError error = Assert.Single(transcript.Errors);
+        Assert.Equal(errorTime, error.CreatedAtUtc);
+        Assert.Equal("openai", error.Provider);
+        Assert.Equal("responses.create", error.Operation);
+        Assert.Equal(429, error.StatusCode);
+        Assert.Equal("rate_limited", error.LocalErrorCode);
+        Assert.Equal("Request was rate limited. Retry later.", error.SafeMessage);
+        Assert.True(error.Retryable);
+        Assert.DoesNotContain("sk-", error.SafeMessage);
+        Assert.Equal(errorTime, transcript.UpdatedAtUtc);
+    }
 }
