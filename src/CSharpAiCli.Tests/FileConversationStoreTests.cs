@@ -1,3 +1,4 @@
+using System.Reflection;
 using System.Text.Json;
 using CSharpAiCli.Core;
 
@@ -149,7 +150,7 @@ public sealed class FileConversationStoreTests
         using TempDirectory temp = TempDirectory.Create();
         string sessionDirectory = Path.Combine(temp.Path, ".caicli", "sessions");
         FileConversationStore store = new(sessionDirectory);
-        ConversationSessionName sessionName = new("smoke", Path.Combine("..", "outside"));
+        ConversationSessionName sessionName = CreateSessionNameBypassingParse("smoke", Path.Combine("..", "outside"));
         ConversationTranscript transcript = ConversationTranscript.Create(
             sessionName.Value,
             DateTimeOffset.Parse("2024-01-01T00:00:00Z"));
@@ -159,6 +160,18 @@ public sealed class FileConversationStoreTests
             sessionName,
             DateTimeOffset.Parse("2024-01-01T00:01:00Z")));
         Assert.False(File.Exists(Path.Combine(temp.Path, ".caicli", "outside.transcript.json")));
+    }
+
+    private static ConversationSessionName CreateSessionNameBypassingParse(string value, string fileSafeName)
+    {
+        var constructor = typeof(ConversationSessionName).GetConstructor(
+            BindingFlags.Instance | BindingFlags.NonPublic,
+            binder: null,
+            types: [typeof(string), typeof(string)],
+            modifiers: null);
+
+        Assert.NotNull(constructor);
+        return (ConversationSessionName)constructor.Invoke([value, fileSafeName]);
     }
 
     private sealed class TempDirectory : IDisposable

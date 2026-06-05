@@ -4,6 +4,12 @@ namespace CSharpAiCli.Tests;
 
 public sealed class ConversationSessionNameTests
 {
+    [Fact]
+    public void ConversationSessionName_has_no_public_constructors()
+    {
+        Assert.Empty(typeof(ConversationSessionName).GetConstructors());
+    }
+
     [Theory]
     [InlineData("smoke", "smoke")]
     [InlineData("week-7_smoke", "week-7_smoke")]

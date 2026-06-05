@@ -3,9 +3,19 @@ namespace CSharpAiCli.Core;
 using System.Security.Cryptography;
 using System.Text;
 
-public sealed record ConversationSessionName(string Value, string FileSafeName)
+public sealed record ConversationSessionName
 {
     private static readonly char[] ReservedFileNameCharacters = ['<', '>', ':', '"', '|', '?', '*'];
+
+    private ConversationSessionName(string value, string fileSafeName)
+    {
+        Value = value;
+        FileSafeName = fileSafeName;
+    }
+
+    public string Value { get; }
+
+    public string FileSafeName { get; }
 
     public static ConversationSessionName Parse(string? value)
     {
