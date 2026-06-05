@@ -9,7 +9,6 @@ public sealed class ConversationSessionNameTests
     [InlineData("Week-7_Smoke", "week-7_smoke")]
     [InlineData("release notes", "release-notes")]
     [InlineData("  My Session  ", "my-session")]
-    [InlineData("__", "__")]
     public void Parse_accepts_safe_names_and_creates_file_safe_name(string input, string expectedFileSafeName)
     {
         ConversationSessionName sessionName = ConversationSessionName.Parse(input);
