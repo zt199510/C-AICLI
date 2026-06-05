@@ -31,4 +31,16 @@ public sealed class ConversationSessionNameTests
 
         Assert.Contains("session", exception.Message, StringComparison.OrdinalIgnoreCase);
     }
+
+    [Theory]
+    [InlineData("a.b")]
+    [InlineData("a+b")]
+    [InlineData("name@home")]
+    [InlineData("tag#1")]
+    public void Parse_rejects_punctuation_that_would_be_dropped_from_file_safe_name(string input)
+    {
+        ArgumentException exception = Assert.Throws<ArgumentException>(() => ConversationSessionName.Parse(input));
+
+        Assert.Contains("session", exception.Message, StringComparison.OrdinalIgnoreCase);
+    }
 }

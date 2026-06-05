@@ -20,6 +20,11 @@ public sealed record ConversationSessionName(string Value, string FileSafeName)
             throw new ArgumentException("Session name contains invalid path characters.", nameof(value));
         }
 
+        if (trimmedValue.Any(character => !IsSupportedCharacter(character)))
+        {
+            throw new ArgumentException("Session name contains unsupported characters.", nameof(value));
+        }
+
         string fileSafeName = ToFileSafeName(trimmedValue);
         if (string.IsNullOrWhiteSpace(fileSafeName))
         {
@@ -54,4 +59,9 @@ public sealed record ConversationSessionName(string Value, string FileSafeName)
 
         return builder.ToString().Trim('-');
     }
+
+    private static bool IsSupportedCharacter(char character) =>
+        char.IsLetterOrDigit(character) ||
+        char.IsWhiteSpace(character) ||
+        character is '_' or '-';
 }
