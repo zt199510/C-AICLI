@@ -6,15 +6,48 @@ public sealed class ConversationSessionNameTests
 {
     [Theory]
     [InlineData("smoke", "smoke")]
-    [InlineData("Week-7_Smoke", "week-7_smoke")]
-    [InlineData("release notes", "release-notes")]
-    [InlineData("  My Session  ", "my-session")]
+    [InlineData("week-7_smoke", "week-7_smoke")]
     public void Parse_accepts_safe_names_and_creates_file_safe_name(string input, string expectedFileSafeName)
     {
         ConversationSessionName sessionName = ConversationSessionName.Parse(input);
 
         Assert.Equal(input.Trim(), sessionName.Value);
         Assert.Equal(expectedFileSafeName, sessionName.FileSafeName);
+    }
+
+    [Theory]
+    [InlineData("Week-7_Smoke", "week-7_smoke")]
+    [InlineData("release notes", "release-notes")]
+    [InlineData("  My Session  ", "my-session")]
+    public void Parse_adds_stable_suffix_when_normalized_file_safe_name_changes(string input, string expectedPrefix)
+    {
+        ConversationSessionName sessionName = ConversationSessionName.Parse(input);
+
+        Assert.Equal(input.Trim(), sessionName.Value);
+        Assert.StartsWith($"{expectedPrefix}-", sessionName.FileSafeName, StringComparison.Ordinal);
+        string suffix = sessionName.FileSafeName[(expectedPrefix.Length + 1)..];
+        Assert.Equal(8, suffix.Length);
+        Assert.All(suffix, character => Assert.True(
+            char.IsAsciiHexDigit(character) && char.IsLower(character) == char.IsLetter(character),
+            $"Expected lower-case ASCII hex suffix, got '{suffix}'."));
+    }
+
+    [Fact]
+    public void Parse_keeps_case_variants_from_colliding_after_normalization()
+    {
+        ConversationSessionName upperCaseName = ConversationSessionName.Parse("Smoke");
+        ConversationSessionName lowerCaseName = ConversationSessionName.Parse("smoke");
+
+        Assert.NotEqual(upperCaseName.FileSafeName, lowerCaseName.FileSafeName);
+    }
+
+    [Fact]
+    public void Parse_keeps_whitespace_and_dash_variants_from_colliding_after_normalization()
+    {
+        ConversationSessionName whitespaceName = ConversationSessionName.Parse("release notes");
+        ConversationSessionName dashName = ConversationSessionName.Parse("release-notes");
+
+        Assert.NotEqual(whitespaceName.FileSafeName, dashName.FileSafeName);
     }
 
     [Theory]

@@ -1,5 +1,8 @@
 namespace CSharpAiCli.Core;
 
+using System.Security.Cryptography;
+using System.Text;
+
 public sealed record ConversationSessionName(string Value, string FileSafeName)
 {
     private static readonly char[] ReservedFileNameCharacters = ['<', '>', ':', '"', '|', '?', '*'];
@@ -31,6 +34,11 @@ public sealed record ConversationSessionName(string Value, string FileSafeName)
             throw new ArgumentException("Session name must produce a file-safe value.", nameof(value));
         }
 
+        if (!string.Equals(fileSafeName, trimmedValue, StringComparison.Ordinal))
+        {
+            fileSafeName = $"{fileSafeName}-{CreateStableHashSuffix(trimmedValue)}";
+        }
+
         return new ConversationSessionName(trimmedValue, fileSafeName);
     }
 
@@ -58,6 +66,12 @@ public sealed record ConversationSessionName(string Value, string FileSafeName)
         }
 
         return builder.ToString().Trim('-');
+    }
+
+    private static string CreateStableHashSuffix(string value)
+    {
+        byte[] hash = SHA256.HashData(Encoding.UTF8.GetBytes(value));
+        return Convert.ToHexString(hash, 0, 4).ToLowerInvariant();
     }
 
     private static bool IsSupportedCharacter(char character) =>
