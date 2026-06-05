@@ -201,6 +201,99 @@ public sealed class CliCommandFactoryTests
         Assert.Contains("localErrorCode: missing-openai-api-key", output.ToString());
     }
 
+    [Fact]
+    public void Chat_session_loads_transcript_records_success_and_saves()
+    {
+        using StringWriter output = new();
+        FakeChatModelClient chatClient = new(ChatModelResult.Success(new ChatResponse(
+            Provider: "openai",
+            Model: "gpt-test",
+            ResponseId: "resp_test",
+            Text: "fake model output")));
+        FakeConversationStore store = new();
+
+        int exitCode = CliCommandFactory
+            .Create(
+                output,
+                workspacePath => CreateSnapshot(workspacePath, apiKey: "sk-test", apiKeySource: "OPENAI_API_KEY", model: "gpt-test"),
+                (_, _) => { },
+                _ => chatClient,
+                writer => new TerminalChatStreamingRenderer(writer),
+                _ => store,
+                () => DateTimeOffset.Parse("2024-01-01T00:00:05Z"))
+            .Parse(["chat", "--session", "smoke", "hello model"])
+            .Invoke();
+
+        Assert.Equal(0, exitCode);
+        Assert.Equal("smoke", chatClient.LastRequest?.SessionName);
+        Assert.Equal("smoke", store.LoadedSessionName?.Value);
+        Assert.Equal("smoke", store.SavedSessionName?.Value);
+        Assert.NotNull(store.SavedTranscript);
+        Assert.Equal(2, store.SavedTranscript.Messages.Count);
+        Assert.Equal("hello model", store.SavedTranscript.Messages[0].Content);
+        Assert.Equal("fake model output", store.SavedTranscript.Messages[1].Content);
+    }
+
+    [Fact]
+    public void Chat_session_records_failure_and_returns_nonzero()
+    {
+        using StringWriter output = new();
+        FakeChatModelClient chatClient = new(ChatModelResult.Failure(new ModelError(
+            Provider: "openai",
+            Operation: "responses.create",
+            StatusCode: null,
+            LocalErrorCode: "missing-openai-api-key",
+            SafeMessage: "OpenAI API key is missing. Set OPENAI_API_KEY or user config apiKey.",
+            Retryable: false)));
+        FakeConversationStore store = new();
+
+        int exitCode = CliCommandFactory
+            .Create(
+                output,
+                workspacePath => CreateSnapshot(workspacePath, apiKey: null, apiKeySource: "missing", model: "gpt-test"),
+                (_, _) => { },
+                _ => chatClient,
+                writer => new TerminalChatStreamingRenderer(writer),
+                _ => store,
+                () => DateTimeOffset.Parse("2024-01-01T00:00:05Z"))
+            .Parse(["chat", "--session", "smoke", "hello model"])
+            .Invoke();
+
+        Assert.Equal(1, exitCode);
+        Assert.NotNull(store.SavedTranscript);
+        Assert.Equal("hello model", Assert.Single(store.SavedTranscript.Messages).Content);
+        Assert.Equal("missing-openai-api-key", Assert.Single(store.SavedTranscript.Errors).LocalErrorCode);
+    }
+
+    [Fact]
+    public void Chat_without_session_does_not_create_transcript()
+    {
+        using StringWriter output = new();
+        FakeChatModelClient chatClient = new(ChatModelResult.Success(new ChatResponse(
+            Provider: "openai",
+            Model: "gpt-test",
+            ResponseId: "resp_test",
+            Text: "fake model output")));
+        FakeConversationStore store = new();
+
+        int exitCode = CliCommandFactory
+            .Create(
+                output,
+                workspacePath => CreateSnapshot(workspacePath, apiKey: "sk-test", apiKeySource: "OPENAI_API_KEY", model: "gpt-test"),
+                (_, _) => { },
+                _ => chatClient,
+                writer => new TerminalChatStreamingRenderer(writer),
+                _ => store,
+                () => DateTimeOffset.Parse("2024-01-01T00:00:05Z"))
+            .Parse(["chat", "hello model"])
+            .Invoke();
+
+        Assert.Equal(0, exitCode);
+        Assert.Null(store.LoadedSessionName);
+        Assert.Null(store.SavedSessionName);
+        Assert.Null(store.SavedTranscript);
+    }
+
     private static CliEnvironmentSnapshot CreateSnapshot(
         string? workspacePath,
         string? apiKey,
@@ -238,9 +331,11 @@ public sealed class CliCommandFactoryTests
     {
         public string? LastNonStreamingPrompt { get; private set; }
         public string? LastStreamingPrompt { get; private set; }
+        public ChatRequest? LastRequest { get; private set; }
 
         public ChatModelResult Send(ChatRequest request, CancellationToken cancellationToken = default)
         {
+            LastRequest = request;
             LastNonStreamingPrompt = request.Prompt;
             return result;
         }
@@ -250,6 +345,7 @@ public sealed class CliCommandFactoryTests
             IChatStreamingRenderer renderer,
             CancellationToken cancellationToken = default)
         {
+            LastRequest = request;
             LastStreamingPrompt = request.Prompt;
 
             if (result.Response is not null)
@@ -270,6 +366,29 @@ public sealed class CliCommandFactoryTests
                 apiKeySource: "missing",
                 model: "gpt-test"), result.Error!);
             return result;
+        }
+    }
+
+    private sealed class FakeConversationStore : IConversationStore
+    {
+        public ConversationSessionName? LoadedSessionName { get; private set; }
+        public ConversationSessionName? SavedSessionName { get; private set; }
+        public ConversationTranscript? SavedTranscript { get; private set; }
+        public ConversationTranscript Transcript { get; init; } = ConversationTranscript.Create(
+            "smoke",
+            DateTimeOffset.Parse("2024-01-01T00:00:00Z"));
+
+        public ConversationTranscript LoadOrCreate(ConversationSessionName sessionName, DateTimeOffset nowUtc)
+        {
+            LoadedSessionName = sessionName;
+            return Transcript;
+        }
+
+        public string Save(ConversationSessionName sessionName, ConversationTranscript transcript)
+        {
+            SavedSessionName = sessionName;
+            SavedTranscript = transcript;
+            return Path.Combine("user-home", ".caicli", "sessions", $"{sessionName.FileSafeName}.transcript.json");
         }
     }
 }

@@ -59,11 +59,32 @@ public static class CliCommandFactory
         Func<CliEnvironmentSnapshot, IChatModelClient> chatModelClientFactory,
         Func<TextWriter, IChatStreamingRenderer> streamingRendererFactory)
     {
+        return Create(
+            output,
+            snapshotProvider,
+            commandLogger,
+            chatModelClientFactory,
+            streamingRendererFactory,
+            snapshot => FileConversationStore.Create(snapshot),
+            () => DateTimeOffset.UtcNow);
+    }
+
+    public static RootCommand Create(
+        TextWriter output,
+        Func<string?, CliEnvironmentSnapshot> snapshotProvider,
+        Action<string, CliEnvironmentSnapshot> commandLogger,
+        Func<CliEnvironmentSnapshot, IChatModelClient> chatModelClientFactory,
+        Func<TextWriter, IChatStreamingRenderer> streamingRendererFactory,
+        Func<CliEnvironmentSnapshot, IConversationStore> conversationStoreFactory,
+        Func<DateTimeOffset> utcNowProvider)
+    {
         ArgumentNullException.ThrowIfNull(output);
         ArgumentNullException.ThrowIfNull(snapshotProvider);
         ArgumentNullException.ThrowIfNull(commandLogger);
         ArgumentNullException.ThrowIfNull(chatModelClientFactory);
         ArgumentNullException.ThrowIfNull(streamingRendererFactory);
+        ArgumentNullException.ThrowIfNull(conversationStoreFactory);
+        ArgumentNullException.ThrowIfNull(utcNowProvider);
 
         RootCommand rootCommand = new($"{ProductInfo.CommandName} - {ProductInfo.Description}");
         Option<string> workspaceOption = new("--workspace")
@@ -101,17 +122,43 @@ public static class CliCommandFactory
         {
             Description = "The user message to send to the model.",
         };
+        Option<string> sessionOption = new("--session")
+        {
+            Description = "Resume or create a named chat session.",
+        };
         chatCommand.Arguments.Add(promptArgument);
+        chatCommand.Options.Add(sessionOption);
         chatCommand.SetAction(parseResult =>
         {
             string? workspacePath = parseResult.GetValue(workspaceOption);
             string prompt = parseResult.GetValue(promptArgument) ?? string.Empty;
+            string? session = parseResult.GetValue(sessionOption);
             CliEnvironmentSnapshot snapshot = snapshotProvider(workspacePath);
             TryWriteCommandLog(commandLogger, "chat", snapshot);
 
             IChatModelClient chatModelClient = chatModelClientFactory(snapshot);
             IChatStreamingRenderer renderer = streamingRendererFactory(output);
-            ChatModelResult result = chatModelClient.SendStreaming(new ChatRequest(prompt), renderer);
+            ChatRequest request = new(prompt, session);
+
+            ConversationSessionName? sessionName = null;
+            ConversationTranscript? transcript = null;
+            IConversationStore? conversationStore = null;
+            DateTimeOffset nowUtc = default;
+            if (!string.IsNullOrWhiteSpace(session))
+            {
+                sessionName = ConversationSessionName.Parse(session);
+                conversationStore = conversationStoreFactory(snapshot);
+                nowUtc = utcNowProvider();
+                transcript = conversationStore.LoadOrCreate(sessionName, nowUtc);
+            }
+
+            ChatModelResult result = chatModelClient.SendStreaming(request, renderer);
+            if (sessionName is not null && transcript is not null && conversationStore is not null)
+            {
+                ConversationTranscriptRecorder.RecordTurn(transcript, prompt, result, nowUtc);
+                conversationStore.Save(sessionName, transcript);
+            }
+
             return result.IsSuccess ? 0 : 1;
         });
 
