@@ -18,7 +18,7 @@
 - 命令：`dotnet build src/CSharpAiCli.sln`
 - 结果：通过，0 个警告，0 个错误。
 - 命令：`dotnet test src/CSharpAiCli.sln`
-- 结果：通过，失败 0，通过 99，跳过 0，总计 99。
+- 结果：通过，失败 0，通过 103，跳过 0，总计 103。
 - 命令：`dotnet run --project src/CSharpAiCli.Cli -- chat --help`
 - 结果：通过，help 输出包含 `--session <session>`。
 - 命令：缺 key session smoke
