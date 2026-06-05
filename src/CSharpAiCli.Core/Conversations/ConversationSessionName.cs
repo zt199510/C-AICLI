@@ -2,6 +2,8 @@ namespace CSharpAiCli.Core;
 
 public sealed record ConversationSessionName(string Value, string FileSafeName)
 {
+    private static readonly char[] ReservedFileNameCharacters = ['<', '>', ':', '"', '|', '?', '*'];
+
     public static ConversationSessionName Parse(string? value)
     {
         if (string.IsNullOrWhiteSpace(value))
@@ -13,7 +15,7 @@ public sealed record ConversationSessionName(string Value, string FileSafeName)
         if (trimmedValue.Contains("..", StringComparison.Ordinal) ||
             trimmedValue.Contains(Path.DirectorySeparatorChar, StringComparison.Ordinal) ||
             trimmedValue.Contains(Path.AltDirectorySeparatorChar, StringComparison.Ordinal) ||
-            trimmedValue.IndexOfAny(Path.GetInvalidFileNameChars()) >= 0)
+            trimmedValue.IndexOfAny(ReservedFileNameCharacters) >= 0)
         {
             throw new ArgumentException("Session name contains invalid path characters.", nameof(value));
         }
