@@ -235,6 +235,49 @@ public sealed class CliCommandFactoryTests
     }
 
     [Fact]
+    public void Chat_session_appends_to_existing_transcript()
+    {
+        using StringWriter output = new();
+        FakeChatModelClient chatClient = new(ChatModelResult.Success(new ChatResponse(
+            Provider: "openai",
+            Model: "gpt-test",
+            ResponseId: "resp_second",
+            Text: "second response")));
+        ConversationTranscript existing = ConversationTranscript.Create(
+            "smoke",
+            DateTimeOffset.Parse("2024-01-01T00:00:00Z"));
+        existing.AddUserMessage("first prompt", DateTimeOffset.Parse("2024-01-01T00:00:01Z"));
+        existing.AddAssistantMessage(new ChatResponse(
+            Provider: "openai",
+            Model: "gpt-test",
+            ResponseId: "resp_first",
+            Text: "first response"), DateTimeOffset.Parse("2024-01-01T00:00:02Z"));
+        FakeConversationStore store = new()
+        {
+            Transcript = existing
+        };
+
+        int exitCode = CliCommandFactory
+            .Create(
+                output,
+                workspacePath => CreateSnapshot(workspacePath, apiKey: "sk-test", apiKeySource: "OPENAI_API_KEY", model: "gpt-test"),
+                (_, _) => { },
+                _ => chatClient,
+                writer => new TerminalChatStreamingRenderer(writer),
+                _ => store,
+                () => DateTimeOffset.Parse("2024-01-01T00:00:05Z"))
+            .Parse(["chat", "--session", "smoke", "second prompt"])
+            .Invoke();
+
+        Assert.Equal(0, exitCode);
+        Assert.Equal("second prompt", chatClient.LastStreamingPrompt);
+        Assert.NotNull(store.SavedTranscript);
+        Assert.Equal(
+            ["first prompt", "first response", "second prompt", "second response"],
+            store.SavedTranscript.Messages.Select(message => message.Content).ToArray());
+    }
+
+    [Fact]
     public void Chat_session_records_failure_and_returns_nonzero()
     {
         using StringWriter output = new();

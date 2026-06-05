@@ -66,6 +66,31 @@ public sealed class FileConversationStoreTests
     }
 
     [Fact]
+    public void Save_after_restore_preserves_existing_messages_and_appends_new_turn()
+    {
+        using TempDirectory temp = TempDirectory.Create();
+        FileConversationStore store = new(Path.Combine(temp.Path, ".caicli", "sessions"));
+        ConversationSessionName sessionName = ConversationSessionName.Parse("smoke");
+        ConversationTranscript transcript = ConversationTranscript.Create(
+            sessionName.Value,
+            DateTimeOffset.Parse("2024-01-01T00:00:00Z"));
+        transcript.AddUserMessage("first", DateTimeOffset.Parse("2024-01-01T00:00:01Z"));
+        store.Save(sessionName, transcript);
+
+        ConversationTranscript restored = store.LoadOrCreate(
+            sessionName,
+            DateTimeOffset.Parse("2024-01-01T00:01:00Z"));
+        restored.AddUserMessage("second", DateTimeOffset.Parse("2024-01-01T00:01:01Z"));
+        store.Save(sessionName, restored);
+
+        ConversationTranscript loadedAgain = store.LoadOrCreate(
+            sessionName,
+            DateTimeOffset.Parse("2024-01-01T00:02:00Z"));
+
+        Assert.Equal(["first", "second"], loadedAgain.Messages.Select(message => message.Content).ToArray());
+    }
+
+    [Fact]
     public void Load_or_create_rejects_transcript_missing_schema_version()
     {
         using TempDirectory temp = TempDirectory.Create();
