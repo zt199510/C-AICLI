@@ -65,6 +65,77 @@ public sealed class FileConversationStoreTests
         Assert.Equal("first", Assert.Single(restored.Messages).Content);
     }
 
+    [Fact]
+    public void Load_or_create_rejects_transcript_missing_schema_version()
+    {
+        using TempDirectory temp = TempDirectory.Create();
+        string sessionDirectory = Path.Combine(temp.Path, ".caicli", "sessions");
+        Directory.CreateDirectory(sessionDirectory);
+        File.WriteAllText(
+            Path.Combine(sessionDirectory, "smoke.transcript.json"),
+            """
+            {
+              "sessionName": "smoke",
+              "createdAtUtc": "2024-01-01T00:00:00+00:00",
+              "updatedAtUtc": "2024-01-01T00:00:00+00:00",
+              "messages": [],
+              "toolCalls": [],
+              "errors": []
+            }
+            """);
+        FileConversationStore store = new(sessionDirectory);
+        ConversationSessionName sessionName = ConversationSessionName.Parse("smoke");
+
+        Assert.Throws<InvalidOperationException>(() => store.LoadOrCreate(
+            sessionName,
+            DateTimeOffset.Parse("2024-01-01T00:01:00Z")));
+    }
+
+    [Fact]
+    public void Load_or_create_rejects_transcript_with_unsupported_schema_version()
+    {
+        using TempDirectory temp = TempDirectory.Create();
+        string sessionDirectory = Path.Combine(temp.Path, ".caicli", "sessions");
+        Directory.CreateDirectory(sessionDirectory);
+        File.WriteAllText(
+            Path.Combine(sessionDirectory, "smoke.transcript.json"),
+            """
+            {
+              "schemaVersion": 2,
+              "sessionName": "smoke",
+              "createdAtUtc": "2024-01-01T00:00:00+00:00",
+              "updatedAtUtc": "2024-01-01T00:00:00+00:00",
+              "messages": [],
+              "toolCalls": [],
+              "errors": []
+            }
+            """);
+        FileConversationStore store = new(sessionDirectory);
+        ConversationSessionName sessionName = ConversationSessionName.Parse("smoke");
+
+        Assert.Throws<InvalidOperationException>(() => store.LoadOrCreate(
+            sessionName,
+            DateTimeOffset.Parse("2024-01-01T00:01:00Z")));
+    }
+
+    [Fact]
+    public void Save_and_load_reject_session_paths_outside_session_directory()
+    {
+        using TempDirectory temp = TempDirectory.Create();
+        string sessionDirectory = Path.Combine(temp.Path, ".caicli", "sessions");
+        FileConversationStore store = new(sessionDirectory);
+        ConversationSessionName sessionName = new("smoke", Path.Combine("..", "outside"));
+        ConversationTranscript transcript = ConversationTranscript.Create(
+            sessionName.Value,
+            DateTimeOffset.Parse("2024-01-01T00:00:00Z"));
+
+        Assert.Throws<InvalidOperationException>(() => store.Save(sessionName, transcript));
+        Assert.Throws<InvalidOperationException>(() => store.LoadOrCreate(
+            sessionName,
+            DateTimeOffset.Parse("2024-01-01T00:01:00Z")));
+        Assert.False(File.Exists(Path.Combine(temp.Path, ".caicli", "outside.transcript.json")));
+    }
+
     private sealed class TempDirectory : IDisposable
     {
         private TempDirectory(string path)

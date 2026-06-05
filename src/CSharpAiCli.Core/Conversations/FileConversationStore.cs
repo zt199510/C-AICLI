@@ -40,8 +40,17 @@ public sealed class FileConversationStore : IConversationStore
         }
 
         string json = File.ReadAllText(path);
+        using JsonDocument document = JsonDocument.Parse(json);
+        if (!document.RootElement.TryGetProperty("schemaVersion", out JsonElement schemaVersionElement) ||
+            schemaVersionElement.ValueKind != JsonValueKind.Number ||
+            !schemaVersionElement.TryGetInt32(out int schemaVersion) ||
+            schemaVersion != ConversationTranscript.CurrentSchemaVersion)
+        {
+            throw new InvalidOperationException("Conversation transcript is missing or uses an unsupported schema version.");
+        }
+
         ConversationTranscript? transcript = JsonSerializer.Deserialize<ConversationTranscript>(json, JsonOptions);
-        if (transcript is null || transcript.SchemaVersion != ConversationTranscript.CurrentSchemaVersion)
+        if (transcript is null)
         {
             throw new InvalidOperationException("Conversation transcript is missing or uses an unsupported schema version.");
         }
@@ -63,6 +72,17 @@ public sealed class FileConversationStore : IConversationStore
 
     private string GetPath(ConversationSessionName sessionName)
     {
-        return Path.Combine(sessionDirectory, $"{sessionName.FileSafeName}.transcript.json");
+        string fullSessionDirectory = Path.GetFullPath(sessionDirectory);
+        string path = Path.GetFullPath(Path.Combine(fullSessionDirectory, $"{sessionName.FileSafeName}.transcript.json"));
+        string rootedSessionDirectory = fullSessionDirectory.EndsWith(Path.DirectorySeparatorChar)
+            ? fullSessionDirectory
+            : fullSessionDirectory + Path.DirectorySeparatorChar;
+
+        if (!path.StartsWith(rootedSessionDirectory, StringComparison.OrdinalIgnoreCase))
+        {
+            throw new InvalidOperationException("Conversation transcript path must remain inside the session directory.");
+        }
+
+        return path;
     }
 }
