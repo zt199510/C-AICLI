@@ -162,4 +162,32 @@ public sealed class ConversationTranscriptRecorderTests
         Assert.Empty(transcript.Errors);
         Assert.Equal(start, transcript.UpdatedAtUtc);
     }
+
+    [Fact]
+    public void Record_malformed_result_with_response_and_error_throws_without_mutating_transcript()
+    {
+        DateTimeOffset start = DateTimeOffset.Parse("2024-01-01T00:00:00Z");
+        DateTimeOffset writeTime = DateTimeOffset.Parse("2024-01-01T00:00:05Z");
+        ConversationTranscript transcript = ConversationTranscript.Create("smoke", start);
+        ChatResponse response = new(
+            Provider: "openai",
+            Model: "gpt-test",
+            ResponseId: "resp_123",
+            Text: "OK.");
+        ModelError error = new(
+            Provider: "openai",
+            Operation: "responses.create",
+            StatusCode: null,
+            LocalErrorCode: "missing-openai-api-key",
+            SafeMessage: "OpenAI API key is missing. Set OPENAI_API_KEY or user config apiKey.",
+            Retryable: false);
+        ChatModelResult result = new(response, error);
+
+        Assert.Throws<InvalidOperationException>(
+            () => ConversationTranscriptRecorder.RecordTurn(transcript, "Reply with OK.", result, writeTime));
+
+        Assert.Empty(transcript.Messages);
+        Assert.Empty(transcript.Errors);
+        Assert.Equal(start, transcript.UpdatedAtUtc);
+    }
 }

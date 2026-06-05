@@ -11,9 +11,9 @@ public static class ConversationTranscriptRecorder
         ArgumentNullException.ThrowIfNull(transcript);
         ArgumentNullException.ThrowIfNull(result);
 
-        if (result.Response is null && result.Error is null)
+        if ((result.Response is null) == (result.Error is null))
         {
-            throw new InvalidOperationException("Chat model result must include either a response or an error.");
+            throw new InvalidOperationException("Chat model result must include exactly one response or error.");
         }
 
         transcript.AddUserMessage(prompt, nowUtc);
