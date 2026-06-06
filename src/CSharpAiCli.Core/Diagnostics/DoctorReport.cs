@@ -32,6 +32,11 @@ public sealed record DoctorReport(IReadOnlyList<string> Lines)
             lines.Add($"config warning: {warning}");
         }
 
+        foreach (string warning in snapshot.Instructions.Warnings)
+        {
+            lines.Add($"instruction warning: {warning}");
+        }
+
         return new DoctorReport(lines);
     }
 

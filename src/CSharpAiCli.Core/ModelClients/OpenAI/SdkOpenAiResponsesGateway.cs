@@ -14,11 +14,16 @@ public sealed class SdkOpenAiResponsesGateway : IOpenAiResponsesGateway
         client = new ResponsesClient(apiKey);
     }
 
-    public OpenAiResponseEnvelope CreateResponse(string model, string prompt, CancellationToken cancellationToken = default)
+    public OpenAiResponseEnvelope CreateResponse(
+        string model,
+        string prompt,
+        string? instructions = null,
+        CancellationToken cancellationToken = default)
     {
+        CreateResponseOptions options = CreateOptions(model, prompt, instructions, streamingEnabled: false);
+
         ClientResult<ResponseResult> result = client.CreateResponse(
-            model,
-            prompt,
+            options,
             cancellationToken: cancellationToken);
 
         ResponseResult response = result.Value;
@@ -33,14 +38,10 @@ public sealed class SdkOpenAiResponsesGateway : IOpenAiResponsesGateway
     public IEnumerable<OpenAiStreamingResponseUpdate> CreateResponseStreaming(
         string model,
         string prompt,
+        string? instructions = null,
         CancellationToken cancellationToken = default)
     {
-        CreateResponseOptions options = new()
-        {
-            Model = model,
-            StreamingEnabled = true,
-        };
-        options.InputItems.Add(ResponseItem.CreateUserMessageItem(prompt));
+        CreateResponseOptions options = CreateOptions(model, prompt, instructions, streamingEnabled: true);
 
         foreach (StreamingResponseUpdate update in client.CreateResponseStreaming(
             options,
@@ -60,6 +61,27 @@ public sealed class SdkOpenAiResponsesGateway : IOpenAiResponsesGateway
                     response.Model ?? model);
             }
         }
+    }
+
+    private static CreateResponseOptions CreateOptions(
+        string model,
+        string prompt,
+        string? instructions,
+        bool streamingEnabled)
+    {
+        CreateResponseOptions options = new()
+        {
+            Model = model,
+            StreamingEnabled = streamingEnabled,
+        };
+
+        if (!string.IsNullOrWhiteSpace(instructions))
+        {
+            options.InputItems.Add(ResponseItem.CreateDeveloperMessageItem(instructions));
+        }
+
+        options.InputItems.Add(ResponseItem.CreateUserMessageItem(prompt));
+        return options;
     }
 }
 #pragma warning restore OPENAI001

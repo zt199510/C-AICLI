@@ -39,6 +39,7 @@ public sealed class CommandLoggerTests
             Assert.Contains("modelSource=workspace config", log);
             Assert.Contains("apiKey=present", log);
             Assert.Contains("apiKeySource=OPENAI_API_KEY", log);
+            Assert.Contains("instructionWarnings=none", log);
             Assert.DoesNotContain("sk-test-secret", log);
         }
         finally

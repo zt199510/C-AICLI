@@ -34,6 +34,7 @@ public sealed class CliEnvironmentSnapshotTests
             Assert.Equal(".NET 9.0.0", snapshot.DotnetRuntime);
             Assert.Equal("net9.0", snapshot.TargetFramework);
             Assert.False(snapshot.HasGlobalJson);
+            Assert.False(snapshot.Instructions.HasInstructions);
         }
         finally
         {
@@ -67,16 +68,49 @@ public sealed class CliEnvironmentSnapshotTests
                 dotnetSdkVersion: "9.0.308",
                 dotnetRuntime: ".NET 9.0.0",
                 openAiApiKey: "sk-env-secret",
+                openAiModel: "gpt-env",
                 hasGlobalJson: true);
 
-            Assert.Equal("gpt-workspace", snapshot.Configuration.Model);
-            Assert.Equal("workspace config", snapshot.Configuration.ModelSource);
+            Assert.Equal("gpt-env", snapshot.Configuration.Model);
+            Assert.Equal("OPENAI_MODEL", snapshot.Configuration.ModelSource);
             Assert.True(snapshot.HasOpenAiApiKey);
             Assert.Equal("OPENAI_API_KEY", snapshot.Configuration.ApiKeySource);
             Assert.Equal("sk-env-secret", snapshot.Configuration.ApiKey!.Value);
             Assert.True(snapshot.HasGlobalJson);
             Assert.DoesNotContain("sk-env-secret", snapshot.ToString(), StringComparison.Ordinal);
             Assert.DoesNotContain("sk-workspace-secret", snapshot.ToString(), StringComparison.Ordinal);
+        }
+        finally
+        {
+            Directory.Delete(root, recursive: true);
+        }
+    }
+
+    [Fact]
+    public void Create_loads_workspace_instructions_from_AICLI_md()
+    {
+        string root = CreateTempDirectory();
+
+        try
+        {
+            string userProfile = Path.Combine(root, "home");
+            string workspaceRoot = Path.Combine(root, "workspace");
+            Directory.CreateDirectory(userProfile);
+            Directory.CreateDirectory(workspaceRoot);
+            File.WriteAllText(Path.Combine(workspaceRoot, "AICLI.md"), "Prefer short answers.");
+
+            CliEnvironmentSnapshot snapshot = CliEnvironmentSnapshot.Create(
+                workspacePath: workspaceRoot,
+                currentDirectory: root,
+                userProfile: userProfile,
+                dotnetSdkVersion: "9.0.308",
+                dotnetRuntime: ".NET 9.0.0",
+                openAiApiKey: "",
+                hasGlobalJson: false);
+
+            Assert.True(snapshot.Instructions.HasInstructions);
+            Assert.Equal("Prefer short answers.", snapshot.Instructions.Instructions);
+            Assert.Equal(Path.Combine(workspaceRoot, "AICLI.md"), snapshot.Instructions.SourcePath);
         }
         finally
         {

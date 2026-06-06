@@ -115,6 +115,29 @@ public sealed class OpenAiResponsesModelClientTests
     }
 
     [Fact]
+    public void Send_passes_instruction_text_to_gateway_without_merging_it_into_prompt()
+    {
+        FakeGateway gateway = new()
+        {
+            Response = new OpenAiResponseEnvelope(
+                ResponseId: "resp_instruction",
+                Model: "gpt-test",
+                Text: "hello from model")
+        };
+        OpenAiResponsesModelClient client = new(
+            CreateSnapshot(apiKey: "sk-test", apiKeySource: "OPENAI_API_KEY", model: "gpt-test"),
+            _ => gateway);
+
+        ChatModelResult result = client.Send(new ChatRequest(
+            Prompt: "hello",
+            Instructions: "Be concise."));
+
+        Assert.True(result.IsSuccess);
+        Assert.Equal("hello", gateway.LastPrompt);
+        Assert.Equal("Be concise.", gateway.LastInstructions);
+    }
+
+    [Fact]
     public void Send_allows_user_config_api_key_source_and_returns_response_text()
     {
         FakeGateway gateway = new()
@@ -255,6 +278,31 @@ public sealed class OpenAiResponsesModelClientTests
         Assert.Null(renderer.Error);
         Assert.Equal(1, gateway.StreamingCallCount);
         Assert.Equal(0, gateway.CallCount);
+    }
+
+    [Fact]
+    public void SendStreaming_passes_instruction_text_to_gateway()
+    {
+        FakeGateway gateway = new()
+        {
+            StreamingUpdates =
+            [
+                OpenAiStreamingResponseUpdate.OutputTextDelta("OK"),
+                OpenAiStreamingResponseUpdate.Completed("resp_stream", "gpt-test")
+            ]
+        };
+        FakeStreamingRenderer renderer = new();
+        OpenAiResponsesModelClient client = new(
+            CreateSnapshot(apiKey: "sk-test", apiKeySource: "OPENAI_API_KEY", model: "gpt-test"),
+            _ => gateway);
+
+        ChatModelResult result = client.SendStreaming(
+            new ChatRequest("hello", Instructions: "Be concise."),
+            renderer);
+
+        Assert.True(result.IsSuccess);
+        Assert.Equal("hello", gateway.LastPrompt);
+        Assert.Equal("Be concise.", gateway.LastInstructions);
     }
 
     [Fact]
@@ -447,6 +495,7 @@ public sealed class OpenAiResponsesModelClientTests
         public int StreamingCallCount { get; private set; }
         public string? LastModel { get; private set; }
         public string? LastPrompt { get; private set; }
+        public string? LastInstructions { get; private set; }
         public Exception? ExceptionToThrow { get; init; }
         public OpenAiResponseEnvelope Response { get; init; } = new(
             ResponseId: "resp_fake",
@@ -458,11 +507,16 @@ public sealed class OpenAiResponsesModelClientTests
             OpenAiStreamingResponseUpdate.Completed("resp_fake", "gpt-test")
         ];
 
-        public OpenAiResponseEnvelope CreateResponse(string model, string prompt, CancellationToken cancellationToken = default)
+        public OpenAiResponseEnvelope CreateResponse(
+            string model,
+            string prompt,
+            string? instructions = null,
+            CancellationToken cancellationToken = default)
         {
             CallCount++;
             LastModel = model;
             LastPrompt = prompt;
+            LastInstructions = instructions;
 
             if (ExceptionToThrow is not null)
             {
@@ -475,11 +529,13 @@ public sealed class OpenAiResponsesModelClientTests
         public IEnumerable<OpenAiStreamingResponseUpdate> CreateResponseStreaming(
             string model,
             string prompt,
+            string? instructions = null,
             CancellationToken cancellationToken = default)
         {
             StreamingCallCount++;
             LastModel = model;
             LastPrompt = prompt;
+            LastInstructions = instructions;
 
             if (ExceptionToThrow is not null)
             {

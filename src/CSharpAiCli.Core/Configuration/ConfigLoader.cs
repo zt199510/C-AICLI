@@ -13,12 +13,14 @@ public static class ConfigLoader
     public static EffectiveConfiguration Load(
         WorkspaceContext workspace,
         string? userProfile = null,
-        string? openAiApiKey = null)
+        string? openAiApiKey = null,
+        string? openAiModel = null)
     {
         ArgumentNullException.ThrowIfNull(workspace);
 
         userProfile ??= Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
         openAiApiKey ??= Environment.GetEnvironmentVariable("OPENAI_API_KEY");
+        openAiModel ??= Environment.GetEnvironmentVariable("OPENAI_MODEL");
 
         string userConfigPath = Path.Combine(userProfile, ".caicli", "config.json");
         string workspaceConfigPath = workspace.ConfigPath;
@@ -31,8 +33,10 @@ public static class ConfigLoader
             ? ReadConfig(workspaceConfigPath, loadedConfigPaths, warnings)
             : null;
 
-        (string model, string modelSource) = SelectModel(userConfig, workspaceConfig);
-        (SecretValue? apiKey, string apiKeySource) = SelectApiKey(openAiApiKey, userConfig, workspaceConfig);
+        AddWorkspaceApiKeyWarning(workspaceConfig, workspaceConfigPath, warnings);
+
+        (string model, string modelSource) = SelectModel(openAiModel, userConfig, workspaceConfig);
+        (SecretValue? apiKey, string apiKeySource) = SelectApiKey(openAiApiKey, userConfig);
 
         return new EffectiveConfiguration(
             WorkspaceRoot: workspace.RootPath,
@@ -96,12 +100,13 @@ public static class ConfigLoader
     }
 
     private static (string Model, string Source) SelectModel(
+        string? openAiModel,
         CliConfigFile? userConfig,
         CliConfigFile? workspaceConfig)
     {
-        if (!string.IsNullOrWhiteSpace(workspaceConfig?.Model))
+        if (!string.IsNullOrWhiteSpace(openAiModel))
         {
-            return (workspaceConfig.Model, "workspace config");
+            return (openAiModel, "OPENAI_MODEL");
         }
 
         if (!string.IsNullOrWhiteSpace(userConfig?.Model))
@@ -109,24 +114,22 @@ public static class ConfigLoader
             return (userConfig.Model, "user config");
         }
 
+        if (!string.IsNullOrWhiteSpace(workspaceConfig?.Model))
+        {
+            return (workspaceConfig.Model, "workspace config");
+        }
+
         return ("not configured", "default");
     }
 
     private static (SecretValue? ApiKey, string Source) SelectApiKey(
         string? openAiApiKey,
-        CliConfigFile? userConfig,
-        CliConfigFile? workspaceConfig)
+        CliConfigFile? userConfig)
     {
         SecretValue? envApiKey = SecretValue.From(openAiApiKey);
         if (envApiKey is not null)
         {
             return (envApiKey, "OPENAI_API_KEY");
-        }
-
-        SecretValue? workspaceApiKey = SecretValue.From(workspaceConfig?.ApiKey);
-        if (workspaceApiKey is not null)
-        {
-            return (workspaceApiKey, "workspace config");
         }
 
         SecretValue? userApiKey = SecretValue.From(userConfig?.ApiKey);
@@ -136,5 +139,16 @@ public static class ConfigLoader
         }
 
         return (null, "missing");
+    }
+
+    private static void AddWorkspaceApiKeyWarning(
+        CliConfigFile? workspaceConfig,
+        string workspaceConfigPath,
+        List<string> warnings)
+    {
+        if (!string.IsNullOrWhiteSpace(workspaceConfig?.ApiKey))
+        {
+            warnings.Add($"ignored workspace config apiKey: {workspaceConfigPath}");
+        }
     }
 }

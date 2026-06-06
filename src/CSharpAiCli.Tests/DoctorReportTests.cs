@@ -53,6 +53,22 @@ public sealed class DoctorReportTests
         Assert.Contains("config warning: ignored invalid config", text);
     }
 
+    [Fact]
+    public void Create_prints_instruction_warnings()
+    {
+        CliEnvironmentSnapshot snapshot = CreateSnapshot(
+            apiKey: null,
+            apiKeySource: "missing")
+            with
+            {
+                Instructions = InstructionLoadResult.Empty(["ignored instruction file over 4 bytes: workspace-root/AICLI.md"])
+            };
+
+        string text = DoctorReport.Create(snapshot).ToDisplayText();
+
+        Assert.Contains("instruction warning: ignored instruction file over 4 bytes", text);
+    }
+
     private static CliEnvironmentSnapshot CreateSnapshot(
         string? apiKey,
         string apiKeySource,

@@ -22,6 +22,9 @@ public static class CommandLogger
         string warnings = snapshot.Configuration.Warnings.Count == 0
             ? "none"
             : string.Join("; ", snapshot.Configuration.Warnings.Select(Sanitize));
+        string instructionWarnings = snapshot.Instructions.Warnings.Count == 0
+            ? "none"
+            : string.Join("; ", snapshot.Instructions.Warnings.Select(Sanitize));
 
         string line = string.Join(" | ",
         [
@@ -33,7 +36,8 @@ public static class CommandLogger
             $"modelSource={Sanitize(snapshot.Configuration.ModelSource)}",
             $"apiKey={apiKeyStatus}",
             $"apiKeySource={Sanitize(snapshot.Configuration.ApiKeySource)}",
-            $"warnings={warnings}"
+            $"warnings={warnings}",
+            $"instructionWarnings={instructionWarnings}"
         ]);
 
         File.AppendAllText(logPath, line + Environment.NewLine);

@@ -159,10 +159,45 @@ public sealed class CliCommandFactoryTests
         Assert.Equal("custom-root", receivedWorkspace);
         Assert.Equal(["chat"], loggedCommands);
         Assert.Equal("hello model", chatClient.LastStreamingPrompt);
+        Assert.Null(chatClient.LastRequest?.Instructions);
         Assert.Null(chatClient.LastNonStreamingPrompt);
         Assert.Contains("status: streaming", output.ToString());
         Assert.Contains("fake model output", output.ToString());
         Assert.Contains("status: completed", output.ToString());
+    }
+
+    [Fact]
+    public void Chat_command_passes_workspace_instructions_to_model_request()
+    {
+        using StringWriter output = new();
+        FakeChatModelClient chatClient = new(ChatModelResult.Success(new ChatResponse(
+            Provider: "openai",
+            Model: "gpt-test",
+            ResponseId: "resp_test",
+            Text: "fake model output")));
+        CliEnvironmentSnapshot snapshot = CreateSnapshot(
+            workspacePath: null,
+            apiKey: "sk-test",
+            apiKeySource: "OPENAI_API_KEY",
+            model: "gpt-test")
+            with
+            {
+                Instructions = InstructionLoadResult.Loaded("Be concise.", Path.Combine("workspace-root", "AICLI.md"))
+            };
+
+        int exitCode = CliCommandFactory
+            .Create(
+                output,
+                _ => snapshot,
+                (_, _) => { },
+                _ => chatClient,
+                writer => new TerminalChatStreamingRenderer(writer))
+            .Parse(["chat", "hello model"])
+            .Invoke();
+
+        Assert.Equal(0, exitCode);
+        Assert.Equal("hello model", chatClient.LastRequest?.Prompt);
+        Assert.Equal("Be concise.", chatClient.LastRequest?.Instructions);
     }
 
     private static CliEnvironmentSnapshot CreateSnapshot(string? workspacePath)
@@ -226,6 +261,7 @@ public sealed class CliCommandFactoryTests
 
         Assert.Equal(0, exitCode);
         Assert.Equal("smoke", chatClient.LastRequest?.SessionName);
+        Assert.Null(chatClient.LastRequest?.Instructions);
         Assert.Equal("smoke", store.LoadedSessionName?.Value);
         Assert.Equal("smoke", store.SavedSessionName?.Value);
         Assert.NotNull(store.SavedTranscript);

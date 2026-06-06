@@ -23,10 +23,11 @@ public sealed class ConfigLoaderTests
             EffectiveConfiguration configuration = ConfigLoader.Load(
                 workspace,
                 userProfile: userProfile,
-                openAiApiKey: "sk-env-secret");
+                openAiApiKey: "sk-env-secret",
+                openAiModel: "gpt-env");
 
-            Assert.Equal("gpt-workspace", configuration.Model);
-            Assert.Equal("workspace config", configuration.ModelSource);
+            Assert.Equal("gpt-env", configuration.Model);
+            Assert.Equal("OPENAI_MODEL", configuration.ModelSource);
             Assert.True(configuration.HasApiKey);
             Assert.Equal("OPENAI_API_KEY", configuration.ApiKeySource);
             Assert.Equal("sk-env-secret", configuration.ApiKey!.Value);
@@ -43,7 +44,7 @@ public sealed class ConfigLoaderTests
     }
 
     [Fact]
-    public void Load_uses_workspace_api_key_when_environment_is_missing()
+    public void Load_uses_user_api_key_when_environment_is_missing_and_ignores_workspace_api_key()
     {
         string root = CreateTempDirectory();
 
@@ -63,9 +64,73 @@ public sealed class ConfigLoaderTests
                 userProfile: userProfile,
                 openAiApiKey: "");
 
-            Assert.Equal("sk-workspace-secret", configuration.ApiKey!.Value);
-            Assert.Equal("workspace config", configuration.ApiKeySource);
+            Assert.Equal("sk-user-secret", configuration.ApiKey!.Value);
+            Assert.Equal("user config", configuration.ApiKeySource);
             Assert.DoesNotContain("sk-workspace-secret", configuration.ToString(), StringComparison.Ordinal);
+            Assert.Contains(configuration.Warnings, warning => warning.Contains("ignored workspace config apiKey", StringComparison.Ordinal));
+            Assert.DoesNotContain("sk-workspace-secret", string.Join(Environment.NewLine, configuration.Warnings), StringComparison.Ordinal);
+        }
+        finally
+        {
+            Directory.Delete(root, recursive: true);
+        }
+    }
+
+    [Fact]
+    public void Load_uses_user_model_before_workspace_model_when_environment_model_is_missing()
+    {
+        string root = CreateTempDirectory();
+
+        try
+        {
+            string userProfile = Path.Combine(root, "home");
+            string workspaceRoot = Path.Combine(root, "workspace");
+            Directory.CreateDirectory(userProfile);
+            Directory.CreateDirectory(workspaceRoot);
+
+            WriteConfig(Path.Combine(userProfile, ".caicli", "config.json"), "gpt-user", "sk-user-secret");
+            WriteConfig(Path.Combine(workspaceRoot, ".caicli", "config.json"), "gpt-workspace", "sk-workspace-secret");
+
+            WorkspaceContext workspace = WorkspaceContext.Detect(workspaceRoot, root);
+            EffectiveConfiguration configuration = ConfigLoader.Load(
+                workspace,
+                userProfile: userProfile,
+                openAiApiKey: "");
+
+            Assert.Equal("gpt-user", configuration.Model);
+            Assert.Equal("user config", configuration.ModelSource);
+        }
+        finally
+        {
+            Directory.Delete(root, recursive: true);
+        }
+    }
+
+    [Fact]
+    public void Load_uses_workspace_model_when_environment_and_user_model_are_missing()
+    {
+        string root = CreateTempDirectory();
+
+        try
+        {
+            string userProfile = Path.Combine(root, "home");
+            string workspaceRoot = Path.Combine(root, "workspace");
+            Directory.CreateDirectory(userProfile);
+            Directory.CreateDirectory(workspaceRoot);
+
+            WriteConfig(Path.Combine(workspaceRoot, ".caicli", "config.json"), "gpt-workspace", "sk-workspace-secret");
+
+            WorkspaceContext workspace = WorkspaceContext.Detect(workspaceRoot, root);
+            EffectiveConfiguration configuration = ConfigLoader.Load(
+                workspace,
+                userProfile: userProfile,
+                openAiApiKey: "");
+
+            Assert.Equal("gpt-workspace", configuration.Model);
+            Assert.Equal("workspace config", configuration.ModelSource);
+            Assert.False(configuration.HasApiKey);
+            Assert.Equal("missing", configuration.ApiKeySource);
+            Assert.Contains(configuration.Warnings, warning => warning.Contains("ignored workspace config apiKey", StringComparison.Ordinal));
         }
         finally
         {

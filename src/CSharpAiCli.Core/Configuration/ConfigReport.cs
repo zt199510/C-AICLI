@@ -32,6 +32,11 @@ public sealed record ConfigReport(IReadOnlyList<string> Lines)
             lines.Add($"configWarning: {warning}");
         }
 
+        foreach (string warning in snapshot.Instructions.Warnings)
+        {
+            lines.Add($"instructionWarning: {warning}");
+        }
+
         return new ConfigReport(lines);
     }
 

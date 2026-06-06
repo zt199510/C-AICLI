@@ -40,7 +40,11 @@ public sealed class OpenAiResponsesModelClient : IChatModelClient
         try
         {
             IOpenAiResponsesGateway gateway = gatewayFactory(apiKey!.Value);
-            OpenAiResponseEnvelope response = gateway.CreateResponse(model, prompt, cancellationToken);
+            OpenAiResponseEnvelope response = gateway.CreateResponse(
+                model,
+                prompt,
+                request.Instructions,
+                cancellationToken);
 
             if (string.IsNullOrWhiteSpace(response.Text))
             {
@@ -90,7 +94,11 @@ public sealed class OpenAiResponsesModelClient : IChatModelClient
             string responseId = "unknown";
             string responseModel = model;
 
-            foreach (OpenAiStreamingResponseUpdate update in gateway.CreateResponseStreaming(model, prompt, cancellationToken))
+            foreach (OpenAiStreamingResponseUpdate update in gateway.CreateResponseStreaming(
+                model,
+                prompt,
+                request.Instructions,
+                cancellationToken))
             {
                 cancellationToken.ThrowIfCancellationRequested();
 

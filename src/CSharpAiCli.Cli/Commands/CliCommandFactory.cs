@@ -138,7 +138,7 @@ public static class CliCommandFactory
 
             IChatModelClient chatModelClient = chatModelClientFactory(snapshot);
             IChatStreamingRenderer renderer = streamingRendererFactory(output);
-            ChatRequest request = new(prompt, session);
+            ChatRequest request = new(prompt, session, snapshot.Instructions.Instructions);
 
             ConversationSessionName? sessionName = null;
             ConversationTranscript? transcript = null;

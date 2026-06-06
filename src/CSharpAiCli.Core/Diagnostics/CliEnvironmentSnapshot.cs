@@ -16,6 +16,7 @@ public sealed record CliEnvironmentSnapshot(
     public string WorkspaceConfigPath => Configuration.WorkspaceConfigPath;
     public WorkspaceStatus WorkspaceStatus => Workspace.Status;
     public bool HasOpenAiApiKey => Configuration.HasApiKey;
+    public InstructionLoadResult Instructions { get; init; } = InstructionLoadResult.Empty();
 
     public static CliEnvironmentSnapshot Create(
         string? workspacePath = null,
@@ -24,6 +25,7 @@ public sealed record CliEnvironmentSnapshot(
         string? dotnetSdkVersion = null,
         string? dotnetRuntime = null,
         string? openAiApiKey = null,
+        string? openAiModel = null,
         bool? hasGlobalJson = null)
     {
         currentDirectory ??= Environment.CurrentDirectory;
@@ -31,7 +33,8 @@ public sealed record CliEnvironmentSnapshot(
         dotnetRuntime ??= RuntimeInformation.FrameworkDescription;
 
         WorkspaceContext workspace = WorkspaceContext.Detect(workspacePath, currentDirectory);
-        EffectiveConfiguration configuration = ConfigLoader.Load(workspace, userProfile, openAiApiKey);
+        EffectiveConfiguration configuration = ConfigLoader.Load(workspace, userProfile, openAiApiKey, openAiModel);
+        InstructionLoadResult instructions = new WorkspaceInstructionLoader().Load(workspace);
         hasGlobalJson ??= File.Exists(Path.Combine(workspace.RootPath, "global.json"));
 
         return new CliEnvironmentSnapshot(
@@ -40,7 +43,10 @@ public sealed record CliEnvironmentSnapshot(
             DotnetSdkVersion: dotnetSdkVersion,
             DotnetRuntime: dotnetRuntime,
             TargetFramework: ProductInfo.TargetFramework,
-            HasGlobalJson: hasGlobalJson.Value);
+            HasGlobalJson: hasGlobalJson.Value)
+        {
+            Instructions = instructions
+        };
     }
 
     private static string ReadDotnetSdkVersion()

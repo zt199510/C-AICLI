@@ -57,6 +57,22 @@ public sealed class ConfigReportTests
         Assert.Contains("configWarning: ignored invalid config: broken-config.json", text);
     }
 
+    [Fact]
+    public void Create_prints_instruction_warnings_without_instruction_content()
+    {
+        CliEnvironmentSnapshot snapshot = CreateSnapshot(
+            apiKey: null,
+            apiKeySource: "missing")
+            with
+            {
+                Instructions = InstructionLoadResult.Empty(["ignored instruction file over 4 bytes: workspace-root/AICLI.md"])
+            };
+
+        string text = ConfigReport.Create(snapshot).ToDisplayText();
+
+        Assert.Contains("instructionWarning: ignored instruction file over 4 bytes", text);
+    }
+
     private static CliEnvironmentSnapshot CreateSnapshot(
         string? apiKey,
         string apiKeySource,
