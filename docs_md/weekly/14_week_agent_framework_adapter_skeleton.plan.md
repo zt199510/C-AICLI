@@ -19,15 +19,14 @@
 
 ## 任务清单
 
-- [ ] Step 1: 确认 direct runner 与 `IAgentRunner` 边界。
-- [ ] Step 2: 添加 adapter 项目/命名空间。
-- [ ] Step 3: 添加构建和边界测试。
-- [ ] Step 4: 更新阶段 04 风险记录。
-- [ ] Step 5: 运行 `dotnet build` 和 `dotnet test`。
-- [ ] Step 6: 创建 `14_week_review.md` 并更新总排期。
+- [x] Step 1: 确认 direct runner 与 `IAgentRunner` 边界。
+- [x] Step 2: 添加 adapter 项目/命名空间。
+- [x] Step 3: 添加构建和边界测试。
+- [x] Step 4: 更新阶段 04 风险记录。
+- [x] Step 5: 运行 `dotnet build` 和 `dotnet test`。
+- [x] Step 6: 创建 `14_week_review.md` 并更新总排期。
 
 ## 验收标准
 
 - 适配器构建成功，且不需要修改 CLI 命令代码。
 - direct 后端保持可用。
-

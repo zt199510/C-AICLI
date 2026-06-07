@@ -19,14 +19,13 @@
 
 ## 任务清单
 
-- [ ] Step 1: 添加 project pack 目录/命名空间。
-- [ ] Step 2: 添加计划文档读取 workflow。
-- [ ] Step 3: 添加 C++ 验证 profile workflow。
-- [ ] Step 4: 补齐阶段 05 acceptance 文档。
-- [ ] Step 5: 运行 `dotnet build` 和 `dotnet test`。
-- [ ] Step 6: 创建 `22_week_review.md` 并更新总排期。
+- [x] Step 1: 添加 project pack 目录/命名空间。
+- [x] Step 2: 添加计划文档读取 workflow。
+- [x] Step 3: 添加 C++ 验证 profile workflow。
+- [x] Step 4: 补齐阶段 05 acceptance 文档。
+- [x] Step 5: 运行 `dotnet build` 和 `dotnet test`。
+- [x] Step 6: 创建 `22_week_review.md` 并更新总排期。
 
 ## 验收标准
 
 - 阶段 05 验收清单通过，或作为增强目标清晰标注未启用。
-

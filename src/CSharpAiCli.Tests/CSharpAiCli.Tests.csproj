@@ -19,8 +19,10 @@
   </ItemGroup>
 
   <ItemGroup>
+    <ProjectReference Include="..\CSharpAiCli.AgentFramework\CSharpAiCli.AgentFramework.csproj" />
     <ProjectReference Include="..\CSharpAiCli.Core\CSharpAiCli.Core.csproj" />
     <ProjectReference Include="..\CSharpAiCli.Cli\CSharpAiCli.Cli.csproj" />
+    <ProjectReference Include="..\CSharpAiCli.ProjectPacks\CSharpAiCli.ProjectPacks.csproj" />
   </ItemGroup>
 
 </Project>

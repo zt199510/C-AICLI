@@ -26,16 +26,15 @@
 
 ## 任务清单
 
-- [ ] Step 1: 定义 shell command request/result。
-- [ ] Step 2: 实现危险命令检测。
-- [ ] Step 3: 实现受限 shell runner。
-- [ ] Step 4: 接入 approval policy。
-- [ ] Step 5: 添加超时、cwd 越界、stdout/stderr 截断测试。
-- [ ] Step 6: 运行 `dotnet build` 和 `dotnet test`。
-- [ ] Step 7: 创建 `12_week_review.md` 并更新总排期。
+- [x] Step 1: 定义 shell command request/result。
+- [x] Step 2: 实现危险命令检测。
+- [x] Step 3: 实现受限 shell runner。
+- [x] Step 4: 接入 approval policy。
+- [x] Step 5: 添加超时、cwd 越界、stdout/stderr 截断测试。
+- [x] Step 6: 运行 `dotnet build` 和 `dotnet test`。
+- [x] Step 7: 创建 `12_week_review.md` 并更新总排期。
 
 ## 验收标准
 
 - 无害命令审批后运行。
 - 危险模式、cwd 越界和超时路径有测试。
-

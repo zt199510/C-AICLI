@@ -4,7 +4,7 @@
 
 **Goal:** 完成阶段 02 收口：添加工作区 instruction loader，收紧配置优先级和工作区密钥策略，并验收模型错误格式、脱敏和 session/transcript 边界。
 
-**Architecture:** `CSharpAiCli.Core` 保持 provider-neutral 的 `IInstructionLoader` 与 `InstructionSet`；CLI 负责读取工作区指令并写入 `ChatRequest`；OpenAI Responses client 负责把指令放进请求 payload。配置层统一执行 `OPENAI_MODEL`、用户配置、工作区配置、默认值的 model 优先级，以及 `OPENAI_API_KEY`、用户配置、missing 的 API key 优先级。
+**Architecture:** `CSharpAiCli.Core` 保持 provider-neutral 的 `IInstructionLoader` 与 `InstructionLoadResult`；CLI 负责读取工作区指令并写入 `ChatRequest`；OpenAI Responses client 负责把指令放进请求 payload。配置层统一执行 `OPENAI_MODEL`、用户配置、工作区配置、默认值的 model 优先级，以及 `OPENAI_API_KEY`、用户配置、missing 的 API key 优先级。
 
 **Tech Stack:** C#、`net9.0`、System.CommandLine、OpenAI .NET SDK Responses API、System.Text.Json、xUnit、Windows PowerShell。
 
@@ -86,42 +86,42 @@ docs_md/
 
 ## Task 1: 创建 instruction loader
 
-- [ ] Step 1: 添加 `InstructionLoadResult`，包含 `Instructions`、`SourcePath`、`Warnings` 和 `HasInstructions`。
-- [ ] Step 2: 添加 `IInstructionLoader`，定义 `Load(WorkspaceContext workspace)`。
-- [ ] Step 3: 添加 `WorkspaceInstructionLoader`，读取 `<workspace>/AICLI.md`，默认最大 64 KiB。
-- [ ] Step 4: 添加单元测试覆盖不存在、存在、空文件、超大文件、缺失 workspace。
+- [x] Step 1: 添加 `InstructionLoadResult`，包含 `Instructions`、`SourcePath`、`Warnings` 和 `HasInstructions`。
+- [x] Step 2: 添加 `IInstructionLoader`，定义 `Load(WorkspaceContext workspace)`。
+- [x] Step 3: 添加 `WorkspaceInstructionLoader`，读取 `<workspace>/AICLI.md`，默认最大 64 KiB。
+- [x] Step 4: 添加单元测试覆盖不存在、存在、空文件、超大文件、缺失 workspace。
 
 ## Task 2: 配置优先级和密钥策略收口
 
-- [ ] Step 1: 给 `ConfigLoader.Load` 增加 `openAiModel` 参数，默认读 `OPENAI_MODEL`。
-- [ ] Step 2: model 优先级改为 `OPENAI_MODEL` > user config > workspace config > default。
-- [ ] Step 3: API key 优先级改为 `OPENAI_API_KEY` > user config > missing。
-- [ ] Step 4: workspace config `apiKey` 只产生 warning，不进入 `EffectiveConfiguration.ApiKey`。
-- [ ] Step 5: 更新 config、doctor、logger 相关测试，确认不泄漏密钥。
+- [x] Step 1: 给 `ConfigLoader.Load` 增加 `openAiModel` 参数，默认读 `OPENAI_MODEL`。
+- [x] Step 2: model 优先级改为 `OPENAI_MODEL` > user config > workspace config > default。
+- [x] Step 3: API key 优先级改为 `OPENAI_API_KEY` > user config > missing。
+- [x] Step 4: workspace config `apiKey` 只产生 warning，不进入 `EffectiveConfiguration.ApiKey`。
+- [x] Step 5: 更新 config、doctor、logger 相关测试，确认不泄漏密钥。
 
 ## Task 3: CLI 接线 instruction loader
 
-- [ ] Step 1: `ChatRequest` 增加 `Instructions` 字段。
-- [ ] Step 2: `CliCommandFactory.Create` 增加可注入的 `IInstructionLoader` factory，默认使用 `WorkspaceInstructionLoader`。
-- [ ] Step 3: chat 命令在模型调用前加载 instruction，并传给 `ChatRequest`。
-- [ ] Step 4: session transcript 只记录用户 prompt，不把 instruction 写入 user message。
-- [ ] Step 5: 添加 CLI 单元测试确认 instruction 被传递，且无 `AICLI.md` 时传空。
+- [x] Step 1: `ChatRequest` 增加 `Instructions` 字段。
+- [x] Step 2: `CliEnvironmentSnapshot` 默认使用 `WorkspaceInstructionLoader` 加载 workspace instructions。
+- [x] Step 3: chat 命令在模型调用前加载 instruction，并传给 `ChatRequest`。
+- [x] Step 4: session transcript 只记录用户 prompt，不把 instruction 写入 user message。
+- [x] Step 5: 添加 CLI 单元测试确认 instruction 被传递，且无 `AICLI.md` 时传空。
 
 ## Task 4: OpenAI Responses payload 支持 instructions
 
-- [ ] Step 1: `IOpenAiResponsesGateway` 在非流式和流式方法中增加 `instructions` 参数。
-- [ ] Step 2: `OpenAiResponsesModelClient` 传递 `request.Instructions`，并保持 prompt trim 行为。
-- [ ] Step 3: `SdkOpenAiResponsesGateway` 用 Responses options 构造请求，包含 instructions 和 user input。
-- [ ] Step 4: 更新 fake gateway 测试，确认 instruction 透传。
+- [x] Step 1: `IOpenAiResponsesGateway` 在非流式和流式方法中增加 `instructions` 参数。
+- [x] Step 2: `OpenAiResponsesModelClient` 传递 `request.Instructions`，并保持 prompt trim 行为。
+- [x] Step 3: `SdkOpenAiResponsesGateway` 用 Responses options 构造请求，包含 developer instructions 和 user input。
+- [x] Step 4: 更新 fake gateway 测试，确认 instruction 透传。
 
 ## Task 5: Spec、验证与回顾
 
-- [ ] Step 1: 更新 `docs_md/spec/model_client_responses_api.md` 的 Week 8 行为。
-- [ ] Step 2: 运行 `dotnet build src/CSharpAiCli.sln`。
-- [ ] Step 3: 运行 `dotnet test src/CSharpAiCli.sln`。
-- [ ] Step 4: 运行缺 key、workspace key 禁用、instruction loader 的 CLI smoke。
-- [ ] Step 5: 创建 `docs_md/weekly/08_week_review.md`。
-- [ ] Step 6: 更新 `docs_md/weekly/26_week_goal_schedule.md`：第 8 周已验收，并将阶段 02 标记完成。
+- [x] Step 1: 更新 `docs_md/spec/model_client_responses_api.md` 的 Week 8 行为。
+- [x] Step 2: 运行 `dotnet build src/CSharpAiCli.sln`。
+- [x] Step 3: 运行 `dotnet test src/CSharpAiCli.sln`。
+- [x] Step 4: 运行缺 key、workspace key 禁用、instruction loader 的 CLI smoke。
+- [x] Step 5: 创建 `docs_md/weekly/08_week_review.md`。
+- [x] Step 6: 更新 `docs_md/weekly/26_week_goal_schedule.md`：第 8 周已验收，并将阶段 02 标记完成。
 
 ## 验收标准
 
@@ -134,4 +134,3 @@ Do not mark Week 8 accepted until:
 - workspace config `apiKey` 不会让 effective config 显示 `apiKey: present`。
 - 工作区密钥值不会出现在 report、日志、chat output 或 transcript error。
 - 阶段 02 计划的 8 条验收标准均有实现、测试或明确记录。
-

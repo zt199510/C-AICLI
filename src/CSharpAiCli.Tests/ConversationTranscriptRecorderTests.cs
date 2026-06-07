@@ -95,6 +95,27 @@ public sealed class ConversationTranscriptRecorderTests
     }
 
     [Fact]
+    public void Add_tool_call_appends_tool_call_and_updates_timestamp()
+    {
+        ConversationTranscript transcript = ConversationTranscript.Create(
+            "smoke",
+            DateTimeOffset.Parse("2024-01-01T00:00:00Z"));
+        DateTimeOffset toolTime = DateTimeOffset.Parse("2024-01-01T00:00:04Z");
+        ConversationToolCall toolCall = ConversationToolCall.FromExecution(
+            "call_echo_1",
+            "test.echo",
+            """{"text":"hello"}""",
+            ToolExecutionResult.Success("hello"),
+            toolTime,
+            "not-required");
+
+        transcript.AddToolCall(toolCall);
+
+        Assert.Same(toolCall, Assert.Single(transcript.ToolCalls));
+        Assert.Equal(toolTime, transcript.UpdatedAtUtc);
+    }
+
+    [Fact]
     public void Record_success_appends_user_and_assistant_messages()
     {
         DateTimeOffset start = DateTimeOffset.Parse("2024-01-01T00:00:00Z");

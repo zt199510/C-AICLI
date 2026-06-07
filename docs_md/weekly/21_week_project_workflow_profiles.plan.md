@@ -19,15 +19,14 @@
 
 ## 任务清单
 
-- [ ] Step 1: 添加 workflow registry contract。
-- [ ] Step 2: 添加 validation profile loader。
-- [ ] Step 3: 添加 workflow status/validate 命令骨架。
-- [ ] Step 4: 添加路径来源和审批测试。
-- [ ] Step 5: 运行 `dotnet build` 和 `dotnet test`。
-- [ ] Step 6: 创建 `21_week_review.md` 并更新总排期。
+- [x] Step 1: 添加 workflow registry contract。
+- [x] Step 2: 添加 validation profile loader。
+- [x] Step 3: 添加 workflow status/validate 命令骨架。
+- [x] Step 4: 添加路径来源和审批测试。
+- [x] Step 5: 运行 `dotnet build` 和 `dotnet test`。
+- [x] Step 6: 创建 `21_week_review.md` 并更新总排期。
 
 ## 验收标准
 
 - 工作流可以建议已配置的验证命令。
 - 路径来自 profile 或 `--workspace`。
-

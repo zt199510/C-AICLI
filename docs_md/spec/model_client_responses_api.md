@@ -6,6 +6,8 @@
 
 第 7 周已添加命名 session transcript 持久化和恢复追加；当前仍不会把历史消息发送给模型。
 
+第 8 周已添加工作区 `AICLI.md` instruction loading，并完成配置优先级、workspace `apiKey` 禁用和阶段 02 验收收口。
+
 ## 源码布局
 
 Week 5-6 收尾时已把 `CSharpAiCli.Cli` 和 `CSharpAiCli.Core` 的物理文件位置按职责整理，项目名和公共 namespace 暂不改变。
@@ -38,6 +40,10 @@ src/
       CommandLogger.cs
       DoctorReport.cs
       LogPathResolver.cs
+    Instructions/
+      IInstructionLoader.cs
+      InstructionLoadResult.cs
+      WorkspaceInstructionLoader.cs
     ModelClients/
       OpenAI/
         IOpenAiResponsesGateway.cs
@@ -57,7 +63,7 @@ src/
 - `CSharpAiCli.Cli` 只保留入口和命令接线。
 - `CSharpAiCli.Core/Chat` 承载 provider-neutral chat contract、result 和 report。
 - `CSharpAiCli.Core/ModelClients/OpenAI` 承载 OpenAI Responses SDK adapter 和 gateway。
-- `Configuration`、`Diagnostics`、`Workspace` 分别承载配置、运行时诊断和工作区上下文。
+- `Configuration`、`Diagnostics`、`Instructions`、`Workspace` 分别承载配置、运行时诊断、工作区指令加载和工作区上下文。
 
 ## CLI 行为
 
@@ -104,7 +110,7 @@ retryable: false
 
 ## 配置
 
-第 5 周继续使用最小配置 schema：
+第 8 周继续使用最小配置 schema：
 
 ```json
 {
@@ -113,12 +119,25 @@ retryable: false
 }
 ```
 
+模型配置优先级：
+
+1. `OPENAI_MODEL`
+2. 用户配置文件中的 `model`
+3. 工作区配置文件中的 `model`
+4. `not configured`
+
 真实模型调用只使用以下 API key 来源：
 
 - `OPENAI_API_KEY`
 - 用户配置文件中的 `apiKey`
 
-工作区配置中的 `apiKey` 不用于真实模型调用。完整配置优先级、schema 清理和工作区密钥策略收束留到第 8 周完成。
+工作区配置中的 `apiKey` 不进入 effective configuration；`doctor`、`config get` 和日志只记录安全 warning：
+
+```text
+ignored workspace config apiKey: <workspace config path>
+```
+
+warning 不包含原始密钥值。
 
 ## SDK
 
@@ -128,7 +147,7 @@ OpenAI SDK package：
 OpenAI 2.10.0
 ```
 
-第 5 周引入的非流式 `OpenAI.Responses.ResponsesClient.CreateResponse(string model, string userInputText, ...)` 仍由 `OpenAiResponsesModelClient.Send(...)` 使用。
+第 8 周起，非流式和流式路径都通过 `CreateResponseOptions` 构造 payload，以便在 user input 之外传入 workspace instructions。
 
 第 6 周起，默认 `chat` 路径使用 `ResponsesClient.CreateResponseStreaming(CreateResponseOptions, CancellationToken)` 渲染终端流式输出。
 
@@ -257,6 +276,24 @@ $exitCode
 - Successful turns append one `user` message and one `assistant` message.
 - Failed turns append one `user` message and one safe error entry.
 - `toolCalls` is present as an empty array in Week 7 and reserved for Week 9 tool-call recording.
-- Week 7 does not send historical transcript messages back to the model; model requests still use the current prompt only.
+- Week 7 does not send historical transcript messages back to the model; model requests still use the current prompt plus Week 8 workspace instructions when present.
 - Without `--session`, `chat` keeps the Week 6 streaming behavior and does not create a transcript.
 - Transcript files must not contain raw API keys.
+
+## Week 8 instruction and Phase 02 acceptance behavior
+
+- `CliEnvironmentSnapshot` loads `<workspace>/AICLI.md` through `WorkspaceInstructionLoader` when the workspace is ready.
+- Missing `AICLI.md` keeps Week 7 behavior.
+- Empty `AICLI.md` is ignored.
+- `AICLI.md` over 65536 bytes is ignored with an `instruction warning`.
+- `chat` passes instruction text through `ChatRequest.Instructions`.
+- `OpenAiResponsesModelClient` passes instructions to `IOpenAiResponsesGateway`.
+- `SdkOpenAiResponsesGateway` adds instructions as a developer message item before the user message item.
+- Session transcript user messages continue to record the raw user prompt only; instructions are not copied into transcript user messages.
+- Reports and logs never print instruction content when instruction loading fails.
+
+阶段 02 acceptance status：
+
+```text
+Accepted after Week 8.
+```

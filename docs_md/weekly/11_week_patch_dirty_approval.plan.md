@@ -26,16 +26,15 @@
 
 ## 任务清单
 
-- [ ] Step 1: 定义 `IPatchApplier`、patch preview 和 apply result。
-- [ ] Step 2: 实现单文件 patch 应用和上下文校验。
-- [ ] Step 3: 添加 dirty workspace 检测。
-- [ ] Step 4: 添加 approval policy fake 和生产默认拒绝/询问策略。
-- [ ] Step 5: 将 patch 工具接入工具注册表和 transcript。
-- [ ] Step 6: 运行 `dotnet build` 和 `dotnet test`。
-- [ ] Step 7: 创建 `11_week_review.md` 并更新总排期。
+- [x] Step 1: 定义 `IPatchApplier`、patch preview 和 apply result。
+- [x] Step 2: 实现单文件 patch 应用和上下文校验。
+- [x] Step 3: 添加 dirty workspace 检测。
+- [x] Step 4: 添加 approval policy fake 和生产默认拒绝/询问策略。
+- [x] Step 5: 将 patch 工具接入工具注册表和 transcript。
+- [x] Step 6: 运行 `dotnet build` 和 `dotnet test`。
+- [x] Step 7: 创建 `11_week_review.md` 并更新总排期。
 
 ## 验收标准
 
 - patch 可预览、审批、应用。
 - 目标文件预览后变化会拒绝应用。
-

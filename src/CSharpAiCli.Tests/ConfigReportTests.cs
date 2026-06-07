@@ -23,6 +23,8 @@ public sealed class ConfigReportTests
         Assert.Contains("logDirectory: " + Path.Combine("workspace-root", ".caicli", "logs"), text);
         Assert.Contains("model: gpt-workspace", text);
         Assert.Contains("modelSource: workspace config", text);
+        Assert.Contains("agentBackend: direct", text);
+        Assert.Contains("agentBackendSource: default", text);
         Assert.Contains("apiKey: missing", text);
         Assert.Contains("apiKeySource: missing", text);
         Assert.Contains("loadedConfigPaths: none", text);
@@ -40,6 +42,23 @@ public sealed class ConfigReportTests
         Assert.Contains("apiKey: present", text);
         Assert.Contains("apiKeySource: OPENAI_API_KEY", text);
         Assert.DoesNotContain("sk-test-secret", text, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Create_prints_disabled_tools()
+    {
+        CliEnvironmentSnapshot snapshot = CreateSnapshot(
+            apiKey: null,
+            apiKeySource: "missing",
+            disabledTools: new HashSet<string>(StringComparer.Ordinal)
+            {
+                "workspace.run_shell",
+                "workspace.apply_patch"
+            });
+
+        string text = ConfigReport.Create(snapshot).ToDisplayText();
+
+        Assert.Contains("disabledTools: workspace.apply_patch, workspace.run_shell", text);
     }
 
     [Fact]
@@ -79,7 +98,8 @@ public sealed class ConfigReportTests
         string model = "not configured",
         string modelSource = "default",
         IReadOnlyList<string>? loadedConfigPaths = null,
-        IReadOnlyList<string>? warnings = null)
+        IReadOnlyList<string>? warnings = null,
+        IReadOnlySet<string>? disabledTools = null)
     {
         WorkspaceContext workspace = new(
             RootPath: "workspace-root",
@@ -92,10 +112,14 @@ public sealed class ConfigReportTests
             WorkspaceConfigPath: Path.Combine("workspace-root", ".caicli", "config.json"),
             Model: model,
             ModelSource: modelSource,
+            AgentBackend: "direct",
+            AgentBackendSource: "default",
+            DisabledTools: disabledTools ?? new HashSet<string>(StringComparer.Ordinal),
             ApiKey: SecretValue.From(apiKey),
             ApiKeySource: apiKeySource,
             LoadedConfigPaths: loadedConfigPaths ?? [],
-            Warnings: warnings ?? []);
+            Warnings: warnings ?? [],
+            ConfigSources: []);
 
         return new CliEnvironmentSnapshot(
             Workspace: workspace,

@@ -37,6 +37,300 @@ public sealed class CliCommandFactoryTests
     }
 
     [Fact]
+    public void Version_command_writes_version_metadata()
+    {
+        using StringWriter output = new();
+
+        int exitCode = CliCommandFactory
+            .Create(output, CreateSnapshot)
+            .Parse(["version"])
+            .Invoke();
+
+        Assert.Equal(0, exitCode);
+        Assert.Contains("caicli ", output.ToString());
+        Assert.Contains("target framework: net9.0", output.ToString());
+        Assert.Contains("release runtime: win-x64", output.ToString());
+    }
+
+    [Fact]
+    public void Mcp_list_command_writes_mcp_server_report()
+    {
+        using StringWriter output = new();
+        CliEnvironmentSnapshot snapshot = CreateSnapshot(
+            workspacePath: null,
+            apiKey: null,
+            apiKeySource: "missing",
+            model: "not configured",
+            configSources:
+            [
+                new CliConfigFileSource(
+                    "workspace config",
+                    "workspace-config.json",
+                    new CliConfigFile
+                    {
+                        McpServers = new Dictionary<string, McpServerConfig>
+                        {
+                            ["disabled"] = new()
+                            {
+                                Enabled = false,
+                                Transport = "stdio",
+                                Command = "mcp-disabled"
+                            }
+                        }
+                    })
+            ]);
+
+        int exitCode = CliCommandFactory
+            .Create(output, _ => snapshot)
+            .Parse(["mcp", "list"])
+            .Invoke();
+
+        Assert.Equal(0, exitCode);
+        Assert.Contains("C# AI CLI MCP servers", output.ToString());
+        Assert.Contains("server: disabled", output.ToString());
+        Assert.Contains("status: inactive", output.ToString());
+    }
+
+    [Fact]
+    public void Mcp_doctor_command_writes_mcp_diagnostic_report()
+    {
+        using StringWriter output = new();
+        CliEnvironmentSnapshot snapshot = CreateSnapshot(
+            workspacePath: null,
+            apiKey: null,
+            apiKeySource: "missing",
+            model: "not configured",
+            configSources:
+            [
+                new CliConfigFileSource(
+                    "workspace config",
+                    "workspace-config.json",
+                    new CliConfigFile
+                    {
+                        McpServers = new Dictionary<string, McpServerConfig>
+                        {
+                            ["disabled"] = new()
+                            {
+                                Enabled = false,
+                                Transport = "stdio",
+                                Command = "mcp-disabled"
+                            }
+                        }
+                    })
+            ]);
+
+        int exitCode = CliCommandFactory
+            .Create(output, _ => snapshot)
+            .Parse(["mcp", "doctor"])
+            .Invoke();
+
+        Assert.Equal(0, exitCode);
+        Assert.Contains("C# AI CLI MCP doctor", output.ToString());
+        Assert.Contains("server: disabled", output.ToString());
+        Assert.Contains("connectionStatus: inactive", output.ToString());
+    }
+
+    [Fact]
+    public void Workflow_list_command_writes_workflow_profiles()
+    {
+        using StringWriter output = new();
+        CliEnvironmentSnapshot snapshot = CreateSnapshot(
+            workspacePath: null,
+            apiKey: null,
+            apiKeySource: "missing",
+            model: "not configured",
+            configSources: [CreateWorkflowSource()]);
+
+        int exitCode = CliCommandFactory
+            .Create(output, _ => snapshot)
+            .Parse(["workflow", "list"])
+            .Invoke();
+
+        Assert.Equal(0, exitCode);
+        Assert.Contains("C# AI CLI workflows", output.ToString());
+        Assert.Contains("profile: cpp", output.ToString());
+    }
+
+    [Fact]
+    public void Workflow_validate_command_suggests_validation_command_without_running()
+    {
+        using StringWriter output = new();
+        CliEnvironmentSnapshot snapshot = CreateSnapshot(
+            workspacePath: "cli-root",
+            apiKey: null,
+            apiKeySource: "missing",
+            model: "not configured",
+            configSources: [CreateWorkflowSource()]);
+
+        int exitCode = CliCommandFactory
+            .Create(output, _ => snapshot)
+            .Parse(["workflow", "validate", "cpp"])
+            .Invoke();
+
+        Assert.Equal(0, exitCode);
+        Assert.Contains("profile: cpp", output.ToString());
+        Assert.Contains("validationCommand: dotnet test", output.ToString());
+        Assert.Contains("execution: not run", output.ToString());
+    }
+
+    [Fact]
+    public void Tools_list_prints_enabled_tools_and_disabled_tools()
+    {
+        using StringWriter output = new();
+        CliEnvironmentSnapshot snapshot = CreateSnapshot(
+            workspacePath: null,
+            apiKey: null,
+            apiKeySource: "missing",
+            model: "not configured",
+            disabledTools: new HashSet<string>(StringComparer.Ordinal)
+            {
+                "workspace.run_shell"
+            });
+
+        int exitCode = CliCommandFactory
+            .Create(output, _ => snapshot)
+            .Parse(["tools", "list"])
+            .Invoke();
+
+        Assert.Equal(0, exitCode);
+        Assert.Contains("workspace.read_text", output.ToString());
+        Assert.DoesNotContain("workspace.run_shell: Run", output.ToString(), StringComparison.Ordinal);
+        Assert.Contains("disabledTools: workspace.run_shell", output.ToString());
+    }
+
+    [Fact]
+    public void Tools_call_returns_unknown_tool_when_tool_is_disabled()
+    {
+        using StringWriter output = new();
+        using TempDirectory temp = TempDirectory.Create();
+        string argumentsPath = Path.Combine(temp.Path, "arguments.json");
+        File.WriteAllText(argumentsPath, """{"command":"dotnet --version"}""");
+        CliEnvironmentSnapshot snapshot = CreateSnapshot(
+            workspacePath: null,
+            apiKey: null,
+            apiKeySource: "missing",
+            model: "not configured",
+            disabledTools: new HashSet<string>(StringComparer.Ordinal)
+            {
+                "workspace.run_shell"
+            });
+
+        int exitCode = CliCommandFactory
+            .Create(output, _ => snapshot)
+            .Parse(["tools", "call", "workspace.run_shell", "--arguments-file", argumentsPath])
+            .Invoke();
+
+        Assert.Equal(1, exitCode);
+        Assert.Contains("errorCode: unknown-tool", output.ToString());
+    }
+
+    [Fact]
+    public void Tools_call_refuses_patch_without_approval()
+    {
+        using TempDirectory temp = TempDirectory.Create();
+        File.WriteAllText(Path.Combine(temp.Path, "note.txt"), "before");
+        string argumentsPath = Path.Combine(temp.Path, "arguments.json");
+        File.WriteAllText(argumentsPath, """{"path":"note.txt","find":"before","replace":"after"}""");
+        using StringWriter output = new();
+
+        int exitCode = CliCommandFactory
+            .Create(output, workspacePath => CreateSnapshot(workspacePath))
+            .Parse(["tools", "call", "--workspace", temp.Path, "workspace.apply_patch", "--arguments-file", argumentsPath])
+            .Invoke();
+
+        Assert.Equal(1, exitCode);
+        Assert.Contains("errorCode: approval-denied", output.ToString());
+        Assert.Equal("before", File.ReadAllText(Path.Combine(temp.Path, "note.txt")));
+    }
+
+    [Fact]
+    public void Run_create_smoke_note_applies_patch_when_approved()
+    {
+        using TempDirectory temp = TempDirectory.Create();
+        using StringWriter output = new();
+
+        int exitCode = CliCommandFactory
+            .Create(output, workspacePath => CreateSnapshot(workspacePath))
+            .Parse(["run", "--workspace", temp.Path, "--approve", "create smoke note"])
+            .Invoke();
+
+        Assert.Equal(0, exitCode);
+        Assert.Contains("status: succeeded", output.ToString());
+        Assert.Contains("status: completed", File.ReadAllText(Path.Combine(temp.Path, "caicli-smoke.txt")));
+    }
+
+    [Fact]
+    public void Run_create_smoke_note_respects_patch_tool_disable()
+    {
+        using TempDirectory temp = TempDirectory.Create();
+        using StringWriter output = new();
+        CliEnvironmentSnapshot snapshot = CreateSnapshot(
+            workspacePath: temp.Path,
+            apiKey: null,
+            apiKeySource: "missing",
+            model: "not configured",
+            disabledTools: new HashSet<string>(StringComparer.Ordinal)
+            {
+                "workspace.apply_patch"
+            });
+
+        int exitCode = CliCommandFactory
+            .Create(output, _ => snapshot)
+            .Parse(["run", "--approve", "create smoke note"])
+            .Invoke();
+
+        Assert.Equal(1, exitCode);
+        Assert.Contains("errorCode: unknown-tool", output.ToString());
+    }
+
+    [Fact]
+    public void Session_export_and_clear_manage_transcript_file()
+    {
+        using TempDirectory temp = TempDirectory.Create();
+        string userHome = Path.Combine(temp.Path, "user-home");
+        string workspace = Path.Combine(temp.Path, "workspace");
+        Directory.CreateDirectory(workspace);
+        string sessionDirectory = Path.Combine(userHome, ".caicli", "sessions");
+        Directory.CreateDirectory(sessionDirectory);
+        File.WriteAllText(Path.Combine(sessionDirectory, "smoke.transcript.json"), """
+        {
+          "schemaVersion": 1,
+          "sessionName": "smoke",
+          "createdAtUtc": "2024-01-01T00:00:00+00:00",
+          "updatedAtUtc": "2024-01-01T00:00:00+00:00",
+          "messages": [],
+          "toolCalls": [],
+          "errors": []
+        }
+        """);
+        using StringWriter exportOutput = new();
+        CliEnvironmentSnapshot snapshot = CreateSnapshot(
+            workspacePath: workspace,
+            apiKey: null,
+            apiKeySource: "missing",
+            model: "not configured",
+            userConfigPath: Path.Combine(userHome, ".caicli", "config.json"));
+
+        int exportExitCode = CliCommandFactory
+            .Create(exportOutput, _ => snapshot)
+            .Parse(["session", "export", "smoke"])
+            .Invoke();
+
+        Assert.Equal(0, exportExitCode);
+        Assert.Contains("\"sessionName\": \"smoke\"", exportOutput.ToString());
+
+        using StringWriter clearOutput = new();
+        int clearExitCode = CliCommandFactory
+            .Create(clearOutput, _ => snapshot)
+            .Parse(["session", "clear", "smoke"])
+            .Invoke();
+
+        Assert.Equal(0, clearExitCode);
+        Assert.Contains("status: cleared", clearOutput.ToString());
+        Assert.False(File.Exists(Path.Combine(sessionDirectory, "smoke.transcript.json")));
+    }
+
+    [Fact]
     public void Workspace_option_is_passed_to_doctor_command()
     {
         using StringWriter output = new();
@@ -377,7 +671,10 @@ public sealed class CliCommandFactoryTests
         string? workspacePath,
         string? apiKey,
         string apiKeySource,
-        string model)
+        string model,
+        IReadOnlyList<CliConfigFileSource>? configSources = null,
+        IReadOnlySet<string>? disabledTools = null,
+        string? userConfigPath = null)
     {
         string workspaceRoot = string.IsNullOrWhiteSpace(workspacePath) ? "workspace-root" : workspacePath;
 
@@ -388,14 +685,18 @@ public sealed class CliCommandFactoryTests
 
         EffectiveConfiguration configuration = new(
             WorkspaceRoot: workspaceRoot,
-            UserConfigPath: Path.Combine("user-home", ".caicli", "config.json"),
+            UserConfigPath: userConfigPath ?? Path.Combine("user-home", ".caicli", "config.json"),
             WorkspaceConfigPath: Path.Combine(workspaceRoot, ".caicli", "config.json"),
             Model: model,
             ModelSource: model == "not configured" ? "default" : "workspace config",
+            AgentBackend: "direct",
+            AgentBackendSource: "default",
+            DisabledTools: disabledTools ?? new HashSet<string>(StringComparer.Ordinal),
             ApiKey: SecretValue.From(apiKey),
             ApiKeySource: apiKeySource,
             LoadedConfigPaths: [],
-            Warnings: []);
+            Warnings: [],
+            ConfigSources: configSources ?? []);
 
         return new CliEnvironmentSnapshot(
             Workspace: workspace,
@@ -404,6 +705,49 @@ public sealed class CliCommandFactoryTests
             DotnetRuntime: ".NET 9.0.0",
             TargetFramework: "net9.0",
             HasGlobalJson: false);
+    }
+
+    private sealed class TempDirectory : IDisposable
+    {
+        private TempDirectory(string path)
+        {
+            Path = path;
+        }
+
+        public string Path { get; }
+
+        public static TempDirectory Create()
+        {
+            string path = System.IO.Path.Combine(System.IO.Path.GetTempPath(), "caicli-tests-" + Guid.NewGuid().ToString("N"));
+            Directory.CreateDirectory(path);
+            return new TempDirectory(path);
+        }
+
+        public void Dispose()
+        {
+            if (Directory.Exists(Path))
+            {
+                Directory.Delete(Path, recursive: true);
+            }
+        }
+    }
+
+    private static CliConfigFileSource CreateWorkflowSource()
+    {
+        return new CliConfigFileSource(
+            "workspace config",
+            "workspace-config.json",
+            new CliConfigFile
+            {
+                WorkflowProfiles = new Dictionary<string, WorkflowProfileConfig>
+                {
+                    ["cpp"] = new()
+                    {
+                        WorkspacePath = null,
+                        ValidationCommand = "dotnet test"
+                    }
+                }
+            });
     }
 
     private sealed class FakeChatModelClient(ChatModelResult result) : IChatModelClient

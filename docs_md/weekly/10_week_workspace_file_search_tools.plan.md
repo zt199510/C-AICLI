@@ -26,16 +26,15 @@
 
 ## 任务清单
 
-- [ ] Step 1: 添加 `WorkspaceGuard` 和路径安全测试。
-- [ ] Step 2: 添加 junction/symlink 越界测试，Windows 上可运行。
-- [ ] Step 3: 添加 file read tool。
-- [ ] Step 4: 添加 search tool。
-- [ ] Step 5: 接入工具注册表和离线 agent loop。
-- [ ] Step 6: 运行 `dotnet build` 和 `dotnet test`。
-- [ ] Step 7: 创建 `10_week_review.md` 并更新总排期。
+- [x] Step 1: 添加 `WorkspaceGuard` 和路径安全测试。
+- [x] Step 2: 添加 junction/symlink 越界测试，Windows 上可运行。
+- [x] Step 3: 添加 file read tool。
+- [x] Step 4: 添加 search tool。
+- [x] Step 5: 接入工具注册表和离线 agent loop。
+- [x] Step 6: 运行 `dotnet build` 和 `dotnet test`。
+- [x] Step 7: 创建 `10_week_review.md` 并更新总排期。
 
 ## 验收标准
 
 - 工作区外读取、`..`、大小写路径和 junction/symlink 越界在测试中被阻止。
 - 工作区内文本读取和搜索可用。
-

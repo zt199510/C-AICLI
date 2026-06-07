@@ -143,10 +143,14 @@ public sealed class CommandLoggerTests
             WorkspaceConfigPath: Path.Combine(workspaceRoot, ".caicli", "config.json"),
             Model: model,
             ModelSource: modelSource,
+            AgentBackend: "direct",
+            AgentBackendSource: "default",
+            DisabledTools: new HashSet<string>(StringComparer.Ordinal),
             ApiKey: SecretValue.From(apiKey),
             ApiKeySource: apiKeySource,
             LoadedConfigPaths: [],
-            Warnings: warnings ?? []);
+            Warnings: warnings ?? [],
+            ConfigSources: []);
 
         return new CliEnvironmentSnapshot(
             Workspace: workspace,

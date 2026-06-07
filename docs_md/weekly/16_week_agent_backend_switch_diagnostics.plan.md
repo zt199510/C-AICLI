@@ -18,15 +18,14 @@
 
 ## 任务清单
 
-- [ ] Step 1: 扩展配置模型，添加 backend 字段。
-- [ ] Step 2: 添加 backend resolver。
-- [ ] Step 3: 更新 doctor/config get 输出。
-- [ ] Step 4: 添加 framework 缺失/禁用测试。
-- [ ] Step 5: 运行 `dotnet build` 和 `dotnet test`。
-- [ ] Step 6: 创建 `16_week_review.md` 并更新总排期。
+- [x] Step 1: 扩展配置模型，添加 backend 字段。
+- [x] Step 2: 添加 backend resolver。
+- [x] Step 3: 更新 doctor/config get 输出。
+- [x] Step 4: 添加 framework 缺失/禁用测试。
+- [x] Step 5: 运行 `dotnet build` 和 `dotnet test`。
+- [x] Step 6: 创建 `16_week_review.md` 并更新总排期。
 
 ## 验收标准
 
 - direct 和 framework 后端都可以通过配置选择。
 - framework 缺失时 doctor 解释原因。
-

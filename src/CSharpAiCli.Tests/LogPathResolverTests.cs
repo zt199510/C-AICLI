@@ -46,10 +46,14 @@ public sealed class LogPathResolverTests
             WorkspaceConfigPath: Path.Combine(workspaceRoot, ".caicli", "config.json"),
             Model: "not configured",
             ModelSource: "default",
+            AgentBackend: "direct",
+            AgentBackendSource: "default",
+            DisabledTools: new HashSet<string>(StringComparer.Ordinal),
             ApiKey: null,
             ApiKeySource: "missing",
             LoadedConfigPaths: [],
-            Warnings: []);
+            Warnings: [],
+            ConfigSources: []);
 
         return new CliEnvironmentSnapshot(
             Workspace: workspace,

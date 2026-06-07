@@ -29,6 +29,7 @@ public sealed record CliEnvironmentSnapshot(
         bool? hasGlobalJson = null)
     {
         currentDirectory ??= Environment.CurrentDirectory;
+        userProfile ??= Environment.GetEnvironmentVariable("CAICLI_USER_PROFILE");
         dotnetSdkVersion ??= ReadDotnetSdkVersion();
         dotnetRuntime ??= RuntimeInformation.FrameworkDescription;
 

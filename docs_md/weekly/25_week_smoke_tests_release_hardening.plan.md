@@ -18,14 +18,22 @@
 
 ## 任务清单
 
-- [ ] Step 1: 添加 smoke test 脚本。
-- [ ] Step 2: 添加干净 workspace fixture。
-- [ ] Step 3: 覆盖缺 key 和模型配置错误。
-- [ ] Step 4: 覆盖审批拒绝、路径越界和工具禁用。
-- [ ] Step 5: 运行 Release build 和 smoke tests。
-- [ ] Step 6: 创建 `25_week_review.md` 并更新总排期。
+- [x] Step 1: 添加 smoke test 脚本。
+- [x] Step 2: 添加干净 workspace fixture。
+- [x] Step 3: 覆盖缺 key 和模型配置错误。
+- [x] Step 4: 覆盖审批拒绝、路径越界和工具禁用。
+- [x] Step 5: 运行 Release build 和 smoke tests。
+- [x] Step 6: 创建 `25_week_review.md` 并更新总排期。
+
+## 固化记录
+
+- 新增 `tools/Invoke-SmokeTests.ps1`，默认使用 `artifacts/release/caicli-0.1.0-win-x64/caicli.exe`。
+- Smoke 使用临时 user profile、临时 workspace 和 workspace 外 fixture 文件。
+- 覆盖 `version`、`doctor`、`chat` 缺 model、`chat` 缺 key、审批拒绝、路径越界、工具禁用、shell timeout、`run` 小任务、session export 和 session clear。
+- 新增 `tools list/call`、`run`、`session export/clear` CLI 表面命令用于发布验收。
+- 新增 `disabledTools` 配置字段，支持 user/workspace config 合并禁用工具。
+- 已验证 Release build、Release tests 和 smoke tests 均通过。
 
 ## 验收标准
 
 - Smoke test 脚本在干净测试工作区通过。
-

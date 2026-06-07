@@ -150,6 +150,37 @@ public sealed class CliEnvironmentSnapshotTests
     }
 
     [Fact]
+    public void Create_uses_caicli_user_profile_environment_override()
+    {
+        string root = CreateTempDirectory();
+        string? previous = Environment.GetEnvironmentVariable("CAICLI_USER_PROFILE");
+
+        try
+        {
+            string userProfile = Path.Combine(root, "portable-home");
+            string workspaceRoot = Path.Combine(root, "workspace");
+            Directory.CreateDirectory(userProfile);
+            Directory.CreateDirectory(workspaceRoot);
+            Environment.SetEnvironmentVariable("CAICLI_USER_PROFILE", userProfile);
+
+            CliEnvironmentSnapshot snapshot = CliEnvironmentSnapshot.Create(
+                workspacePath: workspaceRoot,
+                currentDirectory: root,
+                dotnetSdkVersion: "9.0.308",
+                dotnetRuntime: ".NET 9.0.0",
+                openAiApiKey: "",
+                hasGlobalJson: false);
+
+            Assert.Equal(Path.Combine(userProfile, ".caicli", "config.json"), snapshot.UserConfigPath);
+        }
+        finally
+        {
+            Environment.SetEnvironmentVariable("CAICLI_USER_PROFILE", previous);
+            Directory.Delete(root, recursive: true);
+        }
+    }
+
+    [Fact]
     public void Create_detects_global_json_from_effective_workspace_root()
     {
         string root = CreateTempDirectory();

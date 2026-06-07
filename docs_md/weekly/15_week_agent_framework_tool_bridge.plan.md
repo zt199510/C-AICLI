@@ -18,13 +18,12 @@
 
 ## 任务清单
 
-- [ ] Step 1: 添加 framework tool bridge。
-- [ ] Step 2: 映射 read/search 工具 metadata。
-- [ ] Step 3: 添加 framework backend fake/integration 测试。
-- [ ] Step 4: 运行 `dotnet build` 和 `dotnet test`。
-- [ ] Step 5: 创建 `15_week_review.md` 并更新总排期。
+- [x] Step 1: 添加 framework tool bridge。
+- [x] Step 2: 映射 read/search 工具 metadata。
+- [x] Step 3: 添加 framework backend fake/integration 测试。
+- [x] Step 4: 运行 `dotnet build` 和 `dotnet test`。
+- [x] Step 5: 创建 `15_week_review.md` 并更新总排期。
 
 ## 验收标准
 
 - 框架后端可以调用读取和搜索工具。
-

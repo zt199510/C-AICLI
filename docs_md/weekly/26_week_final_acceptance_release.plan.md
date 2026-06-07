@@ -20,15 +20,23 @@
 
 ## 任务清单
 
-- [ ] Step 1: 汇总阶段 01-06 状态。
-- [ ] Step 2: 创建 changelog。
-- [ ] Step 3: 创建 known limitations。
-- [ ] Step 4: 运行 Release build、tests、smoke tests。
-- [ ] Step 5: 归档发布产物并记录校验摘要。
-- [ ] Step 6: 创建 `26_week_review.md` 并更新总排期。
+- [x] Step 1: 汇总阶段 01-06 状态。
+- [x] Step 2: 创建 changelog。
+- [x] Step 3: 创建 known limitations。
+- [x] Step 4: 运行 Release build、tests、smoke tests。
+- [x] Step 5: 归档发布产物并记录校验摘要。
+- [x] Step 6: 创建 `26_week_review.md` 并更新总排期。
+
+## 固化记录
+
+- 新增 `docs_md/release/CHANGELOG.md`。
+- 新增 `docs_md/release/known_limitations.md`。
+- 新增 `docs_md/release/final_acceptance.md`。
+- 已运行最终 Release build、Release tests、发布脚本和 smoke tests。
+- 已生成 `artifacts/release/caicli-0.1.0-win-x64.zip`。
+- 发布 zip SHA256：`279AE0CE7802E6DC79344B76FC3C36954875FC8D34E1CF385085652E244D9AEA`。
 
 ## 验收标准
 
 - 半年验收清单通过。
 - 第一个本地发布包存在且可运行。
-

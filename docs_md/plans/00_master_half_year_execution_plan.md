@@ -2,7 +2,7 @@
 
 ## 状态
 
-`Planned`
+`MVP Accepted / Enhanced Deferred`
 
 ## 目标
 
@@ -185,12 +185,12 @@ caicli mcp list
 
 | 阶段 | 文件 | 目标周数 | 状态 |
 |---|---|---:|---|
-| 01 | `01_foundation_cli_workspace.plan.md` | 1-4 | `Planned` |
-| 02 | `02_model_streaming_sessions.plan.md` | 5-8 | `Planned` |
-| 03 | `03_tools_safety_file_editing.plan.md` | 9-13 | `Planned` |
-| 04 | `04_agent_framework_adapter.plan.md` | 14-17 | `Planned` |
-| 05 | `05_mcp_project_workflows.plan.md` | 18-22 | `Planned` |
-| 06 | `06_packaging_release_hardening.plan.md` | 23-26 | `Planned` |
+| 01 | `01_foundation_cli_workspace.plan.md` | 1-4 | `Accepted` |
+| 02 | `02_model_streaming_sessions.plan.md` | 5-8 | `Accepted` |
+| 03 | `03_tools_safety_file_editing.plan.md` | 9-13 | `Accepted` |
+| 04 | `04_agent_framework_adapter.plan.md` | 14-17 | `Deferred` |
+| 05 | `05_mcp_project_workflows.plan.md` | 18-22 | `Deferred` |
+| 06 | `06_packaging_release_hardening.plan.md` | 23-26 | `Accepted` |
 
 ## 周计划
 

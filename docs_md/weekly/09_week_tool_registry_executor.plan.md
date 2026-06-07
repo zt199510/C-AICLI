@@ -27,17 +27,16 @@
 
 ## 任务清单
 
-- [ ] Step 1: 定义 `ITool`、`ToolDefinition`、`ToolExecutionContext`、`ToolExecutionResult`。
-- [ ] Step 2: 实现 `ToolRegistry`，支持注册、列出和按名称查找。
-- [ ] Step 3: 实现 `ToolExecutor`，统一捕获安全错误和工具异常。
-- [ ] Step 4: 扩展 transcript tool call schema，并保持 Week 7 空数组兼容。
-- [ ] Step 5: 添加 fake model + fake tool 离线循环测试。
-- [ ] Step 6: 运行 `dotnet build` 和 `dotnet test`。
-- [ ] Step 7: 创建 `09_week_review.md` 并更新总排期。
+- [x] Step 1: 定义 `ITool`、`ToolDefinition`、`ToolExecutionContext`、`ToolExecutionResult`。
+- [x] Step 2: 实现 `ToolRegistry`，支持注册、列出和按名称查找。
+- [x] Step 3: 实现 `ToolExecutor`，统一捕获安全错误和工具异常。
+- [x] Step 4: 扩展 transcript tool call schema，并保持 Week 7 空数组兼容。
+- [x] Step 5: 添加 fake model + fake tool 离线循环测试。
+- [x] Step 6: 运行 `dotnet build` 和 `dotnet test`。
+- [x] Step 7: 创建 `09_week_review.md` 并更新总排期。
 
 ## 验收标准
 
 - fake model + fake test tool 可以通过离线 agent loop 调用。
 - 工具结果和失败原因可写入 transcript。
 - 未知工具和参数错误不会崩溃 CLI/core。
-

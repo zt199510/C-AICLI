@@ -2,7 +2,7 @@
 
 ## 状态
 
-`Planned`
+`Accepted`
 
 ## 目标
 
@@ -91,3 +91,11 @@ powershell -NoProfile -ExecutionPolicy Bypass -File tools/Invoke-SmokeTests.ps1
 - 所有六个阶段计划都达到 `Accepted`
 - 后端适配器可以被替换，而不需要重写 CLI
 - MCP 和项目工作流可用，或有单独发布计划承接
+
+## 阶段 06 验收记录
+
+- `dotnet build src\CSharpAiCli.sln -c Release`：通过，0 warning，0 error。
+- `dotnet test src\CSharpAiCli.sln -c Release --no-build`：通过，246 tests passed。
+- `powershell -NoProfile -ExecutionPolicy Bypass -File tools/Build-Release.ps1`：通过，生成 `artifacts/release/caicli-0.1.0-win-x64` 和 zip。
+- `powershell -NoProfile -ExecutionPolicy Bypass -File tools/Invoke-SmokeTests.ps1`：通过，覆盖缺 model/key、审批拒绝、路径越界、工具禁用、shell timeout、`run` 和 session export/clear。
+- 发布文档位于 `docs_md/release/`，包含 installation、configuration、security model、quickstart、capability status、changelog、known limitations 和 final acceptance。

@@ -23,6 +23,23 @@ public sealed class DoctorReportTests
         Assert.Contains("workspace config: " + Path.Combine("workspace-root", ".caicli", "config.json"), text);
         Assert.Contains("log directory: " + Path.Combine("workspace-root", ".caicli", "logs"), text);
         Assert.Contains("api key: missing", text);
+        Assert.Contains("agent backend: direct (default)", text);
+        Assert.Contains("agent backend status: available", text);
+    }
+
+    [Fact]
+    public void Create_explains_framework_backend_unavailable()
+    {
+        CliEnvironmentSnapshot snapshot = CreateSnapshot(
+            apiKey: null,
+            apiKeySource: "missing",
+            agentBackend: "framework",
+            agentBackendSource: "workspace config");
+
+        string text = DoctorReport.Create(snapshot).ToDisplayText();
+
+        Assert.Contains("agent backend: framework (workspace config)", text);
+        Assert.Contains("agent backend status: unavailable: Microsoft Agent Framework adapter is an experimental stub", text);
     }
 
     [Fact]
@@ -73,7 +90,9 @@ public sealed class DoctorReportTests
         string? apiKey,
         string apiKeySource,
         bool hasGlobalJson = false,
-        IReadOnlyList<string>? warnings = null)
+        IReadOnlyList<string>? warnings = null,
+        string agentBackend = "direct",
+        string agentBackendSource = "default")
     {
         WorkspaceContext workspace = new(
             RootPath: "workspace-root",
@@ -86,10 +105,14 @@ public sealed class DoctorReportTests
             WorkspaceConfigPath: Path.Combine("workspace-root", ".caicli", "config.json"),
             Model: "not configured",
             ModelSource: "default",
+            AgentBackend: agentBackend,
+            AgentBackendSource: agentBackendSource,
+            DisabledTools: new HashSet<string>(StringComparer.Ordinal),
             ApiKey: SecretValue.From(apiKey),
             ApiKeySource: apiKeySource,
             LoadedConfigPaths: [],
-            Warnings: warnings ?? []);
+            Warnings: warnings ?? [],
+            ConfigSources: []);
 
         return new CliEnvironmentSnapshot(
             Workspace: workspace,

@@ -9,7 +9,7 @@ public sealed class ConversationTranscript
     public DateTimeOffset CreatedAtUtc { get; init; }
     public DateTimeOffset UpdatedAtUtc { get; set; }
     public List<ConversationMessage> Messages { get; init; } = [];
-    public List<object> ToolCalls { get; init; } = [];
+    public List<ConversationToolCall> ToolCalls { get; init; } = [];
     public List<ConversationError> Errors { get; init; } = [];
 
     public static ConversationTranscript Create(string sessionName, DateTimeOffset nowUtc)
@@ -55,5 +55,13 @@ public sealed class ConversationTranscript
     {
         Errors.Add(ConversationError.FromModelError(error, nowUtc));
         UpdatedAtUtc = nowUtc;
+    }
+
+    public void AddToolCall(ConversationToolCall toolCall)
+    {
+        ArgumentNullException.ThrowIfNull(toolCall);
+
+        ToolCalls.Add(toolCall);
+        UpdatedAtUtc = toolCall.CompletedAtUtc;
     }
 }

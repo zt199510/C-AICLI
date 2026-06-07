@@ -18,14 +18,13 @@
 
 ## 任务清单
 
-- [ ] Step 1: 添加 MCP tool adapter。
-- [ ] Step 2: 接入通用工具注册表。
-- [ ] Step 3: 添加禁用工具拒绝测试。
-- [ ] Step 4: 添加 fake MCP tool 调用测试。
-- [ ] Step 5: 运行 `dotnet build` 和 `dotnet test`。
-- [ ] Step 6: 创建 `20_week_review.md` 并更新总排期。
+- [x] Step 1: 添加 MCP tool adapter。
+- [x] Step 2: 接入通用工具注册表。
+- [x] Step 3: 添加禁用工具拒绝测试。
+- [x] Step 4: 添加 fake MCP tool 调用测试。
+- [x] Step 5: 运行 `dotnet build` 和 `dotnet test`。
+- [x] Step 6: 创建 `20_week_review.md` 并更新总排期。
 
 ## 验收标准
 
 - MCP 工具在启用后可列出并调用。
-

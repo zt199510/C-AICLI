@@ -1,4 +1,5 @@
 using System.CommandLine;
+using System.Text.Json;
 using CSharpAiCli.Core;
 
 namespace CSharpAiCli.Cli;
@@ -94,6 +95,15 @@ public static class CliCommandFactory
         };
         rootCommand.Options.Add(workspaceOption);
 
+        Command versionCommand = new("version", "Print product version metadata.");
+        versionCommand.SetAction(_ =>
+        {
+            output.WriteLine($"{ProductInfo.CommandName} {ProductInfo.Version}");
+            output.WriteLine($"target framework: {ProductInfo.TargetFramework}");
+            output.WriteLine($"release runtime: {ProductInfo.ReleaseRuntime}");
+            return 0;
+        });
+
         Command doctorCommand = new("doctor", "Inspect runtime, workspace, and configuration readiness.");
         doctorCommand.SetAction(parseResult =>
         {
@@ -116,6 +126,183 @@ public static class CliCommandFactory
         });
 
         configCommand.Subcommands.Add(configGetCommand);
+
+        Command mcpCommand = new("mcp", "Inspect MCP server configuration.");
+        Command mcpListCommand = new("list", "List configured MCP servers.");
+        mcpListCommand.SetAction(parseResult =>
+        {
+            string? workspacePath = parseResult.GetValue(workspaceOption);
+            CliEnvironmentSnapshot snapshot = snapshotProvider(workspacePath);
+            TryWriteCommandLog(commandLogger, "mcp list", snapshot);
+            output.WriteLine(McpListReport.Create(snapshot).ToDisplayText());
+            return 0;
+        });
+        mcpCommand.Subcommands.Add(mcpListCommand);
+        Command mcpDoctorCommand = new("doctor", "Diagnose configured MCP servers.");
+        mcpDoctorCommand.SetAction(parseResult =>
+        {
+            string? workspacePath = parseResult.GetValue(workspaceOption);
+            CliEnvironmentSnapshot snapshot = snapshotProvider(workspacePath);
+            TryWriteCommandLog(commandLogger, "mcp doctor", snapshot);
+            output.WriteLine(McpDoctorReport.Create(snapshot).ToDisplayText());
+            return 0;
+        });
+        mcpCommand.Subcommands.Add(mcpDoctorCommand);
+
+        Command workflowCommand = new("workflow", "Inspect project workflow profiles.");
+        Command workflowListCommand = new("list", "List configured workflow profiles.");
+        workflowListCommand.SetAction(parseResult =>
+        {
+            string? workspacePath = parseResult.GetValue(workspaceOption);
+            CliEnvironmentSnapshot snapshot = snapshotProvider(workspacePath);
+            TryWriteCommandLog(commandLogger, "workflow list", snapshot);
+            output.WriteLine(WorkflowListReport.Create(snapshot).ToDisplayText());
+            return 0;
+        });
+        Command workflowValidateCommand = new("validate", "Suggest the validation command for a workflow profile.");
+        Argument<string> workflowProfileArgument = new("profile")
+        {
+            Description = "The configured workflow profile name.",
+        };
+        workflowValidateCommand.Arguments.Add(workflowProfileArgument);
+        workflowValidateCommand.SetAction(parseResult =>
+        {
+            string? workspacePath = parseResult.GetValue(workspaceOption);
+            string profile = parseResult.GetValue(workflowProfileArgument) ?? string.Empty;
+            CliEnvironmentSnapshot snapshot = snapshotProvider(workspacePath);
+            TryWriteCommandLog(commandLogger, "workflow validate", snapshot);
+            output.WriteLine(WorkflowValidateReport.Create(snapshot, profile).ToDisplayText());
+            return 0;
+        });
+        workflowCommand.Subcommands.Add(workflowListCommand);
+        workflowCommand.Subcommands.Add(workflowValidateCommand);
+
+        Command toolsCommand = new("tools", "Inspect and invoke local workspace tools.");
+        Command toolsListCommand = new("list", "List enabled local tools.");
+        toolsListCommand.SetAction(parseResult =>
+        {
+            string? workspacePath = parseResult.GetValue(workspaceOption);
+            CliEnvironmentSnapshot snapshot = snapshotProvider(workspacePath);
+            TryWriteCommandLog(commandLogger, "tools list", snapshot);
+            ToolRegistry registry = CliToolFactory.CreateRegistry(snapshot, new DefaultDenyApprovalPolicy());
+            foreach (ToolDefinition definition in registry.List().OrderBy(definition => definition.Name, StringComparer.Ordinal))
+            {
+                output.WriteLine($"{definition.Name}: {definition.Description}");
+            }
+
+            if (snapshot.Configuration.DisabledTools.Count > 0)
+            {
+                output.WriteLine("disabledTools: " + string.Join(", ", snapshot.Configuration.DisabledTools.Order(StringComparer.Ordinal)));
+            }
+
+            return 0;
+        });
+
+        Command toolsCallCommand = new("call", "Invoke one enabled local tool with a JSON argument object.");
+        Argument<string> toolNameArgument = new("name")
+        {
+            Description = "The tool name to invoke.",
+        };
+        Argument<string> toolArgumentsArgument = new("arguments")
+        {
+            Description = "JSON object arguments for the tool.",
+            DefaultValueFactory = _ => "{}",
+        };
+        Option<bool> toolsApproveOption = new("--approve")
+        {
+            Description = "Approve file edit or shell actions for this call.",
+        };
+        Option<string> toolArgumentsFileOption = new("--arguments-file")
+        {
+            Description = "Read JSON object arguments from a file.",
+        };
+        toolsCallCommand.Arguments.Add(toolNameArgument);
+        toolsCallCommand.Arguments.Add(toolArgumentsArgument);
+        toolsCallCommand.Options.Add(toolsApproveOption);
+        toolsCallCommand.Options.Add(toolArgumentsFileOption);
+        toolsCallCommand.SetAction(parseResult =>
+        {
+            string? workspacePath = parseResult.GetValue(workspaceOption);
+            string toolName = parseResult.GetValue(toolNameArgument) ?? string.Empty;
+            string argumentsJson = parseResult.GetValue(toolArgumentsArgument) ?? "{}";
+            string? argumentsFile = parseResult.GetValue(toolArgumentsFileOption);
+            if (!string.IsNullOrWhiteSpace(argumentsFile))
+            {
+                argumentsJson = File.ReadAllText(argumentsFile);
+            }
+
+            bool approve = parseResult.GetValue(toolsApproveOption);
+            CliEnvironmentSnapshot snapshot = snapshotProvider(workspacePath);
+            TryWriteCommandLog(commandLogger, "tools call", snapshot);
+            ToolRegistry registry = CliToolFactory.CreateRegistry(
+                snapshot,
+                approve ? new AlwaysApproveApprovalPolicy() : new DefaultDenyApprovalPolicy());
+            ToolExecutor executor = new(registry);
+            ToolExecutionResult result = executor.Execute(
+                toolName,
+                new ToolExecutionContext("cli_tool_call", snapshot.Workspace, argumentsJson));
+
+            WriteToolResult(output, result);
+            return result.Succeeded ? 0 : 1;
+        });
+        toolsCommand.Subcommands.Add(toolsListCommand);
+        toolsCommand.Subcommands.Add(toolsCallCommand);
+
+        Command runCommand = new("run", "Run a deterministic local workspace task through the direct tool layer.");
+        Argument<string> taskArgument = new("task")
+        {
+            Description = "Task text. Supported smoke tasks: create smoke note, read <path>, shell <command>.",
+        };
+        Option<bool> runApproveOption = new("--approve")
+        {
+            Description = "Approve patch or shell tools used by this run.",
+        };
+        runCommand.Arguments.Add(taskArgument);
+        runCommand.Options.Add(runApproveOption);
+        runCommand.SetAction(parseResult =>
+        {
+            string? workspacePath = parseResult.GetValue(workspaceOption);
+            string task = parseResult.GetValue(taskArgument) ?? string.Empty;
+            bool approve = parseResult.GetValue(runApproveOption);
+            CliEnvironmentSnapshot snapshot = snapshotProvider(workspacePath);
+            TryWriteCommandLog(commandLogger, "run", snapshot);
+            ToolRegistry registry = CliToolFactory.CreateRegistry(
+                snapshot,
+                approve ? new AlwaysApproveApprovalPolicy() : new DefaultDenyApprovalPolicy());
+            ToolExecutor executor = new(registry);
+
+            ToolExecutionResult result = ExecuteRunTask(task, snapshot, executor);
+            WriteToolResult(output, result);
+            return result.Succeeded ? 0 : 1;
+        });
+
+        Command sessionCommand = new("session", "Manage local conversation transcripts.");
+        Command sessionExportCommand = new("export", "Print one session transcript JSON.");
+        Command sessionClearCommand = new("clear", "Delete one session transcript.");
+        Argument<string> sessionNameArgument = new("name")
+        {
+            Description = "The session name.",
+        };
+        sessionExportCommand.Arguments.Add(sessionNameArgument);
+        sessionClearCommand.Arguments.Add(sessionNameArgument);
+        sessionExportCommand.SetAction(parseResult =>
+        {
+            string? workspacePath = parseResult.GetValue(workspaceOption);
+            string name = parseResult.GetValue(sessionNameArgument) ?? string.Empty;
+            CliEnvironmentSnapshot snapshot = snapshotProvider(workspacePath);
+            TryWriteCommandLog(commandLogger, "session export", snapshot);
+            return ExportSession(output, snapshot, name);
+        });
+        sessionClearCommand.SetAction(parseResult =>
+        {
+            string? workspacePath = parseResult.GetValue(workspaceOption);
+            string name = parseResult.GetValue(sessionNameArgument) ?? string.Empty;
+            CliEnvironmentSnapshot snapshot = snapshotProvider(workspacePath);
+            TryWriteCommandLog(commandLogger, "session clear", snapshot);
+            return ClearSession(output, snapshot, name);
+        });
+        sessionCommand.Subcommands.Add(sessionExportCommand);
+        sessionCommand.Subcommands.Add(sessionClearCommand);
 
         Command chatCommand = new("chat", "Send one prompt to the configured model.");
         Argument<string> promptArgument = new("prompt")
@@ -162,8 +349,14 @@ public static class CliCommandFactory
             return result.IsSuccess ? 0 : 1;
         });
 
+        rootCommand.Subcommands.Add(versionCommand);
         rootCommand.Subcommands.Add(doctorCommand);
         rootCommand.Subcommands.Add(configCommand);
+        rootCommand.Subcommands.Add(mcpCommand);
+        rootCommand.Subcommands.Add(workflowCommand);
+        rootCommand.Subcommands.Add(toolsCommand);
+        rootCommand.Subcommands.Add(runCommand);
+        rootCommand.Subcommands.Add(sessionCommand);
         rootCommand.Subcommands.Add(chatCommand);
 
         return rootCommand;
@@ -181,5 +374,142 @@ public static class CliCommandFactory
         catch
         {
         }
+    }
+
+    private static ToolExecutionResult ExecuteRunTask(
+        string task,
+        CliEnvironmentSnapshot snapshot,
+        ToolExecutor executor)
+    {
+        string trimmedTask = task.Trim();
+        if (string.IsNullOrWhiteSpace(trimmedTask))
+        {
+            return ToolExecutionResult.Failure("empty-run-task", "Run task is empty.");
+        }
+
+        if (trimmedTask.Contains("create", StringComparison.OrdinalIgnoreCase) &&
+            trimmedTask.Contains("smoke", StringComparison.OrdinalIgnoreCase))
+        {
+            EnsureSmokeNoteSeed(snapshot.Workspace);
+            return executor.Execute(
+                "workspace.apply_patch",
+                new ToolExecutionContext(
+                    "cli_run_patch",
+                    snapshot.Workspace,
+                    """{"path":"caicli-smoke.txt","find":"status: pending","replace":"status: completed"}"""));
+        }
+
+        if (trimmedTask.StartsWith("read ", StringComparison.OrdinalIgnoreCase))
+        {
+            string path = trimmedTask["read ".Length..].Trim();
+            return executor.Execute(
+                "workspace.read_text",
+                new ToolExecutionContext(
+                    "cli_run_read",
+                    snapshot.Workspace,
+                    JsonSerializer.Serialize(new Dictionary<string, string> { ["path"] = path })));
+        }
+
+        if (trimmedTask.StartsWith("shell ", StringComparison.OrdinalIgnoreCase))
+        {
+            string command = trimmedTask["shell ".Length..].Trim();
+            return executor.Execute(
+                "workspace.run_shell",
+                new ToolExecutionContext(
+                    "cli_run_shell",
+                    snapshot.Workspace,
+                    JsonSerializer.Serialize(new Dictionary<string, object>
+                    {
+                        ["command"] = command,
+                        ["timeoutMilliseconds"] = 10_000
+                    })));
+        }
+
+        return ToolExecutionResult.Failure(
+            "unsupported-run-task",
+            "Supported run tasks are: create smoke note, read <path>, shell <command>.");
+    }
+
+    private static void EnsureSmokeNoteSeed(WorkspaceContext workspace)
+    {
+        if (!workspace.IsUsable)
+        {
+            return;
+        }
+
+        string path = Path.Combine(workspace.RootPath, "caicli-smoke.txt");
+        if (!File.Exists(path))
+        {
+            File.WriteAllText(path, "status: pending" + Environment.NewLine);
+        }
+    }
+
+    private static void WriteToolResult(TextWriter output, ToolExecutionResult result)
+    {
+        output.WriteLine(result.Succeeded ? "status: succeeded" : "status: failed");
+        output.WriteLine($"approvalStatus: {result.ApprovalStatus}");
+        if (!string.IsNullOrWhiteSpace(result.ErrorCode))
+        {
+            output.WriteLine($"errorCode: {result.ErrorCode}");
+        }
+
+        output.WriteLine("summary:");
+        output.WriteLine(result.Summary);
+    }
+
+    private static int ExportSession(TextWriter output, CliEnvironmentSnapshot snapshot, string name)
+    {
+        ConversationSessionName sessionName = ConversationSessionName.Parse(name);
+        string path = ResolveSessionPath(snapshot, sessionName);
+        if (!File.Exists(path))
+        {
+            output.WriteLine("status: failed");
+            output.WriteLine("errorCode: session-not-found");
+            output.WriteLine("summary:");
+            output.WriteLine("Session transcript was not found.");
+            return 1;
+        }
+
+        output.Write(File.ReadAllText(path));
+        return 0;
+    }
+
+    private static int ClearSession(TextWriter output, CliEnvironmentSnapshot snapshot, string name)
+    {
+        ConversationSessionName sessionName = ConversationSessionName.Parse(name);
+        string path = ResolveSessionPath(snapshot, sessionName);
+        if (!File.Exists(path))
+        {
+            output.WriteLine("status: not-found");
+            return 0;
+        }
+
+        File.Delete(path);
+        output.WriteLine("status: cleared");
+        output.WriteLine($"session: {sessionName.Value}");
+        return 0;
+    }
+
+    private static string ResolveSessionPath(CliEnvironmentSnapshot snapshot, ConversationSessionName sessionName)
+    {
+        string? userConfigDirectory = Path.GetDirectoryName(snapshot.UserConfigPath);
+        string root = string.IsNullOrWhiteSpace(userConfigDirectory)
+            ? Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), ".caicli")
+            : userConfigDirectory;
+        string sessionDirectory = Path.GetFullPath(Path.Combine(root, "sessions"));
+        string path = Path.GetFullPath(Path.Combine(sessionDirectory, $"{sessionName.FileSafeName}.transcript.json"));
+        string rootedSessionDirectory = sessionDirectory.EndsWith(Path.DirectorySeparatorChar)
+            ? sessionDirectory
+            : sessionDirectory + Path.DirectorySeparatorChar;
+        StringComparison comparison = OperatingSystem.IsWindows()
+            ? StringComparison.OrdinalIgnoreCase
+            : StringComparison.Ordinal;
+
+        if (!path.StartsWith(rootedSessionDirectory, comparison))
+        {
+            throw new InvalidOperationException("Conversation transcript path must remain inside the session directory.");
+        }
+
+        return path;
     }
 }

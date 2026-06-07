@@ -11,5 +11,7 @@ public sealed class ProductInfoTests
         Assert.Equal("C# AI CLI", ProductInfo.DisplayName);
         Assert.Equal("Local AI engineering CLI", ProductInfo.Description);
         Assert.Equal("net9.0", ProductInfo.TargetFramework);
+        Assert.Equal("win-x64", ProductInfo.ReleaseRuntime);
+        Assert.Matches(@"^\d+\.\d+\.\d+", ProductInfo.Version);
     }
 }

@@ -475,10 +475,14 @@ public sealed class OpenAiResponsesModelClientTests
             WorkspaceConfigPath: Path.Combine("workspace-root", ".caicli", "config.json"),
             Model: model,
             ModelSource: "workspace config",
+            AgentBackend: "direct",
+            AgentBackendSource: "default",
+            DisabledTools: new HashSet<string>(StringComparer.Ordinal),
             ApiKey: SecretValue.From(apiKey),
             ApiKeySource: apiKeySource,
             LoadedConfigPaths: [],
-            Warnings: []);
+            Warnings: [],
+            ConfigSources: []);
 
         return new CliEnvironmentSnapshot(
             Workspace: workspace,

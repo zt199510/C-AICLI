@@ -1,0 +1,135 @@
+using System.Text.Json;
+using CSharpAiCli.Core;
+
+namespace CSharpAiCli.Tests;
+
+public sealed class ToolExecutorTests
+{
+    [Fact]
+    public void Execute_invokes_registered_tool_with_normalized_arguments()
+    {
+        ToolRegistry registry = new();
+        EchoTool tool = new();
+        registry.Register(tool);
+        ToolExecutor executor = new(registry);
+        ToolExecutionContext context = CreateContext("""
+        {
+          "text": "hello"
+        }
+        """);
+
+        ToolExecutionResult result = executor.Execute("test.echo", context);
+
+        Assert.True(result.Succeeded);
+        Assert.Equal("""{"text":"hello"}""", result.Summary);
+        Assert.Null(result.ErrorCode);
+        Assert.Equal("""{"text":"hello"}""", tool.LastArgumentsJson);
+    }
+
+    [Fact]
+    public void Execute_returns_failure_for_unknown_tool()
+    {
+        ToolExecutor executor = new(new ToolRegistry());
+
+        ToolExecutionResult result = executor.Execute("missing.tool", CreateContext("{}"));
+
+        Assert.False(result.Succeeded);
+        Assert.Equal("unknown-tool", result.ErrorCode);
+        Assert.Contains("missing.tool", result.Summary, StringComparison.Ordinal);
+    }
+
+    [Theory]
+    [InlineData("{")]
+    [InlineData("[]")]
+    [InlineData("\"text\"")]
+    public void Execute_returns_failure_for_invalid_arguments(string argumentsJson)
+    {
+        ToolRegistry registry = new();
+        registry.Register(new EchoTool());
+        ToolExecutor executor = new(registry);
+
+        ToolExecutionResult result = executor.Execute("test.echo", CreateContext(argumentsJson));
+
+        Assert.False(result.Succeeded);
+        Assert.Equal("invalid-tool-arguments", result.ErrorCode);
+    }
+
+    [Fact]
+    public void Execute_converts_tool_security_exception_to_safe_failure()
+    {
+        ToolRegistry registry = new();
+        registry.Register(new ThrowingTool(new ToolSecurityException(
+            "workspace-boundary-denied",
+            "Tool request was outside the workspace.")));
+        ToolExecutor executor = new(registry);
+
+        ToolExecutionResult result = executor.Execute("test.throw", CreateContext("{}"));
+
+        Assert.False(result.Succeeded);
+        Assert.Equal("workspace-boundary-denied", result.ErrorCode);
+        Assert.Equal("Tool request was outside the workspace.", result.Summary);
+        Assert.False(result.Retryable);
+    }
+
+    [Fact]
+    public void Execute_converts_unexpected_exception_to_generic_failure()
+    {
+        ToolRegistry registry = new();
+        registry.Register(new ThrowingTool(new InvalidOperationException("secret sk-hidden should not leak")));
+        ToolExecutor executor = new(registry);
+
+        ToolExecutionResult result = executor.Execute("test.throw", CreateContext("{}"));
+
+        Assert.False(result.Succeeded);
+        Assert.Equal("tool-execution-failed", result.ErrorCode);
+        Assert.Equal("Tool 'test.throw' failed during execution.", result.Summary);
+        Assert.DoesNotContain("sk-hidden", result.Summary, StringComparison.Ordinal);
+    }
+
+    private static ToolExecutionContext CreateContext(string argumentsJson)
+    {
+        WorkspaceContext workspace = new(
+            RootPath: Path.GetTempPath(),
+            ConfigPath: Path.Combine(Path.GetTempPath(), ".caicli", "config.json"),
+            Status: WorkspaceStatus.Ready);
+
+        return new ToolExecutionContext(
+            CallId: "call_1",
+            Workspace: workspace,
+            ArgumentsJson: argumentsJson);
+    }
+
+    private sealed class EchoTool : ITool
+    {
+        public ToolDefinition Definition { get; } = new(
+            "test.echo",
+            "Echoes arguments.",
+            """{"type":"object"}""");
+
+        public string? LastArgumentsJson { get; private set; }
+
+        public ToolExecutionResult Execute(
+            ToolExecutionContext context,
+            CancellationToken cancellationToken = default)
+        {
+            LastArgumentsJson = context.ArgumentsJson;
+            JsonDocument.Parse(context.ArgumentsJson);
+            return ToolExecutionResult.Success(context.ArgumentsJson);
+        }
+    }
+
+    private sealed class ThrowingTool(Exception exception) : ITool
+    {
+        public ToolDefinition Definition { get; } = new(
+            "test.throw",
+            "Throws.",
+            """{"type":"object"}""");
+
+        public ToolExecutionResult Execute(
+            ToolExecutionContext context,
+            CancellationToken cancellationToken = default)
+        {
+            throw exception;
+        }
+    }
+}

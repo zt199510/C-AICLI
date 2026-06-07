@@ -19,15 +19,14 @@
 
 ## 任务清单
 
-- [ ] Step 1: 添加 MCP 配置模型。
-- [ ] Step 2: 添加 MCP 配置 loader。
-- [ ] Step 3: 添加 `mcp list` 命令。
-- [ ] Step 4: 添加禁用 server 测试。
-- [ ] Step 5: 运行 `dotnet build` 和 `dotnet test`。
-- [ ] Step 6: 创建 `18_week_review.md` 并更新总排期。
+- [x] Step 1: 添加 MCP 配置模型。
+- [x] Step 2: 添加 MCP 配置 loader。
+- [x] Step 3: 添加 `mcp list` 命令。
+- [x] Step 4: 添加禁用 server 测试。
+- [x] Step 5: 运行 `dotnet build` 和 `dotnet test`。
+- [x] Step 6: 创建 `18_week_review.md` 并更新总排期。
 
 ## 验收标准
 
 - MCP 配置可加载。
 - 已禁用 servers 保持 inactive。
-

@@ -2,7 +2,7 @@
 
 ## 状态
 
-`Planned`
+`Accepted`
 
 ## 目标
 
@@ -117,10 +117,12 @@ dotnet run --project src/CSharpAiCli.Cli -- chat --session smoke
 
 ## 阶段交付物
 
-- 直接模型客户端
-- 流式输出
-- 持久化会话
-- 指令加载
+- 直接模型客户端：已完成
+- 流式输出：已完成
+- 持久化会话：已完成
+- 指令加载：已完成
+- 配置优先级和 workspace `apiKey` 禁用：已完成
+- 阶段 02 验收：第 8 周已通过
 
 ## 下一阶段输入
 

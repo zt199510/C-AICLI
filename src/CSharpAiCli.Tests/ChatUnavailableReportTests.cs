@@ -33,10 +33,14 @@ public sealed class ChatUnavailableReportTests
             WorkspaceConfigPath: Path.Combine("workspace-root", ".caicli", "config.json"),
             Model: "not configured",
             ModelSource: "default",
+            AgentBackend: "direct",
+            AgentBackendSource: "default",
+            DisabledTools: new HashSet<string>(StringComparer.Ordinal),
             ApiKey: SecretValue.From(apiKey),
             ApiKeySource: apiKey is null ? "missing" : "OPENAI_API_KEY",
             LoadedConfigPaths: [],
-            Warnings: []);
+            Warnings: [],
+            ConfigSources: []);
 
         return new CliEnvironmentSnapshot(
             Workspace: workspace,

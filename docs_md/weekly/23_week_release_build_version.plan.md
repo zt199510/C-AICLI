@@ -19,13 +19,20 @@
 
 ## 任务清单
 
-- [ ] Step 1: 添加版本元数据。
-- [ ] Step 2: 添加 `tools/Build-Release.ps1`。
-- [ ] Step 3: 添加 Release build 测试或脚本 smoke。
-- [ ] Step 4: 运行 `dotnet build -c Release` 和 `dotnet test -c Release`。
-- [ ] Step 5: 创建 `23_week_review.md` 并更新总排期。
+- [x] Step 1: 添加版本元数据。
+- [x] Step 2: 添加 `tools/Build-Release.ps1`。
+- [x] Step 3: 添加 Release build 测试或脚本 smoke。
+- [x] Step 4: 运行 `dotnet build -c Release` 和 `dotnet test -c Release`。
+- [x] Step 5: 创建 `23_week_review.md` 并更新总排期。
+
+## 固化记录
+
+- `Directory.Build.props` 定义 `Version`、assembly/file/informational version 和发布产品元数据。
+- CLI 项目输出程序集名固定为 `caicli`，并新增 `version` 命令用于发布包自检。
+- `tools/Build-Release.ps1` 使用 `dotnet publish` 生成 `win-x64` self-contained single-file 产物和 `release-manifest.json`。
+- 发布脚本不读取或嵌入 `OPENAI_API_KEY`、`apiKey` 或示例密钥。
+- 已验证 `artifacts/release/caicli-0.1.0-win-x64/caicli.exe version` 输出 `caicli 0.1.0`。
 
 ## 验收标准
 
 - 发布构建命令会产生产物。
-

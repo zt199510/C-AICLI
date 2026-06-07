@@ -170,6 +170,246 @@ public sealed class ConfigLoaderTests
     }
 
     [Fact]
+    public void Load_uses_agent_backend_priority_environment_user_workspace_default()
+    {
+        string root = CreateTempDirectory();
+
+        try
+        {
+            string userProfile = Path.Combine(root, "home");
+            string workspaceRoot = Path.Combine(root, "workspace");
+            Directory.CreateDirectory(userProfile);
+            Directory.CreateDirectory(workspaceRoot);
+            WriteConfig(
+                Path.Combine(userProfile, ".caicli", "config.json"),
+                model: "gpt-user",
+                apiKey: "sk-user-secret",
+                agentBackend: "framework");
+            WriteConfig(
+                Path.Combine(workspaceRoot, ".caicli", "config.json"),
+                model: "gpt-workspace",
+                apiKey: "",
+                agentBackend: "direct");
+
+            WorkspaceContext workspace = WorkspaceContext.Detect(workspaceRoot, root);
+            EffectiveConfiguration envConfiguration = ConfigLoader.Load(
+                workspace,
+                userProfile: userProfile,
+                openAiApiKey: "",
+                agentBackend: "maf");
+            EffectiveConfiguration userConfiguration = ConfigLoader.Load(
+                workspace,
+                userProfile: userProfile,
+                openAiApiKey: "");
+
+            Assert.Equal("framework", envConfiguration.AgentBackend);
+            Assert.Equal("CAICLI_AGENT_BACKEND", envConfiguration.AgentBackendSource);
+            Assert.Equal("framework", userConfiguration.AgentBackend);
+            Assert.Equal("user config", userConfiguration.AgentBackendSource);
+        }
+        finally
+        {
+            Directory.Delete(root, recursive: true);
+        }
+    }
+
+    [Fact]
+    public void Load_uses_workspace_agent_backend_when_user_and_environment_are_missing()
+    {
+        string root = CreateTempDirectory();
+
+        try
+        {
+            string userProfile = Path.Combine(root, "home");
+            string workspaceRoot = Path.Combine(root, "workspace");
+            Directory.CreateDirectory(userProfile);
+            Directory.CreateDirectory(workspaceRoot);
+            WriteConfig(
+                Path.Combine(workspaceRoot, ".caicli", "config.json"),
+                model: "gpt-workspace",
+                apiKey: "",
+                agentBackend: "framework");
+
+            WorkspaceContext workspace = WorkspaceContext.Detect(workspaceRoot, root);
+            EffectiveConfiguration configuration = ConfigLoader.Load(
+                workspace,
+                userProfile: userProfile,
+                openAiApiKey: "");
+
+            Assert.Equal("framework", configuration.AgentBackend);
+            Assert.Equal("workspace config", configuration.AgentBackendSource);
+        }
+        finally
+        {
+            Directory.Delete(root, recursive: true);
+        }
+    }
+
+    [Fact]
+    public void Load_ignores_invalid_agent_backend_and_defaults_to_direct()
+    {
+        string root = CreateTempDirectory();
+
+        try
+        {
+            string userProfile = Path.Combine(root, "home");
+            string workspaceRoot = Path.Combine(root, "workspace");
+            Directory.CreateDirectory(userProfile);
+            Directory.CreateDirectory(workspaceRoot);
+            WriteConfig(
+                Path.Combine(workspaceRoot, ".caicli", "config.json"),
+                model: "",
+                apiKey: "",
+                agentBackend: "unknown");
+
+            WorkspaceContext workspace = WorkspaceContext.Detect(workspaceRoot, root);
+            EffectiveConfiguration configuration = ConfigLoader.Load(
+                workspace,
+                userProfile: userProfile,
+                openAiApiKey: "");
+
+            Assert.Equal("direct", configuration.AgentBackend);
+            Assert.Equal("default", configuration.AgentBackendSource);
+            Assert.Contains(configuration.Warnings, warning => warning.Contains("ignored invalid agent backend", StringComparison.Ordinal));
+        }
+        finally
+        {
+            Directory.Delete(root, recursive: true);
+        }
+    }
+
+    [Fact]
+    public void Load_preserves_mcp_server_sources_from_config_files()
+    {
+        string root = CreateTempDirectory();
+
+        try
+        {
+            string userProfile = Path.Combine(root, "home");
+            string workspaceRoot = Path.Combine(root, "workspace");
+            Directory.CreateDirectory(userProfile);
+            Directory.CreateDirectory(workspaceRoot);
+            string workspaceConfigPath = Path.Combine(workspaceRoot, ".caicli", "config.json");
+            Directory.CreateDirectory(Path.GetDirectoryName(workspaceConfigPath)!);
+            File.WriteAllText(workspaceConfigPath, """
+            {
+              "mcpServers": {
+                "disabled": {
+                  "enabled": false,
+                  "transport": "stdio",
+                  "command": "mcp-disabled"
+                }
+              }
+            }
+            """);
+
+            WorkspaceContext workspace = WorkspaceContext.Detect(workspaceRoot, root);
+            EffectiveConfiguration configuration = ConfigLoader.Load(
+                workspace,
+                userProfile: userProfile,
+                openAiApiKey: "");
+
+            CliConfigFileSource source = Assert.Single(configuration.ConfigSources);
+            Assert.Equal("workspace config", source.SourceName);
+            Assert.NotNull(source.Config.McpServers);
+            McpServerConfig server = source.Config.McpServers["disabled"];
+            Assert.False(server.Enabled);
+            Assert.Equal("stdio", server.Transport);
+            Assert.Equal("mcp-disabled", server.Command);
+        }
+        finally
+        {
+            Directory.Delete(root, recursive: true);
+        }
+    }
+
+    [Fact]
+    public void Load_preserves_workflow_profile_sources_from_config_files()
+    {
+        string root = CreateTempDirectory();
+
+        try
+        {
+            string userProfile = Path.Combine(root, "home");
+            string workspaceRoot = Path.Combine(root, "workspace");
+            Directory.CreateDirectory(userProfile);
+            Directory.CreateDirectory(workspaceRoot);
+            string workspaceConfigPath = Path.Combine(workspaceRoot, ".caicli", "config.json");
+            Directory.CreateDirectory(Path.GetDirectoryName(workspaceConfigPath)!);
+            File.WriteAllText(workspaceConfigPath, """
+            {
+              "workflowProfiles": {
+                "cpp": {
+                  "workspacePath": "cpp-root",
+                  "validationCommand": "ctest"
+                }
+              }
+            }
+            """);
+
+            WorkspaceContext workspace = WorkspaceContext.Detect(workspaceRoot, root);
+            EffectiveConfiguration configuration = ConfigLoader.Load(
+                workspace,
+                userProfile: userProfile,
+                openAiApiKey: "");
+
+            CliConfigFileSource source = Assert.Single(configuration.ConfigSources);
+            Assert.NotNull(source.Config.WorkflowProfiles);
+            WorkflowProfileConfig profile = source.Config.WorkflowProfiles["cpp"];
+            Assert.Equal("cpp-root", profile.WorkspacePath);
+            Assert.Equal("ctest", profile.ValidationCommand);
+        }
+        finally
+        {
+            Directory.Delete(root, recursive: true);
+        }
+    }
+
+    [Fact]
+    public void Load_merges_disabled_tools_from_user_and_workspace_config()
+    {
+        string root = CreateTempDirectory();
+
+        try
+        {
+            string userProfile = Path.Combine(root, "home");
+            string workspaceRoot = Path.Combine(root, "workspace");
+            Directory.CreateDirectory(userProfile);
+            Directory.CreateDirectory(workspaceRoot);
+
+            string userConfigPath = Path.Combine(userProfile, ".caicli", "config.json");
+            Directory.CreateDirectory(Path.GetDirectoryName(userConfigPath)!);
+            File.WriteAllText(userConfigPath, """
+            {
+              "disabledTools": [ "workspace.run_shell", "git.diff" ]
+            }
+            """);
+            string workspaceConfigPath = Path.Combine(workspaceRoot, ".caicli", "config.json");
+            Directory.CreateDirectory(Path.GetDirectoryName(workspaceConfigPath)!);
+            File.WriteAllText(workspaceConfigPath, """
+            {
+              "disabledTools": [ "workspace.apply_patch", "workspace.run_shell" ]
+            }
+            """);
+
+            WorkspaceContext workspace = WorkspaceContext.Detect(workspaceRoot, root);
+            EffectiveConfiguration configuration = ConfigLoader.Load(
+                workspace,
+                userProfile: userProfile,
+                openAiApiKey: "");
+
+            Assert.Contains("workspace.run_shell", configuration.DisabledTools);
+            Assert.Contains("workspace.apply_patch", configuration.DisabledTools);
+            Assert.Contains("git.diff", configuration.DisabledTools);
+            Assert.Equal(3, configuration.DisabledTools.Count);
+        }
+        finally
+        {
+            Directory.Delete(root, recursive: true);
+        }
+    }
+
+    [Fact]
     public void Load_ignores_invalid_json_and_records_warning()
     {
         string root = CreateTempDirectory();
@@ -238,12 +478,15 @@ public sealed class ConfigLoaderTests
         }
     }
 
-    private static void WriteConfig(string path, string model, string apiKey)
+    private static void WriteConfig(string path, string model, string apiKey, string? agentBackend = null)
     {
         Directory.CreateDirectory(Path.GetDirectoryName(path)!);
+        string backendLine = agentBackend is null
+            ? string.Empty
+            : $",{Environment.NewLine}  \"agentBackend\": \"{agentBackend}\"";
         File.WriteAllText(path, $@"{{
   ""model"": ""{model}"",
-  ""apiKey"": ""{apiKey}""
+  ""apiKey"": ""{apiKey}""{backendLine}
 }}");
     }
 

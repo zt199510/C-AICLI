@@ -22,6 +22,9 @@ public sealed record ConfigReport(IReadOnlyList<string> Lines)
             $"logDirectory: {LogPathResolver.ResolveLogDirectory(snapshot)}",
             $"model: {configuration.Model}",
             $"modelSource: {configuration.ModelSource}",
+            $"agentBackend: {configuration.AgentBackend}",
+            $"agentBackendSource: {configuration.AgentBackendSource}",
+            $"disabledTools: {FormatDisabledTools(configuration.DisabledTools)}",
             $"apiKey: {apiKeyStatus}",
             $"apiKeySource: {configuration.ApiKeySource}",
             $"loadedConfigPaths: {loadedConfigPaths}"
@@ -54,5 +57,12 @@ public sealed record ConfigReport(IReadOnlyList<string> Lines)
             WorkspaceStatus.NotDirectory => "not directory",
             _ => "unknown"
         };
+    }
+
+    private static string FormatDisabledTools(IReadOnlySet<string> disabledTools)
+    {
+        return disabledTools.Count == 0
+            ? "none"
+            : string.Join(", ", disabledTools.Order(StringComparer.Ordinal));
     }
 }

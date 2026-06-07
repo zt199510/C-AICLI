@@ -14,13 +14,15 @@ public static class ConfigLoader
         WorkspaceContext workspace,
         string? userProfile = null,
         string? openAiApiKey = null,
-        string? openAiModel = null)
+        string? openAiModel = null,
+        string? agentBackend = null)
     {
         ArgumentNullException.ThrowIfNull(workspace);
 
         userProfile ??= Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
         openAiApiKey ??= Environment.GetEnvironmentVariable("OPENAI_API_KEY");
         openAiModel ??= Environment.GetEnvironmentVariable("OPENAI_MODEL");
+        agentBackend ??= Environment.GetEnvironmentVariable("CAICLI_AGENT_BACKEND");
 
         string userConfigPath = Path.Combine(userProfile, ".caicli", "config.json");
         string workspaceConfigPath = workspace.ConfigPath;
@@ -32,10 +34,21 @@ public static class ConfigLoader
         CliConfigFile? workspaceConfig = workspace.IsUsable
             ? ReadConfig(workspaceConfigPath, loadedConfigPaths, warnings)
             : null;
+        List<CliConfigFileSource> configSources = [];
+        if (userConfig is not null)
+        {
+            configSources.Add(new CliConfigFileSource("user config", userConfigPath, userConfig));
+        }
+
+        if (workspaceConfig is not null)
+        {
+            configSources.Add(new CliConfigFileSource("workspace config", workspaceConfigPath, workspaceConfig));
+        }
 
         AddWorkspaceApiKeyWarning(workspaceConfig, workspaceConfigPath, warnings);
 
         (string model, string modelSource) = SelectModel(openAiModel, userConfig, workspaceConfig);
+        (string effectiveAgentBackend, string agentBackendSource) = SelectAgentBackend(agentBackend, userConfig, workspaceConfig, warnings);
         (SecretValue? apiKey, string apiKeySource) = SelectApiKey(openAiApiKey, userConfig);
 
         return new EffectiveConfiguration(
@@ -44,10 +57,14 @@ public static class ConfigLoader
             WorkspaceConfigPath: workspaceConfigPath,
             Model: model,
             ModelSource: modelSource,
+            AgentBackend: effectiveAgentBackend,
+            AgentBackendSource: agentBackendSource,
+            DisabledTools: SelectDisabledTools(userConfig, workspaceConfig),
             ApiKey: apiKey,
             ApiKeySource: apiKeySource,
             LoadedConfigPaths: loadedConfigPaths,
-            Warnings: warnings);
+            Warnings: warnings,
+            ConfigSources: configSources);
     }
 
     private static CliConfigFile? ReadConfig(
@@ -96,7 +113,11 @@ public static class ConfigLoader
     private static bool HasMeaningfulValue(CliConfigFile config)
     {
         return !string.IsNullOrWhiteSpace(config.Model)
-            || !string.IsNullOrWhiteSpace(config.ApiKey);
+            || !string.IsNullOrWhiteSpace(config.ApiKey)
+            || !string.IsNullOrWhiteSpace(config.AgentBackend)
+            || config.DisabledTools is { Length: > 0 }
+            || config.McpServers is { Count: > 0 }
+            || config.WorkflowProfiles is { Count: > 0 };
     }
 
     private static (string Model, string Source) SelectModel(
@@ -139,6 +160,85 @@ public static class ConfigLoader
         }
 
         return (null, "missing");
+    }
+
+    private static IReadOnlySet<string> SelectDisabledTools(
+        CliConfigFile? userConfig,
+        CliConfigFile? workspaceConfig)
+    {
+        HashSet<string> disabledTools = new(StringComparer.Ordinal);
+        AddDisabledTools(disabledTools, userConfig);
+        AddDisabledTools(disabledTools, workspaceConfig);
+        return disabledTools;
+    }
+
+    private static void AddDisabledTools(HashSet<string> disabledTools, CliConfigFile? config)
+    {
+        if (config?.DisabledTools is null)
+        {
+            return;
+        }
+
+        foreach (string toolName in config.DisabledTools)
+        {
+            if (!string.IsNullOrWhiteSpace(toolName))
+            {
+                disabledTools.Add(toolName.Trim());
+            }
+        }
+    }
+
+    private static (string Backend, string Source) SelectAgentBackend(
+        string? environmentBackend,
+        CliConfigFile? userConfig,
+        CliConfigFile? workspaceConfig,
+        List<string> warnings)
+    {
+        if (TryNormalizeBackend(environmentBackend, warnings, "CAICLI_AGENT_BACKEND", out string? backend))
+        {
+            return (backend!, "CAICLI_AGENT_BACKEND");
+        }
+
+        if (TryNormalizeBackend(userConfig?.AgentBackend, warnings, "user config", out backend))
+        {
+            return (backend!, "user config");
+        }
+
+        if (TryNormalizeBackend(workspaceConfig?.AgentBackend, warnings, "workspace config", out backend))
+        {
+            return (backend!, "workspace config");
+        }
+
+        return ("direct", "default");
+    }
+
+    private static bool TryNormalizeBackend(
+        string? value,
+        List<string> warnings,
+        string source,
+        out string? backend)
+    {
+        backend = null;
+        if (string.IsNullOrWhiteSpace(value))
+        {
+            return false;
+        }
+
+        string normalized = value.Trim().ToLowerInvariant();
+        if (normalized is "direct" or "openai")
+        {
+            backend = "direct";
+            return true;
+        }
+
+        if (normalized is "framework" or "maf" or "agent-framework")
+        {
+            backend = "framework";
+            return true;
+        }
+
+        warnings.Add($"ignored invalid agent backend '{value}' from {source}");
+        return false;
     }
 
     private static void AddWorkspaceApiKeyWarning(

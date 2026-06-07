@@ -24,7 +24,9 @@ public sealed record DoctorReport(IReadOnlyList<string> Lines)
             $"user config: {snapshot.UserConfigPath}",
             $"workspace config: {snapshot.WorkspaceConfigPath}",
             $"log directory: {LogPathResolver.ResolveLogDirectory(snapshot)}",
-            $"api key: {apiKeyStatus}"
+            $"api key: {apiKeyStatus}",
+            $"agent backend: {snapshot.Configuration.AgentBackend} ({snapshot.Configuration.AgentBackendSource})",
+            $"agent backend status: {FormatAgentBackendStatus(snapshot.Configuration.AgentBackend)}"
         ];
 
         foreach (string warning in snapshot.Configuration.Warnings)
@@ -52,6 +54,16 @@ public sealed record DoctorReport(IReadOnlyList<string> Lines)
             WorkspaceStatus.Ready => "ready",
             WorkspaceStatus.Missing => "missing",
             WorkspaceStatus.NotDirectory => "not directory",
+            _ => "unknown"
+        };
+    }
+
+    private static string FormatAgentBackendStatus(string backend)
+    {
+        return backend switch
+        {
+            "direct" => "available",
+            "framework" => "unavailable: Microsoft Agent Framework adapter is an experimental stub and no framework package is enabled.",
             _ => "unknown"
         };
     }

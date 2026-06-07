@@ -2,7 +2,7 @@
 
 ## 状态
 
-`Planned`
+`Deferred`
 
 ## 目标
 
@@ -18,12 +18,12 @@
 
 创建：
 
-- `MicrosoftAgentFrameworkRunner`
-- 适配器测试
-- agent backend 的配置开关
-- 共享工具注册桥接
-- 框架会话映射
-- 当框架包变化或失败时的回退行为
+- `MicrosoftAgentFrameworkRunner`：第 14 周已完成 experimental stub
+- 适配器测试：第 14 周已完成边界测试
+- agent backend 的配置开关：第 16 周已完成 `agentBackend` resolver
+- 共享工具注册桥接：第 15 周已完成 adapter DTO + Core executor bridge
+- 框架会话映射：真实 framework 后端未启用，作为增强目标 Deferred
+- 当框架包变化或失败时的回退行为：第 16 周 doctor 已诊断 experimental stub / package 未启用
 - 预览依赖风险记录
 
 ## 架构
@@ -74,6 +74,7 @@ dotnet run --project src/CSharpAiCli.Cli -- run "summarize the workspace"
 
 ## 风险与保护边界
 
+- 第 14 周未引入 Microsoft Agent Framework 预览包；adapter 当前标记为 `experimental-stub`，避免预览依赖泄漏到 Core/CLI。
 - 不在 CLI 命令代码中暴露 Microsoft Agent Framework 类型。
 - 不移除直接 runner。
 - 必需行为不依赖预览版特性。
@@ -90,3 +91,11 @@ dotnet run --project src/CSharpAiCli.Cli -- run "summarize the workspace"
 ## 下一阶段输入
 
 本地 agent 和安全模型稳定后，阶段 05 添加 MCP 和项目专用工作流。
+
+## 阶段 04 验收记录
+
+- `dotnet build src\CSharpAiCli.sln`：通过，0 warning，0 error。
+- `dotnet test src\CSharpAiCli.sln`：通过，205 tests passed。
+- Direct/offline backend 通过 `Phase04AcceptanceTests` 回归。
+- Microsoft Agent Framework adapter、tool bridge、backend config 和 doctor 诊断已完成。
+- 真实 Microsoft Agent Framework package 未启用，framework 后端标记为增强目标 Deferred；不阻塞 direct MVP。

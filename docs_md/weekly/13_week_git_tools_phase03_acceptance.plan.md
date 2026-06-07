@@ -25,15 +25,14 @@
 
 ## 任务清单
 
-- [ ] Step 1: 添加 git status/diff 工具。
-- [ ] Step 2: 添加临时 git repo 测试。
-- [ ] Step 3: 串联读取、编辑、测试 MVP workflow。
-- [ ] Step 4: 补齐阶段 03 安全验收清单。
-- [ ] Step 5: 运行 `dotnet build` 和 `dotnet test`。
-- [ ] Step 6: 创建 `13_week_review.md` 并更新总排期。
+- [x] Step 1: 添加 git status/diff 工具。
+- [x] Step 2: 添加临时 git repo 测试。
+- [x] Step 3: 串联读取、编辑、测试 MVP workflow。
+- [x] Step 4: 补齐阶段 03 安全验收清单。
+- [x] Step 5: 运行 `dotnet build` 和 `dotnet test`。
+- [x] Step 6: 创建 `13_week_review.md` 并更新总排期。
 
 ## 验收标准
 
 - 阶段 03 验收清单通过。
 - git 测试使用临时仓库。
-

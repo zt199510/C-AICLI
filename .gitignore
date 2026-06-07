@@ -3,6 +3,7 @@ bin/
 obj/
 TestResults/
 *.trx
+artifacts/
 
 # User-specific IDE files
 .vs/

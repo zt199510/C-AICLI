@@ -2,7 +2,7 @@
 
 ## 状态
 
-`Planned`
+`Deferred`
 
 ## 目标
 
@@ -18,13 +18,13 @@
 
 创建：
 
-- MCP server 配置加载器
-- MCP client 连接管理器
-- MCP tool bridge
-- 项目工作流注册表
-- 验证命令 profile
-- Gerber/TIFF 项目工作流包
-- 计划文档读取工作流
+- MCP server 配置加载器：第 18 周已完成
+- MCP client 连接管理器：第 19 周已完成配置级 doctor 诊断
+- MCP tool bridge：第 20 周已完成 generic external tool bridge
+- 项目工作流注册表：第 21 周已完成
+- 验证命令 profile：第 21 周已完成 MVP
+- Gerber/TIFF 项目工作流包：第 22 周已完成 project-pack MVP
+- 计划文档读取工作流：第 22 周已完成 fixture/status MVP
 
 ## 架构
 
@@ -91,3 +91,10 @@ dotnet run --project src/CSharpAiCli.Cli -- workflow gerber-tiff status --worksp
 ## 下一阶段输入
 
 阶段 06 打包 CLI，强化文档和测试，并准备第一个可用发布版本。
+
+## 阶段 05 验收记录
+
+- `dotnet build src\CSharpAiCli.sln`：通过，0 warning，0 error。
+- `dotnet test src\CSharpAiCli.sln`：通过，233 tests passed。
+- MCP config/list/doctor、generic MCP tool bridge、workflow profiles 和 Gerber/TIFF project-pack MVP 均已覆盖测试。
+- 真实 MCP 协议 handshake、真实 MCP tool discovery 和完整 Gerber/TIFF 执行包作为增强目标 Deferred；不阻塞阶段 06 MVP 发布。

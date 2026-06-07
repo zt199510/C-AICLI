@@ -18,7 +18,7 @@
 
 ## 配置来源
 
-第 4 周仍沿用第 3 周的最小配置 schema：
+第 8 周仍沿用最小配置 schema：
 
 以下 key 仅为示例值，不可作为真实凭据。
 
@@ -31,8 +31,10 @@
 
 配置优先级：
 
-- API key：`OPENAI_API_KEY` > 工作区配置 `apiKey` > 用户配置 `apiKey` > missing
-- model：工作区配置 `model` > 用户配置 `model` > `not configured`
+- API key：`OPENAI_API_KEY` > 用户配置 `apiKey` > missing
+- model：`OPENAI_MODEL` > 用户配置 `model` > 工作区配置 `model` > `not configured`
+
+工作区配置中的 `apiKey` 不进入 effective configuration；诊断和日志只记录 `ignored workspace config apiKey: <path>`，不记录原始 key。
 
 报告和日志只打印 API key 的 `present` 或 `missing`，以及来源；不打印原始 key。
 
@@ -67,6 +69,7 @@ yyyy-MM-dd.log
 - `apiKey`
 - `apiKeySource`
 - `warnings`
+- `instructionWarnings`
 
 日志不记录 `SecretValue.Value`。
 

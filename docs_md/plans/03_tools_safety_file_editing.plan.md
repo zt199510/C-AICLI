@@ -2,7 +2,7 @@
 
 ## 状态
 
-`Planned`
+`Accepted`
 
 ## 目标
 
@@ -16,16 +16,16 @@
 
 创建：
 
-- 工具注册表
-- 工具执行上下文
-- 工作区路径验证器
-- 审批策略
-- 文件读取工具
-- 搜索工具
-- patch 编辑工具
-- shell 命令工具
-- git status 和 diff 工具
-- 工具调用转录记录
+- 工具注册表：第 9 周已完成
+- 工具执行上下文：第 9 周已完成
+- 工作区路径验证器：第 10 周已完成
+- 审批策略：第 11 周已完成文件编辑审批基础策略
+- 文件读取工具：第 10 周已完成
+- 搜索工具：第 10 周已完成
+- patch 编辑工具：第 11 周已完成单文件 exact-text replacement MVP
+- shell 命令工具：第 12 周已完成受限 runner MVP
+- git status 和 diff 工具：第 13 周已完成
+- 工具调用转录记录：第 9-13 周已完成并用于工具、审批、patch、shell 和 git 验收
 
 本阶段是最高风险阶段，按严格 MVP 实施。第一版只要求在一个受控工作区内完成小型读文件、搜索、单文件 patch、无害验证命令和 git 状态总结；多文件重构、复杂冲突合并、自动修复长测试链路和跨工作区操作不进入本阶段。
 
@@ -130,3 +130,9 @@ dotnet run --project src/CSharpAiCli.Cli -- run "run the configured smoke test c
 ## 下一阶段输入
 
 阶段 04 通过适配器引入 Microsoft Agent Framework，同时保留直接 OpenAI SDK 路径作为回退。
+
+## 阶段 03 验收记录
+
+- `dotnet build src\CSharpAiCli.sln`：通过，0 warning，0 error。
+- `dotnet test src\CSharpAiCli.sln`：通过，190 tests passed。
+- 离线集成测试 `Phase03AcceptanceTests` 串联读取、搜索、patch、shell、git status 和 git diff。
