@@ -1,9 +1,68 @@
+using System.Text.Json;
 using CSharpAiCli.Core;
 
 namespace CSharpAiCli.Tests;
 
 public sealed class ConfigLoaderTests
 {
+    [Fact]
+    public void Load_uses_default_openai_base_url_when_base_url_is_missing()
+    {
+        string root = CreateTempDirectory();
+
+        try
+        {
+            string userProfile = Path.Combine(root, "home");
+            string workspaceRoot = Path.Combine(root, "workspace");
+            Directory.CreateDirectory(userProfile);
+            Directory.CreateDirectory(workspaceRoot);
+
+            WorkspaceContext workspace = WorkspaceContext.Detect(workspaceRoot, root);
+            EffectiveConfiguration configuration = ConfigLoader.Load(
+                workspace,
+                userProfile: userProfile,
+                openAiApiKey: "");
+
+            Assert.Equal("https://api.openai.com/v1", configuration.BaseUrl);
+            Assert.Equal("default", configuration.BaseUrlSource);
+        }
+        finally
+        {
+            Directory.Delete(root, recursive: true);
+        }
+    }
+
+    [Fact]
+    public void CliConfigFile_deserializes_base_url_from_camel_case_json()
+    {
+        CliConfigFile? config = JsonSerializer.Deserialize<CliConfigFile>(
+            """{ "baseUrl": "https://openai.example.test/v1" }""",
+            new JsonSerializerOptions(JsonSerializerDefaults.Web));
+
+        Assert.NotNull(config);
+        Assert.Equal("https://openai.example.test/v1", config.BaseUrl);
+    }
+
+    [Theory]
+    [InlineData(" https://gateway.example.test/v1 ", "https://gateway.example.test/v1")]
+    [InlineData("http://localhost:8080/v1", "http://localhost:8080/v1")]
+    public void TryNormalizeBaseUrl_accepts_absolute_http_and_https_urls(string value, string expected)
+    {
+        Assert.True(ConfigLoader.TryNormalizeBaseUrl(value, out string? baseUrl));
+        Assert.Equal(expected, baseUrl);
+    }
+
+    [Theory]
+    [InlineData("api.openai.com/v1")]
+    [InlineData("/v1")]
+    [InlineData("ftp://api.openai.com/v1")]
+    [InlineData("   ")]
+    public void TryNormalizeBaseUrl_rejects_non_absolute_http_urls(string value)
+    {
+        Assert.False(ConfigLoader.TryNormalizeBaseUrl(value, out string? baseUrl));
+        Assert.Null(baseUrl);
+    }
+
     [Fact]
     public void Load_merges_user_workspace_and_environment_with_expected_priority()
     {

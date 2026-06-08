@@ -15,5 +15,9 @@ public sealed record EffectiveConfiguration(
     IReadOnlyList<string> Warnings,
     IReadOnlyList<CliConfigFileSource> ConfigSources)
 {
+    public string BaseUrl { get; init; } = ConfigLoader.DefaultOpenAiBaseUrl;
+
+    public string BaseUrlSource { get; init; } = "default";
+
     public bool HasApiKey => ApiKey is not null;
 }

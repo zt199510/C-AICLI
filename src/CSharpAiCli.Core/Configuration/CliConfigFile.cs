@@ -6,6 +6,8 @@ public sealed class CliConfigFile
 
     public string? ApiKey { get; init; }
 
+    public string? BaseUrl { get; init; }
+
     public string? AgentBackend { get; init; }
 
     public string[]? DisabledTools { get; init; }
