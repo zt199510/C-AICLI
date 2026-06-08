@@ -4,7 +4,7 @@ namespace CSharpAiCli.Core;
 
 public static class ConfigLoader
 {
-    public const string DefaultOpenAiBaseUrl = "https://api.openai.com/v1";
+    public static readonly string DefaultOpenAiBaseUrl = "https://api.openai.com/v1";
 
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web)
     {
@@ -116,7 +116,6 @@ public static class ConfigLoader
     {
         return !string.IsNullOrWhiteSpace(config.Model)
             || !string.IsNullOrWhiteSpace(config.ApiKey)
-            || !string.IsNullOrWhiteSpace(config.BaseUrl)
             || !string.IsNullOrWhiteSpace(config.AgentBackend)
             || config.DisabledTools is { Length: > 0 }
             || config.McpServers is { Count: > 0 }
@@ -138,6 +137,13 @@ public static class ConfigLoader
         }
 
         if (uri.Scheme is not ("http" or "https"))
+        {
+            return false;
+        }
+
+        if (!string.IsNullOrEmpty(uri.UserInfo)
+            || !string.IsNullOrEmpty(uri.Query)
+            || !string.IsNullOrEmpty(uri.Fragment))
         {
             return false;
         }

@@ -63,6 +63,53 @@ public sealed class ConfigLoaderTests
         Assert.Null(baseUrl);
     }
 
+    [Theory]
+    [InlineData("https://user:pass@example.test/v1")]
+    [InlineData("https://example.test/v1?token=abc")]
+    [InlineData("https://example.test/v1#frag")]
+    public void TryNormalizeBaseUrl_rejects_urls_with_non_display_safe_parts(string value)
+    {
+        Assert.False(ConfigLoader.TryNormalizeBaseUrl(value, out string? baseUrl));
+        Assert.Null(baseUrl);
+    }
+
+    [Fact]
+    public void Load_does_not_treat_base_url_only_config_as_loaded_until_base_url_priority_is_implemented()
+    {
+        string root = CreateTempDirectory();
+
+        try
+        {
+            string userProfile = Path.Combine(root, "home");
+            string workspaceRoot = Path.Combine(root, "workspace");
+            Directory.CreateDirectory(userProfile);
+            Directory.CreateDirectory(workspaceRoot);
+
+            string workspaceConfigPath = Path.Combine(workspaceRoot, ".caicli", "config.json");
+            Directory.CreateDirectory(Path.GetDirectoryName(workspaceConfigPath)!);
+            File.WriteAllText(workspaceConfigPath, """
+            {
+              "baseUrl": "https://gateway.example.test/v1"
+            }
+            """);
+
+            WorkspaceContext workspace = WorkspaceContext.Detect(workspaceRoot, root);
+            EffectiveConfiguration configuration = ConfigLoader.Load(
+                workspace,
+                userProfile: userProfile,
+                openAiApiKey: "");
+
+            Assert.Equal(ConfigLoader.DefaultOpenAiBaseUrl, configuration.BaseUrl);
+            Assert.Equal("default", configuration.BaseUrlSource);
+            Assert.DoesNotContain(workspaceConfigPath, configuration.LoadedConfigPaths);
+            Assert.Empty(configuration.ConfigSources);
+        }
+        finally
+        {
+            Directory.Delete(root, recursive: true);
+        }
+    }
+
     [Fact]
     public void Load_merges_user_workspace_and_environment_with_expected_priority()
     {
