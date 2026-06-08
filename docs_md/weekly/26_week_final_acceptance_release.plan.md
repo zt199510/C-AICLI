@@ -34,7 +34,8 @@
 - 新增 `docs_md/release/final_acceptance.md`。
 - 已运行最终 Release build、Release tests、发布脚本和 smoke tests。
 - 已生成 `artifacts/release/caicli-0.1.0-win-x64.zip`。
-- 发布 zip SHA256：`279AE0CE7802E6DC79344B76FC3C36954875FC8D34E1CF385085652E244D9AEA`。
+- 发布 zip size：`32108447` bytes。
+- 发布 zip SHA256：`44B96A18C99343EADEFE7448FB50BB5BCDA0A6E9CD2D384A7F7751A2AE1EF4D2`。
 
 ## 验收标准
 

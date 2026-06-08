@@ -2,6 +2,8 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use `superpowers:subagent-driven-development` (recommended) or `superpowers:executing-plans` to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
+> **历史状态：** 本计划作为历史实施记录保留；checkbox 状态已在 2026-06-08 验收固化时闭合，最终证据见 `05_week_review.md`。
+
 **Goal:** 添加 provider-neutral model client 抽象，并把 `caicli chat "<prompt>"` 升级为一次性非流式 OpenAI Responses API 调用。
 
 **Architecture:** `CSharpAiCli.Core` 承载 chat request/result/error/report、OpenAI Responses SDK 适配器和可测试的网关接口。`CSharpAiCli.Cli` 只负责命令接线、工作区快照、命令日志、prompt 参数读取、模型客户端注入和 exit code。第 5 周不做终端流式渲染、会话恢复、转录文件、工具调用或 Microsoft Agent Framework。
@@ -101,7 +103,7 @@ docs_md/
 - Create: `src/CSharpAiCli.Tests/ChatModelResultTests.cs`
 - Create: `src/CSharpAiCli.Tests/ChatModelReportTests.cs`
 
-- [ ] **Step 1: 写失败的 result 和 report 测试**
+- [x] **Step 1: 写失败的 result 和 report 测试**
 
 Create `src/CSharpAiCli.Tests/ChatModelResultTests.cs`:
 
@@ -230,7 +232,7 @@ public sealed class ChatModelReportTests
 }
 ```
 
-- [ ] **Step 2: 运行测试确认失败**
+- [x] **Step 2: 运行测试确认失败**
 
 Run:
 
@@ -244,7 +246,7 @@ Expected:
 Failed because ChatModelResult and ChatModelReport are not defined.
 ```
 
-- [ ] **Step 3: 添加领域类型**
+- [x] **Step 3: 添加领域类型**
 
 Create `src/CSharpAiCli.Core/ChatRequest.cs`:
 
@@ -306,7 +308,7 @@ public sealed record ChatModelResult(ChatResponse? Response, ModelError? Error)
 }
 ```
 
-- [ ] **Step 4: 添加 chat 输出报告**
+- [x] **Step 4: 添加 chat 输出报告**
 
 Create `src/CSharpAiCli.Core/ChatModelReport.cs`:
 
@@ -377,7 +379,7 @@ public sealed record ChatModelReport(IReadOnlyList<string> Lines)
 }
 ```
 
-- [ ] **Step 5: 运行领域类型和报告测试**
+- [x] **Step 5: 运行领域类型和报告测试**
 
 Run:
 
@@ -391,7 +393,7 @@ Expected:
 Passed!  - Failed: 0, Passed: 4
 ```
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 Run:
 
@@ -418,7 +420,7 @@ Commit created with chat model result reporting.
 - Create: `src/CSharpAiCli.Core/OpenAiResponsesModelClient.cs`
 - Create: `src/CSharpAiCli.Tests/OpenAiResponsesModelClientTests.cs`
 
-- [ ] **Step 1: 写失败的 OpenAI model client 测试**
+- [x] **Step 1: 写失败的 OpenAI model client 测试**
 
 Create `src/CSharpAiCli.Tests/OpenAiResponsesModelClientTests.cs`:
 
@@ -591,7 +593,7 @@ public sealed class OpenAiResponsesModelClientTests
 }
 ```
 
-- [ ] **Step 2: 运行测试确认失败**
+- [x] **Step 2: 运行测试确认失败**
 
 Run:
 
@@ -605,7 +607,7 @@ Expected:
 Failed because OpenAiResponsesModelClient and IOpenAiResponsesGateway are not defined.
 ```
 
-- [ ] **Step 3: 添加 OpenAI NuGet package**
+- [x] **Step 3: 添加 OpenAI NuGet package**
 
 Run:
 
@@ -619,7 +621,7 @@ Expected:
 PackageReference Include="OpenAI" Version="2.10.0" is added to CSharpAiCli.Core.csproj.
 ```
 
-- [ ] **Step 4: 添加 model client 和 gateway 接口**
+- [x] **Step 4: 添加 model client 和 gateway 接口**
 
 Create `src/CSharpAiCli.Core/IChatModelClient.cs`:
 
@@ -657,7 +659,7 @@ public interface IOpenAiResponsesGateway
 }
 ```
 
-- [ ] **Step 5: 添加 SDK gateway 实现**
+- [x] **Step 5: 添加 SDK gateway 实现**
 
 Create `src/CSharpAiCli.Core/SdkOpenAiResponsesGateway.cs`:
 
@@ -712,7 +714,7 @@ public sealed class SdkOpenAiResponsesGateway : IOpenAiResponsesGateway
 }
 ```
 
-- [ ] **Step 6: 添加 OpenAI Responses model client**
+- [x] **Step 6: 添加 OpenAI Responses model client**
 
 Create `src/CSharpAiCli.Core/OpenAiResponsesModelClient.cs`:
 
@@ -871,7 +873,7 @@ public sealed class OpenAiResponsesModelClient : IChatModelClient
 }
 ```
 
-- [ ] **Step 7: 运行 OpenAI model client 测试**
+- [x] **Step 7: 运行 OpenAI model client 测试**
 
 Run:
 
@@ -885,7 +887,7 @@ Expected:
 Passed!  - Failed: 0, Passed: 6
 ```
 
-- [ ] **Step 8: Commit**
+- [x] **Step 8: Commit**
 
 Run:
 
@@ -907,7 +909,7 @@ Commit created with OpenAI Responses model client.
 - Modify: `src/CSharpAiCli.Cli/CliCommandFactory.cs`
 - Modify: `src/CSharpAiCli.Tests/CliCommandFactoryTests.cs`
 
-- [ ] **Step 1: 更新 CLI tests**
+- [x] **Step 1: 更新 CLI tests**
 
 In `src/CSharpAiCli.Tests/CliCommandFactoryTests.cs`, replace the existing `Chat_command_returns_phase_02_boundary_message_and_logs_command` test with these tests:
 
@@ -1036,7 +1038,7 @@ Add this fake client before the final closing brace:
     }
 ```
 
-- [ ] **Step 2: 运行 CLI tests 确认失败**
+- [x] **Step 2: 运行 CLI tests 确认失败**
 
 Run:
 
@@ -1050,7 +1052,7 @@ Expected:
 Failed because CliCommandFactory does not accept a chat model client factory and chat still returns the Phase 01 boundary.
 ```
 
-- [ ] **Step 3: 更新 CLI command factory overloads**
+- [x] **Step 3: 更新 CLI command factory overloads**
 
 In `src/CSharpAiCli.Cli/CliCommandFactory.cs`, replace the three `Create` overload declarations with:
 
@@ -1098,7 +1100,7 @@ At the start of the final overload body, add:
         ArgumentNullException.ThrowIfNull(chatModelClientFactory);
 ```
 
-- [ ] **Step 4: Replace the chat command block**
+- [x] **Step 4: Replace the chat command block**
 
 In `src/CSharpAiCli.Cli/CliCommandFactory.cs`, replace the existing `chatCommand` block with:
 
@@ -1123,7 +1125,7 @@ In `src/CSharpAiCli.Cli/CliCommandFactory.cs`, replace the existing `chatCommand
         });
 ```
 
-- [ ] **Step 5: 运行 CLI tests**
+- [x] **Step 5: 运行 CLI tests**
 
 Run:
 
@@ -1137,7 +1139,7 @@ Expected:
 Passed!  - Failed: 0
 ```
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 Run:
 
@@ -1158,7 +1160,7 @@ Commit created with chat model command wiring.
 
 - Create: `docs_md/spec/model_client_responses_api.md`
 
-- [ ] **Step 1: 创建 model client 和 Responses API 说明**
+- [x] **Step 1: 创建 model client 和 Responses API 说明**
 
 Create `docs_md/spec/model_client_responses_api.md`:
 
@@ -1275,7 +1277,7 @@ Expected:
 ```
 ```
 
-- [ ] **Step 2: 扫描说明文档占位内容**
+- [x] **Step 2: 扫描说明文档占位内容**
 
 Run:
 
@@ -1290,7 +1292,7 @@ Expected:
 No matches.
 ```
 
-- [ ] **Step 3: Commit**
+- [x] **Step 3: Commit**
 
 Run:
 
@@ -1313,7 +1315,7 @@ Commit created with Week 5 model client notes.
 - Modify: `docs_md/weekly/26_week_goal_schedule.md`
 - Create: `docs_md/weekly/05_week_review.md`
 
-- [ ] **Step 1: 构建 solution**
+- [x] **Step 1: 构建 solution**
 
 Run:
 
@@ -1327,7 +1329,7 @@ Expected:
 Build succeeded.
 ```
 
-- [ ] **Step 2: 运行全部测试**
+- [x] **Step 2: 运行全部测试**
 
 Run:
 
@@ -1341,7 +1343,7 @@ Expected:
 Passed!  - Failed: 0
 ```
 
-- [ ] **Step 3: 验证缺 key chat 错误**
+- [x] **Step 3: 验证缺 key chat 错误**
 
 Run:
 
@@ -1367,7 +1369,7 @@ Expected:
 最后打印的 exit code 是 1。
 ```
 
-- [ ] **Step 4: 验证真实模型 smoke**
+- [x] **Step 4: 验证真实模型 smoke**
 
 Only run this step when a real key is available in the developer environment.
 
@@ -1387,7 +1389,7 @@ Expected:
 命令 exit code 是 0。
 ```
 
-- [ ] **Step 5: 验证命令日志仍脱敏**
+- [x] **Step 5: 验证命令日志仍脱敏**
 
 Run:
 
@@ -1405,7 +1407,7 @@ Expected:
 日志不包含任何 sk- 开头的测试密钥值。
 ```
 
-- [ ] **Step 6: 更新总周计划 Week 5 状态**
+- [x] **Step 6: 更新总周计划 Week 5 状态**
 
 In `docs_md/weekly/26_week_goal_schedule.md`, replace the current progress item:
 
@@ -1431,7 +1433,7 @@ to:
 | 5 | 2024-07-01 至 2024-07-07 | 阶段 02 | 已稳固 | 添加 model client 抽象和 OpenAI SDK Responses API 实现。详见 `05_week_model_client_responses_api.plan.md` 和 `05_week_review.md`。 | 已验证：`chat "<prompt>"` 可以用已配置凭据调用模型；缺 key 错误清晰。 |
 ```
 
-- [ ] **Step 7: 创建第 5 周回顾**
+- [x] **Step 7: 创建第 5 周回顾**
 
 Create `docs_md/weekly/05_week_review.md`:
 
@@ -1483,7 +1485,7 @@ Create `docs_md/weekly/05_week_review.md`:
 - 保持当前缺 key、缺 model 和脱敏行为。
 ```
 
-- [ ] **Step 8: 扫描文档占位内容**
+- [x] **Step 8: 扫描文档占位内容**
 
 Run:
 
@@ -1498,7 +1500,7 @@ Expected:
 No matches.
 ```
 
-- [ ] **Step 9: Commit**
+- [x] **Step 9: Commit**
 
 Run:
 

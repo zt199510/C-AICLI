@@ -2,6 +2,8 @@
 
 > **给 agentic workers：** 必须使用 `superpowers:subagent-driven-development` 或 `superpowers:executing-plans` 按任务逐步执行本计划。步骤使用 checkbox（`- [ ]`）语法跟踪进度。
 
+> **历史状态：** 本计划作为历史实施记录保留；checkbox 状态已在 2026-06-08 验收固化时闭合，最终证据见 `03_week_review.md`。
+
 **目标：** 添加工作区检测、真实配置加载、配置优先级、密钥脱敏，以及 `--workspace <path>` 覆盖支持。
 
 **架构：** `CSharpAiCli.Core` 负责工作区检测、配置文件解析、配置优先级、密钥处理、运行时快照和脱敏报告。`CSharpAiCli.Cli` 只负责解析命令/选项，并把用户指定的工作区路径传给 Core。报告继续保持文本优先和确定性输出，方便在接入模型之前测试。
@@ -108,7 +110,7 @@ docs_md/weekly/
 - 创建: `src/CSharpAiCli.Core/WorkspaceContext.cs`
 - 创建: `src/CSharpAiCli.Tests/WorkspaceContextTests.cs`
 
-- [ ] **Step 1: 编写失败的工作区检测测试**
+- [x] **Step 1: 编写失败的工作区检测测试**
 
 创建 `src/CSharpAiCli.Tests/WorkspaceContextTests.cs`：
 
@@ -219,7 +221,7 @@ public sealed class WorkspaceContextTests
 }
 ```
 
-- [ ] **Step 2: 运行测试，确认失败**
+- [x] **Step 2: 运行测试，确认失败**
 
 运行：
 
@@ -233,7 +235,7 @@ dotnet test src/CSharpAiCli.sln --filter WorkspaceContextTests
 失败原因：WorkspaceContext 和 WorkspaceStatus 尚未定义。
 ```
 
-- [ ] **Step 3: 添加工作区状态枚举**
+- [x] **Step 3: 添加工作区状态枚举**
 
 创建 `src/CSharpAiCli.Core/WorkspaceStatus.cs`：
 
@@ -248,7 +250,7 @@ public enum WorkspaceStatus
 }
 ```
 
-- [ ] **Step 4: 添加工作区检测器**
+- [x] **Step 4: 添加工作区检测器**
 
 创建 `src/CSharpAiCli.Core/WorkspaceContext.cs`：
 
@@ -285,7 +287,7 @@ public sealed record WorkspaceContext(
 }
 ```
 
-- [ ] **Step 5: 运行工作区检测器测试**
+- [x] **Step 5: 运行工作区检测器测试**
 
 运行：
 
@@ -306,7 +308,7 @@ Passed!  - Failed: 0, Passed: 4
 - 创建: `src/CSharpAiCli.Core/SecretValue.cs`
 - 创建: `src/CSharpAiCli.Tests/SecretValueTests.cs`
 
-- [ ] **Step 1: 编写失败的密钥测试**
+- [x] **Step 1: 编写失败的密钥测试**
 
 创建 `src/CSharpAiCli.Tests/SecretValueTests.cs`：
 
@@ -337,7 +339,7 @@ public sealed class SecretValueTests
 }
 ```
 
-- [ ] **Step 2: 运行测试，确认失败**
+- [x] **Step 2: 运行测试，确认失败**
 
 运行：
 
@@ -351,7 +353,7 @@ dotnet test src/CSharpAiCli.sln --filter SecretValueTests
 失败原因：SecretValue 尚未定义。
 ```
 
-- [ ] **Step 3: 实现脱敏密钥包装器**
+- [x] **Step 3: 实现脱敏密钥包装器**
 
 创建 `src/CSharpAiCli.Core/SecretValue.cs`：
 
@@ -381,7 +383,7 @@ public sealed class SecretValue
 }
 ```
 
-- [ ] **Step 4: 运行密钥测试**
+- [x] **Step 4: 运行密钥测试**
 
 运行：
 
@@ -404,7 +406,7 @@ Passed!  - Failed: 0, Passed: 2
 - 创建: `src/CSharpAiCli.Core/ConfigLoader.cs`
 - 创建: `src/CSharpAiCli.Tests/ConfigLoaderTests.cs`
 
-- [ ] **Step 1: 编写失败的配置加载器测试**
+- [x] **Step 1: 编写失败的配置加载器测试**
 
 创建 `src/CSharpAiCli.Tests/ConfigLoaderTests.cs`：
 
@@ -567,7 +569,7 @@ public sealed class ConfigLoaderTests
 }
 ```
 
-- [ ] **Step 2: 运行测试，确认失败**
+- [x] **Step 2: 运行测试，确认失败**
 
 运行：
 
@@ -581,7 +583,7 @@ dotnet test src/CSharpAiCli.sln --filter ConfigLoaderTests
 失败原因：ConfigLoader、EffectiveConfiguration 和 CliConfigFile 尚未定义。
 ```
 
-- [ ] **Step 3: 添加配置文件模型**
+- [x] **Step 3: 添加配置文件模型**
 
 创建 `src/CSharpAiCli.Core/CliConfigFile.cs`：
 
@@ -596,7 +598,7 @@ public sealed class CliConfigFile
 }
 ```
 
-- [ ] **Step 4: 添加生效配置模型**
+- [x] **Step 4: 添加生效配置模型**
 
 创建 `src/CSharpAiCli.Core/EffectiveConfiguration.cs`：
 
@@ -618,7 +620,7 @@ public sealed record EffectiveConfiguration(
 }
 ```
 
-- [ ] **Step 5: 添加配置加载器**
+- [x] **Step 5: 添加配置加载器**
 
 创建 `src/CSharpAiCli.Core/ConfigLoader.cs`：
 
@@ -774,7 +776,7 @@ public static class ConfigLoader
 }
 ```
 
-- [ ] **Step 6: 运行配置加载器测试**
+- [x] **Step 6: 运行配置加载器测试**
 
 运行：
 
@@ -795,7 +797,7 @@ Passed!  - Failed: 0, Passed: 4
 - 修改: `src/CSharpAiCli.Core/CliEnvironmentSnapshot.cs`
 - 修改: `src/CSharpAiCli.Tests/CliEnvironmentSnapshotTests.cs`
 
-- [ ] **Step 1: 替换快照测试**
+- [x] **Step 1: 替换快照测试**
 
 替换 `src/CSharpAiCli.Tests/CliEnvironmentSnapshotTests.cs`：
 
@@ -914,7 +916,7 @@ public sealed class CliEnvironmentSnapshotTests
 }
 ```
 
-- [ ] **Step 2: 运行测试，确认失败**
+- [x] **Step 2: 运行测试，确认失败**
 
 运行：
 
@@ -928,7 +930,7 @@ dotnet test src/CSharpAiCli.sln --filter CliEnvironmentSnapshotTests
 失败原因：CliEnvironmentSnapshot 尚未暴露 Workspace、Configuration 或 workspacePath 支持。
 ```
 
-- [ ] **Step 3: 替换运行时快照实现**
+- [x] **Step 3: 替换运行时快照实现**
 
 替换 `src/CSharpAiCli.Core/CliEnvironmentSnapshot.cs`：
 
@@ -1034,7 +1036,7 @@ public sealed record CliEnvironmentSnapshot(
 }
 ```
 
-- [ ] **Step 4: 运行快照测试**
+- [x] **Step 4: 运行快照测试**
 
 运行：
 
@@ -1057,7 +1059,7 @@ Passed!  - Failed: 0, Passed: 3
 - 修改: `src/CSharpAiCli.Tests/DoctorReportTests.cs`
 - 修改: `src/CSharpAiCli.Tests/ConfigReportTests.cs`
 
-- [ ] **Step 1: 替换 doctor 报告测试**
+- [x] **Step 1: 替换 doctor 报告测试**
 
 替换 `src/CSharpAiCli.Tests/DoctorReportTests.cs`：
 
@@ -1144,7 +1146,7 @@ public sealed class DoctorReportTests
 }
 ```
 
-- [ ] **Step 2: 替换 config 报告测试**
+- [x] **Step 2: 替换 config 报告测试**
 
 替换 `src/CSharpAiCli.Tests/ConfigReportTests.cs`：
 
@@ -1234,7 +1236,7 @@ public sealed class ConfigReportTests
 }
 ```
 
-- [ ] **Step 3: 运行报告测试，确认失败**
+- [x] **Step 3: 运行报告测试，确认失败**
 
 运行：
 
@@ -1248,7 +1250,7 @@ dotnet test src/CSharpAiCli.sln --filter "DoctorReportTests|ConfigReportTests"
 失败原因：报告尚未使用 WorkspaceContext 或 EffectiveConfiguration。
 ```
 
-- [ ] **Step 4: 替换 doctor 报告实现**
+- [x] **Step 4: 替换 doctor 报告实现**
 
 替换 `src/CSharpAiCli.Core/DoctorReport.cs`：
 
@@ -1307,7 +1309,7 @@ public sealed record DoctorReport(IReadOnlyList<string> Lines)
 }
 ```
 
-- [ ] **Step 5: 替换 config 报告实现**
+- [x] **Step 5: 替换 config 报告实现**
 
 替换 `src/CSharpAiCli.Core/ConfigReport.cs`：
 
@@ -1368,7 +1370,7 @@ public sealed record ConfigReport(IReadOnlyList<string> Lines)
 }
 ```
 
-- [ ] **Step 6: 运行报告测试**
+- [x] **Step 6: 运行报告测试**
 
 运行：
 
@@ -1389,7 +1391,7 @@ Passed!  - Failed: 0, Passed: 6
 - 修改: `src/CSharpAiCli.Cli/CliCommandFactory.cs`
 - 修改: `src/CSharpAiCli.Tests/CliCommandFactoryTests.cs`
 
-- [ ] **Step 1: 替换命令工厂测试**
+- [x] **Step 1: 替换命令工厂测试**
 
 替换 `src/CSharpAiCli.Tests/CliCommandFactoryTests.cs`：
 
@@ -1503,7 +1505,7 @@ public sealed class CliCommandFactoryTests
 }
 ```
 
-- [ ] **Step 2: 运行命令工厂测试，确认失败**
+- [x] **Step 2: 运行命令工厂测试，确认失败**
 
 运行：
 
@@ -1517,7 +1519,7 @@ dotnet test src/CSharpAiCli.sln --filter CliCommandFactoryTests
 失败原因：CliCommandFactory 仍接收 Func<CliEnvironmentSnapshot>，而不是 Func<string?, CliEnvironmentSnapshot>。
 ```
 
-- [ ] **Step 3: 替换命令工厂实现**
+- [x] **Step 3: 替换命令工厂实现**
 
 替换 `src/CSharpAiCli.Cli/CliCommandFactory.cs`：
 
@@ -1576,7 +1578,7 @@ public static class CliCommandFactory
 }
 ```
 
-- [ ] **Step 4: 运行命令工厂测试**
+- [x] **Step 4: 运行命令工厂测试**
 
 运行：
 
@@ -1597,7 +1599,7 @@ Passed!  - Failed: 0, Passed: 4
 - 验证: `src/CSharpAiCli.sln`
 - 创建: `docs_md/weekly/03_week_review.md`
 
-- [ ] **Step 1: 构建 solution**
+- [x] **Step 1: 构建 solution**
 
 运行：
 
@@ -1611,7 +1613,7 @@ dotnet build src/CSharpAiCli.sln
 Build succeeded.
 ```
 
-- [ ] **Step 2: 运行全部测试**
+- [x] **Step 2: 运行全部测试**
 
 运行：
 
@@ -1625,7 +1627,7 @@ dotnet test src/CSharpAiCli.sln
 Passed!  - Failed: 0
 ```
 
-- [ ] **Step 3: 验证 help 包含 workspace 选项**
+- [x] **Step 3: 验证 help 包含 workspace 选项**
 
 运行：
 
@@ -1642,7 +1644,7 @@ config
 --help
 ```
 
-- [ ] **Step 4: 验证带工作区覆盖的 doctor**
+- [x] **Step 4: 验证带工作区覆盖的 doctor**
 
 运行：
 
@@ -1661,7 +1663,7 @@ workspace config:
 api key:
 ```
 
-- [ ] **Step 5: 验证带工作区覆盖的 config get，且不泄露 API key**
+- [x] **Step 5: 验证带工作区覆盖的 config get，且不泄露 API key**
 
 运行：
 
@@ -1681,7 +1683,7 @@ $env:OPENAI_API_KEY = $oldOpenAiKey
 命令以 0 退出。
 ```
 
-- [ ] **Step 6: 手动验证工作区配置优先级**
+- [x] **Step 6: 手动验证工作区配置优先级**
 
 运行：
 
@@ -1709,7 +1711,7 @@ Remove-Item -LiteralPath $tempWorkspace -Recurse -Force
 命令以 0 退出。
 ```
 
-- [ ] **Step 7: 记录第 3 周回顾**
+- [x] **Step 7: 记录第 3 周回顾**
 
 创建 `docs_md/weekly/03_week_review.md`：
 

@@ -1,3 +1,5 @@
+using System.Text.Json;
+
 namespace CSharpAiCli.Tests;
 
 public sealed class ReleaseBuildScriptTests
@@ -27,12 +29,47 @@ public sealed class ReleaseBuildScriptTests
     }
 
     [Fact]
+    public void Build_release_script_uses_stable_manifest_metadata()
+    {
+        string script = ReadRepositoryFile("tools", "Build-Release.ps1");
+
+        Assert.DoesNotContain("Get-Date", script, StringComparison.Ordinal);
+        Assert.DoesNotContain("createdAtUtc", script, StringComparison.Ordinal);
+        Assert.Contains("builtFromVersion = $version", script, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Build_release_script_creates_zip_with_deterministic_entries()
+    {
+        string script = ReadRepositoryFile("tools", "Build-Release.ps1");
+
+        Assert.DoesNotContain("Compress-Archive", script, StringComparison.Ordinal);
+        Assert.Contains("[System.IO.Compression.ZipArchive]", script, StringComparison.Ordinal);
+        Assert.Contains("OrderBy", script, StringComparison.Ordinal);
+        Assert.Contains("LastWriteTime", script, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void Repository_version_metadata_is_defined_for_release_artifacts()
     {
         string props = ReadRepositoryFile("Directory.Build.props");
 
         Assert.Contains("<Version>0.1.0</Version>", props, StringComparison.Ordinal);
         Assert.Contains("<InformationalVersion>$(Version)</InformationalVersion>", props, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Repository_sdk_is_locked_to_current_net9_sdk()
+    {
+        string globalJsonPath = Path.Combine(GetRepositoryRoot(), "global.json");
+
+        Assert.True(File.Exists(globalJsonPath), "global.json should lock the repository SDK.");
+
+        using JsonDocument document = JsonDocument.Parse(File.ReadAllText(globalJsonPath));
+        JsonElement sdk = document.RootElement.GetProperty("sdk");
+
+        Assert.Equal("9.0.308", sdk.GetProperty("version").GetString());
+        Assert.Equal("latestPatch", sdk.GetProperty("rollForward").GetString());
     }
 
     private static string ReadRepositoryFile(params string[] relativeParts)

@@ -2,6 +2,8 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use `superpowers:subagent-driven-development` (recommended) or `superpowers:executing-plans` to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
+> **历史状态：** 本计划作为历史实施记录保留；checkbox 状态已在 2026-06-08 验收固化时闭合，最终证据见 `07_week_review.md`。
+
 **Goal:** 添加命名会话恢复、用户数据目录中的会话存储，以及版本化 JSON transcript v1。
 
 **Architecture:** `CSharpAiCli.Core` 新增 provider-neutral conversation/transcript 领域类型和文件存储实现；`CSharpAiCli.Cli` 只负责 `chat --session <name> "<prompt>"` 参数接线、store 注入、会话加载、模型调用和 transcript 写入。Week 7 只持久化用户消息、assistant 消息和安全错误；`toolCalls` 保留稳定空数组，供 Week 9 接入真实工具调用记录。
@@ -174,7 +176,7 @@ docs_md/
 - Create: `src/CSharpAiCli.Core/Conversations/ConversationSessionName.cs`
 - Create: `src/CSharpAiCli.Tests/ConversationSessionNameTests.cs`
 
-- [ ] **Step 1: 写失败的 session name 测试**
+- [x] **Step 1: 写失败的 session name 测试**
 
 Create `src/CSharpAiCli.Tests/ConversationSessionNameTests.cs`:
 
@@ -215,7 +217,7 @@ public sealed class ConversationSessionNameTests
 }
 ```
 
-- [ ] **Step 2: 运行测试并确认失败**
+- [x] **Step 2: 运行测试并确认失败**
 
 Run:
 
@@ -225,7 +227,7 @@ dotnet test src/CSharpAiCli.sln --filter ConversationSessionNameTests
 
 Expected: FAIL，因为 `ConversationSessionName` 尚不存在。
 
-- [ ] **Step 3: 实现 session name 值对象**
+- [x] **Step 3: 实现 session name 值对象**
 
 Create `src/CSharpAiCli.Core/Conversations/ConversationSessionName.cs`:
 
@@ -292,7 +294,7 @@ public sealed record ConversationSessionName(string Value, string FileSafeName)
 }
 ```
 
-- [ ] **Step 4: 运行 session name 测试**
+- [x] **Step 4: 运行 session name 测试**
 
 Run:
 
@@ -302,7 +304,7 @@ dotnet test src/CSharpAiCli.sln --filter ConversationSessionNameTests
 
 Expected: PASS。
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```powershell
 git add src/CSharpAiCli.Core/Conversations/ConversationSessionName.cs src/CSharpAiCli.Tests/ConversationSessionNameTests.cs
@@ -320,7 +322,7 @@ git commit -m "feat: add conversation session names"
 - Create: `src/CSharpAiCli.Core/Conversations/ConversationError.cs`
 - Create: `src/CSharpAiCli.Tests/ConversationTranscriptRecorderTests.cs`
 
-- [ ] **Step 1: 写失败的 transcript aggregate 测试**
+- [x] **Step 1: 写失败的 transcript aggregate 测试**
 
 Create `src/CSharpAiCli.Tests/ConversationTranscriptRecorderTests.cs`:
 
@@ -369,7 +371,7 @@ public sealed class ConversationTranscriptRecorderTests
 }
 ```
 
-- [ ] **Step 2: 运行测试并确认失败**
+- [x] **Step 2: 运行测试并确认失败**
 
 Run:
 
@@ -379,7 +381,7 @@ dotnet test src/CSharpAiCli.sln --filter ConversationTranscriptRecorderTests
 
 Expected: FAIL，因为 transcript 类型尚不存在。
 
-- [ ] **Step 3: 实现 transcript message 类型**
+- [x] **Step 3: 实现 transcript message 类型**
 
 Create `src/CSharpAiCli.Core/Conversations/ConversationMessage.cs`:
 
@@ -395,7 +397,7 @@ public sealed record ConversationMessage(
     string? ResponseId);
 ```
 
-- [ ] **Step 4: 实现 transcript error 类型**
+- [x] **Step 4: 实现 transcript error 类型**
 
 Create `src/CSharpAiCli.Core/Conversations/ConversationError.cs`:
 
@@ -427,7 +429,7 @@ public sealed record ConversationError(
 }
 ```
 
-- [ ] **Step 5: 实现 transcript aggregate**
+- [x] **Step 5: 实现 transcript aggregate**
 
 Create `src/CSharpAiCli.Core/Conversations/ConversationTranscript.cs`:
 
@@ -493,7 +495,7 @@ public sealed class ConversationTranscript
 }
 ```
 
-- [ ] **Step 6: 运行 transcript aggregate 测试**
+- [x] **Step 6: 运行 transcript aggregate 测试**
 
 Run:
 
@@ -503,7 +505,7 @@ dotnet test src/CSharpAiCli.sln --filter ConversationTranscriptRecorderTests
 
 Expected: PASS。
 
-- [ ] **Step 7: Commit**
+- [x] **Step 7: Commit**
 
 ```powershell
 git add src/CSharpAiCli.Core/Conversations/ConversationTranscript.cs src/CSharpAiCli.Core/Conversations/ConversationMessage.cs src/CSharpAiCli.Core/Conversations/ConversationError.cs src/CSharpAiCli.Tests/ConversationTranscriptRecorderTests.cs
@@ -520,7 +522,7 @@ git commit -m "feat: add conversation transcript model"
 - Create: `src/CSharpAiCli.Core/Conversations/FileConversationStore.cs`
 - Create: `src/CSharpAiCli.Tests/FileConversationStoreTests.cs`
 
-- [ ] **Step 1: 写失败的 file store 测试**
+- [x] **Step 1: 写失败的 file store 测试**
 
 Create `src/CSharpAiCli.Tests/FileConversationStoreTests.cs`:
 
@@ -619,7 +621,7 @@ public sealed class FileConversationStoreTests
 }
 ```
 
-- [ ] **Step 2: 运行 file store 测试并确认失败**
+- [x] **Step 2: 运行 file store 测试并确认失败**
 
 Run:
 
@@ -629,7 +631,7 @@ dotnet test src/CSharpAiCli.sln --filter FileConversationStoreTests
 
 Expected: FAIL，因为 store 类型尚不存在。
 
-- [ ] **Step 3: 实现 store contract**
+- [x] **Step 3: 实现 store contract**
 
 Create `src/CSharpAiCli.Core/Conversations/IConversationStore.cs`:
 
@@ -644,7 +646,7 @@ public interface IConversationStore
 }
 ```
 
-- [ ] **Step 4: 实现 JSON file store**
+- [x] **Step 4: 实现 JSON file store**
 
 Create `src/CSharpAiCli.Core/Conversations/FileConversationStore.cs`:
 
@@ -719,7 +721,7 @@ public sealed class FileConversationStore : IConversationStore
 }
 ```
 
-- [ ] **Step 5: 运行 file store 测试**
+- [x] **Step 5: 运行 file store 测试**
 
 Run:
 
@@ -729,7 +731,7 @@ dotnet test src/CSharpAiCli.sln --filter FileConversationStoreTests
 
 Expected: PASS。
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```powershell
 git add src/CSharpAiCli.Core/Conversations/IConversationStore.cs src/CSharpAiCli.Core/Conversations/FileConversationStore.cs src/CSharpAiCli.Tests/FileConversationStoreTests.cs
@@ -745,7 +747,7 @@ git commit -m "feat: add file conversation store"
 - Create: `src/CSharpAiCli.Core/Conversations/ConversationTranscriptRecorder.cs`
 - Modify: `src/CSharpAiCli.Tests/ConversationTranscriptRecorderTests.cs`
 
-- [ ] **Step 1: 扩展失败的 recorder 测试**
+- [x] **Step 1: 扩展失败的 recorder 测试**
 
 Append to `src/CSharpAiCli.Tests/ConversationTranscriptRecorderTests.cs`:
 
@@ -804,7 +806,7 @@ Append to `src/CSharpAiCli.Tests/ConversationTranscriptRecorderTests.cs`:
     }
 ```
 
-- [ ] **Step 2: 运行 recorder 测试并确认失败**
+- [x] **Step 2: 运行 recorder 测试并确认失败**
 
 Run:
 
@@ -814,7 +816,7 @@ dotnet test src/CSharpAiCli.sln --filter ConversationTranscriptRecorderTests
 
 Expected: FAIL，因为 `ConversationTranscriptRecorder` 尚不存在。
 
-- [ ] **Step 3: 实现 recorder**
+- [x] **Step 3: 实现 recorder**
 
 Create `src/CSharpAiCli.Core/Conversations/ConversationTranscriptRecorder.cs`:
 
@@ -848,7 +850,7 @@ public static class ConversationTranscriptRecorder
 }
 ```
 
-- [ ] **Step 4: 运行 recorder 测试**
+- [x] **Step 4: 运行 recorder 测试**
 
 Run:
 
@@ -858,7 +860,7 @@ dotnet test src/CSharpAiCli.sln --filter ConversationTranscriptRecorderTests
 
 Expected: PASS。
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```powershell
 git add src/CSharpAiCli.Core/Conversations/ConversationTranscriptRecorder.cs src/CSharpAiCli.Tests/ConversationTranscriptRecorderTests.cs
@@ -874,7 +876,7 @@ git commit -m "feat: record chat turns in transcripts"
 - Modify: `src/CSharpAiCli.Core/Chat/ChatRequest.cs`
 - Modify: `src/CSharpAiCli.Tests/OpenAiResponsesModelClientTests.cs`
 
-- [ ] **Step 1: 写失败的 ChatRequest 测试**
+- [x] **Step 1: 写失败的 ChatRequest 测试**
 
 Append to `src/CSharpAiCli.Tests/OpenAiResponsesModelClientTests.cs`:
 
@@ -900,7 +902,7 @@ Append to `src/CSharpAiCli.Tests/OpenAiResponsesModelClientTests.cs`:
     }
 ```
 
-- [ ] **Step 2: 运行测试并确认失败**
+- [x] **Step 2: 运行测试并确认失败**
 
 Run:
 
@@ -910,7 +912,7 @@ dotnet test src/CSharpAiCli.sln --filter Send_ignores_session_name_for_week_seve
 
 Expected: FAIL，因为 `ChatRequest` 还没有 `SessionName` 参数。
 
-- [ ] **Step 3: 修改 ChatRequest**
+- [x] **Step 3: 修改 ChatRequest**
 
 Replace `src/CSharpAiCli.Core/Chat/ChatRequest.cs` with:
 
@@ -924,7 +926,7 @@ public sealed record ChatRequest(string Prompt, string? SessionName = null)
 }
 ```
 
-- [ ] **Step 4: 运行 ChatRequest 相关测试**
+- [x] **Step 4: 运行 ChatRequest 相关测试**
 
 Run:
 
@@ -934,7 +936,7 @@ dotnet test src/CSharpAiCli.sln --filter "OpenAiResponsesModelClientTests|ChatMo
 
 Expected: PASS。既有 `new ChatRequest("hello")` 调用应继续编译。
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```powershell
 git add src/CSharpAiCli.Core/Chat/ChatRequest.cs src/CSharpAiCli.Tests/OpenAiResponsesModelClientTests.cs
@@ -950,7 +952,7 @@ git commit -m "feat: include session name on chat requests"
 - Modify: `src/CSharpAiCli.Cli/Commands/CliCommandFactory.cs`
 - Modify: `src/CSharpAiCli.Tests/CliCommandFactoryTests.cs`
 
-- [ ] **Step 1: 写失败的 CLI session 成功测试**
+- [x] **Step 1: 写失败的 CLI session 成功测试**
 
 Append to `src/CSharpAiCli.Tests/CliCommandFactoryTests.cs`:
 
@@ -989,7 +991,7 @@ Append to `src/CSharpAiCli.Tests/CliCommandFactoryTests.cs`:
     }
 ```
 
-- [ ] **Step 2: 写失败的 CLI session 错误测试**
+- [x] **Step 2: 写失败的 CLI session 错误测试**
 
 Append to `src/CSharpAiCli.Tests/CliCommandFactoryTests.cs`:
 
@@ -1026,7 +1028,7 @@ Append to `src/CSharpAiCli.Tests/CliCommandFactoryTests.cs`:
     }
 ```
 
-- [ ] **Step 3: 写无 session 不落盘测试**
+- [x] **Step 3: 写无 session 不落盘测试**
 
 Append to `src/CSharpAiCli.Tests/CliCommandFactoryTests.cs`:
 
@@ -1061,7 +1063,7 @@ Append to `src/CSharpAiCli.Tests/CliCommandFactoryTests.cs`:
     }
 ```
 
-- [ ] **Step 4: 更新 FakeChatModelClient 和添加 FakeConversationStore**
+- [x] **Step 4: 更新 FakeChatModelClient 和添加 FakeConversationStore**
 
 Modify the existing `FakeChatModelClient` in `src/CSharpAiCli.Tests/CliCommandFactoryTests.cs`:
 
@@ -1136,7 +1138,7 @@ Add this fake below it:
     }
 ```
 
-- [ ] **Step 5: 运行 CLI 测试并确认失败**
+- [x] **Step 5: 运行 CLI 测试并确认失败**
 
 Run:
 
@@ -1146,7 +1148,7 @@ dotnet test src/CSharpAiCli.sln --filter CliCommandFactoryTests
 
 Expected: FAIL，因为 `CliCommandFactory.Create(...)` 还没有 conversation store 注入，也没有 `--session` option。
 
-- [ ] **Step 6: 修改 CliCommandFactory overloads**
+- [x] **Step 6: 修改 CliCommandFactory overloads**
 
 Update `src/CSharpAiCli.Cli/Commands/CliCommandFactory.cs` so the full overload accepts store and clock factories:
 
@@ -1185,7 +1187,7 @@ At the start of the full overload, add:
         ArgumentNullException.ThrowIfNull(utcNowProvider);
 ```
 
-- [ ] **Step 7: 添加 --session option 并记录 transcript**
+- [x] **Step 7: 添加 --session option 并记录 transcript**
 
 In the chat command setup, add:
 
@@ -1234,7 +1236,7 @@ Replace the chat action body with:
         });
 ```
 
-- [ ] **Step 8: 运行 CLI 测试**
+- [x] **Step 8: 运行 CLI 测试**
 
 Run:
 
@@ -1244,7 +1246,7 @@ dotnet test src/CSharpAiCli.sln --filter CliCommandFactoryTests
 
 Expected: PASS。
 
-- [ ] **Step 9: Commit**
+- [x] **Step 9: Commit**
 
 ```powershell
 git add src/CSharpAiCli.Cli/Commands/CliCommandFactory.cs src/CSharpAiCli.Tests/CliCommandFactoryTests.cs
@@ -1260,7 +1262,7 @@ git commit -m "feat: wire chat sessions into cli"
 - Modify: `src/CSharpAiCli.Tests/FileConversationStoreTests.cs`
 - Modify: `src/CSharpAiCli.Tests/CliCommandFactoryTests.cs`
 
-- [ ] **Step 1: 添加 store 追加持久化测试**
+- [x] **Step 1: 添加 store 追加持久化测试**
 
 Append to `src/CSharpAiCli.Tests/FileConversationStoreTests.cs`:
 
@@ -1291,7 +1293,7 @@ Append to `src/CSharpAiCli.Tests/FileConversationStoreTests.cs`:
     }
 ```
 
-- [ ] **Step 2: 添加 CLI 恢复已有 transcript 测试**
+- [x] **Step 2: 添加 CLI 恢复已有 transcript 测试**
 
 Append to `src/CSharpAiCli.Tests/CliCommandFactoryTests.cs`:
 
@@ -1339,7 +1341,7 @@ Append to `src/CSharpAiCli.Tests/CliCommandFactoryTests.cs`:
     }
 ```
 
-- [ ] **Step 3: 运行恢复追加测试**
+- [x] **Step 3: 运行恢复追加测试**
 
 Run:
 
@@ -1349,7 +1351,7 @@ dotnet test src/CSharpAiCli.sln --filter "FileConversationStoreTests|CliCommandF
 
 Expected: PASS。
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```powershell
 git add src/CSharpAiCli.Tests/FileConversationStoreTests.cs src/CSharpAiCli.Tests/CliCommandFactoryTests.cs
@@ -1366,7 +1368,7 @@ git commit -m "test: cover session transcript append"
 - Modify: `docs_md/weekly/26_week_goal_schedule.md`
 - Create: `docs_md/weekly/07_week_review.md`
 
-- [ ] **Step 1: 更新 Week 5/6 spec 的 session/transcript 说明**
+- [x] **Step 1: 更新 Week 5/6 spec 的 session/transcript 说明**
 
 Append this section to `docs_md/spec/model_client_responses_api.md`:
 
@@ -1384,7 +1386,7 @@ Append this section to `docs_md/spec/model_client_responses_api.md`:
 - Transcript files must not contain raw API keys.
 ```
 
-- [ ] **Step 2: 运行 build/test**
+- [x] **Step 2: 运行 build/test**
 
 Run:
 
@@ -1400,7 +1402,7 @@ Build succeeded
 Failed: 0
 ```
 
-- [ ] **Step 3: 运行缺 key session smoke**
+- [x] **Step 3: 运行缺 key session smoke**
 
 Use an isolated user profile and temporary workspace so this smoke does not touch real user config:
 
@@ -1440,7 +1442,7 @@ transcript does not contain: sk-
 
 If PowerShell keeps the real user profile despite `$env:USERPROFILE`, run this smoke through tests only and document that `CliEnvironmentSnapshot.Create(userProfile: ...)` is the deterministic isolation path.
 
-- [ ] **Step 4: 可选真实 streaming session smoke**
+- [x] **Step 4: 可选真实 streaming session smoke**
 
 Only run when a real `OPENAI_API_KEY` is available and a model is configured:
 
@@ -1459,7 +1461,7 @@ transcript contains a user message and an assistant message
 transcript does not contain raw API key values
 ```
 
-- [ ] **Step 5: 创建 Week 7 review**
+- [x] **Step 5: 创建 Week 7 review**
 
 Create `docs_md/weekly/07_week_review.md`:
 
@@ -1510,7 +1512,7 @@ Create `docs_md/weekly/07_week_review.md`:
 - 加固模型错误处理和阶段 02 验收清单。
 ```
 
-- [ ] **Step 6: 更新总排期 Week 7 状态**
+- [x] **Step 6: 更新总排期 Week 7 状态**
 
 In `docs_md/weekly/26_week_goal_schedule.md`, update the Week 7 row after verification:
 
@@ -1524,7 +1526,7 @@ Also add a current progress bullet:
 - 第 7 周已稳固：命名会话恢复、用户 profile transcript v1 和工具调用 schema 占位已完成。详见 `07_week_review.md`。
 ```
 
-- [ ] **Step 7: Commit**
+- [x] **Step 7: Commit**
 
 ```powershell
 git add docs_md/spec/model_client_responses_api.md docs_md/weekly/26_week_goal_schedule.md docs_md/weekly/07_week_review.md

@@ -2,6 +2,8 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use `superpowers:subagent-driven-development` (recommended) or `superpowers:executing-plans` to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
+> **历史状态：** 本计划作为历史实施记录保留；checkbox 状态已在 2026-06-08 验收固化时闭合，最终证据见 `06_week_review.md`。
+
 **Goal:** 将 `caicli chat "<prompt>"` 从一次性非流式输出升级为可测试的终端流式输出。
 
 **Architecture:** `CSharpAiCli.Core` 新增 provider-neutral streaming renderer contract，并把 OpenAI Responses SDK streaming event 适配为仓库内部的最小 streaming update。`CSharpAiCli.Cli` 仍只负责命令接线、工作区快照、命令日志、prompt 参数读取、model client 注入、renderer 注入和 exit code。第 6 周不做 session、transcript、instruction loader、工具调用或配置 schema 大调整。
@@ -99,7 +101,7 @@ docs_md/
 - Create: `src/CSharpAiCli.Core/Chat/TerminalChatStreamingRenderer.cs`
 - Create: `src/CSharpAiCli.Tests/TerminalChatStreamingRendererTests.cs`
 
-- [ ] **Step 1: 写失败的 renderer 测试**
+- [x] **Step 1: 写失败的 renderer 测试**
 
 Create `src/CSharpAiCli.Tests/TerminalChatStreamingRendererTests.cs`:
 
@@ -239,7 +241,7 @@ public sealed class TerminalChatStreamingRendererTests
 }
 ```
 
-- [ ] **Step 2: 运行 renderer 测试确认失败**
+- [x] **Step 2: 运行 renderer 测试确认失败**
 
 Run:
 
@@ -253,7 +255,7 @@ Expected:
 Failed because IChatStreamingRenderer and TerminalChatStreamingRenderer are not defined.
 ```
 
-- [ ] **Step 3: 添加 renderer contract**
+- [x] **Step 3: 添加 renderer contract**
 
 Create `src/CSharpAiCli.Core/Chat/IChatStreamingRenderer.cs`:
 
@@ -272,7 +274,7 @@ public interface IChatStreamingRenderer
 }
 ```
 
-- [ ] **Step 4: 添加终端 renderer 实现**
+- [x] **Step 4: 添加终端 renderer 实现**
 
 Create `src/CSharpAiCli.Core/Chat/TerminalChatStreamingRenderer.cs`:
 
@@ -373,7 +375,7 @@ public sealed class TerminalChatStreamingRenderer : IChatStreamingRenderer
 }
 ```
 
-- [ ] **Step 5: 运行 renderer 测试**
+- [x] **Step 5: 运行 renderer 测试**
 
 Run:
 
@@ -387,7 +389,7 @@ Expected:
 Passed!  - Failed: 0, Passed: 3
 ```
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 Run:
 
@@ -410,7 +412,7 @@ Commit created with terminal chat streaming renderer.
 - Modify: `src/CSharpAiCli.Core/ModelClients/OpenAI/IOpenAiResponsesGateway.cs`
 - Modify: `src/CSharpAiCli.Core/ModelClients/OpenAI/SdkOpenAiResponsesGateway.cs`
 
-- [ ] **Step 1: 添加内部 streaming update 类型**
+- [x] **Step 1: 添加内部 streaming update 类型**
 
 Create `src/CSharpAiCli.Core/ModelClients/OpenAI/OpenAiStreamingResponseUpdate.cs`:
 
@@ -449,7 +451,7 @@ public sealed record OpenAiStreamingResponseUpdate(
 }
 ```
 
-- [ ] **Step 2: 扩展 gateway interface**
+- [x] **Step 2: 扩展 gateway interface**
 
 Replace `src/CSharpAiCli.Core/ModelClients/OpenAI/IOpenAiResponsesGateway.cs` with:
 
@@ -470,7 +472,7 @@ public interface IOpenAiResponsesGateway
 }
 ```
 
-- [ ] **Step 3: 更新 SDK gateway 的 streaming path**
+- [x] **Step 3: 更新 SDK gateway 的 streaming path**
 
 Replace `src/CSharpAiCli.Core/ModelClients/OpenAI/SdkOpenAiResponsesGateway.cs` with:
 
@@ -542,7 +544,7 @@ public sealed class SdkOpenAiResponsesGateway : IOpenAiResponsesGateway
 #pragma warning restore OPENAI001
 ```
 
-- [ ] **Step 4: 编译确认 SDK streaming API 名称匹配**
+- [x] **Step 4: 编译确认 SDK streaming API 名称匹配**
 
 Run:
 
@@ -567,7 +569,7 @@ else if (update is StreamingResponseCompletedUpdate)
 }
 ```
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 Run:
 
@@ -590,7 +592,7 @@ Commit created with OpenAI streaming gateway support.
 - Modify: `src/CSharpAiCli.Core/ModelClients/OpenAI/OpenAiResponsesModelClient.cs`
 - Modify: `src/CSharpAiCli.Tests/OpenAiResponsesModelClientTests.cs`
 
-- [ ] **Step 1: 扩展 model client contract**
+- [x] **Step 1: 扩展 model client contract**
 
 Replace `src/CSharpAiCli.Core/Chat/IChatModelClient.cs` with:
 
@@ -608,7 +610,7 @@ public interface IChatModelClient
 }
 ```
 
-- [ ] **Step 2: 添加 streaming model client 测试**
+- [x] **Step 2: 添加 streaming model client 测试**
 
 Append these tests inside `OpenAiResponsesModelClientTests` before the helper methods:
 
@@ -774,7 +776,7 @@ Add this fake renderer before the final closing brace:
     }
 ```
 
-- [ ] **Step 3: 运行 OpenAI model client 测试确认失败**
+- [x] **Step 3: 运行 OpenAI model client 测试确认失败**
 
 Run:
 
@@ -788,7 +790,7 @@ Expected:
 Failed because OpenAiResponsesModelClient does not implement SendStreaming yet.
 ```
 
-- [ ] **Step 4: Replace OpenAI model client implementation**
+- [x] **Step 4: Replace OpenAI model client implementation**
 
 Replace `src/CSharpAiCli.Core/ModelClients/OpenAI/OpenAiResponsesModelClient.cs` with:
 
@@ -1053,7 +1055,7 @@ public sealed class OpenAiResponsesModelClient : IChatModelClient
 }
 ```
 
-- [ ] **Step 5: 运行 OpenAI model client 测试**
+- [x] **Step 5: 运行 OpenAI model client 测试**
 
 Run:
 
@@ -1067,7 +1069,7 @@ Expected:
 Passed!  - Failed: 0
 ```
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 Run:
 
@@ -1089,7 +1091,7 @@ Commit created with streaming model client path.
 - Modify: `src/CSharpAiCli.Cli/Commands/CliCommandFactory.cs`
 - Modify: `src/CSharpAiCli.Tests/CliCommandFactoryTests.cs`
 
-- [ ] **Step 1: 更新 CLI tests**
+- [x] **Step 1: 更新 CLI tests**
 
 In `src/CSharpAiCli.Tests/CliCommandFactoryTests.cs`, replace `Chat_command_sends_prompt_to_model_client_and_logs_command` with:
 
@@ -1205,7 +1207,7 @@ Replace the existing `FakeChatModelClient` class with:
     }
 ```
 
-- [ ] **Step 2: 运行 CLI tests 确认失败**
+- [x] **Step 2: 运行 CLI tests 确认失败**
 
 Run:
 
@@ -1219,7 +1221,7 @@ Expected:
 Failed because CliCommandFactory does not accept a streaming renderer factory and chat still calls Send.
 ```
 
-- [ ] **Step 3: 更新 CLI command factory overloads**
+- [x] **Step 3: 更新 CLI command factory overloads**
 
 In `src/CSharpAiCli.Cli/Commands/CliCommandFactory.cs`, replace the overload chain with this shape:
 
@@ -1285,7 +1287,7 @@ At the start of the final overload body, add:
         ArgumentNullException.ThrowIfNull(streamingRendererFactory);
 ```
 
-- [ ] **Step 4: Replace the chat command action**
+- [x] **Step 4: Replace the chat command action**
 
 In `src/CSharpAiCli.Cli/Commands/CliCommandFactory.cs`, replace the existing `chatCommand.SetAction` block with:
 
@@ -1304,7 +1306,7 @@ In `src/CSharpAiCli.Cli/Commands/CliCommandFactory.cs`, replace the existing `ch
         });
 ```
 
-- [ ] **Step 5: 运行 CLI tests**
+- [x] **Step 5: 运行 CLI tests**
 
 Run:
 
@@ -1318,7 +1320,7 @@ Expected:
 Passed!  - Failed: 0
 ```
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 Run:
 
@@ -1339,7 +1341,7 @@ Commit created with streaming chat CLI wiring.
 
 - Modify: `docs_md/spec/model_client_responses_api.md`
 
-- [ ] **Step 1: 更新 Week 5 spec，加入 Week 6 streaming section**
+- [x] **Step 1: 更新 Week 5 spec，加入 Week 6 streaming section**
 
 Append this section to `docs_md/spec/model_client_responses_api.md`:
 
@@ -1448,7 +1450,7 @@ $exitCode
 ```
 ````
 
-- [ ] **Step 2: 扫描说明文档占位内容**
+- [x] **Step 2: 扫描说明文档占位内容**
 
 Run:
 
@@ -1463,7 +1465,7 @@ Expected:
 No matches.
 ```
 
-- [ ] **Step 3: Commit**
+- [x] **Step 3: Commit**
 
 Run:
 
@@ -1486,7 +1488,7 @@ Commit created with Week 6 streaming notes.
 - Modify: `docs_md/weekly/26_week_goal_schedule.md`
 - Create: `docs_md/weekly/06_week_review.md`
 
-- [ ] **Step 1: 构建 solution**
+- [x] **Step 1: 构建 solution**
 
 Run:
 
@@ -1500,7 +1502,7 @@ Expected:
 Build succeeded.
 ```
 
-- [ ] **Step 2: 运行全部测试**
+- [x] **Step 2: 运行全部测试**
 
 Run:
 
@@ -1514,7 +1516,7 @@ Expected:
 Passed!  - Failed: 0
 ```
 
-- [ ] **Step 3: 验证缺 key chat 错误**
+- [x] **Step 3: 验证缺 key chat 错误**
 
 Run:
 
@@ -1540,7 +1542,7 @@ Expected:
 最后打印的 exit code 是 1。
 ```
 
-- [ ] **Step 4: 验证真实 streaming smoke**
+- [x] **Step 4: 验证真实 streaming smoke**
 
 Only run this step when a real key and model are available in the developer environment.
 
@@ -1561,7 +1563,7 @@ Expected:
 命令 exit code 是 0。
 ```
 
-- [ ] **Step 5: 验证命令日志仍脱敏**
+- [x] **Step 5: 验证命令日志仍脱敏**
 
 Run:
 
@@ -1579,7 +1581,7 @@ Expected:
 日志不包含任何 sk- 开头的测试密钥值。
 ```
 
-- [ ] **Step 6: 更新总周计划 Week 6 状态**
+- [x] **Step 6: 更新总周计划 Week 6 状态**
 
 In `docs_md/weekly/26_week_goal_schedule.md`, update the current progress list so it includes:
 
@@ -1599,7 +1601,7 @@ to:
 | 6 | 2024-07-08 至 2024-07-14 | 阶段 02 | 已稳固 | 添加用于 chat 输出的终端流式渲染器。详见 `06_week_chat_streaming_renderer.plan.md` 和 `06_week_review.md`。 | 已验证：`caicli chat` 可以流式输出响应，并保持缺 key/model 和脱敏行为。 |
 ```
 
-- [ ] **Step 7: 创建第 6 周回顾**
+- [x] **Step 7: 创建第 6 周回顾**
 
 Create `docs_md/weekly/06_week_review.md`:
 
@@ -1653,7 +1655,7 @@ Create `docs_md/weekly/06_week_review.md`:
 - 为后续工具调用保留 transcript schema 占位字段。
 ```
 
-- [ ] **Step 8: 扫描文档占位内容**
+- [x] **Step 8: 扫描文档占位内容**
 
 Run:
 
@@ -1668,7 +1670,7 @@ Expected:
 No matches.
 ```
 
-- [ ] **Step 9: Commit**
+- [x] **Step 9: Commit**
 
 Run:
 

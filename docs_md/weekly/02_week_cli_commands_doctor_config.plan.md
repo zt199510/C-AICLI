@@ -2,6 +2,8 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use `superpowers:subagent-driven-development` or `superpowers:executing-plans` to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
+> **历史状态：** 本计划作为历史实施记录保留；checkbox 状态已在 2026-06-08 验收固化时闭合，最终证据见 `02_week_review.md`。
+
 **Goal:** 添加可运行的 `System.CommandLine` 根命令、`doctor`、`config get` 和帮助输出，让 CLI 在没有 API key 时也能给出清晰诊断。
 
 **Architecture:** CLI 项目只负责命令解析和输出连接，Core 项目负责产品元数据、运行环境快照、doctor 报告和 config 报告。第 2 周不读取真实配置文件、不接入模型、不实现 workspace override；只建立命令外壳和可测试的诊断文本。
@@ -91,7 +93,7 @@ docs_md/weekly/
 - Modify: `src/CSharpAiCli.Cli/CSharpAiCli.Cli.csproj`
 - Modify: `src/CSharpAiCli.Tests/CSharpAiCli.Tests.csproj`
 
-- [ ] **Step 1: 添加 System.CommandLine 精确版本**
+- [x] **Step 1: 添加 System.CommandLine 精确版本**
 
 Run:
 
@@ -105,7 +107,7 @@ Expected:
 PackageReference for package 'System.CommandLine' version '2.0.8' added
 ```
 
-- [ ] **Step 2: 让测试项目引用 CLI 项目**
+- [x] **Step 2: 让测试项目引用 CLI 项目**
 
 Run:
 
@@ -119,7 +121,7 @@ Expected:
 Reference ... CSharpAiCli.Cli.csproj added to the project.
 ```
 
-- [ ] **Step 3: 验证引用后 solution 仍可构建**
+- [x] **Step 3: 验证引用后 solution 仍可构建**
 
 Run:
 
@@ -140,7 +142,7 @@ Build succeeded.
 - Rename: `src/CSharpAiCli.Tests/UnitTest1.cs` -> `src/CSharpAiCli.Tests/ProductInfoTests.cs`
 - Modify: `src/CSharpAiCli.Core/ProductInfo.cs`
 
-- [ ] **Step 1: 重命名测试文件**
+- [x] **Step 1: 重命名测试文件**
 
 Run:
 
@@ -154,7 +156,7 @@ Expected:
 src/CSharpAiCli.Tests/ProductInfoTests.cs exists.
 ```
 
-- [ ] **Step 2: 写失败测试**
+- [x] **Step 2: 写失败测试**
 
 Replace `src/CSharpAiCli.Tests/ProductInfoTests.cs` with:
 
@@ -176,7 +178,7 @@ public sealed class ProductInfoTests
 }
 ```
 
-- [ ] **Step 3: 运行测试确认失败**
+- [x] **Step 3: 运行测试确认失败**
 
 Run:
 
@@ -190,7 +192,7 @@ Expected:
 Failed because ProductInfo.DisplayName, Description, or TargetFramework is not defined.
 ```
 
-- [ ] **Step 4: 实现产品元数据**
+- [x] **Step 4: 实现产品元数据**
 
 Replace `src/CSharpAiCli.Core/ProductInfo.cs` with:
 
@@ -206,7 +208,7 @@ public static class ProductInfo
 }
 ```
 
-- [ ] **Step 5: 运行测试确认通过**
+- [x] **Step 5: 运行测试确认通过**
 
 Run:
 
@@ -227,7 +229,7 @@ Passed!  - Failed: 0, Passed: 1
 - Create: `src/CSharpAiCli.Core/CliEnvironmentSnapshot.cs`
 - Create: `src/CSharpAiCli.Tests/CliEnvironmentSnapshotTests.cs`
 
-- [ ] **Step 1: 写失败测试**
+- [x] **Step 1: 写失败测试**
 
 Create `src/CSharpAiCli.Tests/CliEnvironmentSnapshotTests.cs`:
 
@@ -277,7 +279,7 @@ public sealed class CliEnvironmentSnapshotTests
 }
 ```
 
-- [ ] **Step 2: 运行测试确认失败**
+- [x] **Step 2: 运行测试确认失败**
 
 Run:
 
@@ -291,7 +293,7 @@ Expected:
 Failed because CliEnvironmentSnapshot is not defined.
 ```
 
-- [ ] **Step 3: 实现运行环境快照**
+- [x] **Step 3: 实现运行环境快照**
 
 Create `src/CSharpAiCli.Core/CliEnvironmentSnapshot.cs`:
 
@@ -382,7 +384,7 @@ public sealed record CliEnvironmentSnapshot(
 }
 ```
 
-- [ ] **Step 4: 运行测试确认通过**
+- [x] **Step 4: 运行测试确认通过**
 
 Run:
 
@@ -403,7 +405,7 @@ Passed!  - Failed: 0, Passed: 2
 - Create: `src/CSharpAiCli.Core/DoctorReport.cs`
 - Create: `src/CSharpAiCli.Tests/DoctorReportTests.cs`
 
-- [ ] **Step 1: 写失败测试**
+- [x] **Step 1: 写失败测试**
 
 Create `src/CSharpAiCli.Tests/DoctorReportTests.cs`:
 
@@ -461,7 +463,7 @@ public sealed class DoctorReportTests
 }
 ```
 
-- [ ] **Step 2: 运行测试确认失败**
+- [x] **Step 2: 运行测试确认失败**
 
 Run:
 
@@ -475,7 +477,7 @@ Expected:
 Failed because DoctorReport is not defined.
 ```
 
-- [ ] **Step 3: 实现 doctor 报告**
+- [x] **Step 3: 实现 doctor 报告**
 
 Create `src/CSharpAiCli.Core/DoctorReport.cs`:
 
@@ -513,7 +515,7 @@ public sealed record DoctorReport(IReadOnlyList<string> Lines)
 }
 ```
 
-- [ ] **Step 4: 运行测试确认通过**
+- [x] **Step 4: 运行测试确认通过**
 
 Run:
 
@@ -534,7 +536,7 @@ Passed!  - Failed: 0, Passed: 2
 - Create: `src/CSharpAiCli.Core/ConfigReport.cs`
 - Create: `src/CSharpAiCli.Tests/ConfigReportTests.cs`
 
-- [ ] **Step 1: 写失败测试**
+- [x] **Step 1: 写失败测试**
 
 Create `src/CSharpAiCli.Tests/ConfigReportTests.cs`:
 
@@ -587,7 +589,7 @@ public sealed class ConfigReportTests
 }
 ```
 
-- [ ] **Step 2: 运行测试确认失败**
+- [x] **Step 2: 运行测试确认失败**
 
 Run:
 
@@ -601,7 +603,7 @@ Expected:
 Failed because ConfigReport is not defined.
 ```
 
-- [ ] **Step 3: 实现 config get 报告**
+- [x] **Step 3: 实现 config get 报告**
 
 Create `src/CSharpAiCli.Core/ConfigReport.cs`:
 
@@ -634,7 +636,7 @@ public sealed record ConfigReport(IReadOnlyList<string> Lines)
 }
 ```
 
-- [ ] **Step 4: 运行测试确认通过**
+- [x] **Step 4: 运行测试确认通过**
 
 Run:
 
@@ -655,7 +657,7 @@ Passed!  - Failed: 0, Passed: 2
 - Create: `src/CSharpAiCli.Cli/CliCommandFactory.cs`
 - Create: `src/CSharpAiCli.Tests/CliCommandFactoryTests.cs`
 
-- [ ] **Step 1: 写失败测试**
+- [x] **Step 1: 写失败测试**
 
 Create `src/CSharpAiCli.Tests/CliCommandFactoryTests.cs`:
 
@@ -713,7 +715,7 @@ public sealed class CliCommandFactoryTests
 }
 ```
 
-- [ ] **Step 2: 运行测试确认失败**
+- [x] **Step 2: 运行测试确认失败**
 
 Run:
 
@@ -727,7 +729,7 @@ Expected:
 Failed because CliCommandFactory is not defined.
 ```
 
-- [ ] **Step 3: 实现命令工厂**
+- [x] **Step 3: 实现命令工厂**
 
 Create `src/CSharpAiCli.Cli/CliCommandFactory.cs`:
 
@@ -777,7 +779,7 @@ public static class CliCommandFactory
 }
 ```
 
-- [ ] **Step 4: 运行测试确认通过**
+- [x] **Step 4: 运行测试确认通过**
 
 Run:
 
@@ -797,7 +799,7 @@ Passed!  - Failed: 0, Passed: 2
 
 - Modify: `src/CSharpAiCli.Cli/Program.cs`
 
-- [ ] **Step 1: 更新 Program.cs**
+- [x] **Step 1: 更新 Program.cs**
 
 Replace `src/CSharpAiCli.Cli/Program.cs` with:
 
@@ -811,7 +813,7 @@ return CliCommandFactory
     .Invoke();
 ```
 
-- [ ] **Step 2: 运行 help smoke check**
+- [x] **Step 2: 运行 help smoke check**
 
 Run:
 
@@ -829,7 +831,7 @@ config
 --version
 ```
 
-- [ ] **Step 3: 运行 doctor smoke check**
+- [x] **Step 3: 运行 doctor smoke check**
 
 Run:
 
@@ -852,7 +854,7 @@ workspace config:
 api key:
 ```
 
-- [ ] **Step 4: 运行 config get smoke check**
+- [x] **Step 4: 运行 config get smoke check**
 
 Run:
 
@@ -878,7 +880,7 @@ apiKey:
 - Verify: `src/CSharpAiCli.sln`
 - Create: `docs_md/weekly/02_week_review.md`
 
-- [ ] **Step 1: 构建 solution**
+- [x] **Step 1: 构建 solution**
 
 Run:
 
@@ -892,7 +894,7 @@ Expected:
 Build succeeded.
 ```
 
-- [ ] **Step 2: 运行全部测试**
+- [x] **Step 2: 运行全部测试**
 
 Run:
 
@@ -906,7 +908,7 @@ Expected:
 Passed!  - Failed: 0
 ```
 
-- [ ] **Step 3: 验证 help**
+- [x] **Step 3: 验证 help**
 
 Run:
 
@@ -920,7 +922,7 @@ Expected:
 输出包含 doctor、config、--help 和 --version。
 ```
 
-- [ ] **Step 4: 验证 doctor 无 key 可运行**
+- [x] **Step 4: 验证 doctor 无 key 可运行**
 
 Run:
 
@@ -937,7 +939,7 @@ Expected:
 输出包含 api key: missing，且命令 exit code 为 0。
 ```
 
-- [ ] **Step 5: 验证 config get 不泄露 key**
+- [x] **Step 5: 验证 config get 不泄露 key**
 
 Run:
 
@@ -955,7 +957,7 @@ Expected:
 输出不包含 sk-week2-secret。
 ```
 
-- [ ] **Step 6: 记录第 2 周回顾**
+- [x] **Step 6: 记录第 2 周回顾**
 
 Create `docs_md/weekly/02_week_review.md`:
 

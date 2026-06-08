@@ -36,4 +36,4 @@
 
 - Windows is the primary target.
 - Tests run on .NET 9 in the current environment.
-- No `global.json` SDK lock is currently present.
+- The repository SDK is locked by root `global.json` to .NET SDK `9.0.308` with `latestPatch` roll-forward.

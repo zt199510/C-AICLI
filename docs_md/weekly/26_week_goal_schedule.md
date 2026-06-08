@@ -30,7 +30,7 @@
 - 第 24 周已稳固：安装、配置、安全模型、quickstart 和能力状态文档已完成，并验证干净用户路径下的 `doctor` 与 `chat` 错误路径。详见 `24_week_review.md`。
 - 第 25 周已稳固：发布 smoke 脚本、工具禁用、`tools`、deterministic `run` 和 session export/clear 加固已完成。详见 `25_week_review.md`。
 - 第 26 周已验收：changelog、known limitations、final acceptance 和首个本地发布 zip 已完成，MVP release `0.1.0` 通过验收。详见 `26_week_review.md`。
-- 运行时仍为 `net9.0`，本地 .NET SDK 为 `9.0.308`，当前没有 `global.json` SDK 锁定。
+- 运行时仍为 `net9.0`，仓库通过根目录 `global.json` 锁定 .NET SDK `9.0.308`，并使用 `latestPatch` roll-forward 策略。
 
 ## 假设
 
@@ -41,7 +41,7 @@
 - 产品方向：类似 Codex 的本地工程 CLI，而不是完整 Codex 克隆
 - 核心框架策略：Microsoft Agent Framework 是适配器，不是产品内核
 - 发布策略：direct OpenAI runner、本地安全工具和 Windows 发布包是 MVP；Microsoft Agent Framework、MCP 和 Gerber/TIFF 项目包是增强目标
-- 运行时策略：重新启动时优先 .NET 10 LTS；若使用 .NET 8 LTS，必须通过 `global.json` 和安装说明锁定 SDK
+- 运行时策略：当前保持 `net9.0`，通过 `global.json` 锁定 .NET SDK `9.0.308`；后续若迁移到 .NET 10 LTS 或 .NET 8 LTS，必须同步目标框架、安装说明和 release 文档。
 
 ## 逐周目标
 

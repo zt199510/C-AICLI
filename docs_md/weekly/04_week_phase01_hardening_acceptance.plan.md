@@ -2,6 +2,8 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use `superpowers:subagent-driven-development` (recommended) or `superpowers:executing-plans` to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
+> **历史状态：** 本计划作为历史实施记录保留；checkbox 状态已在 2026-06-08 验收固化时闭合，最终证据见 `04_week_review.md`。
+
 **Goal:** 稳定阶段 01 的 CLI 基础能力，补齐轻量命令日志、诊断可见性、`chat` Phase 02 边界提示和阶段 01 验收文档。
 
 **Architecture:** `CSharpAiCli.Core` 继续承载可测试的报告、日志路径解析、文件日志写入和 Phase 02 边界报告。`CSharpAiCli.Cli` 只负责命令接线：`doctor`、`config get` 和 `chat` 都通过现有 `CliEnvironmentSnapshot` 获取工作区与配置上下文，并在执行时写入脱敏命令日志。第 4 周不接入模型、不实现流式输出、不改变配置 schema 的密钥语义。
@@ -96,7 +98,7 @@ docs_md/
 - Modify: `src/CSharpAiCli.Tests/DoctorReportTests.cs`
 - Modify: `src/CSharpAiCli.Tests/ConfigReportTests.cs`
 
-- [ ] **Step 1: 写失败的日志目录解析测试**
+- [x] **Step 1: 写失败的日志目录解析测试**
 
 Create `src/CSharpAiCli.Tests/LogPathResolverTests.cs`:
 
@@ -165,7 +167,7 @@ public sealed class LogPathResolverTests
 }
 ```
 
-- [ ] **Step 2: 运行测试确认失败**
+- [x] **Step 2: 运行测试确认失败**
 
 Run:
 
@@ -179,7 +181,7 @@ Expected:
 Failed because LogPathResolver is not defined.
 ```
 
-- [ ] **Step 3: 实现日志目录解析器**
+- [x] **Step 3: 实现日志目录解析器**
 
 Create `src/CSharpAiCli.Core/LogPathResolver.cs`:
 
@@ -203,7 +205,7 @@ public static class LogPathResolver
 }
 ```
 
-- [ ] **Step 4: 运行日志目录解析测试**
+- [x] **Step 4: 运行日志目录解析测试**
 
 Run:
 
@@ -217,7 +219,7 @@ Expected:
 Passed!  - Failed: 0, Passed: 2
 ```
 
-- [ ] **Step 5: 更新 doctor 报告测试**
+- [x] **Step 5: 更新 doctor 报告测试**
 
 Replace `src/CSharpAiCli.Tests/DoctorReportTests.cs` with:
 
@@ -310,7 +312,7 @@ public sealed class DoctorReportTests
 }
 ```
 
-- [ ] **Step 6: 更新 config 报告测试**
+- [x] **Step 6: 更新 config 报告测试**
 
 Replace `src/CSharpAiCli.Tests/ConfigReportTests.cs` with:
 
@@ -409,7 +411,7 @@ public sealed class ConfigReportTests
 }
 ```
 
-- [ ] **Step 7: 运行报告测试确认失败**
+- [x] **Step 7: 运行报告测试确认失败**
 
 Run:
 
@@ -423,7 +425,7 @@ Expected:
 Failed because DoctorReport and ConfigReport do not print log directory yet.
 ```
 
-- [ ] **Step 8: 更新 doctor 报告实现**
+- [x] **Step 8: 更新 doctor 报告实现**
 
 Replace `src/CSharpAiCli.Core/DoctorReport.cs` with:
 
@@ -483,7 +485,7 @@ public sealed record DoctorReport(IReadOnlyList<string> Lines)
 }
 ```
 
-- [ ] **Step 9: 更新 config 报告实现**
+- [x] **Step 9: 更新 config 报告实现**
 
 Replace `src/CSharpAiCli.Core/ConfigReport.cs` with:
 
@@ -543,7 +545,7 @@ public sealed record ConfigReport(IReadOnlyList<string> Lines)
 }
 ```
 
-- [ ] **Step 10: 运行日志目录和报告测试**
+- [x] **Step 10: 运行日志目录和报告测试**
 
 Run:
 
@@ -557,7 +559,7 @@ Expected:
 Passed!  - Failed: 0, Passed: 8
 ```
 
-- [ ] **Step 11: Commit**
+- [x] **Step 11: Commit**
 
 Run:
 
@@ -579,7 +581,7 @@ Commit created with log directory diagnostics.
 - Create: `src/CSharpAiCli.Core/CommandLogger.cs`
 - Create: `src/CSharpAiCli.Tests/CommandLoggerTests.cs`
 
-- [ ] **Step 1: 写失败的命令日志测试**
+- [x] **Step 1: 写失败的命令日志测试**
 
 Create `src/CSharpAiCli.Tests/CommandLoggerTests.cs`:
 
@@ -749,7 +751,7 @@ public sealed class CommandLoggerTests
 }
 ```
 
-- [ ] **Step 2: 运行测试确认失败**
+- [x] **Step 2: 运行测试确认失败**
 
 Run:
 
@@ -763,7 +765,7 @@ Expected:
 Failed because CommandLogger is not defined.
 ```
 
-- [ ] **Step 3: 实现命令日志写入器**
+- [x] **Step 3: 实现命令日志写入器**
 
 Create `src/CSharpAiCli.Core/CommandLogger.cs`:
 
@@ -832,7 +834,7 @@ public static class CommandLogger
 }
 ```
 
-- [ ] **Step 4: 运行命令日志测试**
+- [x] **Step 4: 运行命令日志测试**
 
 Run:
 
@@ -846,7 +848,7 @@ Expected:
 Passed!  - Failed: 0, Passed: 3
 ```
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 Run:
 
@@ -868,7 +870,7 @@ Commit created with command logging.
 - Modify: `src/CSharpAiCli.Cli/CliCommandFactory.cs`
 - Modify: `src/CSharpAiCli.Tests/CliCommandFactoryTests.cs`
 
-- [ ] **Step 1: 替换 CLI 命令工厂测试**
+- [x] **Step 1: 替换 CLI 命令工厂测试**
 
 Replace `src/CSharpAiCli.Tests/CliCommandFactoryTests.cs` with:
 
@@ -1035,7 +1037,7 @@ public sealed class CliCommandFactoryTests
 }
 ```
 
-- [ ] **Step 2: 运行 CLI 测试确认失败**
+- [x] **Step 2: 运行 CLI 测试确认失败**
 
 Run:
 
@@ -1049,7 +1051,7 @@ Expected:
 Failed because CliCommandFactory does not expose the command logger overload yet.
 ```
 
-- [ ] **Step 3: 更新 CLI 命令工厂实现**
+- [x] **Step 3: 更新 CLI 命令工厂实现**
 
 Replace `src/CSharpAiCli.Cli/CliCommandFactory.cs` with:
 
@@ -1135,7 +1137,7 @@ public static class CliCommandFactory
 }
 ```
 
-- [ ] **Step 4: 运行 CLI 命令工厂测试**
+- [x] **Step 4: 运行 CLI 命令工厂测试**
 
 Run:
 
@@ -1149,7 +1151,7 @@ Expected:
 Passed!  - Failed: 0, Passed: 7
 ```
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 Run:
 
@@ -1173,7 +1175,7 @@ Commit created with CLI logging.
 - Modify: `src/CSharpAiCli.Cli/CliCommandFactory.cs`
 - Modify: `src/CSharpAiCli.Tests/CliCommandFactoryTests.cs`
 
-- [ ] **Step 1: 写失败的 chat 边界报告测试**
+- [x] **Step 1: 写失败的 chat 边界报告测试**
 
 Create `src/CSharpAiCli.Tests/ChatUnavailableReportTests.cs`:
 
@@ -1229,7 +1231,7 @@ public sealed class ChatUnavailableReportTests
 }
 ```
 
-- [ ] **Step 2: 运行 chat 边界报告测试确认失败**
+- [x] **Step 2: 运行 chat 边界报告测试确认失败**
 
 Run:
 
@@ -1243,7 +1245,7 @@ Expected:
 Failed because ChatUnavailableReport is not defined.
 ```
 
-- [ ] **Step 3: 实现 chat 边界报告**
+- [x] **Step 3: 实现 chat 边界报告**
 
 Create `src/CSharpAiCli.Core/ChatUnavailableReport.cs`:
 
@@ -1286,7 +1288,7 @@ public sealed record ChatUnavailableReport(IReadOnlyList<string> Lines)
 }
 ```
 
-- [ ] **Step 4: 运行 chat 边界报告测试**
+- [x] **Step 4: 运行 chat 边界报告测试**
 
 Run:
 
@@ -1300,7 +1302,7 @@ Expected:
 Passed!  - Failed: 0, Passed: 1
 ```
 
-- [ ] **Step 5: 扩展 CLI 测试覆盖 chat 命令**
+- [x] **Step 5: 扩展 CLI 测试覆盖 chat 命令**
 
 Add this test to `src/CSharpAiCli.Tests/CliCommandFactoryTests.cs` before `CreateSnapshot`:
 
@@ -1334,7 +1336,7 @@ Add this test to `src/CSharpAiCli.Tests/CliCommandFactoryTests.cs` before `Creat
     }
 ```
 
-- [ ] **Step 6: 运行 CLI 测试确认失败**
+- [x] **Step 6: 运行 CLI 测试确认失败**
 
 Run:
 
@@ -1348,7 +1350,7 @@ Expected:
 Failed because CliCommandFactory does not add chat yet.
 ```
 
-- [ ] **Step 7: 更新 CLI 命令工厂实现**
+- [x] **Step 7: 更新 CLI 命令工厂实现**
 
 In `src/CSharpAiCli.Cli/CliCommandFactory.cs`, add this command after `configCommand.Subcommands.Add(configGetCommand);` and before root subcommands are added:
 
@@ -1467,7 +1469,7 @@ public static class CliCommandFactory
 }
 ```
 
-- [ ] **Step 8: 运行 chat 和 CLI 测试**
+- [x] **Step 8: 运行 chat 和 CLI 测试**
 
 Run:
 
@@ -1481,7 +1483,7 @@ Expected:
 Passed!  - Failed: 0, Passed: 9
 ```
 
-- [ ] **Step 9: Commit**
+- [x] **Step 9: Commit**
 
 Run:
 
@@ -1503,7 +1505,7 @@ Commit created with chat boundary command.
 - Create: `docs_md/spec/phase01_acceptance.md`
 - Create: `docs_md/spec/runtime_logging_diagnostics.md`
 
-- [ ] **Step 1: 创建阶段 01 验收清单**
+- [x] **Step 1: 创建阶段 01 验收清单**
 
 Create `docs_md/spec/phase01_acceptance.md`:
 
@@ -1572,7 +1574,7 @@ Phase 02 可以依赖以下基础：
 Phase 02 的第一个实现目标是 model client 抽象和 OpenAI SDK Responses API runner。
 ```
 
-- [ ] **Step 2: 创建运行时、日志、诊断说明**
+- [x] **Step 2: 创建运行时、日志、诊断说明**
 
 Create `docs_md/spec/runtime_logging_diagnostics.md`:
 
@@ -1654,7 +1656,7 @@ yyyy-MM-dd.log
 `chat` 命令可以使用 `--workspace <path>`，用于显示与记录当前工作区上下文。
 ```
 
-- [ ] **Step 3: 检查文档没有占位内容**
+- [x] **Step 3: 检查文档没有占位内容**
 
 Run:
 
@@ -1669,7 +1671,7 @@ Expected:
 No matches.
 ```
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 Run:
 
@@ -1693,7 +1695,7 @@ Commit created with Phase 01 diagnostics docs.
 - Modify: `docs_md/weekly/26_week_goal_schedule.md`
 - Create: `docs_md/weekly/04_week_review.md`
 
-- [ ] **Step 1: 构建 solution**
+- [x] **Step 1: 构建 solution**
 
 Run:
 
@@ -1707,7 +1709,7 @@ Expected:
 Build succeeded.
 ```
 
-- [ ] **Step 2: 运行全部测试**
+- [x] **Step 2: 运行全部测试**
 
 Run:
 
@@ -1721,7 +1723,7 @@ Expected:
 Passed!  - Failed: 0
 ```
 
-- [ ] **Step 3: 验证 help 包含阶段 01 命令和 workspace 选项**
+- [x] **Step 3: 验证 help 包含阶段 01 命令和 workspace 选项**
 
 Run:
 
@@ -1739,7 +1741,7 @@ chat
 --help
 ```
 
-- [ ] **Step 4: 验证 doctor 输出**
+- [x] **Step 4: 验证 doctor 输出**
 
 Run:
 
@@ -1758,7 +1760,7 @@ log directory:
 api key:
 ```
 
-- [ ] **Step 5: 验证 config get 输出和脱敏**
+- [x] **Step 5: 验证 config get 输出和脱敏**
 
 Run:
 
@@ -1779,7 +1781,7 @@ Expected:
 命令以 0 退出。
 ```
 
-- [ ] **Step 6: 验证 chat Phase 02 边界**
+- [x] **Step 6: 验证 chat Phase 02 边界**
 
 Run:
 
@@ -1801,7 +1803,7 @@ Expected exit code:
 2
 ```
 
-- [ ] **Step 7: 验证命令日志写入且不泄露密钥**
+- [x] **Step 7: 验证命令日志写入且不泄露密钥**
 
 Run:
 
@@ -1826,7 +1828,7 @@ Expected:
 日志不包含 sk-week4-log-secret。
 ```
 
-- [ ] **Step 8: 更新阶段 01 计划状态**
+- [x] **Step 8: 更新阶段 01 计划状态**
 
 In `docs_md/plans/01_foundation_cli_workspace.plan.md`, replace:
 
@@ -1856,7 +1858,7 @@ Then append this section before `## 下一阶段输入`:
 - `docs_md/weekly/04_week_review.md`
 ```
 
-- [ ] **Step 9: 更新总周计划当前进度**
+- [x] **Step 9: 更新总周计划当前进度**
 
 In `docs_md/weekly/26_week_goal_schedule.md`, replace the current progress list with:
 
@@ -1876,7 +1878,7 @@ Then update the week 3 and week 4 rows:
 | 4 | 2024-06-24 至 2024-06-30 | 阶段 01 | 已验收 | 稳定基础能力、日志、诊断、`chat` Phase 02 边界提示和阶段 01 文档。详见 `04_week_phase01_hardening_acceptance.plan.md` 和 `04_week_review.md`。 | 已验证：阶段 01 验收清单通过。 |
 ```
 
-- [ ] **Step 10: 创建第 4 周回顾**
+- [x] **Step 10: 创建第 4 周回顾**
 
 Create `docs_md/weekly/04_week_review.md`:
 
@@ -1926,7 +1928,7 @@ Create `docs_md/weekly/04_week_review.md`:
 - 缺少 API key 时给出清晰错误，且不打印密钥值。
 ```
 
-- [ ] **Step 11: 运行文档占位扫描**
+- [x] **Step 11: 运行文档占位扫描**
 
 Run:
 
@@ -1941,7 +1943,7 @@ Expected:
 No matches.
 ```
 
-- [ ] **Step 12: Commit**
+- [x] **Step 12: Commit**
 
 Run:
 

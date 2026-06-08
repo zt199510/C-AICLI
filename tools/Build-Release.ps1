@@ -39,6 +39,7 @@ $zipPath = Join-Path $OutputRoot "$releaseName.zip"
 $resolvedOutputRoot = [System.IO.Path]::GetFullPath($OutputRoot)
 $resolvedPublishDir = [System.IO.Path]::GetFullPath($publishDir)
 $resolvedRepoRoot = [System.IO.Path]::GetFullPath($repoRoot)
+$resolvedZipPath = [System.IO.Path]::GetFullPath($zipPath)
 
 if (-not $resolvedOutputRoot.StartsWith($resolvedRepoRoot, [System.StringComparison]::OrdinalIgnoreCase)) {
     throw "OutputRoot must stay inside the repository: $resolvedOutputRoot"
@@ -77,22 +78,81 @@ $manifest = [ordered]@{
     targetFramework = "net9.0"
     selfContained = $true
     executable = "caicli.exe"
-    createdAtUtc = (Get-Date).ToUniversalTime().ToString("o")
+    builtFromVersion = $version
 }
 
 $manifestPath = Join-Path $resolvedPublishDir "release-manifest.json"
 $manifest | ConvertTo-Json -Depth 4 | Set-Content -LiteralPath $manifestPath -Encoding UTF8
 
 if (-not $NoZip) {
-    if (Test-Path -LiteralPath $zipPath) {
-        Remove-Item -LiteralPath $zipPath -Force
+    if (Test-Path -LiteralPath $resolvedZipPath) {
+        Remove-Item -LiteralPath $resolvedZipPath -Force
     }
 
-    Compress-Archive -Path (Join-Path $resolvedPublishDir "*") -DestinationPath $zipPath -Force
+    Add-Type -AssemblyName System.IO.Compression
+
+    $fixedEntryTimestamp = [System.DateTimeOffset]::Parse("2020-01-01T00:00:00Z")
+    $files = [string[]][System.IO.Directory]::EnumerateFiles($resolvedPublishDir, "*", [System.IO.SearchOption]::AllDirectories)
+    $orderedFiles = [System.Linq.Enumerable]::OrderBy(
+        $files,
+        [System.Func[string, string]]{
+            param($path)
+
+            $relativePath = $path.Substring($resolvedPublishDir.Length).TrimStart(
+                [System.IO.Path]::DirectorySeparatorChar,
+                [System.IO.Path]::AltDirectorySeparatorChar)
+            $relativePath.Replace('\', '/')
+        },
+        [System.StringComparer]::Ordinal)
+
+    $zipFileStream = [System.IO.File]::Open(
+        $resolvedZipPath,
+        [System.IO.FileMode]::CreateNew,
+        [System.IO.FileAccess]::ReadWrite,
+        [System.IO.FileShare]::None)
+
+    try {
+        $zipArchive = [System.IO.Compression.ZipArchive]::new(
+            $zipFileStream,
+            [System.IO.Compression.ZipArchiveMode]::Create,
+            $false)
+
+        try {
+            foreach ($filePath in $orderedFiles) {
+                $entryName = $filePath.Substring($resolvedPublishDir.Length).TrimStart(
+                    [System.IO.Path]::DirectorySeparatorChar,
+                    [System.IO.Path]::AltDirectorySeparatorChar)
+                $entryName = $entryName.Replace('\', '/')
+
+                $entry = $zipArchive.CreateEntry($entryName, [System.IO.Compression.CompressionLevel]::Optimal)
+                $entry.LastWriteTime = $fixedEntryTimestamp
+
+                $sourceStream = [System.IO.File]::OpenRead($filePath)
+                try {
+                    $entryStream = $entry.Open()
+                    try {
+                        $sourceStream.CopyTo($entryStream)
+                    }
+                    finally {
+                        $entryStream.Dispose()
+                    }
+                }
+                finally {
+                    $sourceStream.Dispose()
+                }
+            }
+        }
+        finally {
+            $zipArchive.Dispose()
+        }
+    }
+    finally {
+        $zipFileStream.Dispose()
+    }
 }
 
 Write-Host "release: $releaseName"
 Write-Host "publishDir: $resolvedPublishDir"
 if (-not $NoZip) {
-    Write-Host "zip: $zipPath"
+    Write-Host "zip: $resolvedZipPath"
 }

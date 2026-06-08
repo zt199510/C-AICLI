@@ -9,8 +9,8 @@
 - Release executable: `artifacts/release/caicli-0.1.0-win-x64/caicli.exe`
 - Release manifest: `artifacts/release/caicli-0.1.0-win-x64/release-manifest.json`
 - Release zip: `artifacts/release/caicli-0.1.0-win-x64.zip`
-- Release zip size: `32107967` bytes
-- Release zip SHA256: `279AE0CE7802E6DC79344B76FC3C36954875FC8D34E1CF385085652E244D9AEA`
+- Release zip size: `32108447` bytes
+- Release zip SHA256: `44B96A18C99343EADEFE7448FB50BB5BCDA0A6E9CD2D384A7F7751A2AE1EF4D2`
 
 ## Phase Status
 
@@ -52,4 +52,4 @@ powershell -NoProfile -ExecutionPolicy Bypass -File tools/Invoke-SmokeTests.ps1
 
 ## Decision
 
-MVP release `0.1.0` is accepted. The verification commands above passed on 2026-06-07, and the release zip exists with the SHA256 recorded above. The complete enhanced plan remains partially Deferred because real Microsoft Agent Framework backend execution, real MCP protocol execution, and real Gerber/TIFF execution are not enabled in this release.
+MVP release `0.1.0` is accepted. The verification commands above passed on 2026-06-08, and the release zip exists with the deterministic SHA256 recorded above. The complete enhanced plan remains partially Deferred because real Microsoft Agent Framework backend execution, real MCP protocol execution, and real Gerber/TIFF execution are not enabled in this release.

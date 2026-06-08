@@ -2,7 +2,7 @@
 
 ## Runtime
 
-当前项目目标框架为 `net9.0`。当前验收和本机诊断环境使用 SDK `9.0.308`。当前仓库没有 `global.json` SDK 锁定。
+当前项目目标框架为 `net9.0`。当前验收和本机诊断环境使用 SDK `9.0.308`。当前仓库通过根目录 `global.json` 锁定 SDK `9.0.308`，并使用 `latestPatch` roll-forward 策略。
 
 `doctor` 负责显示：
 

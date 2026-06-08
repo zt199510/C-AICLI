@@ -14,7 +14,7 @@
 - 命令：`dotnet build src\CSharpAiCli.sln -c Release`
 - 结果：通过，0 warning，0 error。
 - 命令：`dotnet test src\CSharpAiCli.sln -c Release --no-build`
-- 结果：通过，247 tests passed。
+- 结果：通过，250 tests passed。
 - 命令：`powershell -NoProfile -ExecutionPolicy Bypass -File tools/Build-Release.ps1`
 - 结果：通过，生成 release directory 和 zip。
 - 命令：`powershell -NoProfile -ExecutionPolicy Bypass -File tools/Invoke-SmokeTests.ps1`
@@ -27,8 +27,8 @@
 - Executable：`artifacts/release/caicli-0.1.0-win-x64/caicli.exe`
 - Manifest：`artifacts/release/caicli-0.1.0-win-x64/release-manifest.json`
 - Zip：`artifacts/release/caicli-0.1.0-win-x64.zip`
-- Zip size：`32107967` bytes
-- Zip SHA256：`279AE0CE7802E6DC79344B76FC3C36954875FC8D34E1CF385085652E244D9AEA`
+- Zip size：`32108447` bytes
+- Zip SHA256：`44B96A18C99343EADEFE7448FB50BB5BCDA0A6E9CD2D384A7F7751A2AE1EF4D2`
 
 阶段状态：
 - 阶段 01：Accepted。
