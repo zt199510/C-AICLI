@@ -26,15 +26,17 @@ public sealed record CliEnvironmentSnapshot(
         string? dotnetRuntime = null,
         string? openAiApiKey = null,
         string? openAiModel = null,
+        string? openAiBaseUrl = null,
         bool? hasGlobalJson = null)
     {
         currentDirectory ??= Environment.CurrentDirectory;
         userProfile ??= Environment.GetEnvironmentVariable("CAICLI_USER_PROFILE");
         dotnetSdkVersion ??= ReadDotnetSdkVersion();
         dotnetRuntime ??= RuntimeInformation.FrameworkDescription;
+        openAiBaseUrl ??= Environment.GetEnvironmentVariable("OPENAI_BASE_URL");
 
         WorkspaceContext workspace = WorkspaceContext.Detect(workspacePath, currentDirectory);
-        EffectiveConfiguration configuration = ConfigLoader.Load(workspace, userProfile, openAiApiKey, openAiModel);
+        EffectiveConfiguration configuration = ConfigLoader.Load(workspace, userProfile, openAiApiKey, openAiModel, openAiBaseUrl: openAiBaseUrl);
         InstructionLoadResult instructions = new WorkspaceInstructionLoader().Load(workspace);
         hasGlobalJson ??= File.Exists(Path.Combine(workspace.RootPath, "global.json"));
 

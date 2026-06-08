@@ -87,6 +87,37 @@ public sealed class CliEnvironmentSnapshotTests
     }
 
     [Fact]
+    public void Create_passes_openai_base_url_injection_to_effective_configuration()
+    {
+        string root = CreateTempDirectory();
+
+        try
+        {
+            string userProfile = Path.Combine(root, "home");
+            string workspaceRoot = Path.Combine(root, "workspace");
+            Directory.CreateDirectory(userProfile);
+            Directory.CreateDirectory(workspaceRoot);
+
+            CliEnvironmentSnapshot snapshot = CliEnvironmentSnapshot.Create(
+                workspacePath: workspaceRoot,
+                currentDirectory: root,
+                userProfile: userProfile,
+                dotnetSdkVersion: "9.0.308",
+                dotnetRuntime: ".NET 9.0.0",
+                openAiApiKey: "",
+                openAiBaseUrl: "https://env.example.test/v1",
+                hasGlobalJson: false);
+
+            Assert.Equal("https://env.example.test/v1", snapshot.Configuration.BaseUrl);
+            Assert.Equal("OPENAI_BASE_URL", snapshot.Configuration.BaseUrlSource);
+        }
+        finally
+        {
+            Directory.Delete(root, recursive: true);
+        }
+    }
+
+    [Fact]
     public void Create_loads_workspace_instructions_from_AICLI_md()
     {
         string root = CreateTempDirectory();

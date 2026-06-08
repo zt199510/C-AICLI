@@ -17,7 +17,8 @@ public static class ConfigLoader
         string? userProfile = null,
         string? openAiApiKey = null,
         string? openAiModel = null,
-        string? agentBackend = null)
+        string? agentBackend = null,
+        string? openAiBaseUrl = null)
     {
         ArgumentNullException.ThrowIfNull(workspace);
 
@@ -25,6 +26,7 @@ public static class ConfigLoader
         openAiApiKey ??= Environment.GetEnvironmentVariable("OPENAI_API_KEY");
         openAiModel ??= Environment.GetEnvironmentVariable("OPENAI_MODEL");
         agentBackend ??= Environment.GetEnvironmentVariable("CAICLI_AGENT_BACKEND");
+        openAiBaseUrl ??= Environment.GetEnvironmentVariable("OPENAI_BASE_URL");
 
         string userConfigPath = Path.Combine(userProfile, ".caicli", "config.json");
         string workspaceConfigPath = workspace.ConfigPath;
@@ -51,6 +53,7 @@ public static class ConfigLoader
 
         (string model, string modelSource) = SelectModel(openAiModel, userConfig, workspaceConfig);
         (string effectiveAgentBackend, string agentBackendSource) = SelectAgentBackend(agentBackend, userConfig, workspaceConfig, warnings);
+        (string baseUrl, string baseUrlSource) = SelectBaseUrl(openAiBaseUrl, userConfig, workspaceConfig, warnings);
         (SecretValue? apiKey, string apiKeySource) = SelectApiKey(openAiApiKey, userConfig);
 
         return new EffectiveConfiguration(
@@ -66,7 +69,11 @@ public static class ConfigLoader
             ApiKeySource: apiKeySource,
             LoadedConfigPaths: loadedConfigPaths,
             Warnings: warnings,
-            ConfigSources: configSources);
+            ConfigSources: configSources)
+        {
+            BaseUrl = baseUrl,
+            BaseUrlSource = baseUrlSource
+        };
     }
 
     private static CliConfigFile? ReadConfig(
@@ -116,6 +123,7 @@ public static class ConfigLoader
     {
         return !string.IsNullOrWhiteSpace(config.Model)
             || !string.IsNullOrWhiteSpace(config.ApiKey)
+            || !string.IsNullOrWhiteSpace(config.BaseUrl)
             || !string.IsNullOrWhiteSpace(config.AgentBackend)
             || config.DisabledTools is { Length: > 0 }
             || config.McpServers is { Count: > 0 }
@@ -150,6 +158,49 @@ public static class ConfigLoader
 
         baseUrl = trimmed;
         return true;
+    }
+
+    private static (string BaseUrl, string Source) SelectBaseUrl(
+        string? openAiBaseUrl,
+        CliConfigFile? userConfig,
+        CliConfigFile? workspaceConfig,
+        List<string> warnings)
+    {
+        if (TryNormalizeBaseUrl(openAiBaseUrl, warnings, "OPENAI_BASE_URL", out string? baseUrl))
+        {
+            return (baseUrl!, "OPENAI_BASE_URL");
+        }
+
+        if (TryNormalizeBaseUrl(userConfig?.BaseUrl, warnings, "user config", out baseUrl))
+        {
+            return (baseUrl!, "user config");
+        }
+
+        if (TryNormalizeBaseUrl(workspaceConfig?.BaseUrl, warnings, "workspace config", out baseUrl))
+        {
+            return (baseUrl!, "workspace config");
+        }
+
+        return (DefaultOpenAiBaseUrl, "default");
+    }
+
+    private static bool TryNormalizeBaseUrl(
+        string? value,
+        List<string> warnings,
+        string source,
+        out string? baseUrl)
+    {
+        if (TryNormalizeBaseUrl(value, out baseUrl))
+        {
+            return true;
+        }
+
+        if (!string.IsNullOrWhiteSpace(value))
+        {
+            warnings.Add($"ignored invalid baseUrl from {source}");
+        }
+
+        return false;
     }
 
     private static (string Model, string Source) SelectModel(

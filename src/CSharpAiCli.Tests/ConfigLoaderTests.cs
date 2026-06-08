@@ -21,7 +21,8 @@ public sealed class ConfigLoaderTests
             EffectiveConfiguration configuration = ConfigLoader.Load(
                 workspace,
                 userProfile: userProfile,
-                openAiApiKey: "");
+                openAiApiKey: "",
+                openAiBaseUrl: "");
 
             Assert.Equal("https://api.openai.com/v1", configuration.BaseUrl);
             Assert.Equal("default", configuration.BaseUrlSource);
@@ -74,7 +75,7 @@ public sealed class ConfigLoaderTests
     }
 
     [Fact]
-    public void Load_does_not_treat_base_url_only_config_as_loaded_until_base_url_priority_is_implemented()
+    public void Load_loads_base_url_only_workspace_config_and_uses_it_as_effective_base_url()
     {
         string root = CreateTempDirectory();
 
@@ -97,12 +98,214 @@ public sealed class ConfigLoaderTests
             EffectiveConfiguration configuration = ConfigLoader.Load(
                 workspace,
                 userProfile: userProfile,
-                openAiApiKey: "");
+                openAiApiKey: "",
+                openAiBaseUrl: "");
+
+            Assert.Equal("https://gateway.example.test/v1", configuration.BaseUrl);
+            Assert.Equal("workspace config", configuration.BaseUrlSource);
+            Assert.Contains(workspaceConfigPath, configuration.LoadedConfigPaths);
+            CliConfigFileSource source = Assert.Single(configuration.ConfigSources);
+            Assert.Equal("workspace config", source.SourceName);
+        }
+        finally
+        {
+            Directory.Delete(root, recursive: true);
+        }
+    }
+
+    [Fact]
+    public void Load_uses_base_url_priority_environment_user_workspace_default()
+    {
+        string root = CreateTempDirectory();
+
+        try
+        {
+            string userProfile = Path.Combine(root, "home");
+            string workspaceRoot = Path.Combine(root, "workspace");
+            Directory.CreateDirectory(userProfile);
+            Directory.CreateDirectory(workspaceRoot);
+
+            string userConfigPath = Path.Combine(userProfile, ".caicli", "config.json");
+            string workspaceConfigPath = Path.Combine(workspaceRoot, ".caicli", "config.json");
+            WriteConfig(userConfigPath, model: "", apiKey: "", baseUrl: "https://user.example.test/v1");
+            WriteConfig(workspaceConfigPath, model: "", apiKey: "", baseUrl: "https://workspace.example.test/v1");
+
+            WorkspaceContext workspace = WorkspaceContext.Detect(workspaceRoot, root);
+            EffectiveConfiguration envConfiguration = ConfigLoader.Load(
+                workspace,
+                userProfile: userProfile,
+                openAiApiKey: "",
+                openAiBaseUrl: " https://env.example.test/v1 ");
+            EffectiveConfiguration userConfiguration = ConfigLoader.Load(
+                workspace,
+                userProfile: userProfile,
+                openAiApiKey: "",
+                openAiBaseUrl: "");
+            File.Delete(userConfigPath);
+            EffectiveConfiguration workspaceConfiguration = ConfigLoader.Load(
+                workspace,
+                userProfile: userProfile,
+                openAiApiKey: "",
+                openAiBaseUrl: "");
+            File.Delete(workspaceConfigPath);
+            EffectiveConfiguration defaultConfiguration = ConfigLoader.Load(
+                workspace,
+                userProfile: userProfile,
+                openAiApiKey: "",
+                openAiBaseUrl: "");
+
+            Assert.Equal("https://env.example.test/v1", envConfiguration.BaseUrl);
+            Assert.Equal("OPENAI_BASE_URL", envConfiguration.BaseUrlSource);
+            Assert.Equal("https://user.example.test/v1", userConfiguration.BaseUrl);
+            Assert.Equal("user config", userConfiguration.BaseUrlSource);
+            Assert.Equal("https://workspace.example.test/v1", workspaceConfiguration.BaseUrl);
+            Assert.Equal("workspace config", workspaceConfiguration.BaseUrlSource);
+            Assert.Equal(ConfigLoader.DefaultOpenAiBaseUrl, defaultConfiguration.BaseUrl);
+            Assert.Equal("default", defaultConfiguration.BaseUrlSource);
+        }
+        finally
+        {
+            Directory.Delete(root, recursive: true);
+        }
+    }
+
+    [Fact]
+    public void Load_warns_for_invalid_environment_base_url_and_falls_back_to_user_config()
+    {
+        string root = CreateTempDirectory();
+
+        try
+        {
+            string userProfile = Path.Combine(root, "home");
+            string workspaceRoot = Path.Combine(root, "workspace");
+            Directory.CreateDirectory(userProfile);
+            Directory.CreateDirectory(workspaceRoot);
+
+            WriteConfig(
+                Path.Combine(userProfile, ".caicli", "config.json"),
+                model: "",
+                apiKey: "",
+                baseUrl: "https://user.example.test/v1");
+
+            WorkspaceContext workspace = WorkspaceContext.Detect(workspaceRoot, root);
+            EffectiveConfiguration configuration = ConfigLoader.Load(
+                workspace,
+                userProfile: userProfile,
+                openAiApiKey: "",
+                openAiBaseUrl: "ftp://env.example.test/v1");
+
+            Assert.Equal("https://user.example.test/v1", configuration.BaseUrl);
+            Assert.Equal("user config", configuration.BaseUrlSource);
+            Assert.Contains(configuration.Warnings, warning =>
+                warning.Contains("ignored invalid baseUrl", StringComparison.Ordinal)
+                && warning.Contains("OPENAI_BASE_URL", StringComparison.Ordinal));
+        }
+        finally
+        {
+            Directory.Delete(root, recursive: true);
+        }
+    }
+
+    [Fact]
+    public void Load_does_not_write_api_key_like_values_from_invalid_base_url_to_warnings()
+    {
+        string root = CreateTempDirectory();
+
+        try
+        {
+            string userProfile = Path.Combine(root, "home");
+            string workspaceRoot = Path.Combine(root, "workspace");
+            Directory.CreateDirectory(userProfile);
+            Directory.CreateDirectory(workspaceRoot);
+
+            WorkspaceContext workspace = WorkspaceContext.Detect(workspaceRoot, root);
+            EffectiveConfiguration configuration = ConfigLoader.Load(
+                workspace,
+                userProfile: userProfile,
+                openAiApiKey: "",
+                openAiBaseUrl: "https://env.example.test/v1?api-key=sk-env-secret");
 
             Assert.Equal(ConfigLoader.DefaultOpenAiBaseUrl, configuration.BaseUrl);
             Assert.Equal("default", configuration.BaseUrlSource);
-            Assert.DoesNotContain(workspaceConfigPath, configuration.LoadedConfigPaths);
-            Assert.Empty(configuration.ConfigSources);
+            Assert.Contains(configuration.Warnings, warning =>
+                warning.Contains("ignored invalid baseUrl", StringComparison.Ordinal)
+                && warning.Contains("OPENAI_BASE_URL", StringComparison.Ordinal));
+            Assert.DoesNotContain("sk-env-secret", string.Join(Environment.NewLine, configuration.Warnings), StringComparison.Ordinal);
+        }
+        finally
+        {
+            Directory.Delete(root, recursive: true);
+        }
+    }
+
+    [Fact]
+    public void Load_warns_for_invalid_user_base_url_and_falls_back_to_workspace_config()
+    {
+        string root = CreateTempDirectory();
+
+        try
+        {
+            string userProfile = Path.Combine(root, "home");
+            string workspaceRoot = Path.Combine(root, "workspace");
+            Directory.CreateDirectory(userProfile);
+            Directory.CreateDirectory(workspaceRoot);
+
+            string userConfigPath = Path.Combine(userProfile, ".caicli", "config.json");
+            WriteConfig(userConfigPath, model: "", apiKey: "", baseUrl: "api.example.test/v1");
+            WriteConfig(
+                Path.Combine(workspaceRoot, ".caicli", "config.json"),
+                model: "",
+                apiKey: "",
+                baseUrl: "https://workspace.example.test/v1");
+
+            WorkspaceContext workspace = WorkspaceContext.Detect(workspaceRoot, root);
+            EffectiveConfiguration configuration = ConfigLoader.Load(
+                workspace,
+                userProfile: userProfile,
+                openAiApiKey: "",
+                openAiBaseUrl: "");
+
+            Assert.Equal("https://workspace.example.test/v1", configuration.BaseUrl);
+            Assert.Equal("workspace config", configuration.BaseUrlSource);
+            Assert.Contains(userConfigPath, configuration.LoadedConfigPaths);
+            Assert.Contains(configuration.Warnings, warning =>
+                warning.Contains("ignored invalid baseUrl", StringComparison.Ordinal)
+                && warning.Contains("user config", StringComparison.Ordinal));
+        }
+        finally
+        {
+            Directory.Delete(root, recursive: true);
+        }
+    }
+
+    [Fact]
+    public void Load_warns_for_invalid_workspace_base_url_and_falls_back_to_default()
+    {
+        string root = CreateTempDirectory();
+
+        try
+        {
+            string userProfile = Path.Combine(root, "home");
+            string workspaceRoot = Path.Combine(root, "workspace");
+            Directory.CreateDirectory(userProfile);
+            Directory.CreateDirectory(workspaceRoot);
+
+            string workspaceConfigPath = Path.Combine(workspaceRoot, ".caicli", "config.json");
+            WriteConfig(workspaceConfigPath, model: "", apiKey: "", baseUrl: "https://workspace.example.test/v1?token=abc");
+
+            WorkspaceContext workspace = WorkspaceContext.Detect(workspaceRoot, root);
+            EffectiveConfiguration configuration = ConfigLoader.Load(
+                workspace,
+                userProfile: userProfile,
+                openAiApiKey: "",
+                openAiBaseUrl: "");
+
+            Assert.Equal(ConfigLoader.DefaultOpenAiBaseUrl, configuration.BaseUrl);
+            Assert.Equal("default", configuration.BaseUrlSource);
+            Assert.Contains(workspaceConfigPath, configuration.LoadedConfigPaths);
+            Assert.Contains(configuration.Warnings, warning =>
+                warning.Contains("ignored invalid baseUrl", StringComparison.Ordinal)
+                && warning.Contains("workspace config", StringComparison.Ordinal));
         }
         finally
         {
@@ -584,15 +787,18 @@ public sealed class ConfigLoaderTests
         }
     }
 
-    private static void WriteConfig(string path, string model, string apiKey, string? agentBackend = null)
+    private static void WriteConfig(string path, string model, string apiKey, string? agentBackend = null, string? baseUrl = null)
     {
         Directory.CreateDirectory(Path.GetDirectoryName(path)!);
         string backendLine = agentBackend is null
             ? string.Empty
             : $",{Environment.NewLine}  \"agentBackend\": \"{agentBackend}\"";
+        string baseUrlLine = baseUrl is null
+            ? string.Empty
+            : $",{Environment.NewLine}  \"baseUrl\": \"{baseUrl}\"";
         File.WriteAllText(path, $@"{{
   ""model"": ""{model}"",
-  ""apiKey"": ""{apiKey}""{backendLine}
+  ""apiKey"": ""{apiKey}""{backendLine}{baseUrlLine}
 }}");
     }
 
