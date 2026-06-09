@@ -9,7 +9,7 @@
 ## Model And Agent Behavior
 
 - `chat` uses the direct OpenAI Responses path.
-- `run` is a deterministic direct-tool smoke/task entry and does not yet perform general natural-language agent planning with real OpenAI tool calling.
+- `exec` and `run` are deterministic direct-tool task entries; they do not yet perform general natural-language planning or a full OpenAI tool loop.
 - The Microsoft Agent Framework project is an adapter boundary and experimental stub; the real framework runtime backend is Deferred.
 
 ## MCP And Project Packs

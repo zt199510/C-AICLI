@@ -1,7 +1,7 @@
 using System.CommandLine;
 using CSharpAiCli.Cli;
 
-return CliCommandFactory
-    .Create(Console.Out)
-    .Parse(args)
-    .Invoke();
+return CliCommandFactory.Invoke(
+    CliCommandFactory.Create(Console.Out),
+    args,
+    Console.Error);

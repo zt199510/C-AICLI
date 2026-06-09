@@ -74,15 +74,35 @@ artifacts\release\caicli-0.1.0-win-x64\caicli.exe workflow list
 
 MCP and Gerber/TIFF workflow execution are enhanced capabilities and are not part of the direct backend MVP.
 
-## 7. Run A Local Smoke Task
+## 7. Run A Deterministic Exec Task
+
+```powershell
+artifacts\release\caicli-0.1.0-win-x64\caicli.exe exec --workspace . "read README.md"
+artifacts\release\caicli-0.1.0-win-x64\caicli.exe exec --json --workspace . "read README.md"
+artifacts\release\caicli-0.1.0-win-x64\caicli.exe exec --output json --workspace . "read README.md"
+artifacts\release\caicli-0.1.0-win-x64\caicli.exe exec --output text --workspace . "read README.md"
+```
+
+`exec` emits a newline-delimited JSON event stream in `--json` mode and returns exit code `0` on success, `1` on task failure, and `2` on argument error.
+
+For direct-tool tasks that write files or run shell commands, pass `--approve`:
+
+```powershell
+artifacts\release\caicli-0.1.0-win-x64\caicli.exe exec --workspace . --approve "create smoke note"
+artifacts\release\caicli-0.1.0-win-x64\caicli.exe exec --workspace . --approve "shell dir"
+```
+
+Without `--approve`, approved-write and shell actions are denied.
+
+## 8. Run A Local Smoke Task
 
 ```powershell
 artifacts\release\caicli-0.1.0-win-x64\caicli.exe run --workspace . --approve "create smoke note"
 ```
 
-This deterministic release-smoke task creates or updates `caicli-smoke.txt` in the workspace through the patch tool. Without `--approve`, the patch is denied.
+This deterministic smoke task creates or updates `caicli-smoke.txt` in the workspace. Without `--approve`, the write is denied.
 
-## 8. Inspect And Call Tools
+## 9. Inspect And Call Tools
 
 ```powershell
 artifacts\release\caicli-0.1.0-win-x64\caicli.exe tools list --workspace .
@@ -95,7 +115,7 @@ Set-Content -Path args.json -Value '{"path":"README.md"}'
 artifacts\release\caicli-0.1.0-win-x64\caicli.exe tools call --workspace . workspace.read_text --arguments-file args.json
 ```
 
-## 9. Export Or Clear A Session
+## 10. Export Or Clear A Session
 
 ```powershell
 artifacts\release\caicli-0.1.0-win-x64\caicli.exe session export smoke

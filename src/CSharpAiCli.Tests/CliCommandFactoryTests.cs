@@ -866,6 +866,23 @@ public sealed class CliCommandFactoryTests
     }
 
     [Fact]
+    public void Run_create_smoke_note_without_approval_returns_failure_without_creating_smoke_note()
+    {
+        using TempDirectory temp = TempDirectory.Create();
+        using StringWriter output = new();
+
+        int exitCode = CliCommandFactory
+            .Create(output, workspacePath => CreateSnapshot(workspacePath))
+            .Parse(["run", "--workspace", temp.Path, "create smoke note"])
+            .Invoke();
+
+        string smokeNotePath = Path.Combine(temp.Path, "caicli-smoke.txt");
+        Assert.Equal(1, exitCode);
+        Assert.Contains("errorCode: approval-denied", output.ToString());
+        Assert.False(File.Exists(smokeNotePath));
+    }
+
+    [Fact]
     public void Run_create_smoke_note_respects_patch_tool_disable()
     {
         using TempDirectory temp = TempDirectory.Create();
@@ -887,6 +904,218 @@ public sealed class CliCommandFactoryTests
 
         Assert.Equal(1, exitCode);
         Assert.Contains("errorCode: unknown-tool", output.ToString());
+        Assert.False(File.Exists(Path.Combine(temp.Path, "caicli-smoke.txt")));
+    }
+
+    [Fact]
+    public void Run_read_note_text_output_returns_old_shape()
+    {
+        using TempDirectory temp = TempDirectory.Create();
+        File.WriteAllText(Path.Combine(temp.Path, "note.txt"), "hello run");
+        using StringWriter output = new();
+
+        int exitCode = CliCommandFactory
+            .Create(output, workspacePath => CreateSnapshot(workspacePath))
+            .Parse(["run", "--workspace", temp.Path, "read note.txt"])
+            .Invoke();
+
+        string text = output.ToString();
+        Assert.Equal(0, exitCode);
+        Assert.Contains("status: succeeded", text);
+        Assert.Contains("approvalStatus: not-required", text);
+        Assert.Contains("summary:", text);
+        Assert.Contains("hello run", text);
+        Assert.DoesNotContain("event:", text, StringComparison.Ordinal);
+        Assert.DoesNotContain("exec.result", text, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Exec_read_note_text_output_returns_success_and_file_content()
+    {
+        using TempDirectory temp = TempDirectory.Create();
+        File.WriteAllText(Path.Combine(temp.Path, "note.txt"), "hello exec");
+        using StringWriter output = new();
+
+        int exitCode = CliCommandFactory
+            .Create(output, workspacePath => CreateSnapshot(
+                workspacePath,
+                apiKey: "sk-test-secret",
+                apiKeySource: "OPENAI_API_KEY",
+                model: "gpt-test"))
+            .Parse(["exec", "--workspace", temp.Path, "read note.txt"])
+            .Invoke();
+
+        string text = output.ToString();
+        Assert.Equal(0, exitCode);
+        Assert.Contains("event: task.started", text);
+        Assert.Contains("event: task.completed", text);
+        Assert.Contains("result: success", text);
+        Assert.Contains("hello exec", text);
+        Assert.Contains("summary=", text);
+        Assert.DoesNotContain("sk-test-secret", text, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Exec_read_note_json_output_writes_valid_ndjson_with_result_exit_code()
+    {
+        using TempDirectory temp = TempDirectory.Create();
+        File.WriteAllText(Path.Combine(temp.Path, "note.txt"), "hello exec");
+        using StringWriter output = new();
+
+        int exitCode = CliCommandFactory
+            .Create(output, workspacePath => CreateSnapshot(
+                workspacePath,
+                apiKey: "sk-test-secret",
+                apiKeySource: "OPENAI_API_KEY",
+                model: "gpt-test"))
+            .Parse(["exec", "--json", "--workspace", temp.Path, "read note.txt"])
+            .Invoke();
+
+        string[] lines = output.ToString()
+            .TrimEnd()
+            .Split(Environment.NewLine, StringSplitOptions.RemoveEmptyEntries);
+
+        Assert.Equal(0, exitCode);
+        Assert.Equal(3, lines.Length);
+        foreach (string line in lines)
+        {
+            JsonNode? node = JsonNode.Parse(line);
+            Assert.NotNull(node);
+        }
+
+        JsonObject started = Assert.IsType<JsonObject>(JsonNode.Parse(lines[0]));
+        JsonObject completed = Assert.IsType<JsonObject>(JsonNode.Parse(lines[1]));
+        JsonObject result = Assert.IsType<JsonObject>(JsonNode.Parse(lines[^1]));
+        Assert.Equal("task.started", started["type"]?.GetValue<string>());
+        Assert.Equal("task.completed", completed["type"]?.GetValue<string>());
+        Assert.Equal("exec.result", result["type"]?.GetValue<string>());
+        Assert.Equal("success", result["payload"]?["status"]?.GetValue<string>());
+        Assert.Equal(0, result["payload"]?["exitCode"]?.GetValue<int>());
+        Assert.DoesNotContain("sk-test-secret", output.ToString(), StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Exec_output_rejects_unknown_value_before_running_task()
+    {
+        using TempDirectory temp = TempDirectory.Create();
+        File.WriteAllText(Path.Combine(temp.Path, "note.txt"), "hello exec");
+        using StringWriter output = new();
+        List<string> loggedCommands = [];
+        RootCommand command = CliCommandFactory.Create(
+            output,
+            CreateSnapshot,
+            (commandName, _) => loggedCommands.Add(commandName));
+
+        int exitCode = CliCommandFactory.Invoke(command, ["exec", "--workspace", temp.Path, "--output", "banana", "read note.txt"], output);
+
+        Assert.Equal(2, exitCode);
+        Assert.Empty(loggedCommands);
+        Assert.DoesNotContain("hello exec", output.ToString(), StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Exec_unsupported_task_returns_task_failure_exit_code()
+    {
+        using TempDirectory temp = TempDirectory.Create();
+        using StringWriter output = new();
+        RootCommand command = CliCommandFactory.Create(
+            output,
+            workspacePath => CreateSnapshot(
+                workspacePath,
+                apiKey: "sk-test-secret",
+                apiKeySource: "OPENAI_API_KEY",
+                model: "gpt-test"));
+
+        int exitCode = CliCommandFactory.Invoke(command, ["exec", "--workspace", temp.Path, "paint the moon"], output);
+
+        string text = output.ToString();
+        Assert.Equal(1, exitCode);
+        Assert.Contains("event: task.failed", text);
+        Assert.Contains("result: failure exitCode=1", text);
+        Assert.Contains("errorCode=unsupported-run-task", text);
+        Assert.DoesNotContain("sk-test-secret", text, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Exec_create_smoke_note_without_approval_returns_failure_without_creating_smoke_note()
+    {
+        using TempDirectory temp = TempDirectory.Create();
+        using StringWriter output = new();
+        RootCommand command = CliCommandFactory.Create(
+            output,
+            workspacePath => CreateSnapshot(
+                workspacePath,
+                apiKey: "sk-test-secret",
+                apiKeySource: "OPENAI_API_KEY",
+                model: "gpt-test"));
+
+        int exitCode = CliCommandFactory.Invoke(command, ["exec", "--workspace", temp.Path, "create smoke note"], output);
+
+        string text = output.ToString();
+        string smokeNotePath = Path.Combine(temp.Path, "caicli-smoke.txt");
+        Assert.Equal(1, exitCode);
+        Assert.Contains("event: task.failed", text);
+        Assert.Contains("errorCode=approval-denied", text);
+        Assert.False(File.Exists(smokeNotePath));
+        Assert.DoesNotContain("sk-test-secret", text, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Exec_read_outside_workspace_returns_failure_and_reports_workspace_boundary_denied()
+    {
+        using TempDirectory temp = TempDirectory.Create();
+        string workspace = Path.Combine(temp.Path, "workspace");
+        Directory.CreateDirectory(workspace);
+        File.WriteAllText(Path.Combine(temp.Path, "outside.txt"), "outside");
+        using StringWriter output = new();
+        RootCommand command = CliCommandFactory.Create(
+            output,
+            workspacePath => CreateSnapshot(
+                workspacePath,
+                apiKey: "sk-test-secret",
+                apiKeySource: "OPENAI_API_KEY",
+                model: "gpt-test"));
+
+        int exitCode = CliCommandFactory.Invoke(command, ["exec", "--workspace", workspace, "read ../outside.txt"], output);
+
+        string text = output.ToString();
+        Assert.Equal(1, exitCode);
+        Assert.Contains("event: task.failed", text);
+        Assert.Contains("errorCode=workspace-boundary-denied", text);
+        Assert.DoesNotContain("sk-test-secret", text, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Exec_command_writes_command_log_through_delegate()
+    {
+        using TempDirectory temp = TempDirectory.Create();
+        File.WriteAllText(Path.Combine(temp.Path, "note.txt"), "hello exec");
+        using StringWriter output = new();
+        List<string> loggedCommands = [];
+        RootCommand command = CliCommandFactory.Create(
+            output,
+            CreateSnapshot,
+            (commandName, _) => loggedCommands.Add(commandName));
+
+        int exitCode = CliCommandFactory.Invoke(command, ["exec", "--workspace", temp.Path, "read note.txt"], output);
+
+        Assert.Equal(0, exitCode);
+        Assert.Equal(["exec"], loggedCommands);
+    }
+
+    [Fact]
+    public void Run_unsupported_task_returns_task_failure_exit_code()
+    {
+        using TempDirectory temp = TempDirectory.Create();
+        using StringWriter output = new();
+        RootCommand command = CliCommandFactory.Create(output, workspacePath => CreateSnapshot(workspacePath));
+
+        int exitCode = CliCommandFactory.Invoke(command, ["run", "--workspace", temp.Path, "paint the moon"], output);
+
+        string text = output.ToString();
+        Assert.Equal(1, exitCode);
+        Assert.Contains("status: failed", text);
+        Assert.Contains("errorCode: unsupported-run-task", text);
     }
 
     [Fact]

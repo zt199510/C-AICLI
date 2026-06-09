@@ -1,4 +1,5 @@
 using System.CommandLine;
+using System.CommandLine.Parsing;
 using System.Text.Json;
 using CSharpAiCli.Core;
 
@@ -300,6 +301,70 @@ public static class CliCommandFactory
         toolsCommand.Subcommands.Add(toolsListCommand);
         toolsCommand.Subcommands.Add(toolsCallCommand);
 
+        Command execCommand = new("exec", "Run a deterministic local workspace task and emit exec events.");
+        Argument<string> execTaskArgument = new("task")
+        {
+            Description = "Task text. Supported smoke tasks: create smoke note, read <path>, shell <command>.",
+        };
+        Option<bool> execApproveOption = new("--approve")
+        {
+            Description = "Approve patch or shell tools used by this exec.",
+        };
+        Option<bool> execJsonOption = new("--json")
+        {
+            Description = "Write newline-delimited JSON events.",
+        };
+        Option<string> execOutputOption = new("--output")
+        {
+            Description = "Select text or json output.",
+        };
+        execOutputOption.DefaultValueFactory = _ => "text";
+        execOutputOption.Validators.Add(result =>
+        {
+            string outputMode = result.GetValueOrDefault<string>() ?? "text";
+            if (!string.Equals(outputMode, "text", StringComparison.OrdinalIgnoreCase) &&
+                !string.Equals(outputMode, "json", StringComparison.OrdinalIgnoreCase))
+            {
+                result.AddError("Invalid value for --output. Allowed values are text and json.");
+            }
+        });
+        execCommand.Arguments.Add(execTaskArgument);
+        execCommand.Options.Add(execApproveOption);
+        execCommand.Options.Add(execJsonOption);
+        execCommand.Options.Add(execOutputOption);
+        execCommand.SetAction(parseResult =>
+        {
+            string? workspacePath = parseResult.GetValue(workspaceOption);
+            string task = parseResult.GetValue(execTaskArgument) ?? string.Empty;
+            bool approve = parseResult.GetValue(execApproveOption);
+            bool jsonRequested = parseResult.GetValue(execJsonOption);
+            string outputMode = parseResult.GetValue(execOutputOption) ?? "text";
+            CliEnvironmentSnapshot snapshot = snapshotProvider(workspacePath);
+            TryWriteCommandLog(commandLogger, "exec", snapshot);
+
+            IApprovalPolicy approvalPolicy = approve
+                ? new AlwaysApproveApprovalPolicy()
+                : new DefaultDenyApprovalPolicy();
+            ToolRegistry registry = CliToolFactory.CreateRegistry(snapshot, approvalPolicy);
+            ToolExecutor executor = new(registry);
+            ExecRunner runner = new(approvalPolicy);
+            ExecRequest request = new(task, WorkspaceRoot: snapshot.Workspace.RootPath);
+            ExecResult execResult = runner.Run(request, snapshot.Workspace, executor);
+
+            if (IsJsonOutputRequested(jsonRequested, outputMode))
+            {
+                ExecJsonRenderer renderer = new(output);
+                WriteExecOutput(renderer, execResult);
+            }
+            else
+            {
+                ExecTextRenderer renderer = new(output);
+                WriteExecOutput(renderer, execResult);
+            }
+
+            return execResult.ExitCode;
+        });
+
         Command runCommand = new("run", "Run a deterministic local workspace task through the direct tool layer.");
         Argument<string> taskArgument = new("task")
         {
@@ -318,14 +383,17 @@ public static class CliCommandFactory
             bool approve = parseResult.GetValue(runApproveOption);
             CliEnvironmentSnapshot snapshot = snapshotProvider(workspacePath);
             TryWriteCommandLog(commandLogger, "run", snapshot);
-            ToolRegistry registry = CliToolFactory.CreateRegistry(
-                snapshot,
-                approve ? new AlwaysApproveApprovalPolicy() : new DefaultDenyApprovalPolicy());
+            IApprovalPolicy approvalPolicy = approve
+                ? new AlwaysApproveApprovalPolicy()
+                : new DefaultDenyApprovalPolicy();
+            ToolRegistry registry = CliToolFactory.CreateRegistry(snapshot, approvalPolicy);
             ToolExecutor executor = new(registry);
+            ExecRunner runner = new(approvalPolicy);
+            ExecRequest request = new(task, WorkspaceRoot: snapshot.Workspace.RootPath);
+            ExecResult result = runner.Run(request, snapshot.Workspace, executor);
 
-            ToolExecutionResult result = ExecuteRunTask(task, snapshot, executor);
-            WriteToolResult(output, result);
-            return result.Succeeded ? 0 : 1;
+            WriteRunResult(output, result);
+            return result.ExitCode;
         });
 
         Command sessionCommand = new("session", "Manage local conversation transcripts.");
@@ -407,11 +475,32 @@ public static class CliCommandFactory
         rootCommand.Subcommands.Add(mcpCommand);
         rootCommand.Subcommands.Add(workflowCommand);
         rootCommand.Subcommands.Add(toolsCommand);
+        rootCommand.Subcommands.Add(execCommand);
         rootCommand.Subcommands.Add(runCommand);
         rootCommand.Subcommands.Add(sessionCommand);
         rootCommand.Subcommands.Add(chatCommand);
 
         return rootCommand;
+    }
+
+    public static int Invoke(RootCommand rootCommand, string[] args, TextWriter error)
+    {
+        ArgumentNullException.ThrowIfNull(rootCommand);
+        ArgumentNullException.ThrowIfNull(args);
+        ArgumentNullException.ThrowIfNull(error);
+
+        ParseResult parseResult = rootCommand.Parse(args);
+        if (parseResult.Errors.Count > 0)
+        {
+            foreach (ParseError parseError in parseResult.Errors)
+            {
+                error.WriteLine(parseError.Message);
+            }
+
+            return 2;
+        }
+
+        return parseResult.Invoke();
     }
 
     private static void TryWriteCommandLog(
@@ -428,72 +517,29 @@ public static class CliCommandFactory
         }
     }
 
-    private static ToolExecutionResult ExecuteRunTask(
-        string task,
-        CliEnvironmentSnapshot snapshot,
-        ToolExecutor executor)
+    private static bool IsJsonOutputRequested(bool jsonRequested, string outputMode)
     {
-        string trimmedTask = task.Trim();
-        if (string.IsNullOrWhiteSpace(trimmedTask))
-        {
-            return ToolExecutionResult.Failure("empty-run-task", "Run task is empty.");
-        }
-
-        if (trimmedTask.Contains("create", StringComparison.OrdinalIgnoreCase) &&
-            trimmedTask.Contains("smoke", StringComparison.OrdinalIgnoreCase))
-        {
-            EnsureSmokeNoteSeed(snapshot.Workspace);
-            return executor.Execute(
-                "workspace.apply_patch",
-                new ToolExecutionContext(
-                    "cli_run_patch",
-                    snapshot.Workspace,
-                    """{"path":"caicli-smoke.txt","find":"status: pending","replace":"status: completed"}"""));
-        }
-
-        if (trimmedTask.StartsWith("read ", StringComparison.OrdinalIgnoreCase))
-        {
-            string path = trimmedTask["read ".Length..].Trim();
-            return executor.Execute(
-                "workspace.read_text",
-                new ToolExecutionContext(
-                    "cli_run_read",
-                    snapshot.Workspace,
-                    JsonSerializer.Serialize(new Dictionary<string, string> { ["path"] = path })));
-        }
-
-        if (trimmedTask.StartsWith("shell ", StringComparison.OrdinalIgnoreCase))
-        {
-            string command = trimmedTask["shell ".Length..].Trim();
-            return executor.Execute(
-                "workspace.run_shell",
-                new ToolExecutionContext(
-                    "cli_run_shell",
-                    snapshot.Workspace,
-                    JsonSerializer.Serialize(new Dictionary<string, object>
-                    {
-                        ["command"] = command,
-                        ["timeoutMilliseconds"] = 10_000
-                    })));
-        }
-
-        return ToolExecutionResult.Failure(
-            "unsupported-run-task",
-            "Supported run tasks are: create smoke note, read <path>, shell <command>.");
+        return jsonRequested || string.Equals(outputMode, "json", StringComparison.OrdinalIgnoreCase);
     }
 
-    private static void EnsureSmokeNoteSeed(WorkspaceContext workspace)
+    private static void WriteExecOutput(ExecTextRenderer renderer, ExecResult result)
     {
-        if (!workspace.IsUsable)
+        foreach (ExecEvent execEvent in result.Events)
         {
-            return;
+            renderer.WriteEvent(execEvent);
         }
 
-        string path = Path.Combine(workspace.RootPath, "caicli-smoke.txt");
-        if (!File.Exists(path))
+        renderer.WriteResult(result);
+    }
+
+    private static void WriteExecOutput(ExecJsonRenderer renderer, ExecResult result)
+    {
+        foreach (ExecEvent execEvent in result.Events)
         {
-            File.WriteAllText(path, "status: pending" + Environment.NewLine);
+            renderer.WriteEvent(execEvent);
         }
+
+        renderer.WriteResult(result);
     }
 
     private static void WriteToolResult(TextWriter output, ToolExecutionResult result)
@@ -521,6 +567,19 @@ public static class CliCommandFactory
         }
 
         output.WriteLine($"errorCode: {result.ErrorCode}");
+        output.WriteLine("summary:");
+        output.WriteLine(result.Summary);
+    }
+
+    private static void WriteRunResult(TextWriter output, ExecResult result)
+    {
+        output.WriteLine(result.IsSuccess ? "status: succeeded" : "status: failed");
+        output.WriteLine($"approvalStatus: {result.ApprovalStatus ?? "not-required"}");
+        if (!string.IsNullOrWhiteSpace(result.ErrorCode))
+        {
+            output.WriteLine($"errorCode: {result.ErrorCode}");
+        }
+
         output.WriteLine("summary:");
         output.WriteLine(result.Summary);
     }
