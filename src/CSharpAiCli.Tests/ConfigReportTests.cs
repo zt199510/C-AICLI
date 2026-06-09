@@ -39,10 +39,14 @@ public sealed class ConfigReportTests
     {
         CliEnvironmentSnapshot snapshot = CreateSnapshot(
             apiKey: "sk-test-secret",
-            apiKeySource: "OPENAI_API_KEY");
+            apiKeySource: "OPENAI_API_KEY",
+            baseUrl: "https://gateway.example.test/v1",
+            baseUrlSource: "OPENAI_BASE_URL");
 
         string text = ConfigReport.Create(snapshot).ToDisplayText();
 
+        Assert.Contains("baseUrl: https://gateway.example.test/v1", text);
+        Assert.Contains("baseUrlSource: OPENAI_BASE_URL", text);
         Assert.Contains("apiKey: present", text);
         Assert.Contains("apiKeySource: OPENAI_API_KEY", text);
         Assert.DoesNotContain("sk-test-secret", text, StringComparison.Ordinal);

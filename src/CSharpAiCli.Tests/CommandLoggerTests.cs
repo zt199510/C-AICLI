@@ -20,6 +20,10 @@ public sealed class CommandLoggerTests
                 userProfile: Path.Combine(tempRoot, "home"),
                 model: "gpt-workspace",
                 modelSource: "workspace config",
+                baseUrl: "https://gateway.example.test/v1",
+                baseUrlSource: "workspace config",
+                agentBackend: "framework",
+                agentBackendSource: "workspace config",
                 apiKey: "sk-test-secret",
                 apiKeySource: "OPENAI_API_KEY");
 
@@ -37,6 +41,11 @@ public sealed class CommandLoggerTests
             Assert.Contains("workspaceStatus=ready", log);
             Assert.Contains("model=gpt-workspace", log);
             Assert.Contains("modelSource=workspace config", log);
+            Assert.Contains("baseUrl=https://gateway.example.test/v1", log);
+            Assert.Contains("baseUrlSource=workspace config", log);
+            Assert.Contains("agentBackend=framework", log);
+            Assert.Contains("agentBackendSource=workspace config", log);
+            Assert.Contains("agentBackendStatus=unavailable: Microsoft Agent Framework adapter is an experimental stub", log);
             Assert.Contains("apiKey=present", log);
             Assert.Contains("apiKeySource=OPENAI_API_KEY", log);
             Assert.Contains("instructionWarnings=none", log);
@@ -97,6 +106,10 @@ public sealed class CommandLoggerTests
                 userProfile: Path.Combine(tempRoot, "home"),
                 model: $"gpt{Environment.NewLine}workspace",
                 modelSource: "workspace|config",
+                baseUrl: $"https://gateway.example.test/v1|{Environment.NewLine}alt",
+                baseUrlSource: "workspace|config",
+                agentBackend: $"direct|{Environment.NewLine}fallback",
+                agentBackendSource: "user|config",
                 warnings: [$"first warning{Environment.NewLine}second warning"]);
 
             CommandLogger.Append(
@@ -113,6 +126,10 @@ public sealed class CommandLoggerTests
             Assert.Contains("command=doctor/config", log);
             Assert.Contains("model=gpt workspace", log);
             Assert.Contains("modelSource=workspace/config", log);
+            Assert.Contains("baseUrl=https://gateway.example.test/v1/ alt", log);
+            Assert.Contains("baseUrlSource=workspace/config", log);
+            Assert.Contains("agentBackend=direct/ fallback", log);
+            Assert.Contains("agentBackendSource=user/config", log);
             Assert.Contains("warnings=first warning second warning", log);
             Assert.Single(nonEmptyLines);
         }
@@ -128,6 +145,10 @@ public sealed class CommandLoggerTests
         string userProfile,
         string model = "not configured",
         string modelSource = "default",
+        string baseUrl = "https://api.openai.com/v1",
+        string baseUrlSource = "default",
+        string agentBackend = "direct",
+        string agentBackendSource = "default",
         string? apiKey = null,
         string apiKeySource = "missing",
         IReadOnlyList<string>? warnings = null)
@@ -143,14 +164,18 @@ public sealed class CommandLoggerTests
             WorkspaceConfigPath: Path.Combine(workspaceRoot, ".caicli", "config.json"),
             Model: model,
             ModelSource: modelSource,
-            AgentBackend: "direct",
-            AgentBackendSource: "default",
+            AgentBackend: agentBackend,
+            AgentBackendSource: agentBackendSource,
             DisabledTools: new HashSet<string>(StringComparer.Ordinal),
             ApiKey: SecretValue.From(apiKey),
             ApiKeySource: apiKeySource,
             LoadedConfigPaths: [],
             Warnings: warnings ?? [],
-            ConfigSources: []);
+            ConfigSources: [])
+        {
+            BaseUrl = baseUrl,
+            BaseUrlSource = baseUrlSource
+        };
 
         return new CliEnvironmentSnapshot(
             Workspace: workspace,

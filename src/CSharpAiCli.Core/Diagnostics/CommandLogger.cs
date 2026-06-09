@@ -34,6 +34,11 @@ public static class CommandLogger
             $"workspaceStatus={FormatWorkspaceStatus(snapshot.WorkspaceStatus)}",
             $"model={Sanitize(snapshot.Configuration.Model)}",
             $"modelSource={Sanitize(snapshot.Configuration.ModelSource)}",
+            $"baseUrl={Sanitize(snapshot.Configuration.BaseUrl)}",
+            $"baseUrlSource={Sanitize(snapshot.Configuration.BaseUrlSource)}",
+            $"agentBackend={Sanitize(snapshot.Configuration.AgentBackend)}",
+            $"agentBackendSource={Sanitize(snapshot.Configuration.AgentBackendSource)}",
+            $"agentBackendStatus={Sanitize(FormatAgentBackendStatus(snapshot.Configuration.AgentBackend))}",
             $"apiKey={apiKeyStatus}",
             $"apiKeySource={Sanitize(snapshot.Configuration.ApiKeySource)}",
             $"warnings={warnings}",
@@ -60,6 +65,16 @@ public static class CommandLogger
             WorkspaceStatus.Ready => "ready",
             WorkspaceStatus.Missing => "missing",
             WorkspaceStatus.NotDirectory => "not directory",
+            _ => "unknown"
+        };
+    }
+
+    private static string FormatAgentBackendStatus(string backend)
+    {
+        return backend switch
+        {
+            "direct" => "available",
+            "framework" => "unavailable: Microsoft Agent Framework adapter is an experimental stub and no framework package is enabled.",
             _ => "unknown"
         };
     }

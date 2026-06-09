@@ -13,6 +13,15 @@ Priority for model:
 3. `<workspace>\.caicli\config.json`
 4. `not configured`
 
+Priority for OpenAI base URL:
+
+1. `OPENAI_BASE_URL`
+2. `%USERPROFILE%\.caicli\config.json`
+3. `<workspace>\.caicli\config.json`
+4. `https://api.openai.com/v1`
+
+`baseUrl` is non-secret configuration. User config is preferred for personal endpoints; workspace config may set `baseUrl` when a repository intentionally shares an OpenAI-compatible endpoint for the team. `baseUrl` must be an absolute `http` or `https` URL and must not contain user info, query, or fragment components.
+
 Priority for API key:
 
 1. `OPENAI_API_KEY`
@@ -52,6 +61,7 @@ Disabled tool names are merged from user and workspace config. A disabled tool i
 ```json
 {
   "model": "gpt-4.1-mini",
+  "baseUrl": "https://api.openai.com/v1",
   "apiKey": "sk-user-secret",
   "agentBackend": "direct"
 }
@@ -62,6 +72,7 @@ Disabled tool names are merged from user and workspace config. A disabled tool i
 ```json
 {
   "model": "gpt-4.1-mini",
+  "baseUrl": "https://gateway.example.test/v1",
   "agentBackend": "direct",
   "disabledTools": [],
   "mcpServers": {
@@ -83,15 +94,32 @@ Disabled tool names are merged from user and workspace config. A disabled tool i
 
 Do not put `apiKey` in workspace config. If present, it is ignored.
 
+## Config Commands
+
+```powershell
+caicli config get
+caicli config list
+caicli config set model gpt-4.1-mini
+caicli config set baseUrl https://gateway.example.test/v1
+caicli config set agentBackend direct
+caicli config set apiKey sk-user-secret
+caicli config unset baseUrl
+```
+
+`config get` and `config list` print the effective non-secret configuration and sources. They include model, base URL, backend, disabled tools, config paths, warnings, and API key presence/source, but never the API key value.
+
+`config set` and `config unset` write scalar values in user config only. Supported scalar keys are `model`, `baseUrl`, `agentBackend`, and `apiKey`. Edit results print status, key, scope, and path without echoing the written value.
+
 ## Diagnostic Commands
 
 ```powershell
 caicli doctor
 caicli config get
+caicli config list
 caicli mcp list
 caicli mcp doctor
 caicli workflow list
 caicli workflow validate cpp
 ```
 
-`config get` and `doctor` report whether a key is present, but do not print the key value.
+`config get`, `config list`, `doctor`, and command logs report whether an API key is present and where it came from, but do not print the key value. `doctor` also reports model/source, base URL/source, backend/source, and backend status.

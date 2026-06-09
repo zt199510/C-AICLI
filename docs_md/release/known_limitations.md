@@ -29,7 +29,9 @@
 ## Configuration And Secrets
 
 - Workspace `apiKey` is ignored. Use `OPENAI_API_KEY` or user config for model calls.
-- Logs record key presence and source, not key value.
+- `baseUrl` can come from `OPENAI_BASE_URL`, user config, or workspace config, but it must be an absolute `http` or `https` URL without user info, query, or fragment components.
+- `config get`, `config list`, `doctor`, and logs record key presence and source, not key value.
+- Logs include configured model, base URL, and backend source/status for diagnostics.
 - Release artifacts do not include user config, workspace config, keys, logs, or transcripts.
 
 ## Platform

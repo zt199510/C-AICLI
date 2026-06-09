@@ -24,6 +24,8 @@ public sealed record DoctorReport(IReadOnlyList<string> Lines)
             $"user config: {snapshot.UserConfigPath}",
             $"workspace config: {snapshot.WorkspaceConfigPath}",
             $"log directory: {LogPathResolver.ResolveLogDirectory(snapshot)}",
+            $"model: {snapshot.Configuration.Model} ({snapshot.Configuration.ModelSource})",
+            $"base URL: {snapshot.Configuration.BaseUrl} ({snapshot.Configuration.BaseUrlSource})",
             $"api key: {apiKeyStatus}",
             $"agent backend: {snapshot.Configuration.AgentBackend} ({snapshot.Configuration.AgentBackendSource})",
             $"agent backend status: {FormatAgentBackendStatus(snapshot.Configuration.AgentBackend)}"

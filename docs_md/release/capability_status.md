@@ -5,9 +5,9 @@
 | Capability | Status | Notes |
 |---|---|---|
 | `caicli version` | Accepted | Reports version, target framework, and release runtime. |
-| `caicli doctor` | Accepted | Diagnoses runtime, workspace, config, key presence, logs, and backend status. |
-| `caicli config get` | Accepted | Reports effective config without printing secret values. |
-| `caicli chat` | Accepted | Uses direct OpenAI Responses path with streaming renderer. |
+| `caicli doctor` | Accepted | Diagnoses runtime, workspace, model/source, base URL/source, key presence/source, logs, and backend source/status. |
+| `caicli config get/list/set/unset` | Accepted | Reports effective config and writes user scalar config without printing secret values. |
+| `caicli chat` | Accepted | Uses direct OpenAI Responses path with streaming renderer and configured OpenAI-compatible base URL. |
 | `chat --session` | Accepted | Saves transcript v1 in the user profile. |
 | `session export/clear` | Accepted | Exports or deletes one transcript file by validated session name. |
 | `caicli run` | Solidified | Deterministic direct-tool release smoke tasks: create smoke note, read file, run approved shell command. |

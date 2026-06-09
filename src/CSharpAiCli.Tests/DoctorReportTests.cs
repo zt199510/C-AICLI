@@ -22,6 +22,8 @@ public sealed class DoctorReportTests
         Assert.Contains("user config: " + Path.Combine("user-home", ".caicli", "config.json"), text);
         Assert.Contains("workspace config: " + Path.Combine("workspace-root", ".caicli", "config.json"), text);
         Assert.Contains("log directory: " + Path.Combine("workspace-root", ".caicli", "logs"), text);
+        Assert.Contains("model: not configured (default)", text);
+        Assert.Contains("base URL: https://api.openai.com/v1 (default)", text);
         Assert.Contains("api key: missing", text);
         Assert.Contains("agent backend: direct (default)", text);
         Assert.Contains("agent backend status: available", text);
@@ -48,10 +50,16 @@ public sealed class DoctorReportTests
         CliEnvironmentSnapshot snapshot = CreateSnapshot(
             apiKey: "sk-test-secret",
             apiKeySource: "OPENAI_API_KEY",
+            model: "gpt-test",
+            modelSource: "OPENAI_MODEL",
+            baseUrl: "https://gateway.example.test/v1",
+            baseUrlSource: "OPENAI_BASE_URL",
             hasGlobalJson: true);
 
         string text = DoctorReport.Create(snapshot).ToDisplayText();
 
+        Assert.Contains("model: gpt-test (OPENAI_MODEL)", text);
+        Assert.Contains("base URL: https://gateway.example.test/v1 (OPENAI_BASE_URL)", text);
         Assert.Contains("api key: present (OPENAI_API_KEY)", text);
         Assert.Contains("sdk lock: global.json found", text);
         Assert.DoesNotContain("sk-test-secret", text, StringComparison.Ordinal);
@@ -91,6 +99,10 @@ public sealed class DoctorReportTests
         string apiKeySource,
         bool hasGlobalJson = false,
         IReadOnlyList<string>? warnings = null,
+        string model = "not configured",
+        string modelSource = "default",
+        string baseUrl = "https://api.openai.com/v1",
+        string baseUrlSource = "default",
         string agentBackend = "direct",
         string agentBackendSource = "default")
     {
@@ -103,8 +115,8 @@ public sealed class DoctorReportTests
             WorkspaceRoot: "workspace-root",
             UserConfigPath: Path.Combine("user-home", ".caicli", "config.json"),
             WorkspaceConfigPath: Path.Combine("workspace-root", ".caicli", "config.json"),
-            Model: "not configured",
-            ModelSource: "default",
+            Model: model,
+            ModelSource: modelSource,
             AgentBackend: agentBackend,
             AgentBackendSource: agentBackendSource,
             DisabledTools: new HashSet<string>(StringComparer.Ordinal),
@@ -112,7 +124,11 @@ public sealed class DoctorReportTests
             ApiKeySource: apiKeySource,
             LoadedConfigPaths: [],
             Warnings: warnings ?? [],
-            ConfigSources: []);
+            ConfigSources: [])
+        {
+            BaseUrl = baseUrl,
+            BaseUrlSource = baseUrlSource
+        };
 
         return new CliEnvironmentSnapshot(
             Workspace: workspace,
