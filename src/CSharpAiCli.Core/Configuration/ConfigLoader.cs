@@ -332,7 +332,7 @@ public static class ConfigLoader
 
         if (!string.IsNullOrWhiteSpace(value))
         {
-            warnings.Add($"ignored invalid agent backend '{value}' from {source}");
+            warnings.Add($"ignored invalid agent backend from {source}");
         }
 
         return false;

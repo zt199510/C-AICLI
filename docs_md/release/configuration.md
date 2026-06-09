@@ -62,7 +62,7 @@ Disabled tool names are merged from user and workspace config. A disabled tool i
 {
   "model": "gpt-4.1-mini",
   "baseUrl": "https://api.openai.com/v1",
-  "apiKey": "sk-user-secret",
+  "apiKey": "<your-api-key>",
   "agentBackend": "direct"
 }
 ```
@@ -102,7 +102,7 @@ caicli config list
 caicli config set model gpt-4.1-mini
 caicli config set baseUrl https://gateway.example.test/v1
 caicli config set agentBackend direct
-caicli config set apiKey sk-user-secret
+caicli config set apiKey <your-api-key>
 caicli config unset baseUrl
 ```
 

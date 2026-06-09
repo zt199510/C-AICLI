@@ -588,6 +588,38 @@ public sealed class ConfigLoaderTests
     }
 
     [Fact]
+    public void Load_does_not_write_api_key_like_values_from_invalid_agent_backend_to_warnings()
+    {
+        string root = CreateTempDirectory();
+
+        try
+        {
+            string userProfile = Path.Combine(root, "home");
+            string workspaceRoot = Path.Combine(root, "workspace");
+            Directory.CreateDirectory(userProfile);
+            Directory.CreateDirectory(workspaceRoot);
+
+            WorkspaceContext workspace = WorkspaceContext.Detect(workspaceRoot, root);
+            EffectiveConfiguration configuration = ConfigLoader.Load(
+                workspace,
+                userProfile: userProfile,
+                openAiApiKey: "",
+                agentBackend: "sk-env-secret");
+
+            Assert.Equal("direct", configuration.AgentBackend);
+            Assert.Equal("default", configuration.AgentBackendSource);
+            Assert.Contains(configuration.Warnings, warning =>
+                warning.Contains("ignored invalid agent backend", StringComparison.Ordinal)
+                && warning.Contains("CAICLI_AGENT_BACKEND", StringComparison.Ordinal));
+            Assert.DoesNotContain("sk-env-secret", string.Join(Environment.NewLine, configuration.Warnings), StringComparison.Ordinal);
+        }
+        finally
+        {
+            Directory.Delete(root, recursive: true);
+        }
+    }
+
+    [Fact]
     public void Load_preserves_mcp_server_sources_from_config_files()
     {
         string root = CreateTempDirectory();
