@@ -91,6 +91,49 @@ public static class ConfigFileEditor
         }
     }
 
+    public static ConfigFileEditResult UnsetUserScalar(string path, string key)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(path);
+        ArgumentNullException.ThrowIfNull(key);
+
+        if (!TryGetScalarPropertyName(key, out string propertyName))
+        {
+            return ConfigFileEditResult.Failure(
+                "unknown-config-key",
+                $"Unknown config key '{key}'. Supported scalar keys are: model, baseUrl, agentBackend, apiKey.");
+        }
+
+        try
+        {
+            if (!File.Exists(path))
+            {
+                return ConfigFileEditResult.Success(propertyName, path, "unchanged");
+            }
+
+            if (!TryReadJsonObject(path, out JsonObject json))
+            {
+                return ConfigFileEditResult.Failure(
+                    "invalid-config-file",
+                    $"User config file is not a valid JSON object: {path}");
+            }
+
+            if (!RemoveCaseInsensitiveProperties(json, propertyName))
+            {
+                return ConfigFileEditResult.Success(propertyName, path, "unchanged");
+            }
+
+            WriteJsonAtomically(path, json.ToJsonString(JsonSerializerOptions) + Environment.NewLine);
+
+            return ConfigFileEditResult.Success(propertyName, path);
+        }
+        catch (Exception exception) when (IsConfigIoException(exception))
+        {
+            return ConfigFileEditResult.Failure(
+                "config-write-failed",
+                $"Unable to write user config file: {path}");
+        }
+    }
+
     private static bool TryGetScalarPropertyName(string key, out string propertyName)
     {
         propertyName = key.Trim() switch
@@ -118,6 +161,21 @@ public static class ConfigFileEditor
         {
             json.Remove(key);
         }
+    }
+
+    private static bool RemoveCaseInsensitiveProperties(JsonObject json, string propertyName)
+    {
+        string[] keysToRemove = json
+            .Select(property => property.Key)
+            .Where(key => key.Equals(propertyName, StringComparison.OrdinalIgnoreCase))
+            .ToArray();
+
+        foreach (string key in keysToRemove)
+        {
+            json.Remove(key);
+        }
+
+        return keysToRemove.Length > 0;
     }
 
     private static void WriteJsonAtomically(string path, string json)
@@ -187,16 +245,18 @@ public sealed record ConfigFileEditResult(
     string? ErrorCode,
     string Summary,
     string? Key,
-    string? Path)
+    string? Path,
+    string Status)
 {
-    public static ConfigFileEditResult Success(string key, string path)
+    public static ConfigFileEditResult Success(string key, string path, string status = "updated")
     {
         return new ConfigFileEditResult(
             Succeeded: true,
             ErrorCode: null,
-            Summary: "User config updated.",
+            Summary: status == "unchanged" ? "User config unchanged." : "User config updated.",
             Key: key,
-            Path: path);
+            Path: path,
+            Status: status);
     }
 
     public static ConfigFileEditResult Failure(string errorCode, string summary)
@@ -206,6 +266,7 @@ public sealed record ConfigFileEditResult(
             ErrorCode: errorCode,
             Summary: summary,
             Key: null,
-            Path: null);
+            Path: null,
+            Status: "failed");
     }
 }

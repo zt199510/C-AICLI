@@ -156,10 +156,28 @@ public static class CliCommandFactory
             WriteConfigSetResult(output, result);
             return result.Succeeded ? 0 : 1;
         });
+        Command configUnsetCommand = new("unset", "Unset a scalar user configuration value.");
+        Argument<string> configUnsetKeyArgument = new("key")
+        {
+            Description = "The scalar config key to unset.",
+        };
+        configUnsetCommand.Arguments.Add(configUnsetKeyArgument);
+        configUnsetCommand.SetAction(parseResult =>
+        {
+            string? workspacePath = parseResult.GetValue(workspaceOption);
+            string key = parseResult.GetValue(configUnsetKeyArgument) ?? string.Empty;
+            CliEnvironmentSnapshot snapshot = snapshotProvider(workspacePath);
+            TryWriteCommandLog(commandLogger, "config unset", snapshot);
+
+            ConfigFileEditResult result = ConfigFileEditor.UnsetUserScalar(snapshot.UserConfigPath, key);
+            WriteConfigSetResult(output, result);
+            return result.Succeeded ? 0 : 1;
+        });
 
         configCommand.Subcommands.Add(configGetCommand);
         configCommand.Subcommands.Add(configListCommand);
         configCommand.Subcommands.Add(configSetCommand);
+        configCommand.Subcommands.Add(configUnsetCommand);
 
         Command mcpCommand = new("mcp", "Inspect MCP server configuration.");
         Command mcpListCommand = new("list", "List configured MCP servers.");
@@ -493,7 +511,7 @@ public static class CliCommandFactory
 
     private static void WriteConfigSetResult(TextWriter output, ConfigFileEditResult result)
     {
-        output.WriteLine(result.Succeeded ? "status: updated" : "status: failed");
+        output.WriteLine($"status: {result.Status}");
         if (result.Succeeded)
         {
             output.WriteLine($"key: {result.Key}");

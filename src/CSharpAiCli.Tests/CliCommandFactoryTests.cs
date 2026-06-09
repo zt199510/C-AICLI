@@ -397,6 +397,94 @@ public sealed class CliCommandFactoryTests
     }
 
     [Fact]
+    public void Config_unset_api_key_removes_case_insensitive_matches_without_printing_secrets()
+    {
+        using TempDirectory temp = TempDirectory.Create();
+        using StringWriter output = new();
+        string userConfigPath = Path.Combine(temp.Path, ".caicli", "config.json");
+        Directory.CreateDirectory(Path.GetDirectoryName(userConfigPath)!);
+        File.WriteAllText(userConfigPath, """
+        {
+          "apiKey": "old-secret",
+          "ApiKey": "older-secret",
+          "model": "gpt-existing"
+        }
+        """);
+        CliEnvironmentSnapshot snapshot = CreateSnapshot(
+            workspacePath: null,
+            apiKey: null,
+            apiKeySource: "missing",
+            model: "not configured",
+            userConfigPath: userConfigPath);
+
+        int exitCode = CliCommandFactory
+            .Create(output, _ => snapshot)
+            .Parse(["config", "unset", "APIKEY"])
+            .Invoke();
+
+        Assert.Equal(0, exitCode);
+        JsonObject json = ReadJsonObject(userConfigPath);
+        Assert.False(json.ContainsKey("apiKey"));
+        Assert.False(json.ContainsKey("ApiKey"));
+        Assert.Equal("gpt-existing", json["model"]?.GetValue<string>());
+        Assert.Contains("status: updated", output.ToString());
+        Assert.Contains("key: apiKey", output.ToString());
+        Assert.Contains("scope: user", output.ToString());
+        Assert.Contains($"path: {userConfigPath}", output.ToString());
+        Assert.DoesNotContain("old-secret", output.ToString(), StringComparison.Ordinal);
+        Assert.DoesNotContain("older-secret", output.ToString(), StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Config_unset_missing_config_file_succeeds_unchanged_without_creating_file()
+    {
+        using TempDirectory temp = TempDirectory.Create();
+        using StringWriter output = new();
+        string userConfigPath = Path.Combine(temp.Path, ".caicli", "config.json");
+        CliEnvironmentSnapshot snapshot = CreateSnapshot(
+            workspacePath: null,
+            apiKey: null,
+            apiKeySource: "missing",
+            model: "not configured",
+            userConfigPath: userConfigPath);
+
+        int exitCode = CliCommandFactory
+            .Create(output, _ => snapshot)
+            .Parse(["config", "unset", "model"])
+            .Invoke();
+
+        Assert.Equal(0, exitCode);
+        Assert.False(File.Exists(userConfigPath));
+        Assert.Contains("status: unchanged", output.ToString());
+        Assert.Contains("key: model", output.ToString());
+        Assert.Contains("scope: user", output.ToString());
+    }
+
+    [Fact]
+    public void Config_unset_unknown_key_returns_nonzero_without_creating_file()
+    {
+        using TempDirectory temp = TempDirectory.Create();
+        using StringWriter output = new();
+        string userConfigPath = Path.Combine(temp.Path, ".caicli", "config.json");
+        CliEnvironmentSnapshot snapshot = CreateSnapshot(
+            workspacePath: null,
+            apiKey: null,
+            apiKeySource: "missing",
+            model: "not configured",
+            userConfigPath: userConfigPath);
+
+        int exitCode = CliCommandFactory
+            .Create(output, _ => snapshot)
+            .Parse(["config", "unset", "temperature"])
+            .Invoke();
+
+        Assert.Equal(1, exitCode);
+        Assert.False(File.Exists(userConfigPath));
+        Assert.Contains("status: failed", output.ToString());
+        Assert.Contains("errorCode: unknown-config-key", output.ToString());
+    }
+
+    [Fact]
     public void Version_command_writes_version_metadata()
     {
         using StringWriter output = new();
@@ -828,6 +916,32 @@ public sealed class CliCommandFactoryTests
 
         Assert.Equal(0, exitCode);
         Assert.Equal(["config set"], loggedCommands);
+    }
+
+    [Fact]
+    public void Config_unset_command_writes_command_log_through_delegate()
+    {
+        using TempDirectory temp = TempDirectory.Create();
+        using StringWriter output = new();
+        List<string> loggedCommands = [];
+        string userConfigPath = Path.Combine(temp.Path, ".caicli", "config.json");
+        CliEnvironmentSnapshot snapshot = CreateSnapshot(
+            workspacePath: null,
+            apiKey: null,
+            apiKeySource: "missing",
+            model: "not configured",
+            userConfigPath: userConfigPath);
+
+        int exitCode = CliCommandFactory
+            .Create(
+                output,
+                _ => snapshot,
+                (commandName, _) => loggedCommands.Add(commandName))
+            .Parse(["config", "unset", "model"])
+            .Invoke();
+
+        Assert.Equal(0, exitCode);
+        Assert.Equal(["config unset"], loggedCommands);
     }
 
     [Fact]
