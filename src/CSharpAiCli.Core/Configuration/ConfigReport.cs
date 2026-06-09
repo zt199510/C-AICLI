@@ -22,6 +22,8 @@ public sealed record ConfigReport(IReadOnlyList<string> Lines)
             $"logDirectory: {LogPathResolver.ResolveLogDirectory(snapshot)}",
             $"model: {configuration.Model}",
             $"modelSource: {configuration.ModelSource}",
+            $"baseUrl: {configuration.BaseUrl}",
+            $"baseUrlSource: {configuration.BaseUrlSource}",
             $"agentBackend: {configuration.AgentBackend}",
             $"agentBackendSource: {configuration.AgentBackendSource}",
             $"disabledTools: {FormatDisabledTools(configuration.DisabledTools)}",

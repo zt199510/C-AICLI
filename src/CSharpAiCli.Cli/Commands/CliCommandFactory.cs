@@ -124,8 +124,18 @@ public static class CliCommandFactory
             output.WriteLine(ConfigReport.Create(snapshot).ToDisplayText());
             return 0;
         });
+        Command configListCommand = new("list", "List non-secret configuration values and sources.");
+        configListCommand.SetAction(parseResult =>
+        {
+            string? workspacePath = parseResult.GetValue(workspaceOption);
+            CliEnvironmentSnapshot snapshot = snapshotProvider(workspacePath);
+            TryWriteCommandLog(commandLogger, "config list", snapshot);
+            output.WriteLine(ConfigReport.Create(snapshot).ToDisplayText());
+            return 0;
+        });
 
         configCommand.Subcommands.Add(configGetCommand);
+        configCommand.Subcommands.Add(configListCommand);
 
         Command mcpCommand = new("mcp", "Inspect MCP server configuration.");
         Command mcpListCommand = new("list", "List configured MCP servers.");

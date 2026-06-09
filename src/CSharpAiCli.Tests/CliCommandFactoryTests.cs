@@ -34,6 +34,42 @@ public sealed class CliCommandFactoryTests
         Assert.Equal(0, exitCode);
         Assert.Contains("C# AI CLI effective configuration", output.ToString());
         Assert.Contains("model: not configured", output.ToString());
+        Assert.Contains("baseUrl: https://api.openai.com/v1", output.ToString());
+    }
+
+    [Fact]
+    public void Config_list_command_writes_non_secret_config_report()
+    {
+        using StringWriter output = new();
+        CliEnvironmentSnapshot snapshot = CreateSnapshot(
+            workspacePath: null,
+            apiKey: "sk-test-secret",
+            apiKeySource: "OPENAI_API_KEY",
+            model: "gpt-workspace",
+            baseUrl: "https://gateway.example.test/v1",
+            baseUrlSource: "workspace config",
+            disabledTools: new HashSet<string>(StringComparer.Ordinal)
+            {
+                "workspace.run_shell"
+            });
+
+        int exitCode = CliCommandFactory
+            .Create(output, _ => snapshot)
+            .Parse(["config", "list"])
+            .Invoke();
+
+        Assert.Equal(0, exitCode);
+        Assert.Contains("C# AI CLI effective configuration", output.ToString());
+        Assert.Contains("model: gpt-workspace", output.ToString());
+        Assert.Contains("modelSource: workspace config", output.ToString());
+        Assert.Contains("baseUrl: https://gateway.example.test/v1", output.ToString());
+        Assert.Contains("baseUrlSource: workspace config", output.ToString());
+        Assert.Contains("agentBackend: direct", output.ToString());
+        Assert.Contains("agentBackendSource: default", output.ToString());
+        Assert.Contains("disabledTools: workspace.run_shell", output.ToString());
+        Assert.Contains("apiKey: present", output.ToString());
+        Assert.Contains("apiKeySource: OPENAI_API_KEY", output.ToString());
+        Assert.DoesNotContain("sk-test-secret", output.ToString(), StringComparison.Ordinal);
     }
 
     [Fact]
@@ -371,6 +407,26 @@ public sealed class CliCommandFactoryTests
     }
 
     [Fact]
+    public void Workspace_option_is_passed_to_config_list_command()
+    {
+        using StringWriter output = new();
+        string? receivedWorkspace = null;
+
+        int exitCode = CliCommandFactory
+            .Create(output, workspacePath =>
+            {
+                receivedWorkspace = workspacePath;
+                return CreateSnapshot(workspacePath);
+            })
+            .Parse(["config", "list", "--workspace", "custom-root"])
+            .Invoke();
+
+        Assert.Equal(0, exitCode);
+        Assert.Equal("custom-root", receivedWorkspace);
+        Assert.Contains("workspace: custom-root", output.ToString());
+    }
+
+    [Fact]
     public void Doctor_command_writes_command_log_through_delegate()
     {
         using StringWriter output = new();
@@ -404,6 +460,24 @@ public sealed class CliCommandFactoryTests
 
         Assert.Equal(0, exitCode);
         Assert.Equal(["config get"], loggedCommands);
+    }
+
+    [Fact]
+    public void Config_list_command_writes_command_log_through_delegate()
+    {
+        using StringWriter output = new();
+        List<string> loggedCommands = [];
+
+        int exitCode = CliCommandFactory
+            .Create(
+                output,
+                CreateSnapshot,
+                (commandName, _) => loggedCommands.Add(commandName))
+            .Parse(["config", "list"])
+            .Invoke();
+
+        Assert.Equal(0, exitCode);
+        Assert.Equal(["config list"], loggedCommands);
     }
 
     [Fact]
@@ -674,7 +748,9 @@ public sealed class CliCommandFactoryTests
         string model,
         IReadOnlyList<CliConfigFileSource>? configSources = null,
         IReadOnlySet<string>? disabledTools = null,
-        string? userConfigPath = null)
+        string? userConfigPath = null,
+        string baseUrl = "https://api.openai.com/v1",
+        string baseUrlSource = "default")
     {
         string workspaceRoot = string.IsNullOrWhiteSpace(workspacePath) ? "workspace-root" : workspacePath;
 
@@ -696,7 +772,11 @@ public sealed class CliCommandFactoryTests
             ApiKeySource: apiKeySource,
             LoadedConfigPaths: [],
             Warnings: [],
-            ConfigSources: configSources ?? []);
+            ConfigSources: configSources ?? [])
+        {
+            BaseUrl = baseUrl,
+            BaseUrlSource = baseUrlSource
+        };
 
         return new CliEnvironmentSnapshot(
             Workspace: workspace,

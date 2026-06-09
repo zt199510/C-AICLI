@@ -11,7 +11,9 @@ public sealed class ConfigReportTests
             apiKey: null,
             apiKeySource: "missing",
             model: "gpt-workspace",
-            modelSource: "workspace config");
+            modelSource: "workspace config",
+            baseUrl: "https://gateway.example.test/v1",
+            baseUrlSource: "workspace config");
 
         string text = ConfigReport.Create(snapshot).ToDisplayText();
 
@@ -23,6 +25,8 @@ public sealed class ConfigReportTests
         Assert.Contains("logDirectory: " + Path.Combine("workspace-root", ".caicli", "logs"), text);
         Assert.Contains("model: gpt-workspace", text);
         Assert.Contains("modelSource: workspace config", text);
+        Assert.Contains("baseUrl: https://gateway.example.test/v1", text);
+        Assert.Contains("baseUrlSource: workspace config", text);
         Assert.Contains("agentBackend: direct", text);
         Assert.Contains("agentBackendSource: default", text);
         Assert.Contains("apiKey: missing", text);
@@ -97,6 +101,8 @@ public sealed class ConfigReportTests
         string apiKeySource,
         string model = "not configured",
         string modelSource = "default",
+        string baseUrl = "https://api.openai.com/v1",
+        string baseUrlSource = "default",
         IReadOnlyList<string>? loadedConfigPaths = null,
         IReadOnlyList<string>? warnings = null,
         IReadOnlySet<string>? disabledTools = null)
@@ -119,7 +125,11 @@ public sealed class ConfigReportTests
             ApiKeySource: apiKeySource,
             LoadedConfigPaths: loadedConfigPaths ?? [],
             Warnings: warnings ?? [],
-            ConfigSources: []);
+            ConfigSources: [])
+        {
+            BaseUrl = baseUrl,
+            BaseUrlSource = baseUrlSource
+        };
 
         return new CliEnvironmentSnapshot(
             Workspace: workspace,
