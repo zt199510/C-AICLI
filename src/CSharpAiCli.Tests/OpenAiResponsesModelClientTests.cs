@@ -85,6 +85,25 @@ public sealed class OpenAiResponsesModelClientTests
     }
 
     [Fact]
+    public void Sdk_gateway_single_api_key_constructor_uses_default_endpoint()
+    {
+        SdkOpenAiResponsesGateway gateway = new("sk-test");
+
+        Assert.Equal(new Uri(ConfigLoader.DefaultOpenAiBaseUrl), gateway.Endpoint);
+    }
+
+    [Theory]
+    [InlineData("https://gateway.example.test/v1?api-key=sk-secret")]
+    [InlineData("ftp://gateway.example.test/v1")]
+    public void Sdk_gateway_rejects_unsafe_base_url(string baseUrl)
+    {
+        ArgumentException exception = Assert.Throws<ArgumentException>(
+            () => new SdkOpenAiResponsesGateway("sk-test", baseUrl));
+
+        Assert.Equal("baseUrl", exception.ParamName);
+    }
+
+    [Fact]
     public void Constructor_rejects_null_legacy_gateway_factory()
     {
         CliEnvironmentSnapshot snapshot = CreateSnapshot(

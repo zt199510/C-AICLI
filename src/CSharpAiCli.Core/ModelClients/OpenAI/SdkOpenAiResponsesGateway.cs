@@ -9,16 +9,26 @@ public sealed class SdkOpenAiResponsesGateway : IOpenAiResponsesGateway
 {
     private readonly ResponsesClient client;
 
+    public SdkOpenAiResponsesGateway(string apiKey)
+        : this(apiKey, ConfigLoader.DefaultOpenAiBaseUrl)
+    {
+    }
+
     public SdkOpenAiResponsesGateway(string apiKey, string baseUrl)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(apiKey);
         ArgumentException.ThrowIfNullOrWhiteSpace(baseUrl);
+        if (!ConfigLoader.TryNormalizeBaseUrl(baseUrl, out string? normalizedBaseUrl)
+            || normalizedBaseUrl is null)
+        {
+            throw new ArgumentException("OpenAI base URL must be an absolute http or https URL without user info, query, or fragment.", nameof(baseUrl));
+        }
 
         client = new ResponsesClient(
             new ApiKeyCredential(apiKey),
             new OpenAIClientOptions
             {
-                Endpoint = new Uri(baseUrl, UriKind.Absolute)
+                Endpoint = new Uri(normalizedBaseUrl, UriKind.Absolute)
             });
     }
 
