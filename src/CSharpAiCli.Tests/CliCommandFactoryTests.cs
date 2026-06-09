@@ -208,6 +208,88 @@ public sealed class CliCommandFactoryTests
     }
 
     [Fact]
+    public void Config_set_api_key_removes_case_insensitive_duplicate_key_without_printing_secrets()
+    {
+        using TempDirectory temp = TempDirectory.Create();
+        using StringWriter output = new();
+        string userConfigPath = Path.Combine(temp.Path, ".caicli", "config.json");
+        Directory.CreateDirectory(Path.GetDirectoryName(userConfigPath)!);
+        File.WriteAllText(userConfigPath, """
+        {
+          "ApiKey": "old-secret",
+          "model": "gpt-existing"
+        }
+        """);
+        CliEnvironmentSnapshot snapshot = CreateSnapshot(
+            workspacePath: null,
+            apiKey: null,
+            apiKeySource: "missing",
+            model: "not configured",
+            userConfigPath: userConfigPath);
+
+        int exitCode = CliCommandFactory
+            .Create(output, _ => snapshot)
+            .Parse(["config", "set", "apiKey", "new-secret"])
+            .Invoke();
+
+        Assert.Equal(0, exitCode);
+        JsonObject json = ReadJsonObject(userConfigPath);
+        Assert.Equal("new-secret", json["apiKey"]?.GetValue<string>());
+        Assert.False(json.ContainsKey("ApiKey"));
+        Assert.Equal("gpt-existing", json["model"]?.GetValue<string>());
+        Assert.DoesNotContain("old-secret", output.ToString(), StringComparison.Ordinal);
+        Assert.DoesNotContain("new-secret", output.ToString(), StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Config_set_agent_backend_writes_normalized_framework_alias()
+    {
+        using TempDirectory temp = TempDirectory.Create();
+        using StringWriter output = new();
+        string userConfigPath = Path.Combine(temp.Path, ".caicli", "config.json");
+        CliEnvironmentSnapshot snapshot = CreateSnapshot(
+            workspacePath: null,
+            apiKey: null,
+            apiKeySource: "missing",
+            model: "not configured",
+            userConfigPath: userConfigPath);
+
+        int exitCode = CliCommandFactory
+            .Create(output, _ => snapshot)
+            .Parse(["config", "set", "agentBackend", "maf"])
+            .Invoke();
+
+        Assert.Equal(0, exitCode);
+        JsonObject json = ReadJsonObject(userConfigPath);
+        Assert.Equal("framework", json["agentBackend"]?.GetValue<string>());
+    }
+
+    [Fact]
+    public void Config_set_agent_backend_rejects_invalid_value_without_writing_or_echoing_value()
+    {
+        using TempDirectory temp = TempDirectory.Create();
+        using StringWriter output = new();
+        string userConfigPath = Path.Combine(temp.Path, ".caicli", "config.json");
+        CliEnvironmentSnapshot snapshot = CreateSnapshot(
+            workspacePath: null,
+            apiKey: null,
+            apiKeySource: "missing",
+            model: "not configured",
+            userConfigPath: userConfigPath);
+
+        int exitCode = CliCommandFactory
+            .Create(output, _ => snapshot)
+            .Parse(["config", "set", "agentBackend", "nope"])
+            .Invoke();
+
+        Assert.Equal(1, exitCode);
+        Assert.False(File.Exists(userConfigPath));
+        Assert.Contains("status: failed", output.ToString());
+        Assert.Contains("errorCode: invalid-agent-backend", output.ToString());
+        Assert.DoesNotContain("nope", output.ToString(), StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void Config_set_unknown_key_returns_nonzero_without_creating_file()
     {
         using TempDirectory temp = TempDirectory.Create();
@@ -255,6 +337,63 @@ public sealed class CliCommandFactoryTests
         Assert.Equal("{not json", File.ReadAllText(userConfigPath));
         Assert.Contains("status: failed", output.ToString());
         Assert.Contains("errorCode: invalid-config-file", output.ToString());
+    }
+
+    [Fact]
+    public void Config_set_json_array_returns_invalid_config_file_without_overwriting()
+    {
+        using TempDirectory temp = TempDirectory.Create();
+        using StringWriter output = new();
+        string userConfigPath = Path.Combine(temp.Path, ".caicli", "config.json");
+        Directory.CreateDirectory(Path.GetDirectoryName(userConfigPath)!);
+        File.WriteAllText(userConfigPath, "[]");
+        CliEnvironmentSnapshot snapshot = CreateSnapshot(
+            workspacePath: null,
+            apiKey: null,
+            apiKeySource: "missing",
+            model: "not configured",
+            userConfigPath: userConfigPath);
+
+        int exitCode = CliCommandFactory
+            .Create(output, _ => snapshot)
+            .Parse(["config", "set", "model", "gpt-test"])
+            .Invoke();
+
+        Assert.Equal(1, exitCode);
+        Assert.Equal("[]", File.ReadAllText(userConfigPath));
+        Assert.Contains("status: failed", output.ToString());
+        Assert.Contains("errorCode: invalid-config-file", output.ToString());
+    }
+
+    [Fact]
+    public void Config_set_parent_path_conflict_returns_write_failure_without_throwing()
+    {
+        using TempDirectory temp = TempDirectory.Create();
+        using StringWriter output = new();
+        string userConfigDirectory = Path.Combine(temp.Path, ".caicli");
+        string userConfigPath = Path.Combine(userConfigDirectory, "config.json");
+        File.WriteAllText(userConfigDirectory, "not a directory");
+        CliEnvironmentSnapshot snapshot = CreateSnapshot(
+            workspacePath: null,
+            apiKey: null,
+            apiKeySource: "missing",
+            model: "not configured",
+            userConfigPath: userConfigPath);
+
+        int exitCode = -1;
+        Exception? exception = Record.Exception(() =>
+        {
+            exitCode = CliCommandFactory
+                .Create(output, _ => snapshot)
+                .Parse(["config", "set", "model", "gpt-test"])
+                .Invoke();
+        });
+
+        Assert.Null(exception);
+        Assert.Equal(1, exitCode);
+        Assert.Equal("not a directory", File.ReadAllText(userConfigDirectory));
+        Assert.Contains("status: failed", output.ToString());
+        Assert.Contains("errorCode: config-write-failed", output.ToString());
     }
 
     [Fact]

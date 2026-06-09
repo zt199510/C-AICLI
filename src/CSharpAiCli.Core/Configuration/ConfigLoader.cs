@@ -160,6 +160,30 @@ public static class ConfigLoader
         return true;
     }
 
+    public static bool TryNormalizeAgentBackend(string? value, out string? backend)
+    {
+        backend = null;
+        if (string.IsNullOrWhiteSpace(value))
+        {
+            return false;
+        }
+
+        string normalized = value.Trim().ToLowerInvariant();
+        if (normalized is "direct" or "openai")
+        {
+            backend = "direct";
+            return true;
+        }
+
+        if (normalized is "framework" or "maf" or "agent-framework")
+        {
+            backend = "framework";
+            return true;
+        }
+
+        return false;
+    }
+
     private static (string BaseUrl, string Source) SelectBaseUrl(
         string? openAiBaseUrl,
         CliConfigFile? userConfig,
@@ -301,26 +325,16 @@ public static class ConfigLoader
         string source,
         out string? backend)
     {
-        backend = null;
-        if (string.IsNullOrWhiteSpace(value))
+        if (TryNormalizeAgentBackend(value, out backend))
         {
-            return false;
-        }
-
-        string normalized = value.Trim().ToLowerInvariant();
-        if (normalized is "direct" or "openai")
-        {
-            backend = "direct";
             return true;
         }
 
-        if (normalized is "framework" or "maf" or "agent-framework")
+        if (!string.IsNullOrWhiteSpace(value))
         {
-            backend = "framework";
-            return true;
+            warnings.Add($"ignored invalid agent backend '{value}' from {source}");
         }
 
-        warnings.Add($"ignored invalid agent backend '{value}' from {source}");
         return false;
     }
 

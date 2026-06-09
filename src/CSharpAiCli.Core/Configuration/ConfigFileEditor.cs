@@ -42,31 +42,53 @@ public static class ConfigFileEditor
             valueToWrite = normalizedBaseUrl!;
         }
 
-        JsonObject json;
-        if (File.Exists(path))
+        if (propertyName == "agentBackend")
         {
-            if (!TryReadJsonObject(path, out json))
+            if (!ConfigLoader.TryNormalizeAgentBackend(value, out string? normalizedBackend))
             {
                 return ConfigFileEditResult.Failure(
-                    "invalid-config-file",
-                    $"User config file is not a valid JSON object: {path}");
+                    "invalid-agent-backend",
+                    "agentBackend must be one of: direct, openai, framework, maf, agent-framework.");
             }
+
+            valueToWrite = normalizedBackend!;
         }
-        else
+
+        try
         {
-            json = [];
-        }
+            JsonObject json;
+            if (File.Exists(path))
+            {
+                if (!TryReadJsonObject(path, out json))
+                {
+                    return ConfigFileEditResult.Failure(
+                        "invalid-config-file",
+                        $"User config file is not a valid JSON object: {path}");
+                }
+            }
+            else
+            {
+                json = [];
+            }
 
-        string? directory = Path.GetDirectoryName(path);
-        if (!string.IsNullOrWhiteSpace(directory))
+            string? directory = Path.GetDirectoryName(path);
+            if (!string.IsNullOrWhiteSpace(directory))
+            {
+                Directory.CreateDirectory(directory);
+            }
+
+            RemoveCaseInsensitiveDuplicateProperties(json, propertyName);
+            json[propertyName] = valueToWrite;
+            WriteJsonAtomically(path, json.ToJsonString(JsonSerializerOptions) + Environment.NewLine);
+
+            return ConfigFileEditResult.Success(propertyName, path);
+        }
+        catch (Exception exception) when (IsConfigIoException(exception))
         {
-            Directory.CreateDirectory(directory);
+            return ConfigFileEditResult.Failure(
+                "config-write-failed",
+                $"Unable to write user config file: {path}");
         }
-
-        json[propertyName] = valueToWrite;
-        File.WriteAllText(path, json.ToJsonString(JsonSerializerOptions) + Environment.NewLine);
-
-        return ConfigFileEditResult.Success(propertyName, path);
     }
 
     private static bool TryGetScalarPropertyName(string key, out string propertyName)
@@ -81,6 +103,61 @@ public static class ConfigFileEditor
         };
 
         return propertyName.Length > 0;
+    }
+
+    private static void RemoveCaseInsensitiveDuplicateProperties(JsonObject json, string propertyName)
+    {
+        string[] keysToRemove = json
+            .Select(property => property.Key)
+            .Where(key =>
+                key.Equals(propertyName, StringComparison.OrdinalIgnoreCase)
+                && !key.Equals(propertyName, StringComparison.Ordinal))
+            .ToArray();
+
+        foreach (string key in keysToRemove)
+        {
+            json.Remove(key);
+        }
+    }
+
+    private static void WriteJsonAtomically(string path, string json)
+    {
+        string? directory = Path.GetDirectoryName(path);
+        string fileName = Path.GetFileName(path);
+        string temporaryPath = string.IsNullOrWhiteSpace(directory)
+            ? $"{fileName}.{Guid.NewGuid():N}.tmp"
+            : Path.Combine(directory, $"{fileName}.{Guid.NewGuid():N}.tmp");
+
+        try
+        {
+            File.WriteAllText(temporaryPath, json);
+            File.Move(temporaryPath, path, overwrite: true);
+        }
+        finally
+        {
+            TryDeleteTemporaryFile(temporaryPath);
+        }
+    }
+
+    private static void TryDeleteTemporaryFile(string path)
+    {
+        try
+        {
+            if (File.Exists(path))
+            {
+                File.Delete(path);
+            }
+        }
+        catch (Exception exception) when (IsConfigIoException(exception))
+        {
+        }
+    }
+
+    private static bool IsConfigIoException(Exception exception)
+    {
+        return exception is IOException
+            or UnauthorizedAccessException
+            or NotSupportedException;
     }
 
     private static bool TryReadJsonObject(string path, out JsonObject json)
