@@ -7,6 +7,98 @@ namespace CSharpAiCli.Tests;
 public sealed class OpenAiResponsesModelClientTests
 {
     [Fact]
+    public void Send_passes_effective_base_url_to_gateway_factory()
+    {
+        FakeGateway gateway = new();
+        string? capturedBaseUrl = null;
+        OpenAiResponsesModelClient client = CreateClientWithBaseUrlAwareFactory(
+            CreateSnapshot(
+                apiKey: "sk-test",
+                apiKeySource: "OPENAI_API_KEY",
+                model: "gpt-test",
+                baseUrl: "https://gateway.example.test/v1"),
+            (_, baseUrl) =>
+            {
+                capturedBaseUrl = baseUrl;
+                return gateway;
+            });
+
+        ChatModelResult result = client.Send(new ChatRequest("hello"));
+
+        Assert.True(result.IsSuccess);
+        Assert.Equal("https://gateway.example.test/v1", capturedBaseUrl);
+        Assert.Equal(1, gateway.CallCount);
+    }
+
+    [Fact]
+    public void Send_passes_default_base_url_to_gateway_factory()
+    {
+        FakeGateway gateway = new();
+        string? capturedBaseUrl = null;
+        OpenAiResponsesModelClient client = CreateClientWithBaseUrlAwareFactory(
+            CreateSnapshot(apiKey: "sk-test", apiKeySource: "OPENAI_API_KEY", model: "gpt-test"),
+            (_, baseUrl) =>
+            {
+                capturedBaseUrl = baseUrl;
+                return gateway;
+            });
+
+        ChatModelResult result = client.Send(new ChatRequest("hello"));
+
+        Assert.True(result.IsSuccess);
+        Assert.Equal(ConfigLoader.DefaultOpenAiBaseUrl, capturedBaseUrl);
+        Assert.Equal(1, gateway.CallCount);
+    }
+
+    [Fact]
+    public void SendStreaming_passes_effective_base_url_to_gateway_factory()
+    {
+        FakeGateway gateway = new();
+        string? capturedBaseUrl = null;
+        FakeStreamingRenderer renderer = new();
+        OpenAiResponsesModelClient client = CreateClientWithBaseUrlAwareFactory(
+            CreateSnapshot(
+                apiKey: "sk-test",
+                apiKeySource: "OPENAI_API_KEY",
+                model: "gpt-test",
+                baseUrl: "https://streaming.example.test/v1"),
+            (_, baseUrl) =>
+            {
+                capturedBaseUrl = baseUrl;
+                return gateway;
+            });
+
+        ChatModelResult result = client.SendStreaming(new ChatRequest("hello"), renderer);
+
+        Assert.True(result.IsSuccess);
+        Assert.Equal("https://streaming.example.test/v1", capturedBaseUrl);
+        Assert.Equal(1, gateway.StreamingCallCount);
+    }
+
+    [Fact]
+    public void Sdk_gateway_exposes_configured_endpoint()
+    {
+        Uri expectedEndpoint = new("https://gateway.example.test/v1");
+        SdkOpenAiResponsesGateway gateway = new("sk-test", expectedEndpoint.ToString());
+
+        Assert.Equal(expectedEndpoint, gateway.Endpoint);
+    }
+
+    [Fact]
+    public void Constructor_rejects_null_legacy_gateway_factory()
+    {
+        CliEnvironmentSnapshot snapshot = CreateSnapshot(
+            apiKey: "sk-test",
+            apiKeySource: "OPENAI_API_KEY",
+            model: "gpt-test");
+
+        Assert.Throws<ArgumentNullException>(
+            () => new OpenAiResponsesModelClient(
+                snapshot,
+                (Func<string, IOpenAiResponsesGateway>)null!));
+    }
+
+    [Fact]
     public void Send_returns_missing_key_error_without_calling_gateway()
     {
         FakeGateway gateway = new();
@@ -462,7 +554,18 @@ public sealed class OpenAiResponsesModelClientTests
             innerException: null);
     }
 
-    private static CliEnvironmentSnapshot CreateSnapshot(string? apiKey, string apiKeySource, string model)
+    private static OpenAiResponsesModelClient CreateClientWithBaseUrlAwareFactory(
+        CliEnvironmentSnapshot snapshot,
+        Func<string, string, IOpenAiResponsesGateway> gatewayFactory)
+    {
+        return new OpenAiResponsesModelClient(snapshot, gatewayFactory);
+    }
+
+    private static CliEnvironmentSnapshot CreateSnapshot(
+        string? apiKey,
+        string apiKeySource,
+        string model,
+        string? baseUrl = null)
     {
         WorkspaceContext workspace = new(
             RootPath: "workspace-root",
@@ -482,7 +585,10 @@ public sealed class OpenAiResponsesModelClientTests
             ApiKeySource: apiKeySource,
             LoadedConfigPaths: [],
             Warnings: [],
-            ConfigSources: []);
+            ConfigSources: [])
+        {
+            BaseUrl = baseUrl ?? ConfigLoader.DefaultOpenAiBaseUrl
+        };
 
         return new CliEnvironmentSnapshot(
             Workspace: workspace,

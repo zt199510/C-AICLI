@@ -9,11 +9,18 @@ public sealed class OpenAiResponsesModelClient : IChatModelClient
     private const string Operation = "responses.create";
 
     private readonly CliEnvironmentSnapshot snapshot;
-    private readonly Func<string, IOpenAiResponsesGateway> gatewayFactory;
+    private readonly Func<string, string, IOpenAiResponsesGateway> gatewayFactory;
 
     public OpenAiResponsesModelClient(
         CliEnvironmentSnapshot snapshot,
         Func<string, IOpenAiResponsesGateway> gatewayFactory)
+        : this(snapshot, AdaptGatewayFactory(gatewayFactory))
+    {
+    }
+
+    public OpenAiResponsesModelClient(
+        CliEnvironmentSnapshot snapshot,
+        Func<string, string, IOpenAiResponsesGateway> gatewayFactory)
     {
         ArgumentNullException.ThrowIfNull(snapshot);
         ArgumentNullException.ThrowIfNull(gatewayFactory);
@@ -22,9 +29,18 @@ public sealed class OpenAiResponsesModelClient : IChatModelClient
         this.gatewayFactory = gatewayFactory;
     }
 
+    private static Func<string, string, IOpenAiResponsesGateway> AdaptGatewayFactory(
+        Func<string, IOpenAiResponsesGateway> gatewayFactory)
+    {
+        ArgumentNullException.ThrowIfNull(gatewayFactory);
+        return (apiKey, _) => gatewayFactory(apiKey);
+    }
+
     public static OpenAiResponsesModelClient Create(CliEnvironmentSnapshot snapshot)
     {
-        return new OpenAiResponsesModelClient(snapshot, apiKey => new SdkOpenAiResponsesGateway(apiKey));
+        return new OpenAiResponsesModelClient(
+            snapshot,
+            (apiKey, baseUrl) => new SdkOpenAiResponsesGateway(apiKey, baseUrl));
     }
 
     public ChatModelResult Send(ChatRequest request, CancellationToken cancellationToken = default)
@@ -39,7 +55,7 @@ public sealed class OpenAiResponsesModelClient : IChatModelClient
 
         try
         {
-            IOpenAiResponsesGateway gateway = gatewayFactory(apiKey!.Value);
+            IOpenAiResponsesGateway gateway = gatewayFactory(apiKey!.Value, snapshot.Configuration.BaseUrl);
             OpenAiResponseEnvelope response = gateway.CreateResponse(
                 model,
                 prompt,
@@ -89,7 +105,7 @@ public sealed class OpenAiResponsesModelClient : IChatModelClient
 
         try
         {
-            IOpenAiResponsesGateway gateway = gatewayFactory(apiKey!.Value);
+            IOpenAiResponsesGateway gateway = gatewayFactory(apiKey!.Value, snapshot.Configuration.BaseUrl);
             StringBuilder text = new();
             string responseId = "unknown";
             string responseModel = model;

@@ -1,4 +1,5 @@
 using System.ClientModel;
+using OpenAI;
 using OpenAI.Responses;
 
 namespace CSharpAiCli.Core;
@@ -8,11 +9,20 @@ public sealed class SdkOpenAiResponsesGateway : IOpenAiResponsesGateway
 {
     private readonly ResponsesClient client;
 
-    public SdkOpenAiResponsesGateway(string apiKey)
+    public SdkOpenAiResponsesGateway(string apiKey, string baseUrl)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(apiKey);
-        client = new ResponsesClient(apiKey);
+        ArgumentException.ThrowIfNullOrWhiteSpace(baseUrl);
+
+        client = new ResponsesClient(
+            new ApiKeyCredential(apiKey),
+            new OpenAIClientOptions
+            {
+                Endpoint = new Uri(baseUrl, UriKind.Absolute)
+            });
     }
+
+    public Uri Endpoint => client.Endpoint;
 
     public OpenAiResponseEnvelope CreateResponse(
         string model,
