@@ -17,17 +17,20 @@
 - 命令：`dotnet build src/CSharpAiCli.sln -c Release`
 - 结果：通过，0 warnings，0 errors。
 - 命令：`dotnet test src/CSharpAiCli.sln -c Release`
-- 结果：通过，307 tests，0 failed，0 skipped。
+- 结果：通过，318 tests，0 failed，0 skipped。
 - Step 7 目标命令：`dotnet test src/CSharpAiCli.Tests/CSharpAiCli.Tests.csproj -c Release --filter "ConfigLoaderTests|DoctorReportTests|ConfigReportTests|CommandLoggerTests"`
 - 结果：通过，48/48。
 - Step 8 目标命令：`dotnet test src/CSharpAiCli.Tests/CSharpAiCli.Tests.csproj -c Release --filter "ConfigLoaderTests|CliCommandFactoryTests|ConfigReportTests|CommandLoggerTests|ConfigFileEditorTests"`
 - 结果：通过，94/94。
+- 最终安全加固目标命令：`dotnet test src/CSharpAiCli.Tests/CSharpAiCli.Tests.csproj -c Release --filter "ConfigLoaderTests|CliCommandFactoryTests|OpenAiResponsesModelClientTests|ConfigFileEditorTests"`
+- 结果：通过，126/126。
 
 运行时说明：
 - 未设置配置时，默认 base URL 仍为官方 OpenAI endpoint。
 - 允许 workspace `baseUrl`，但会通过 source reporting 在诊断信息中可见。
 - `config get/list`、edit-result output 和 command logs 只报告 secret 状态/source，不输出原始 key 值。
 - 无效 URL/backend warnings 避免回显被拒绝的原始值。
+- `baseUrl` 拒绝内部空白/control characters，避免诊断输出注入。
 
 风险：
 - 自定义 base URL 依赖目标 gateway 对 OpenAI Responses API 的兼容性。
