@@ -157,6 +157,10 @@ public sealed class CliCommandFactoryTests
         Assert.Equal(0, exitCode);
         JsonObject json = ReadJsonObject(userConfigPath);
         Assert.Equal("https://gateway.example.test/v1", json["baseUrl"]?.GetValue<string>());
+        Assert.Contains("status: updated", output.ToString());
+        Assert.Contains("key: baseUrl", output.ToString());
+        Assert.Contains("scope: user", output.ToString());
+        Assert.Contains($"path: {userConfigPath}", output.ToString());
     }
 
     [Fact]
@@ -181,6 +185,34 @@ public sealed class CliCommandFactoryTests
         Assert.False(File.Exists(userConfigPath));
         Assert.Contains("status: failed", output.ToString());
         Assert.Contains("errorCode: invalid-base-url", output.ToString());
+    }
+
+    [Fact]
+    public void Config_set_base_url_rejects_secret_like_invalid_value_without_printing_value()
+    {
+        using TempDirectory temp = TempDirectory.Create();
+        using StringWriter output = new();
+        string userConfigPath = Path.Combine(temp.Path, ".caicli", "config.json");
+        string secretLikeInvalidBaseUrl = "https://gateway.example.test/v1?api-key=sk-command-secret";
+        CliEnvironmentSnapshot snapshot = CreateSnapshot(
+            workspacePath: null,
+            apiKey: null,
+            apiKeySource: "missing",
+            model: "not configured",
+            userConfigPath: userConfigPath);
+
+        int exitCode = CliCommandFactory
+            .Create(output, _ => snapshot)
+            .Parse(["config", "set", "baseUrl", secretLikeInvalidBaseUrl])
+            .Invoke();
+
+        string text = output.ToString();
+        Assert.Equal(1, exitCode);
+        Assert.False(File.Exists(userConfigPath));
+        Assert.Contains("status: failed", text);
+        Assert.Contains("errorCode: invalid-base-url", text);
+        Assert.DoesNotContain(secretLikeInvalidBaseUrl, text, StringComparison.Ordinal);
+        Assert.DoesNotContain("sk-command-secret", text, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -433,6 +465,45 @@ public sealed class CliCommandFactoryTests
         Assert.Contains($"path: {userConfigPath}", output.ToString());
         Assert.DoesNotContain("old-secret", output.ToString(), StringComparison.Ordinal);
         Assert.DoesNotContain("older-secret", output.ToString(), StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Config_unset_base_url_removes_user_config_value_without_printing_secret_like_value()
+    {
+        using TempDirectory temp = TempDirectory.Create();
+        using StringWriter output = new();
+        string userConfigPath = Path.Combine(temp.Path, ".caicli", "config.json");
+        string secretLikeBaseUrl = "https://gateway.example.test/v1?api-key=sk-existing-secret";
+        Directory.CreateDirectory(Path.GetDirectoryName(userConfigPath)!);
+        File.WriteAllText(userConfigPath, $$"""
+        {
+          "baseUrl": "{{secretLikeBaseUrl}}",
+          "model": "gpt-existing"
+        }
+        """);
+        CliEnvironmentSnapshot snapshot = CreateSnapshot(
+            workspacePath: null,
+            apiKey: null,
+            apiKeySource: "missing",
+            model: "not configured",
+            userConfigPath: userConfigPath);
+
+        int exitCode = CliCommandFactory
+            .Create(output, _ => snapshot)
+            .Parse(["config", "unset", "BaseURL"])
+            .Invoke();
+
+        string text = output.ToString();
+        Assert.Equal(0, exitCode);
+        JsonObject json = ReadJsonObject(userConfigPath);
+        Assert.False(json.ContainsKey("baseUrl"));
+        Assert.Equal("gpt-existing", json["model"]?.GetValue<string>());
+        Assert.Contains("status: updated", text);
+        Assert.Contains("key: baseUrl", text);
+        Assert.Contains("scope: user", text);
+        Assert.Contains($"path: {userConfigPath}", text);
+        Assert.DoesNotContain(secretLikeBaseUrl, text, StringComparison.Ordinal);
+        Assert.DoesNotContain("sk-existing-secret", text, StringComparison.Ordinal);
     }
 
     [Fact]
