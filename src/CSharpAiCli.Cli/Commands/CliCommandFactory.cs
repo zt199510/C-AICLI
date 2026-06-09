@@ -133,9 +133,33 @@ public static class CliCommandFactory
             output.WriteLine(ConfigReport.Create(snapshot).ToDisplayText());
             return 0;
         });
+        Command configSetCommand = new("set", "Set a scalar user configuration value.");
+        Argument<string> configSetKeyArgument = new("key")
+        {
+            Description = "The scalar config key to set.",
+        };
+        Argument<string> configSetValueArgument = new("value")
+        {
+            Description = "The scalar config value to write.",
+        };
+        configSetCommand.Arguments.Add(configSetKeyArgument);
+        configSetCommand.Arguments.Add(configSetValueArgument);
+        configSetCommand.SetAction(parseResult =>
+        {
+            string? workspacePath = parseResult.GetValue(workspaceOption);
+            string key = parseResult.GetValue(configSetKeyArgument) ?? string.Empty;
+            string value = parseResult.GetValue(configSetValueArgument) ?? string.Empty;
+            CliEnvironmentSnapshot snapshot = snapshotProvider(workspacePath);
+            TryWriteCommandLog(commandLogger, "config set", snapshot);
+
+            ConfigFileEditResult result = ConfigFileEditor.SetUserScalar(snapshot.UserConfigPath, key, value);
+            WriteConfigSetResult(output, result);
+            return result.Succeeded ? 0 : 1;
+        });
 
         configCommand.Subcommands.Add(configGetCommand);
         configCommand.Subcommands.Add(configListCommand);
+        configCommand.Subcommands.Add(configSetCommand);
 
         Command mcpCommand = new("mcp", "Inspect MCP server configuration.");
         Command mcpListCommand = new("list", "List configured MCP servers.");
@@ -463,6 +487,22 @@ public static class CliCommandFactory
             output.WriteLine($"errorCode: {result.ErrorCode}");
         }
 
+        output.WriteLine("summary:");
+        output.WriteLine(result.Summary);
+    }
+
+    private static void WriteConfigSetResult(TextWriter output, ConfigFileEditResult result)
+    {
+        output.WriteLine(result.Succeeded ? "status: updated" : "status: failed");
+        if (result.Succeeded)
+        {
+            output.WriteLine($"key: {result.Key}");
+            output.WriteLine("scope: user");
+            output.WriteLine($"path: {result.Path}");
+            return;
+        }
+
+        output.WriteLine($"errorCode: {result.ErrorCode}");
         output.WriteLine("summary:");
         output.WriteLine(result.Summary);
     }

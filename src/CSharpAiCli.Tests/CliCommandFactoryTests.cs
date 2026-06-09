@@ -1,4 +1,5 @@
 using System.CommandLine;
+using System.Text.Json.Nodes;
 using CSharpAiCli.Cli;
 using CSharpAiCli.Core;
 
@@ -70,6 +71,190 @@ public sealed class CliCommandFactoryTests
         Assert.Contains("apiKey: present", output.ToString());
         Assert.Contains("apiKeySource: OPENAI_API_KEY", output.ToString());
         Assert.DoesNotContain("sk-test-secret", output.ToString(), StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Config_set_model_creates_user_config_json()
+    {
+        using TempDirectory temp = TempDirectory.Create();
+        using StringWriter output = new();
+        string userConfigPath = Path.Combine(temp.Path, ".caicli", "config.json");
+        CliEnvironmentSnapshot snapshot = CreateSnapshot(
+            workspacePath: null,
+            apiKey: null,
+            apiKeySource: "missing",
+            model: "not configured",
+            userConfigPath: userConfigPath);
+
+        int exitCode = CliCommandFactory
+            .Create(output, _ => snapshot)
+            .Parse(["config", "set", "model", "gpt-test"])
+            .Invoke();
+
+        Assert.Equal(0, exitCode);
+        JsonObject json = ReadJsonObject(userConfigPath);
+        Assert.Equal("gpt-test", json["model"]?.GetValue<string>());
+        Assert.Contains("status: updated", output.ToString());
+        Assert.Contains("key: model", output.ToString());
+        Assert.Contains("scope: user", output.ToString());
+        Assert.Contains($"path: {userConfigPath}", output.ToString());
+    }
+
+    [Fact]
+    public void Config_set_preserves_existing_user_config_fields()
+    {
+        using TempDirectory temp = TempDirectory.Create();
+        using StringWriter output = new();
+        string userConfigPath = Path.Combine(temp.Path, ".caicli", "config.json");
+        Directory.CreateDirectory(Path.GetDirectoryName(userConfigPath)!);
+        File.WriteAllText(userConfigPath, """
+        {
+          "baseUrl": "https://gateway.example.test/v1",
+          "customSetting": 42,
+          "disabledTools": [
+            "workspace.run_shell"
+          ]
+        }
+        """);
+        CliEnvironmentSnapshot snapshot = CreateSnapshot(
+            workspacePath: null,
+            apiKey: null,
+            apiKeySource: "missing",
+            model: "not configured",
+            userConfigPath: userConfigPath);
+
+        int exitCode = CliCommandFactory
+            .Create(output, _ => snapshot)
+            .Parse(["config", "set", "model", "gpt-test"])
+            .Invoke();
+
+        Assert.Equal(0, exitCode);
+        JsonObject json = ReadJsonObject(userConfigPath);
+        Assert.Equal("gpt-test", json["model"]?.GetValue<string>());
+        Assert.Equal("https://gateway.example.test/v1", json["baseUrl"]?.GetValue<string>());
+        Assert.Equal(42, json["customSetting"]?.GetValue<int>());
+        Assert.Equal("workspace.run_shell", json["disabledTools"]?[0]?.GetValue<string>());
+    }
+
+    [Fact]
+    public void Config_set_base_url_validates_and_writes_normalized_value()
+    {
+        using TempDirectory temp = TempDirectory.Create();
+        using StringWriter output = new();
+        string userConfigPath = Path.Combine(temp.Path, ".caicli", "config.json");
+        CliEnvironmentSnapshot snapshot = CreateSnapshot(
+            workspacePath: null,
+            apiKey: null,
+            apiKeySource: "missing",
+            model: "not configured",
+            userConfigPath: userConfigPath);
+
+        int exitCode = CliCommandFactory
+            .Create(output, _ => snapshot)
+            .Parse(["config", "set", "baseUrl", "  https://gateway.example.test/v1  "])
+            .Invoke();
+
+        Assert.Equal(0, exitCode);
+        JsonObject json = ReadJsonObject(userConfigPath);
+        Assert.Equal("https://gateway.example.test/v1", json["baseUrl"]?.GetValue<string>());
+    }
+
+    [Fact]
+    public void Config_set_base_url_rejects_invalid_value_without_writing()
+    {
+        using TempDirectory temp = TempDirectory.Create();
+        using StringWriter output = new();
+        string userConfigPath = Path.Combine(temp.Path, ".caicli", "config.json");
+        CliEnvironmentSnapshot snapshot = CreateSnapshot(
+            workspacePath: null,
+            apiKey: null,
+            apiKeySource: "missing",
+            model: "not configured",
+            userConfigPath: userConfigPath);
+
+        int exitCode = CliCommandFactory
+            .Create(output, _ => snapshot)
+            .Parse(["config", "set", "baseUrl", "file:///tmp/gateway"])
+            .Invoke();
+
+        Assert.Equal(1, exitCode);
+        Assert.False(File.Exists(userConfigPath));
+        Assert.Contains("status: failed", output.ToString());
+        Assert.Contains("errorCode: invalid-base-url", output.ToString());
+    }
+
+    [Fact]
+    public void Config_set_api_key_does_not_print_secret_value()
+    {
+        using TempDirectory temp = TempDirectory.Create();
+        using StringWriter output = new();
+        string userConfigPath = Path.Combine(temp.Path, ".caicli", "config.json");
+        CliEnvironmentSnapshot snapshot = CreateSnapshot(
+            workspacePath: null,
+            apiKey: null,
+            apiKeySource: "missing",
+            model: "not configured",
+            userConfigPath: userConfigPath);
+
+        int exitCode = CliCommandFactory
+            .Create(output, _ => snapshot)
+            .Parse(["config", "set", "ApiKey", "sk-test-secret"])
+            .Invoke();
+
+        Assert.Equal(0, exitCode);
+        JsonObject json = ReadJsonObject(userConfigPath);
+        Assert.Equal("sk-test-secret", json["apiKey"]?.GetValue<string>());
+        Assert.DoesNotContain("sk-test-secret", output.ToString(), StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Config_set_unknown_key_returns_nonzero_without_creating_file()
+    {
+        using TempDirectory temp = TempDirectory.Create();
+        using StringWriter output = new();
+        string userConfigPath = Path.Combine(temp.Path, ".caicli", "config.json");
+        CliEnvironmentSnapshot snapshot = CreateSnapshot(
+            workspacePath: null,
+            apiKey: null,
+            apiKeySource: "missing",
+            model: "not configured",
+            userConfigPath: userConfigPath);
+
+        int exitCode = CliCommandFactory
+            .Create(output, _ => snapshot)
+            .Parse(["config", "set", "temperature", "0.2"])
+            .Invoke();
+
+        Assert.Equal(1, exitCode);
+        Assert.False(File.Exists(userConfigPath));
+        Assert.Contains("status: failed", output.ToString());
+        Assert.Contains("errorCode: unknown-config-key", output.ToString());
+    }
+
+    [Fact]
+    public void Config_set_invalid_existing_json_returns_nonzero_without_overwriting()
+    {
+        using TempDirectory temp = TempDirectory.Create();
+        using StringWriter output = new();
+        string userConfigPath = Path.Combine(temp.Path, ".caicli", "config.json");
+        Directory.CreateDirectory(Path.GetDirectoryName(userConfigPath)!);
+        File.WriteAllText(userConfigPath, "{not json");
+        CliEnvironmentSnapshot snapshot = CreateSnapshot(
+            workspacePath: null,
+            apiKey: null,
+            apiKeySource: "missing",
+            model: "not configured",
+            userConfigPath: userConfigPath);
+
+        int exitCode = CliCommandFactory
+            .Create(output, _ => snapshot)
+            .Parse(["config", "set", "model", "gpt-test"])
+            .Invoke();
+
+        Assert.Equal(1, exitCode);
+        Assert.Equal("{not json", File.ReadAllText(userConfigPath));
+        Assert.Contains("status: failed", output.ToString());
+        Assert.Contains("errorCode: invalid-config-file", output.ToString());
     }
 
     [Fact]
@@ -481,6 +666,32 @@ public sealed class CliCommandFactoryTests
     }
 
     [Fact]
+    public void Config_set_command_writes_command_log_through_delegate()
+    {
+        using TempDirectory temp = TempDirectory.Create();
+        using StringWriter output = new();
+        List<string> loggedCommands = [];
+        string userConfigPath = Path.Combine(temp.Path, ".caicli", "config.json");
+        CliEnvironmentSnapshot snapshot = CreateSnapshot(
+            workspacePath: null,
+            apiKey: null,
+            apiKeySource: "missing",
+            model: "not configured",
+            userConfigPath: userConfigPath);
+
+        int exitCode = CliCommandFactory
+            .Create(
+                output,
+                _ => snapshot,
+                (commandName, _) => loggedCommands.Add(commandName))
+            .Parse(["config", "set", "model", "gpt-test"])
+            .Invoke();
+
+        Assert.Equal(0, exitCode);
+        Assert.Equal(["config set"], loggedCommands);
+    }
+
+    [Fact]
     public void Command_logger_failure_does_not_block_doctor_report()
     {
         using StringWriter output = new();
@@ -785,6 +996,12 @@ public sealed class CliCommandFactoryTests
             DotnetRuntime: ".NET 9.0.0",
             TargetFramework: "net9.0",
             HasGlobalJson: false);
+    }
+
+    private static JsonObject ReadJsonObject(string path)
+    {
+        JsonNode? node = JsonNode.Parse(File.ReadAllText(path));
+        return Assert.IsType<JsonObject>(node);
     }
 
     private sealed class TempDirectory : IDisposable
