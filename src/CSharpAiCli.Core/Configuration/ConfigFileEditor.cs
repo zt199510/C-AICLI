@@ -122,6 +122,12 @@ public static class ConfigFileEditor
                 return ConfigFileEditResult.Success(propertyName, path, "unchanged");
             }
 
+            if (json.Count == 0)
+            {
+                File.Delete(path);
+                return ConfigFileEditResult.Success(propertyName, path);
+            }
+
             WriteJsonAtomically(path, json.ToJsonString(JsonSerializerOptions) + Environment.NewLine);
 
             return ConfigFileEditResult.Success(propertyName, path);

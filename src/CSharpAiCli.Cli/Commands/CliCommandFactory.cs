@@ -153,7 +153,7 @@ public static class CliCommandFactory
             TryWriteCommandLog(commandLogger, "config set", snapshot);
 
             ConfigFileEditResult result = ConfigFileEditor.SetUserScalar(snapshot.UserConfigPath, key, value);
-            WriteConfigSetResult(output, result);
+            WriteConfigEditResult(output, result);
             return result.Succeeded ? 0 : 1;
         });
         Command configUnsetCommand = new("unset", "Unset a scalar user configuration value.");
@@ -170,7 +170,7 @@ public static class CliCommandFactory
             TryWriteCommandLog(commandLogger, "config unset", snapshot);
 
             ConfigFileEditResult result = ConfigFileEditor.UnsetUserScalar(snapshot.UserConfigPath, key);
-            WriteConfigSetResult(output, result);
+            WriteConfigEditResult(output, result);
             return result.Succeeded ? 0 : 1;
         });
 
@@ -509,7 +509,7 @@ public static class CliCommandFactory
         output.WriteLine(result.Summary);
     }
 
-    private static void WriteConfigSetResult(TextWriter output, ConfigFileEditResult result)
+    private static void WriteConfigEditResult(TextWriter output, ConfigFileEditResult result)
     {
         output.WriteLine($"status: {result.Status}");
         if (result.Succeeded)

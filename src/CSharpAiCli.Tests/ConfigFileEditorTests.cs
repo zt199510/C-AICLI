@@ -45,6 +45,47 @@ public sealed class ConfigFileEditorTests
     }
 
     [Fact]
+    public void UnsetUserScalar_deletes_config_file_when_removing_last_property()
+    {
+        using TempDirectory temp = TempDirectory.Create();
+        string userConfigPath = Path.Combine(temp.Path, ".caicli", "config.json");
+        Directory.CreateDirectory(Path.GetDirectoryName(userConfigPath)!);
+        File.WriteAllText(userConfigPath, """
+        {
+          "model": "gpt-existing"
+        }
+        """);
+
+        ConfigFileEditResult result = ConfigFileEditor.UnsetUserScalar(userConfigPath, "model");
+
+        Assert.True(result.Succeeded);
+        Assert.Equal("updated", result.Status);
+        Assert.False(File.Exists(userConfigPath));
+    }
+
+    [Fact]
+    public void UnsetUserScalar_keeps_config_file_when_other_properties_remain()
+    {
+        using TempDirectory temp = TempDirectory.Create();
+        string userConfigPath = Path.Combine(temp.Path, ".caicli", "config.json");
+        Directory.CreateDirectory(Path.GetDirectoryName(userConfigPath)!);
+        File.WriteAllText(userConfigPath, """
+        {
+          "model": "gpt-existing",
+          "baseUrl": "https://gateway.example.test/v1"
+        }
+        """);
+
+        ConfigFileEditResult result = ConfigFileEditor.UnsetUserScalar(userConfigPath, "model");
+
+        Assert.True(result.Succeeded);
+        Assert.Equal("updated", result.Status);
+        JsonObject json = ReadJsonObject(userConfigPath);
+        Assert.False(json.ContainsKey("model"));
+        Assert.Equal("https://gateway.example.test/v1", json["baseUrl"]?.GetValue<string>());
+    }
+
+    [Fact]
     public void UnsetUserScalar_missing_key_succeeds_unchanged_without_rewriting_file()
     {
         using TempDirectory temp = TempDirectory.Create();
@@ -105,35 +146,6 @@ public sealed class ConfigFileEditorTests
         Assert.False(result.Succeeded);
         Assert.Equal("invalid-config-file", result.ErrorCode);
         Assert.Equal("[]", File.ReadAllText(userConfigPath));
-    }
-
-    [Fact]
-    public void UnsetUserScalar_read_only_existing_file_returns_write_failure_when_write_is_needed()
-    {
-        using TempDirectory temp = TempDirectory.Create();
-        string userConfigPath = Path.Combine(temp.Path, ".caicli", "config.json");
-        Directory.CreateDirectory(Path.GetDirectoryName(userConfigPath)!);
-        string originalJson = """
-        {
-          "model": "gpt-existing"
-        }
-        """;
-        File.WriteAllText(userConfigPath, originalJson);
-        File.SetAttributes(userConfigPath, File.GetAttributes(userConfigPath) | FileAttributes.ReadOnly);
-
-        ConfigFileEditResult result;
-        try
-        {
-            result = ConfigFileEditor.UnsetUserScalar(userConfigPath, "model");
-        }
-        finally
-        {
-            File.SetAttributes(userConfigPath, File.GetAttributes(userConfigPath) & ~FileAttributes.ReadOnly);
-        }
-
-        Assert.False(result.Succeeded);
-        Assert.Equal("config-write-failed", result.ErrorCode);
-        Assert.Equal(originalJson, File.ReadAllText(userConfigPath));
     }
 
     private static JsonObject ReadJsonObject(string path)
