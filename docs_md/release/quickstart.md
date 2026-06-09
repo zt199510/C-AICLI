@@ -23,8 +23,9 @@ artifacts\release\caicli-0.1.0-win-x64\caicli.exe doctor
 Without a configured key, `doctor` should still succeed and report:
 
 ```text
-api key: missing
-agent backend: direct
+api key: missing (missing)
+agent backend: direct (default)
+agent backend status: available
 ```
 
 ## 3. Configure Chat
