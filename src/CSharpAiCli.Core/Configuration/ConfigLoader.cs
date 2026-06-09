@@ -139,6 +139,11 @@ public static class ConfigLoader
         }
 
         string trimmed = value.Trim();
+        if (ContainsWhitespaceOrControlCharacter(trimmed))
+        {
+            return false;
+        }
+
         if (!Uri.TryCreate(trimmed, UriKind.Absolute, out Uri? uri))
         {
             return false;
@@ -158,6 +163,19 @@ public static class ConfigLoader
 
         baseUrl = trimmed;
         return true;
+    }
+
+    private static bool ContainsWhitespaceOrControlCharacter(string value)
+    {
+        foreach (char character in value)
+        {
+            if (char.IsWhiteSpace(character) || char.IsControl(character))
+            {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     public static bool TryNormalizeAgentBackend(string? value, out string? backend)

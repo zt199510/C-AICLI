@@ -74,6 +74,17 @@ public sealed class ConfigLoaderTests
         Assert.Null(baseUrl);
     }
 
+    [Theory]
+    [InlineData("https://example.test/v1 apiKey: sk-secret")]
+    [InlineData("https://example.test/v1\tapiKey: sk-secret")]
+    [InlineData("https://example.test/v1\napiKey: sk-secret")]
+    [InlineData("https://example.test/v1\r\napiKey: sk-secret")]
+    public void TryNormalizeBaseUrl_rejects_urls_with_internal_whitespace_or_control_characters(string value)
+    {
+        Assert.False(ConfigLoader.TryNormalizeBaseUrl(value, out string? baseUrl));
+        Assert.Null(baseUrl);
+    }
+
     [Fact]
     public void Load_loads_base_url_only_workspace_config_and_uses_it_as_effective_base_url()
     {
@@ -239,6 +250,43 @@ public sealed class ConfigLoaderTests
     }
 
     [Fact]
+    public void Load_rejects_environment_base_url_with_newline_without_leaking_to_warning_or_report()
+    {
+        string root = CreateTempDirectory();
+
+        try
+        {
+            string userProfile = Path.Combine(root, "home");
+            string workspaceRoot = Path.Combine(root, "workspace");
+            Directory.CreateDirectory(userProfile);
+            Directory.CreateDirectory(workspaceRoot);
+
+            string secretLikeBaseUrl = "https://env.example.test/v1\napiKey: sk-env-secret";
+            WorkspaceContext workspace = WorkspaceContext.Detect(workspaceRoot, root);
+            EffectiveConfiguration configuration = ConfigLoader.Load(
+                workspace,
+                userProfile: userProfile,
+                openAiApiKey: "",
+                openAiBaseUrl: secretLikeBaseUrl);
+            string report = ConfigReport.Create(CreateSnapshot(workspace, configuration)).ToDisplayText();
+
+            Assert.Equal(ConfigLoader.DefaultOpenAiBaseUrl, configuration.BaseUrl);
+            Assert.Equal("default", configuration.BaseUrlSource);
+            Assert.Contains(configuration.Warnings, warning =>
+                warning.Contains("ignored invalid baseUrl", StringComparison.Ordinal)
+                && warning.Contains("OPENAI_BASE_URL", StringComparison.Ordinal));
+            Assert.DoesNotContain("sk-env-secret", string.Join(Environment.NewLine, configuration.Warnings), StringComparison.Ordinal);
+            Assert.DoesNotContain(secretLikeBaseUrl, report, StringComparison.Ordinal);
+            Assert.DoesNotContain("sk-env-secret", report, StringComparison.Ordinal);
+            Assert.DoesNotContain("apiKey: sk-env-secret", report, StringComparison.Ordinal);
+        }
+        finally
+        {
+            Directory.Delete(root, recursive: true);
+        }
+    }
+
+    [Fact]
     public void Load_warns_for_invalid_user_base_url_and_falls_back_to_workspace_config()
     {
         string root = CreateTempDirectory();
@@ -271,6 +319,50 @@ public sealed class ConfigLoaderTests
             Assert.Contains(configuration.Warnings, warning =>
                 warning.Contains("ignored invalid baseUrl", StringComparison.Ordinal)
                 && warning.Contains("user config", StringComparison.Ordinal));
+        }
+        finally
+        {
+            Directory.Delete(root, recursive: true);
+        }
+    }
+
+    [Fact]
+    public void Load_rejects_workspace_base_url_with_newline_without_leaking_to_warning_or_report()
+    {
+        string root = CreateTempDirectory();
+
+        try
+        {
+            string userProfile = Path.Combine(root, "home");
+            string workspaceRoot = Path.Combine(root, "workspace");
+            Directory.CreateDirectory(userProfile);
+            Directory.CreateDirectory(workspaceRoot);
+
+            string workspaceConfigPath = Path.Combine(workspaceRoot, ".caicli", "config.json");
+            Directory.CreateDirectory(Path.GetDirectoryName(workspaceConfigPath)!);
+            File.WriteAllText(workspaceConfigPath, """
+            {
+              "baseUrl": "https://workspace.example.test/v1\napiKey: sk-workspace-secret"
+            }
+            """);
+
+            WorkspaceContext workspace = WorkspaceContext.Detect(workspaceRoot, root);
+            EffectiveConfiguration configuration = ConfigLoader.Load(
+                workspace,
+                userProfile: userProfile,
+                openAiApiKey: "",
+                openAiBaseUrl: "");
+            string report = ConfigReport.Create(CreateSnapshot(workspace, configuration)).ToDisplayText();
+
+            Assert.Equal(ConfigLoader.DefaultOpenAiBaseUrl, configuration.BaseUrl);
+            Assert.Equal("default", configuration.BaseUrlSource);
+            Assert.Contains(workspaceConfigPath, configuration.LoadedConfigPaths);
+            Assert.Contains(configuration.Warnings, warning =>
+                warning.Contains("ignored invalid baseUrl", StringComparison.Ordinal)
+                && warning.Contains("workspace config", StringComparison.Ordinal));
+            Assert.DoesNotContain("sk-workspace-secret", string.Join(Environment.NewLine, configuration.Warnings), StringComparison.Ordinal);
+            Assert.DoesNotContain("sk-workspace-secret", report, StringComparison.Ordinal);
+            Assert.DoesNotContain("apiKey: sk-workspace-secret", report, StringComparison.Ordinal);
         }
         finally
         {
@@ -839,5 +931,16 @@ public sealed class ConfigLoaderTests
         string path = Path.Combine(Path.GetTempPath(), "caicli-tests", Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(path);
         return path;
+    }
+
+    private static CliEnvironmentSnapshot CreateSnapshot(WorkspaceContext workspace, EffectiveConfiguration configuration)
+    {
+        return new CliEnvironmentSnapshot(
+            Workspace: workspace,
+            Configuration: configuration,
+            DotnetSdkVersion: "9.0.308",
+            DotnetRuntime: ".NET 9.0.0",
+            TargetFramework: "net9.0",
+            HasGlobalJson: false);
     }
 }

@@ -216,6 +216,35 @@ public sealed class CliCommandFactoryTests
     }
 
     [Fact]
+    public void Config_set_base_url_rejects_newline_secret_like_value_without_printing_value()
+    {
+        using TempDirectory temp = TempDirectory.Create();
+        using StringWriter output = new();
+        string userConfigPath = Path.Combine(temp.Path, ".caicli", "config.json");
+        string secretLikeInvalidBaseUrl = "https://gateway.example.test/v1\napiKey: sk-command-secret";
+        CliEnvironmentSnapshot snapshot = CreateSnapshot(
+            workspacePath: null,
+            apiKey: null,
+            apiKeySource: "missing",
+            model: "not configured",
+            userConfigPath: userConfigPath);
+
+        int exitCode = CliCommandFactory
+            .Create(output, _ => snapshot)
+            .Parse(["config", "set", "baseUrl", secretLikeInvalidBaseUrl])
+            .Invoke();
+
+        string text = output.ToString();
+        Assert.Equal(1, exitCode);
+        Assert.False(File.Exists(userConfigPath));
+        Assert.Contains("status: failed", text);
+        Assert.Contains("errorCode: invalid-base-url", text);
+        Assert.DoesNotContain(secretLikeInvalidBaseUrl, text, StringComparison.Ordinal);
+        Assert.DoesNotContain("sk-command-secret", text, StringComparison.Ordinal);
+        Assert.DoesNotContain("apiKey:", text, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void Config_set_api_key_does_not_print_secret_value()
     {
         using TempDirectory temp = TempDirectory.Create();
@@ -343,6 +372,35 @@ public sealed class CliCommandFactoryTests
         Assert.False(File.Exists(userConfigPath));
         Assert.Contains("status: failed", output.ToString());
         Assert.Contains("errorCode: unknown-config-key", output.ToString());
+    }
+
+    [Fact]
+    public void Config_set_unknown_secret_like_key_returns_nonzero_without_printing_key()
+    {
+        using TempDirectory temp = TempDirectory.Create();
+        using StringWriter output = new();
+        string userConfigPath = Path.Combine(temp.Path, ".caicli", "config.json");
+        string secretLikeKey = "apiKey: sk-command-secret";
+        CliEnvironmentSnapshot snapshot = CreateSnapshot(
+            workspacePath: null,
+            apiKey: null,
+            apiKeySource: "missing",
+            model: "not configured",
+            userConfigPath: userConfigPath);
+
+        int exitCode = CliCommandFactory
+            .Create(output, _ => snapshot)
+            .Parse(["config", "set", secretLikeKey, "0.2"])
+            .Invoke();
+
+        string text = output.ToString();
+        Assert.Equal(1, exitCode);
+        Assert.False(File.Exists(userConfigPath));
+        Assert.Contains("status: failed", text);
+        Assert.Contains("errorCode: unknown-config-key", text);
+        Assert.Contains("Supported scalar keys are: model, baseUrl, agentBackend, apiKey.", text);
+        Assert.DoesNotContain(secretLikeKey, text, StringComparison.Ordinal);
+        Assert.DoesNotContain("sk-command-secret", text, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -553,6 +611,35 @@ public sealed class CliCommandFactoryTests
         Assert.False(File.Exists(userConfigPath));
         Assert.Contains("status: failed", output.ToString());
         Assert.Contains("errorCode: unknown-config-key", output.ToString());
+    }
+
+    [Fact]
+    public void Config_unset_unknown_secret_like_key_returns_nonzero_without_printing_key()
+    {
+        using TempDirectory temp = TempDirectory.Create();
+        using StringWriter output = new();
+        string userConfigPath = Path.Combine(temp.Path, ".caicli", "config.json");
+        string secretLikeKey = "apiKey: sk-command-secret";
+        CliEnvironmentSnapshot snapshot = CreateSnapshot(
+            workspacePath: null,
+            apiKey: null,
+            apiKeySource: "missing",
+            model: "not configured",
+            userConfigPath: userConfigPath);
+
+        int exitCode = CliCommandFactory
+            .Create(output, _ => snapshot)
+            .Parse(["config", "unset", secretLikeKey])
+            .Invoke();
+
+        string text = output.ToString();
+        Assert.Equal(1, exitCode);
+        Assert.False(File.Exists(userConfigPath));
+        Assert.Contains("status: failed", text);
+        Assert.Contains("errorCode: unknown-config-key", text);
+        Assert.Contains("Supported scalar keys are: model, baseUrl, agentBackend, apiKey.", text);
+        Assert.DoesNotContain(secretLikeKey, text, StringComparison.Ordinal);
+        Assert.DoesNotContain("sk-command-secret", text, StringComparison.Ordinal);
     }
 
     [Fact]

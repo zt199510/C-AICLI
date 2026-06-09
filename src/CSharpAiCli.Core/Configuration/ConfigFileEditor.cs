@@ -5,6 +5,9 @@ namespace CSharpAiCli.Core;
 
 public static class ConfigFileEditor
 {
+    private const string UnknownConfigKeySummary =
+        "Unknown config key. Supported scalar keys are: model, baseUrl, agentBackend, apiKey.";
+
     private static readonly JsonDocumentOptions JsonDocumentOptions = new()
     {
         AllowTrailingCommas = true,
@@ -26,7 +29,7 @@ public static class ConfigFileEditor
         {
             return ConfigFileEditResult.Failure(
                 "unknown-config-key",
-                $"Unknown config key '{key}'. Supported scalar keys are: model, baseUrl, agentBackend, apiKey.");
+                UnknownConfigKeySummary);
         }
 
         string valueToWrite = value;
@@ -100,7 +103,7 @@ public static class ConfigFileEditor
         {
             return ConfigFileEditResult.Failure(
                 "unknown-config-key",
-                $"Unknown config key '{key}'. Supported scalar keys are: model, baseUrl, agentBackend, apiKey.");
+                UnknownConfigKeySummary);
         }
 
         try

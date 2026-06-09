@@ -119,6 +119,40 @@ public sealed class ConfigFileEditorTests
     }
 
     [Fact]
+    public void SetUserScalar_unknown_secret_like_key_fails_without_echoing_key()
+    {
+        using TempDirectory temp = TempDirectory.Create();
+        string userConfigPath = Path.Combine(temp.Path, ".caicli", "config.json");
+        string secretLikeKey = "apiKey: sk-editor-secret";
+
+        ConfigFileEditResult result = ConfigFileEditor.SetUserScalar(userConfigPath, secretLikeKey, "0.2");
+
+        Assert.False(result.Succeeded);
+        Assert.Equal("unknown-config-key", result.ErrorCode);
+        Assert.Contains("Supported scalar keys are: model, baseUrl, agentBackend, apiKey.", result.Summary);
+        Assert.DoesNotContain(secretLikeKey, result.Summary, StringComparison.Ordinal);
+        Assert.DoesNotContain("sk-editor-secret", result.Summary, StringComparison.Ordinal);
+        Assert.False(File.Exists(userConfigPath));
+    }
+
+    [Fact]
+    public void UnsetUserScalar_unknown_secret_like_key_fails_without_echoing_key()
+    {
+        using TempDirectory temp = TempDirectory.Create();
+        string userConfigPath = Path.Combine(temp.Path, ".caicli", "config.json");
+        string secretLikeKey = "apiKey: sk-editor-secret";
+
+        ConfigFileEditResult result = ConfigFileEditor.UnsetUserScalar(userConfigPath, secretLikeKey);
+
+        Assert.False(result.Succeeded);
+        Assert.Equal("unknown-config-key", result.ErrorCode);
+        Assert.Contains("Supported scalar keys are: model, baseUrl, agentBackend, apiKey.", result.Summary);
+        Assert.DoesNotContain(secretLikeKey, result.Summary, StringComparison.Ordinal);
+        Assert.DoesNotContain("sk-editor-secret", result.Summary, StringComparison.Ordinal);
+        Assert.False(File.Exists(userConfigPath));
+    }
+
+    [Fact]
     public void UnsetUserScalar_invalid_json_fails_without_overwriting()
     {
         using TempDirectory temp = TempDirectory.Create();
