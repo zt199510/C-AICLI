@@ -24,7 +24,7 @@ public sealed class DoctorReportTests
         Assert.Contains("log directory: " + Path.Combine("workspace-root", ".caicli", "logs"), text);
         Assert.Contains("model: not configured (default)", text);
         Assert.Contains("base URL: https://api.openai.com/v1 (default)", text);
-        Assert.Contains("api key: missing", text);
+        Assert.Contains("api key: missing (missing)", text);
         Assert.Contains("agent backend: direct (default)", text);
         Assert.Contains("agent backend status: available", text);
     }

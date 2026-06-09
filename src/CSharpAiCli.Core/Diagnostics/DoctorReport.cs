@@ -9,7 +9,7 @@ public sealed record DoctorReport(IReadOnlyList<string> Lines)
         string sdkLock = snapshot.HasGlobalJson ? "global.json found" : "not locked";
         string apiKeyStatus = snapshot.Configuration.HasApiKey
             ? $"present ({snapshot.Configuration.ApiKeySource})"
-            : "missing";
+            : $"missing ({snapshot.Configuration.ApiKeySource})";
 
         List<string> lines =
         [
