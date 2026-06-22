@@ -1146,7 +1146,102 @@ public sealed class CliCommandFactoryTests
     }
 
     [Fact]
-    public void Exec_default_direct_backend_maps_unimplemented_sdk_gateway_to_clear_failure()
+    public void Exec_runner_not_supported_exception_surfaces_from_injected_runner()
+    {
+        using TempDirectory temp = TempDirectory.Create();
+        using StringWriter output = new();
+        RootCommand command = CliCommandFactory.Create(
+            output,
+            workspacePath => CreateSnapshot(
+                workspacePath,
+                apiKey: "sk-test-secret",
+                apiKeySource: "OPENAI_API_KEY",
+                model: "gpt-test"),
+            (_, _) => { },
+            _ => new FakeChatModelClient(ChatModelResult.Success(new ChatResponse("openai", "gpt-test", "resp", ""))),
+            writer => new TerminalChatStreamingRenderer(writer),
+            _ => new FakeConversationStore(),
+            () => DateTimeOffset.Parse("2024-01-01T00:00:00Z"),
+            (_, _, _) => new ThrowingAgentRunner(new NotSupportedException("runner detail")));
+
+        NotSupportedException exception = Assert.Throws<NotSupportedException>(
+            () => CliCommandFactory.Invoke(command, ["exec", "--workspace", temp.Path, "paint the moon"], output));
+
+        Assert.Contains("runner detail", exception.Message, StringComparison.Ordinal);
+        Assert.DoesNotContain("agent-backend-unavailable", output.ToString(), StringComparison.Ordinal);
+        Assert.DoesNotContain("sk-test-secret", output.ToString(), StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Exec_default_with_missing_model_reports_missing_model()
+    {
+        using TempDirectory temp = TempDirectory.Create();
+        using StringWriter output = new();
+        RootCommand command = CliCommandFactory.Create(
+            output,
+            workspacePath => CreateSnapshot(
+                workspacePath,
+                apiKey: "sk-test-secret",
+                apiKeySource: "OPENAI_API_KEY",
+                model: "not configured"));
+
+        int exitCode = CliCommandFactory.Invoke(command, ["exec", "--workspace", temp.Path, "summarize workspace"], output);
+
+        string text = output.ToString();
+        Assert.Equal(1, exitCode);
+        Assert.Contains("event: agent.error", text);
+        Assert.Contains("result: failure exitCode=1", text);
+        Assert.Contains("errorCode=missing-model", text);
+        Assert.DoesNotContain("sk-test-secret", text, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Exec_default_with_configured_model_and_missing_api_key_reports_missing_openai_api_key()
+    {
+        using TempDirectory temp = TempDirectory.Create();
+        using StringWriter output = new();
+        RootCommand command = CliCommandFactory.Create(
+            output,
+            workspacePath => CreateSnapshot(
+                workspacePath,
+                apiKey: null,
+                apiKeySource: "missing",
+                model: "gpt-test"));
+
+        int exitCode = CliCommandFactory.Invoke(command, ["exec", "--workspace", temp.Path, "summarize workspace"], output);
+
+        string text = output.ToString();
+        Assert.Equal(1, exitCode);
+        Assert.Contains("event: agent.error", text);
+        Assert.Contains("result: failure exitCode=1", text);
+        Assert.Contains("errorCode=missing-openai-api-key", text);
+    }
+
+    [Fact]
+    public void Exec_default_with_unsupported_api_key_source_reports_unsupported_api_key_source_without_secret()
+    {
+        using TempDirectory temp = TempDirectory.Create();
+        using StringWriter output = new();
+        RootCommand command = CliCommandFactory.Create(
+            output,
+            workspacePath => CreateSnapshot(
+                workspacePath,
+                apiKey: "sk-workspace-secret",
+                apiKeySource: "workspace config",
+                model: "gpt-test"));
+
+        int exitCode = CliCommandFactory.Invoke(command, ["exec", "--workspace", temp.Path, "summarize workspace"], output);
+
+        string text = output.ToString();
+        Assert.Equal(1, exitCode);
+        Assert.Contains("event: agent.error", text);
+        Assert.Contains("result: failure exitCode=1", text);
+        Assert.Contains("errorCode=unsupported-api-key-source", text);
+        Assert.DoesNotContain("sk-workspace-secret", text, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Exec_default_direct_backend_reports_unavailable_until_gateway_is_enabled()
     {
         using TempDirectory temp = TempDirectory.Create();
         using StringWriter output = new();
@@ -1830,6 +1925,17 @@ public sealed class CliCommandFactoryTests
             LastRequest = request;
             LastTranscript = transcript;
             return result;
+        }
+    }
+
+    private sealed class ThrowingAgentRunner(Exception exception) : IAgentRunner
+    {
+        public AgentRunResult Run(
+            AgentRunRequest request,
+            ConversationTranscript? transcript = null,
+            CancellationToken cancellationToken = default)
+        {
+            throw exception;
         }
     }
 

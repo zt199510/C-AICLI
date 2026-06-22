@@ -324,10 +324,10 @@ public static class CliCommandFactory
         toolsCommand.Subcommands.Add(toolsListCommand);
         toolsCommand.Subcommands.Add(toolsCallCommand);
 
-        Command execCommand = new("exec", "Run a deterministic local workspace task and emit exec events.");
+        Command execCommand = new("exec", "Run an agentic local workspace task and emit exec events.");
         Argument<string> execTaskArgument = new("task")
         {
-            Description = "Task text. Supported smoke tasks: create smoke note, read <path>, shell <command>.",
+            Description = "Task text for the local agent runner.",
         };
         Option<bool> execApproveOption = new("--approve")
         {
@@ -400,17 +400,9 @@ public static class CliCommandFactory
                     MaxToolCalls: maxToolCalls,
                     ModelCallTimeout: timeoutSeconds is null ? null : TimeSpan.FromSeconds(timeoutSeconds.Value),
                     OverallTimeout: timeoutSeconds is null ? null : TimeSpan.FromSeconds(timeoutSeconds.Value)));
-            ExecResult execResult;
-            try
-            {
-                IAgentRunner runner = execAgentRunnerFactory(snapshot, registry, executor);
-                AgentRunResult agentResult = runner.Run(request);
-                execResult = AgentExecResultAdapter.FromAgentResult(agentResult);
-            }
-            catch (NotSupportedException exception)
-            {
-                execResult = AgentExecResultAdapter.FromAgentBackendUnavailable(exception);
-            }
+            IAgentRunner runner = execAgentRunnerFactory(snapshot, registry, executor);
+            AgentRunResult agentResult = runner.Run(request);
+            ExecResult execResult = AgentExecResultAdapter.FromAgentResult(agentResult);
 
             if (IsJsonOutputRequested(jsonRequested, outputMode))
             {
@@ -561,7 +553,10 @@ public static class CliCommandFactory
             return 2;
         }
 
-        return parseResult.Invoke();
+        return parseResult.Invoke(new InvocationConfiguration
+        {
+            EnableDefaultExceptionHandler = false,
+        });
     }
 
     private static void TryWriteCommandLog(
@@ -619,13 +614,12 @@ public static class CliCommandFactory
                 Retryable: false));
         }
 
-        IOpenAiResponsesGateway gateway = new SdkOpenAiResponsesGateway(apiKey.Value, snapshot.Configuration.BaseUrl);
-        IToolCallingModel modelClient = new OpenAiToolCallingModel(
-            model,
-            snapshot.Instructions.Instructions,
-            registry,
-            gateway);
-        return new OfflineAgentRunner(modelClient, executor);
+        // Direct OpenAI agent calls are gated until SdkOpenAiResponsesGateway.CreateAgentResponse
+        // can translate tool calls and tool results through the Responses SDK.
+        return new StaticAgentRunner(new AgentError(
+            "agent-backend-unavailable",
+            "Agent backend is unavailable.",
+            Retryable: false));
     }
 
     private static bool IsSupportedApiKeySource(string apiKeySource)
