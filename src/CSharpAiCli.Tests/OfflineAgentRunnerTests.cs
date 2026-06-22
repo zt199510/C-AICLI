@@ -148,6 +148,95 @@ public sealed class OfflineAgentRunnerTests
     }
 
     [Fact]
+    public void Run_uses_request_max_turns_limit()
+    {
+        ToolRegistry registry = new();
+        registry.Register(new EchoTool());
+        ToolExecutor executor = new(registry);
+        FakeToolCallingModel model = new(
+            startTurn: AgentModelTurn.RequestTools(new AgentToolCallRequest(
+                CallId: "call_1",
+                ToolName: "test.echo",
+                ArgumentsJson: """{"text":"hello"}""")),
+            continueFactory: _ => AgentModelTurn.RequestTools(new AgentToolCallRequest(
+                CallId: "call_loop",
+                ToolName: "test.echo",
+                ArgumentsJson: """{"text":"again"}""")));
+        OfflineAgentRunner runner = new(
+            model,
+            executor,
+            () => DateTimeOffset.Parse("2024-01-01T00:00:05Z"));
+
+        AgentRunResult result = runner.Run(CreateRequest(
+            new AgentRunLimits(MaxTurns: 1)));
+
+        Assert.False(result.IsSuccess);
+        Assert.Equal("agent-loop-limit-reached", result.Error?.LocalErrorCode);
+        Assert.Single(result.ToolCalls);
+    }
+
+    [Fact]
+    public void Run_returns_failure_when_tool_call_limit_is_reached()
+    {
+        ToolRegistry registry = new();
+        registry.Register(new EchoTool());
+        ToolExecutor executor = new(registry);
+        FakeToolCallingModel model = new(
+            startTurn: AgentModelTurn.RequestTools(
+                new AgentToolCallRequest(
+                    CallId: "call_1",
+                    ToolName: "test.echo",
+                    ArgumentsJson: """{"text":"one"}"""),
+                new AgentToolCallRequest(
+                    CallId: "call_2",
+                    ToolName: "test.echo",
+                    ArgumentsJson: """{"text":"two"}""")),
+            continueFactory: _ => AgentModelTurn.Final("done"));
+        OfflineAgentRunner runner = new(
+            model,
+            executor,
+            () => DateTimeOffset.Parse("2024-01-01T00:00:05Z"));
+
+        AgentRunResult result = runner.Run(CreateRequest(
+            new AgentRunLimits(MaxToolCalls: 1)));
+
+        Assert.False(result.IsSuccess);
+        Assert.Equal("agent-tool-call-limit-reached", result.Error?.LocalErrorCode);
+        Assert.Single(result.ToolCalls);
+        AgentRunEvent limitEvent = Assert.Single(result.Events, agentEvent => agentEvent.Type == "agent.error");
+        Assert.Equal("agent-tool-call-limit-reached", limitEvent.ErrorCode);
+    }
+
+    [Fact]
+    public void Run_returns_failure_when_overall_timeout_deadline_has_passed()
+    {
+        ToolRegistry registry = new();
+        registry.Register(new EchoTool());
+        ToolExecutor executor = new(registry);
+        DateTimeOffset start = DateTimeOffset.Parse("2024-01-01T00:00:00Z");
+        int clockCalls = 0;
+        FakeToolCallingModel model = new(
+            startTurn: AgentModelTurn.RequestTools(new AgentToolCallRequest(
+                CallId: "call_1",
+                ToolName: "test.echo",
+                ArgumentsJson: """{"text":"hello"}""")),
+            continueFactory: _ => AgentModelTurn.Final("done"));
+        OfflineAgentRunner runner = new(
+            model,
+            executor,
+            () => clockCalls++ == 0 ? start : start.AddSeconds(2));
+
+        AgentRunResult result = runner.Run(CreateRequest(
+            new AgentRunLimits(OverallTimeout: TimeSpan.FromSeconds(1))));
+
+        Assert.False(result.IsSuccess);
+        Assert.Equal("agent-overall-timeout-reached", result.Error?.LocalErrorCode);
+        Assert.Empty(result.ToolCalls);
+        AgentRunEvent timeoutEvent = Assert.Single(result.Events, agentEvent => agentEvent.Type == "agent.error");
+        Assert.Equal("agent-overall-timeout-reached", timeoutEvent.ErrorCode);
+    }
+
+    [Fact]
     public void Tool_call_schema_serializes_to_transcript_json()
     {
         DateTimeOffset now = DateTimeOffset.Parse("2024-01-01T00:00:05Z");
@@ -174,7 +263,7 @@ public sealed class OfflineAgentRunnerTests
         Assert.Equal("hello", toolCall.GetProperty("outputSummary").GetString());
     }
 
-    private static AgentRunRequest CreateRequest()
+    private static AgentRunRequest CreateRequest(AgentRunLimits? limits = null)
     {
         WorkspaceContext workspace = new(
             RootPath: Path.GetTempPath(),
@@ -183,7 +272,8 @@ public sealed class OfflineAgentRunnerTests
 
         return new AgentRunRequest(
             Prompt: "use a test tool",
-            Workspace: workspace);
+            Workspace: workspace,
+            Limits: limits);
     }
 
     private sealed class EchoTool : ITool

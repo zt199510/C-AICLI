@@ -15,6 +15,24 @@ public sealed class ExecDtoTests
         Assert.Equal("C:\\repo", request.WorkspaceRoot);
         Assert.Equal(ExecOutputMode.Text, request.OutputMode);
         Assert.Null(request.ApprovalPolicy);
+        Assert.Null(request.MaxTurns);
+        Assert.Null(request.MaxToolCalls);
+        Assert.Null(request.TimeoutSeconds);
+    }
+
+    [Fact]
+    public void Request_stores_optional_loop_limits()
+    {
+        ExecRequest request = new(
+            Task: "summarize the repo",
+            WorkspaceRoot: "C:\\repo",
+            MaxTurns: 3,
+            MaxToolCalls: 12,
+            TimeoutSeconds: 60);
+
+        Assert.Equal(3, request.MaxTurns);
+        Assert.Equal(12, request.MaxToolCalls);
+        Assert.Equal(60, request.TimeoutSeconds);
     }
 
     [Theory]

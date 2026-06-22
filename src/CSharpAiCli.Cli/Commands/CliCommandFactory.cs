@@ -318,6 +318,18 @@ public static class CliCommandFactory
         {
             Description = "Select text or json output.",
         };
+        Option<int?> execMaxTurnsOption = new("--max-turns")
+        {
+            Description = "Maximum agent loop turns for agentic exec.",
+        };
+        Option<int?> execMaxToolCallsOption = new("--max-tool-calls")
+        {
+            Description = "Maximum total tool calls for agentic exec.",
+        };
+        Option<int?> execTimeoutSecondsOption = new("--timeout-seconds")
+        {
+            Description = "Overall agentic exec timeout in seconds.",
+        };
         execOutputOption.DefaultValueFactory = _ => "text";
         execOutputOption.Validators.Add(result =>
         {
@@ -328,10 +340,16 @@ public static class CliCommandFactory
                 result.AddError("Invalid value for --output. Allowed values are text and json.");
             }
         });
+        AddPositiveIntegerValidator(execMaxTurnsOption, "--max-turns");
+        AddPositiveIntegerValidator(execMaxToolCallsOption, "--max-tool-calls");
+        AddPositiveIntegerValidator(execTimeoutSecondsOption, "--timeout-seconds");
         execCommand.Arguments.Add(execTaskArgument);
         execCommand.Options.Add(execApproveOption);
         execCommand.Options.Add(execJsonOption);
         execCommand.Options.Add(execOutputOption);
+        execCommand.Options.Add(execMaxTurnsOption);
+        execCommand.Options.Add(execMaxToolCallsOption);
+        execCommand.Options.Add(execTimeoutSecondsOption);
         execCommand.SetAction(parseResult =>
         {
             string? workspacePath = parseResult.GetValue(workspaceOption);
@@ -339,6 +357,9 @@ public static class CliCommandFactory
             bool approve = parseResult.GetValue(execApproveOption);
             bool jsonRequested = parseResult.GetValue(execJsonOption);
             string outputMode = parseResult.GetValue(execOutputOption) ?? "text";
+            int? maxTurns = parseResult.GetValue(execMaxTurnsOption);
+            int? maxToolCalls = parseResult.GetValue(execMaxToolCallsOption);
+            int? timeoutSeconds = parseResult.GetValue(execTimeoutSecondsOption);
             CliEnvironmentSnapshot snapshot = snapshotProvider(workspacePath);
             TryWriteCommandLog(commandLogger, "exec", snapshot);
 
@@ -348,7 +369,12 @@ public static class CliCommandFactory
             ToolRegistry registry = CliToolFactory.CreateRegistry(snapshot, approvalPolicy);
             ToolExecutor executor = new(registry);
             ExecRunner runner = new(approvalPolicy);
-            ExecRequest request = new(task, WorkspaceRoot: snapshot.Workspace.RootPath);
+            ExecRequest request = new(
+                task,
+                WorkspaceRoot: snapshot.Workspace.RootPath,
+                MaxTurns: maxTurns,
+                MaxToolCalls: maxToolCalls,
+                TimeoutSeconds: timeoutSeconds);
             ExecResult execResult = runner.Run(request, snapshot.Workspace, executor);
 
             if (IsJsonOutputRequested(jsonRequested, outputMode))
@@ -520,6 +546,18 @@ public static class CliCommandFactory
     private static bool IsJsonOutputRequested(bool jsonRequested, string outputMode)
     {
         return jsonRequested || string.Equals(outputMode, "json", StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static void AddPositiveIntegerValidator(Option<int?> option, string optionName)
+    {
+        option.Validators.Add(result =>
+        {
+            int? value = result.GetValueOrDefault<int?>();
+            if (value is <= 0)
+            {
+                result.AddError($"Invalid value for {optionName}. Value must be greater than zero.");
+            }
+        });
     }
 
     private static void WriteExecOutput(ExecTextRenderer renderer, ExecResult result)

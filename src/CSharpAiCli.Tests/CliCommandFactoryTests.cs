@@ -1013,6 +1013,31 @@ public sealed class CliCommandFactoryTests
         Assert.DoesNotContain("hello exec", output.ToString(), StringComparison.Ordinal);
     }
 
+    [Theory]
+    [InlineData("--max-turns", "0")]
+    [InlineData("--max-tool-calls", "0")]
+    [InlineData("--timeout-seconds", "0")]
+    public void Exec_limit_options_reject_non_positive_values_before_running_task(string option, string value)
+    {
+        using TempDirectory temp = TempDirectory.Create();
+        File.WriteAllText(Path.Combine(temp.Path, "note.txt"), "hello exec");
+        using StringWriter output = new();
+        List<string> loggedCommands = [];
+        RootCommand command = CliCommandFactory.Create(
+            output,
+            CreateSnapshot,
+            (commandName, _) => loggedCommands.Add(commandName));
+
+        int exitCode = CliCommandFactory.Invoke(
+            command,
+            ["exec", "--workspace", temp.Path, option, value, "read note.txt"],
+            output);
+
+        Assert.Equal(2, exitCode);
+        Assert.Empty(loggedCommands);
+        Assert.DoesNotContain("hello exec", output.ToString(), StringComparison.Ordinal);
+    }
+
     [Fact]
     public void Exec_unsupported_task_returns_task_failure_exit_code()
     {

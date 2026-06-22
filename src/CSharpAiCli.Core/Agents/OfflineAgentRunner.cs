@@ -33,14 +33,26 @@ public sealed class OfflineAgentRunner : IAgentRunner
     {
         ArgumentNullException.ThrowIfNull(request);
 
+        AgentRunLimits limits = request.Limits ?? new AgentRunLimits(MaxTurns: maxIterations);
+        DateTimeOffset deadlineUtc = utcNowProvider().Add(limits.OverallTimeout);
         List<ConversationToolCall> recordedToolCalls = [];
         List<AgentRunEvent> events = [];
-        AgentModelTurn turn = model.Start(request, cancellationToken);
-        RecordModelTurn(events, turn);
+        if (TryCreateTimeoutResult(deadlineUtc, recordedToolCalls, events, out AgentRunResult? timeoutResult))
+        {
+            return timeoutResult!;
+        }
 
-        for (int iteration = 0; iteration < maxIterations; iteration++)
+        AgentModelTurn turn = InvokeModelStart(request, limits, cancellationToken);
+        RecordModelTurn(events, turn);
+        int toolCallCount = 0;
+
+        for (int iteration = 0; iteration < limits.MaxTurns; iteration++)
         {
             cancellationToken.ThrowIfCancellationRequested();
+            if (TryCreateTimeoutResult(deadlineUtc, recordedToolCalls, events, out timeoutResult))
+            {
+                return timeoutResult!;
+            }
 
             if (turn.IsFinal)
             {
@@ -64,6 +76,24 @@ public sealed class OfflineAgentRunner : IAgentRunner
             List<AgentToolCallResult> toolResults = [];
             foreach (AgentToolCallRequest toolCall in turn.ToolCalls)
             {
+                if (toolCallCount >= limits.MaxToolCalls)
+                {
+                    AgentError toolCallLimitError = new(
+                        "agent-tool-call-limit-reached",
+                        "Agent loop reached the maximum tool call limit.",
+                        Retryable: false);
+                    RecordError(events, toolCallLimitError);
+                    return AgentRunResult.Failure(
+                        toolCallLimitError,
+                        recordedToolCalls,
+                        events);
+                }
+
+                if (TryCreateTimeoutResult(deadlineUtc, recordedToolCalls, events, out timeoutResult))
+                {
+                    return timeoutResult!;
+                }
+
                 RecordToolCall(events, toolCall);
                 ToolExecutionContext context = new(
                     CallId: toolCall.CallId,
@@ -86,9 +116,15 @@ public sealed class OfflineAgentRunner : IAgentRunner
                 recordedToolCalls.Add(transcriptToolCall);
                 transcript?.AddToolCall(transcriptToolCall);
                 RecordToolResult(events, toolCall, executionResult);
+                toolCallCount++;
             }
 
-            turn = model.Continue(request, toolResults, cancellationToken);
+            if (TryCreateTimeoutResult(deadlineUtc, recordedToolCalls, events, out timeoutResult))
+            {
+                return timeoutResult!;
+            }
+
+            turn = InvokeModelContinue(request, toolResults, limits, cancellationToken);
             RecordModelTurn(events, turn);
         }
 
@@ -101,6 +137,48 @@ public sealed class OfflineAgentRunner : IAgentRunner
             loopLimitError,
             recordedToolCalls,
             events);
+    }
+
+    private AgentModelTurn InvokeModelStart(
+        AgentRunRequest request,
+        AgentRunLimits limits,
+        CancellationToken cancellationToken)
+    {
+        using CancellationTokenSource timeoutSource = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+        timeoutSource.CancelAfter(limits.ModelCallTimeout);
+        return model.Start(request, timeoutSource.Token);
+    }
+
+    private AgentModelTurn InvokeModelContinue(
+        AgentRunRequest request,
+        IReadOnlyList<AgentToolCallResult> toolResults,
+        AgentRunLimits limits,
+        CancellationToken cancellationToken)
+    {
+        using CancellationTokenSource timeoutSource = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+        timeoutSource.CancelAfter(limits.ModelCallTimeout);
+        return model.Continue(request, toolResults, timeoutSource.Token);
+    }
+
+    private bool TryCreateTimeoutResult(
+        DateTimeOffset deadlineUtc,
+        IReadOnlyList<ConversationToolCall> recordedToolCalls,
+        List<AgentRunEvent> events,
+        out AgentRunResult? result)
+    {
+        if (utcNowProvider() <= deadlineUtc)
+        {
+            result = null;
+            return false;
+        }
+
+        AgentError timeoutError = new(
+            "agent-overall-timeout-reached",
+            "Agent loop reached the overall timeout.",
+            Retryable: false);
+        RecordError(events, timeoutError);
+        result = AgentRunResult.Failure(timeoutError, recordedToolCalls, events);
+        return true;
     }
 
     private void RecordModelTurn(List<AgentRunEvent> events, AgentModelTurn turn)
