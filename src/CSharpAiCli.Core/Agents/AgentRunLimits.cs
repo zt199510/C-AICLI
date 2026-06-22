@@ -33,11 +33,23 @@ public sealed record AgentRunLimits
             throw new ArgumentOutOfRangeException(nameof(OverallTimeout), "Overall timeout must be greater than zero.");
         }
 
+        MaxTurnsOverride = MaxTurns;
+        MaxToolCallsOverride = MaxToolCalls;
+        ModelCallTimeoutOverride = ModelCallTimeout;
+        OverallTimeoutOverride = OverallTimeout;
         this.MaxTurns = MaxTurns ?? DefaultMaxTurns;
         this.MaxToolCalls = MaxToolCalls ?? DefaultMaxToolCalls;
         this.ModelCallTimeout = ModelCallTimeout ?? DefaultModelCallTimeout;
         this.OverallTimeout = OverallTimeout ?? DefaultOverallTimeout;
     }
+
+    public int? MaxTurnsOverride { get; }
+
+    public int? MaxToolCallsOverride { get; }
+
+    public TimeSpan? ModelCallTimeoutOverride { get; }
+
+    public TimeSpan? OverallTimeoutOverride { get; }
 
     public int MaxTurns { get; }
 
@@ -48,4 +60,15 @@ public sealed record AgentRunLimits
     public TimeSpan OverallTimeout { get; }
 
     public static AgentRunLimits Default { get; } = new();
+
+    public AgentRunLimits MergeWith(AgentRunLimits defaults)
+    {
+        ArgumentNullException.ThrowIfNull(defaults);
+
+        return new AgentRunLimits(
+            MaxTurnsOverride ?? defaults.MaxTurns,
+            MaxToolCallsOverride ?? defaults.MaxToolCalls,
+            ModelCallTimeoutOverride ?? defaults.ModelCallTimeout,
+            OverallTimeoutOverride ?? defaults.OverallTimeout);
+    }
 }

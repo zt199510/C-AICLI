@@ -33,7 +33,7 @@ public sealed class OfflineAgentRunner : IAgentRunner
     {
         ArgumentNullException.ThrowIfNull(request);
 
-        AgentRunLimits limits = request.Limits ?? new AgentRunLimits(MaxTurns: maxIterations);
+        AgentRunLimits limits = (request.Limits ?? AgentRunLimits.Default).MergeWith(new AgentRunLimits(MaxTurns: maxIterations));
         DateTimeOffset deadlineUtc = utcNowProvider().Add(limits.OverallTimeout);
         List<ConversationToolCall> recordedToolCalls = [];
         List<AgentRunEvent> events = [];
@@ -42,8 +42,13 @@ public sealed class OfflineAgentRunner : IAgentRunner
             return timeoutResult!;
         }
 
-        AgentModelTurn turn = InvokeModelStart(request, limits, cancellationToken);
-        RecordModelTurn(events, turn);
+        if (!TryInvokeModelStart(request, limits, cancellationToken, recordedToolCalls, events, out AgentModelTurn? turn, out AgentRunResult? modelTimeoutResult))
+        {
+            return modelTimeoutResult!;
+        }
+
+        AgentModelTurn currentTurn = turn!;
+        RecordModelTurn(events, currentTurn);
         int toolCallCount = 0;
 
         for (int iteration = 0; iteration < limits.MaxTurns; iteration++)
@@ -54,13 +59,13 @@ public sealed class OfflineAgentRunner : IAgentRunner
                 return timeoutResult!;
             }
 
-            if (turn.IsFinal)
+            if (currentTurn.IsFinal)
             {
-                RecordFinalResponse(events, turn.FinalText!);
-                return AgentRunResult.Success(turn.FinalText!, recordedToolCalls, events);
+                RecordFinalResponse(events, currentTurn.FinalText!);
+                return AgentRunResult.Success(currentTurn.FinalText!, recordedToolCalls, events);
             }
 
-            if (turn.ToolCalls.Count == 0)
+            if (currentTurn.ToolCalls.Count == 0)
             {
                 AgentError error = new(
                     "agent-empty-turn",
@@ -74,7 +79,7 @@ public sealed class OfflineAgentRunner : IAgentRunner
             }
 
             List<AgentToolCallResult> toolResults = [];
-            foreach (AgentToolCallRequest toolCall in turn.ToolCalls)
+            foreach (AgentToolCallRequest toolCall in currentTurn.ToolCalls)
             {
                 if (toolCallCount >= limits.MaxToolCalls)
                 {
@@ -124,8 +129,18 @@ public sealed class OfflineAgentRunner : IAgentRunner
                 return timeoutResult!;
             }
 
-            turn = InvokeModelContinue(request, toolResults, limits, cancellationToken);
-            RecordModelTurn(events, turn);
+            if (!TryInvokeModelContinue(request, toolResults, limits, cancellationToken, recordedToolCalls, events, out turn, out modelTimeoutResult))
+            {
+                return modelTimeoutResult!;
+            }
+
+            currentTurn = turn!;
+            RecordModelTurn(events, currentTurn);
+            if (currentTurn.IsFinal)
+            {
+                RecordFinalResponse(events, currentTurn.FinalText!);
+                return AgentRunResult.Success(currentTurn.FinalText!, recordedToolCalls, events);
+            }
         }
 
         AgentError loopLimitError = new(
@@ -139,25 +154,67 @@ public sealed class OfflineAgentRunner : IAgentRunner
             events);
     }
 
-    private AgentModelTurn InvokeModelStart(
+    private bool TryInvokeModelStart(
         AgentRunRequest request,
         AgentRunLimits limits,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        IReadOnlyList<ConversationToolCall> recordedToolCalls,
+        List<AgentRunEvent> events,
+        out AgentModelTurn? turn,
+        out AgentRunResult? result)
     {
         using CancellationTokenSource timeoutSource = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
         timeoutSource.CancelAfter(limits.ModelCallTimeout);
-        return model.Start(request, timeoutSource.Token);
+        try
+        {
+            turn = model.Start(request, timeoutSource.Token);
+            result = null;
+            return true;
+        }
+        catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested && timeoutSource.IsCancellationRequested)
+        {
+            turn = null;
+            result = CreateModelCallTimeoutResult(recordedToolCalls, events);
+            return false;
+        }
     }
 
-    private AgentModelTurn InvokeModelContinue(
+    private bool TryInvokeModelContinue(
         AgentRunRequest request,
         IReadOnlyList<AgentToolCallResult> toolResults,
         AgentRunLimits limits,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        IReadOnlyList<ConversationToolCall> recordedToolCalls,
+        List<AgentRunEvent> events,
+        out AgentModelTurn? turn,
+        out AgentRunResult? result)
     {
         using CancellationTokenSource timeoutSource = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
         timeoutSource.CancelAfter(limits.ModelCallTimeout);
-        return model.Continue(request, toolResults, timeoutSource.Token);
+        try
+        {
+            turn = model.Continue(request, toolResults, timeoutSource.Token);
+            result = null;
+            return true;
+        }
+        catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested && timeoutSource.IsCancellationRequested)
+        {
+            turn = null;
+            result = CreateModelCallTimeoutResult(recordedToolCalls, events);
+            return false;
+        }
+    }
+
+    private AgentRunResult CreateModelCallTimeoutResult(
+        IReadOnlyList<ConversationToolCall> recordedToolCalls,
+        List<AgentRunEvent> events)
+    {
+        AgentError timeoutError = new(
+            "agent-model-call-timeout-reached",
+            "Agent model call reached the timeout.",
+            Retryable: false);
+        RecordError(events, timeoutError);
+        return AgentRunResult.Failure(timeoutError, recordedToolCalls, events);
     }
 
     private bool TryCreateTimeoutResult(

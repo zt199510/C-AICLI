@@ -176,6 +176,68 @@ public sealed class OfflineAgentRunnerTests
     }
 
     [Fact]
+    public void Run_preserves_constructor_max_iterations_when_request_limits_do_not_override_turns()
+    {
+        ToolRegistry registry = new();
+        registry.Register(new EchoTool());
+        ToolExecutor executor = new(registry);
+        int continueCalls = 0;
+        FakeToolCallingModel model = new(
+            startTurn: AgentModelTurn.RequestTools(new AgentToolCallRequest(
+                CallId: "call_1",
+                ToolName: "test.echo",
+                ArgumentsJson: """{"text":"hello"}""")),
+            continueFactory: _ =>
+            {
+                continueCalls++;
+                return continueCalls == 1
+                    ? AgentModelTurn.RequestTools(new AgentToolCallRequest(
+                        CallId: "call_2",
+                        ToolName: "test.echo",
+                        ArgumentsJson: """{"text":"again"}"""))
+                    : AgentModelTurn.Final("done");
+            });
+        OfflineAgentRunner runner = new(
+            model,
+            executor,
+            () => DateTimeOffset.Parse("2024-01-01T00:00:05Z"),
+            maxIterations: 1);
+
+        AgentRunResult result = runner.Run(CreateRequest(
+            new AgentRunLimits(MaxToolCalls: 5)));
+
+        Assert.False(result.IsSuccess);
+        Assert.Equal("agent-loop-limit-reached", result.Error?.LocalErrorCode);
+        Assert.Single(result.ToolCalls);
+    }
+
+    [Fact]
+    public void Run_succeeds_when_continue_returns_final_on_last_allowed_turn()
+    {
+        ToolRegistry registry = new();
+        registry.Register(new EchoTool());
+        ToolExecutor executor = new(registry);
+        FakeToolCallingModel model = new(
+            startTurn: AgentModelTurn.RequestTools(new AgentToolCallRequest(
+                CallId: "call_1",
+                ToolName: "test.echo",
+                ArgumentsJson: """{"text":"hello"}""")),
+            continueFactory: _ => AgentModelTurn.Final("done"));
+        OfflineAgentRunner runner = new(
+            model,
+            executor,
+            () => DateTimeOffset.Parse("2024-01-01T00:00:05Z"));
+
+        AgentRunResult result = runner.Run(CreateRequest(
+            new AgentRunLimits(MaxTurns: 1)));
+
+        Assert.True(result.IsSuccess);
+        Assert.Equal("done", result.Text);
+        Assert.Single(result.ToolCalls);
+        Assert.Equal("final.response", result.Events[^1].Type);
+    }
+
+    [Fact]
     public void Run_returns_failure_when_tool_call_limit_is_reached()
     {
         ToolRegistry registry = new();
@@ -234,6 +296,60 @@ public sealed class OfflineAgentRunnerTests
         Assert.Empty(result.ToolCalls);
         AgentRunEvent timeoutEvent = Assert.Single(result.Events, agentEvent => agentEvent.Type == "agent.error");
         Assert.Equal("agent-overall-timeout-reached", timeoutEvent.ErrorCode);
+    }
+
+    [Fact]
+    public void Run_returns_failure_when_model_start_observes_model_call_timeout()
+    {
+        OfflineAgentRunner runner = new(
+            new TimeoutObservingModel(timeoutOnStart: true),
+            new ToolExecutor(new ToolRegistry()),
+            () => DateTimeOffset.Parse("2024-01-01T00:00:05Z"));
+
+        AgentRunResult result = runner.Run(CreateRequest(
+            new AgentRunLimits(ModelCallTimeout: TimeSpan.FromMilliseconds(1))));
+
+        Assert.False(result.IsSuccess);
+        Assert.Equal("agent-model-call-timeout-reached", result.Error?.LocalErrorCode);
+        Assert.Empty(result.ToolCalls);
+        AgentRunEvent timeoutEvent = Assert.Single(result.Events, agentEvent => agentEvent.Type == "agent.error");
+        Assert.Equal("agent-model-call-timeout-reached", timeoutEvent.ErrorCode);
+    }
+
+    [Fact]
+    public void Run_returns_failure_when_model_continue_observes_model_call_timeout()
+    {
+        ToolRegistry registry = new();
+        registry.Register(new EchoTool());
+        OfflineAgentRunner runner = new(
+            new TimeoutObservingModel(timeoutOnStart: false),
+            new ToolExecutor(registry),
+            () => DateTimeOffset.Parse("2024-01-01T00:00:05Z"));
+
+        AgentRunResult result = runner.Run(CreateRequest(
+            new AgentRunLimits(ModelCallTimeout: TimeSpan.FromMilliseconds(1))));
+
+        Assert.False(result.IsSuccess);
+        Assert.Equal("agent-model-call-timeout-reached", result.Error?.LocalErrorCode);
+        Assert.Single(result.ToolCalls);
+        AgentRunEvent timeoutEvent = Assert.Single(result.Events, agentEvent => agentEvent.Type == "agent.error");
+        Assert.Equal("agent-model-call-timeout-reached", timeoutEvent.ErrorCode);
+    }
+
+    [Fact]
+    public void Run_propagates_caller_cancellation_during_model_call()
+    {
+        using CancellationTokenSource cancellation = new();
+        cancellation.Cancel();
+        OfflineAgentRunner runner = new(
+            new TimeoutObservingModel(timeoutOnStart: true),
+            new ToolExecutor(new ToolRegistry()),
+            () => DateTimeOffset.Parse("2024-01-01T00:00:05Z"));
+
+        Assert.Throws<OperationCanceledException>(() =>
+            runner.Run(
+                CreateRequest(new AgentRunLimits(ModelCallTimeout: TimeSpan.FromSeconds(30))),
+                cancellationToken: cancellation.Token));
     }
 
     [Fact]
@@ -310,6 +426,40 @@ public sealed class OfflineAgentRunnerTests
             CancellationToken cancellationToken = default)
         {
             return continueFactory(toolResults);
+        }
+    }
+
+    private sealed class TimeoutObservingModel(bool timeoutOnStart) : IToolCallingModel
+    {
+        public AgentModelTurn Start(
+            AgentRunRequest request,
+            CancellationToken cancellationToken = default)
+        {
+            if (timeoutOnStart)
+            {
+                WaitForCancellation(cancellationToken);
+            }
+
+            return AgentModelTurn.RequestTools(new AgentToolCallRequest(
+                CallId: "call_1",
+                ToolName: "test.echo",
+                ArgumentsJson: """{"text":"hello"}"""));
+        }
+
+        public AgentModelTurn Continue(
+            AgentRunRequest request,
+            IReadOnlyList<AgentToolCallResult> toolResults,
+            CancellationToken cancellationToken = default)
+        {
+            WaitForCancellation(cancellationToken);
+            return AgentModelTurn.Final("unreachable");
+        }
+
+        private static void WaitForCancellation(CancellationToken cancellationToken)
+        {
+            cancellationToken.WaitHandle.WaitOne(TimeSpan.FromSeconds(1));
+            cancellationToken.ThrowIfCancellationRequested();
+            throw new InvalidOperationException("Expected model call timeout cancellation.");
         }
     }
 }
