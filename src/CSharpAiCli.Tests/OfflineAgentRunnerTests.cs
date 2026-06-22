@@ -43,6 +43,17 @@ public sealed class OfflineAgentRunnerTests
         Assert.Null(toolCall.ErrorCode);
         Assert.Same(toolCall, Assert.Single(transcript.ToolCalls));
         Assert.Equal(now, transcript.UpdatedAtUtc);
+
+        Assert.Equal(
+            new[] { "model.turn", "tool.call", "tool.result", "model.turn", "final.response" },
+            result.Events.Select(agentEvent => agentEvent.Type).ToArray());
+        Assert.Equal(new long[] { 0, 1, 2, 3, 4 }, result.Events.Select(agentEvent => agentEvent.Sequence).ToArray());
+        Assert.All(result.Events, agentEvent => Assert.Equal(now, agentEvent.Timestamp));
+        Assert.Equal("test.echo", result.Events[1].Payload?["toolName"]);
+        Assert.Equal("call_echo_1", result.Events[1].Payload?["callId"]);
+        Assert.Equal("not-required", result.Events[2].ApprovalStatus);
+        Assert.Equal("hello", result.Events[2].Summary);
+        Assert.Equal("tool said: hello", result.Events[4].Summary);
     }
 
     [Fact]
@@ -131,6 +142,9 @@ public sealed class OfflineAgentRunnerTests
         Assert.False(result.IsSuccess);
         Assert.Equal("agent-loop-limit-reached", result.Error?.LocalErrorCode);
         Assert.Equal(2, result.ToolCalls.Count);
+        AgentRunEvent limitEvent = Assert.Single(result.Events, agentEvent => agentEvent.Type == "agent.error");
+        Assert.Equal("agent-loop-limit-reached", limitEvent.ErrorCode);
+        Assert.Contains("maximum iteration limit", limitEvent.Message);
     }
 
     [Fact]
