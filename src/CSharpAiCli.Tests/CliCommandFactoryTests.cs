@@ -930,45 +930,109 @@ public sealed class CliCommandFactoryTests
     }
 
     [Fact]
-    public void Exec_read_note_text_output_returns_success_and_file_content()
+    public void Exec_uses_injected_agent_runner_and_renders_success_text_output()
     {
         using TempDirectory temp = TempDirectory.Create();
-        File.WriteAllText(Path.Combine(temp.Path, "note.txt"), "hello exec");
         using StringWriter output = new();
+        FakeAgentRunner agentRunner = new(AgentRunResult.Success(
+            "agent completed task",
+            [],
+            [
+                new AgentRunEvent(
+                    Type: "final.response",
+                    Sequence: 0,
+                    Timestamp: DateTimeOffset.Parse("2024-01-01T00:00:00Z"),
+                    Summary: "agent completed task",
+                    Payload: new Dictionary<string, string>
+                    {
+                        ["kind"] = "final"
+                    })
+            ]));
+        CliEnvironmentSnapshot snapshot = CreateSnapshot(
+            workspacePath: temp.Path,
+            apiKey: "sk-test-secret",
+            apiKeySource: "OPENAI_API_KEY",
+            model: "gpt-test")
+            with
+            {
+                Instructions = InstructionLoadResult.Loaded("Prefer concise answers.", Path.Combine(temp.Path, "AICLI.md"))
+            };
 
         int exitCode = CliCommandFactory
-            .Create(output, workspacePath => CreateSnapshot(
-                workspacePath,
-                apiKey: "sk-test-secret",
-                apiKeySource: "OPENAI_API_KEY",
-                model: "gpt-test"))
-            .Parse(["exec", "--workspace", temp.Path, "read note.txt"])
+            .Create(
+                output,
+                _ => snapshot,
+                (_, _) => { },
+                _ => new FakeChatModelClient(ChatModelResult.Success(new ChatResponse("openai", "gpt-test", "resp", ""))),
+                writer => new TerminalChatStreamingRenderer(writer),
+                _ => new FakeConversationStore(),
+                () => DateTimeOffset.Parse("2024-01-01T00:00:00Z"),
+                (_, _, _) => agentRunner)
+            .Parse([
+                "exec",
+                "--workspace",
+                temp.Path,
+                "--max-turns",
+                "3",
+                "--max-tool-calls",
+                "5",
+                "--timeout-seconds",
+                "7",
+                "summarize workspace"
+            ])
             .Invoke();
 
         string text = output.ToString();
         Assert.Equal(0, exitCode);
-        Assert.Contains("event: task.started", text);
-        Assert.Contains("event: task.completed", text);
+        Assert.Equal("summarize workspace", agentRunner.LastRequest?.Prompt);
+        Assert.Same(snapshot.Workspace, agentRunner.LastRequest?.Workspace);
+        Assert.Equal("Prefer concise answers.", agentRunner.LastRequest?.Instructions);
+        Assert.Equal(3, agentRunner.LastRequest?.Limits?.MaxTurns);
+        Assert.Equal(5, agentRunner.LastRequest?.Limits?.MaxToolCalls);
+        Assert.Equal(TimeSpan.FromSeconds(7), agentRunner.LastRequest?.Limits?.OverallTimeout);
+        Assert.Equal(TimeSpan.FromSeconds(7), agentRunner.LastRequest?.Limits?.ModelCallTimeout);
+        Assert.Contains("event: final.response", text);
         Assert.Contains("result: success", text);
-        Assert.Contains("hello exec", text);
-        Assert.Contains("summary=", text);
+        Assert.Contains("agent completed task", text);
+        Assert.Contains("payload.kind=final", text);
         Assert.DoesNotContain("sk-test-secret", text, StringComparison.Ordinal);
     }
 
     [Fact]
-    public void Exec_read_note_json_output_writes_valid_ndjson_with_result_exit_code()
+    public void Exec_uses_injected_agent_runner_and_renders_success_json_output()
     {
         using TempDirectory temp = TempDirectory.Create();
-        File.WriteAllText(Path.Combine(temp.Path, "note.txt"), "hello exec");
         using StringWriter output = new();
+        FakeAgentRunner agentRunner = new(AgentRunResult.Success(
+            "json agent summary",
+            [],
+            [
+                new AgentRunEvent(
+                    Type: "model.turn",
+                    Sequence: 0,
+                    Timestamp: DateTimeOffset.Parse("2024-01-01T00:00:00Z"),
+                    Summary: "model planned",
+                    Payload: new Dictionary<string, string>
+                    {
+                        ["toolCallCount"] = "0"
+                    })
+            ]));
 
         int exitCode = CliCommandFactory
-            .Create(output, workspacePath => CreateSnapshot(
-                workspacePath,
-                apiKey: "sk-test-secret",
-                apiKeySource: "OPENAI_API_KEY",
-                model: "gpt-test"))
-            .Parse(["exec", "--json", "--workspace", temp.Path, "read note.txt"])
+            .Create(
+                output,
+                workspacePath => CreateSnapshot(
+                    workspacePath,
+                    apiKey: "sk-test-secret",
+                    apiKeySource: "OPENAI_API_KEY",
+                    model: "gpt-test"),
+                (_, _) => { },
+                _ => new FakeChatModelClient(ChatModelResult.Success(new ChatResponse("openai", "gpt-test", "resp", ""))),
+                writer => new TerminalChatStreamingRenderer(writer),
+                _ => new FakeConversationStore(),
+                () => DateTimeOffset.Parse("2024-01-01T00:00:00Z"),
+                (_, _, _) => agentRunner)
+            .Parse(["exec", "--json", "--workspace", temp.Path, "summarize workspace"])
             .Invoke();
 
         string[] lines = output.ToString()
@@ -976,19 +1040,19 @@ public sealed class CliCommandFactoryTests
             .Split(Environment.NewLine, StringSplitOptions.RemoveEmptyEntries);
 
         Assert.Equal(0, exitCode);
-        Assert.Equal(3, lines.Length);
+        Assert.Equal(2, lines.Length);
         foreach (string line in lines)
         {
             JsonNode? node = JsonNode.Parse(line);
             Assert.NotNull(node);
         }
 
-        JsonObject started = Assert.IsType<JsonObject>(JsonNode.Parse(lines[0]));
-        JsonObject completed = Assert.IsType<JsonObject>(JsonNode.Parse(lines[1]));
+        JsonObject modelTurn = Assert.IsType<JsonObject>(JsonNode.Parse(lines[0]));
         JsonObject result = Assert.IsType<JsonObject>(JsonNode.Parse(lines[^1]));
-        Assert.Equal("task.started", started["type"]?.GetValue<string>());
-        Assert.Equal("task.completed", completed["type"]?.GetValue<string>());
+        Assert.Equal("model.turn", modelTurn["type"]?.GetValue<string>());
+        Assert.Equal("0", modelTurn["payload"]?["toolCallCount"]?.GetValue<string>());
         Assert.Equal("exec.result", result["type"]?.GetValue<string>());
+        Assert.Equal("json agent summary", result["summary"]?.GetValue<string>());
         Assert.Equal("success", result["payload"]?["status"]?.GetValue<string>());
         Assert.Equal(0, result["payload"]?["exitCode"]?.GetValue<int>());
         Assert.DoesNotContain("sk-test-secret", output.ToString(), StringComparison.Ordinal);
@@ -1039,30 +1103,50 @@ public sealed class CliCommandFactoryTests
     }
 
     [Fact]
-    public void Exec_unsupported_task_returns_task_failure_exit_code()
+    public void Exec_agent_failure_maps_to_nonzero_exit_code_and_error_code()
     {
         using TempDirectory temp = TempDirectory.Create();
         using StringWriter output = new();
+        FakeAgentRunner agentRunner = new(AgentRunResult.Failure(
+            new AgentError(
+                "agent-test-failure",
+                "Agent test failure.",
+                Retryable: false),
+            [],
+            [
+                new AgentRunEvent(
+                    Type: "agent.error",
+                    Sequence: 0,
+                    Timestamp: DateTimeOffset.Parse("2024-01-01T00:00:00Z"),
+                    Message: "Agent test failure.",
+                    ErrorCode: "agent-test-failure")
+            ]));
         RootCommand command = CliCommandFactory.Create(
             output,
             workspacePath => CreateSnapshot(
                 workspacePath,
                 apiKey: "sk-test-secret",
                 apiKeySource: "OPENAI_API_KEY",
-                model: "gpt-test"));
+                model: "gpt-test"),
+            (_, _) => { },
+            _ => new FakeChatModelClient(ChatModelResult.Success(new ChatResponse("openai", "gpt-test", "resp", ""))),
+            writer => new TerminalChatStreamingRenderer(writer),
+            _ => new FakeConversationStore(),
+            () => DateTimeOffset.Parse("2024-01-01T00:00:00Z"),
+            (_, _, _) => agentRunner);
 
         int exitCode = CliCommandFactory.Invoke(command, ["exec", "--workspace", temp.Path, "paint the moon"], output);
 
         string text = output.ToString();
         Assert.Equal(1, exitCode);
-        Assert.Contains("event: task.failed", text);
+        Assert.Contains("event: agent.error", text);
         Assert.Contains("result: failure exitCode=1", text);
-        Assert.Contains("errorCode=unsupported-run-task", text);
+        Assert.Contains("errorCode=agent-test-failure", text);
         Assert.DoesNotContain("sk-test-secret", text, StringComparison.Ordinal);
     }
 
     [Fact]
-    public void Exec_create_smoke_note_without_approval_returns_failure_without_creating_smoke_note()
+    public void Exec_default_direct_backend_maps_unimplemented_sdk_gateway_to_clear_failure()
     {
         using TempDirectory temp = TempDirectory.Create();
         using StringWriter output = new();
@@ -1074,39 +1158,13 @@ public sealed class CliCommandFactoryTests
                 apiKeySource: "OPENAI_API_KEY",
                 model: "gpt-test"));
 
-        int exitCode = CliCommandFactory.Invoke(command, ["exec", "--workspace", temp.Path, "create smoke note"], output);
-
-        string text = output.ToString();
-        string smokeNotePath = Path.Combine(temp.Path, "caicli-smoke.txt");
-        Assert.Equal(1, exitCode);
-        Assert.Contains("event: task.failed", text);
-        Assert.Contains("errorCode=approval-denied", text);
-        Assert.False(File.Exists(smokeNotePath));
-        Assert.DoesNotContain("sk-test-secret", text, StringComparison.Ordinal);
-    }
-
-    [Fact]
-    public void Exec_read_outside_workspace_returns_failure_and_reports_workspace_boundary_denied()
-    {
-        using TempDirectory temp = TempDirectory.Create();
-        string workspace = Path.Combine(temp.Path, "workspace");
-        Directory.CreateDirectory(workspace);
-        File.WriteAllText(Path.Combine(temp.Path, "outside.txt"), "outside");
-        using StringWriter output = new();
-        RootCommand command = CliCommandFactory.Create(
-            output,
-            workspacePath => CreateSnapshot(
-                workspacePath,
-                apiKey: "sk-test-secret",
-                apiKeySource: "OPENAI_API_KEY",
-                model: "gpt-test"));
-
-        int exitCode = CliCommandFactory.Invoke(command, ["exec", "--workspace", workspace, "read ../outside.txt"], output);
+        int exitCode = CliCommandFactory.Invoke(command, ["exec", "--workspace", temp.Path, "summarize workspace"], output);
 
         string text = output.ToString();
         Assert.Equal(1, exitCode);
-        Assert.Contains("event: task.failed", text);
-        Assert.Contains("errorCode=workspace-boundary-denied", text);
+        Assert.Contains("event: agent.error", text);
+        Assert.Contains("result: failure exitCode=1", text);
+        Assert.Contains("errorCode=agent-backend-unavailable", text);
         Assert.DoesNotContain("sk-test-secret", text, StringComparison.Ordinal);
     }
 
@@ -1114,13 +1172,18 @@ public sealed class CliCommandFactoryTests
     public void Exec_command_writes_command_log_through_delegate()
     {
         using TempDirectory temp = TempDirectory.Create();
-        File.WriteAllText(Path.Combine(temp.Path, "note.txt"), "hello exec");
         using StringWriter output = new();
         List<string> loggedCommands = [];
+        FakeAgentRunner agentRunner = new(AgentRunResult.Success("logged", []));
         RootCommand command = CliCommandFactory.Create(
             output,
             CreateSnapshot,
-            (commandName, _) => loggedCommands.Add(commandName));
+            (commandName, _) => loggedCommands.Add(commandName),
+            _ => new FakeChatModelClient(ChatModelResult.Success(new ChatResponse("openai", "gpt-test", "resp", ""))),
+            writer => new TerminalChatStreamingRenderer(writer),
+            _ => new FakeConversationStore(),
+            () => DateTimeOffset.Parse("2024-01-01T00:00:00Z"),
+            (_, _, _) => agentRunner);
 
         int exitCode = CliCommandFactory.Invoke(command, ["exec", "--workspace", temp.Path, "read note.txt"], output);
 
@@ -1750,6 +1813,22 @@ public sealed class CliCommandFactoryTests
                 apiKey: null,
                 apiKeySource: "missing",
                 model: "gpt-test"), result.Error!);
+            return result;
+        }
+    }
+
+    private sealed class FakeAgentRunner(AgentRunResult result) : IAgentRunner
+    {
+        public AgentRunRequest? LastRequest { get; private set; }
+        public ConversationTranscript? LastTranscript { get; private set; }
+
+        public AgentRunResult Run(
+            AgentRunRequest request,
+            ConversationTranscript? transcript = null,
+            CancellationToken cancellationToken = default)
+        {
+            LastRequest = request;
+            LastTranscript = transcript;
             return result;
         }
     }

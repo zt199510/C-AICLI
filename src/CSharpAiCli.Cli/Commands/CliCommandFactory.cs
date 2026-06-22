@@ -68,7 +68,8 @@ public static class CliCommandFactory
             chatModelClientFactory,
             streamingRendererFactory,
             snapshot => FileConversationStore.Create(snapshot),
-            () => DateTimeOffset.UtcNow);
+            () => DateTimeOffset.UtcNow,
+            CreateDefaultExecAgentRunner);
     }
 
     public static RootCommand Create(
@@ -80,6 +81,27 @@ public static class CliCommandFactory
         Func<CliEnvironmentSnapshot, IConversationStore> conversationStoreFactory,
         Func<DateTimeOffset> utcNowProvider)
     {
+        return Create(
+            output,
+            snapshotProvider,
+            commandLogger,
+            chatModelClientFactory,
+            streamingRendererFactory,
+            conversationStoreFactory,
+            utcNowProvider,
+            CreateDefaultExecAgentRunner);
+    }
+
+    public static RootCommand Create(
+        TextWriter output,
+        Func<string?, CliEnvironmentSnapshot> snapshotProvider,
+        Action<string, CliEnvironmentSnapshot> commandLogger,
+        Func<CliEnvironmentSnapshot, IChatModelClient> chatModelClientFactory,
+        Func<TextWriter, IChatStreamingRenderer> streamingRendererFactory,
+        Func<CliEnvironmentSnapshot, IConversationStore> conversationStoreFactory,
+        Func<DateTimeOffset> utcNowProvider,
+        Func<CliEnvironmentSnapshot, ToolRegistry, IToolExecutor, IAgentRunner> execAgentRunnerFactory)
+    {
         ArgumentNullException.ThrowIfNull(output);
         ArgumentNullException.ThrowIfNull(snapshotProvider);
         ArgumentNullException.ThrowIfNull(commandLogger);
@@ -87,6 +109,7 @@ public static class CliCommandFactory
         ArgumentNullException.ThrowIfNull(streamingRendererFactory);
         ArgumentNullException.ThrowIfNull(conversationStoreFactory);
         ArgumentNullException.ThrowIfNull(utcNowProvider);
+        ArgumentNullException.ThrowIfNull(execAgentRunnerFactory);
 
         RootCommand rootCommand = new($"{ProductInfo.CommandName} - {ProductInfo.Description}");
         Option<string> workspaceOption = new("--workspace")
@@ -368,14 +391,26 @@ public static class CliCommandFactory
                 : new DefaultDenyApprovalPolicy();
             ToolRegistry registry = CliToolFactory.CreateRegistry(snapshot, approvalPolicy);
             ToolExecutor executor = new(registry);
-            ExecRunner runner = new(approvalPolicy);
-            ExecRequest request = new(
+            AgentRunRequest request = new(
                 task,
-                WorkspaceRoot: snapshot.Workspace.RootPath,
-                MaxTurns: maxTurns,
-                MaxToolCalls: maxToolCalls,
-                TimeoutSeconds: timeoutSeconds);
-            ExecResult execResult = runner.Run(request, snapshot.Workspace, executor);
+                snapshot.Workspace,
+                snapshot.Instructions.Instructions,
+                Limits: new AgentRunLimits(
+                    MaxTurns: maxTurns,
+                    MaxToolCalls: maxToolCalls,
+                    ModelCallTimeout: timeoutSeconds is null ? null : TimeSpan.FromSeconds(timeoutSeconds.Value),
+                    OverallTimeout: timeoutSeconds is null ? null : TimeSpan.FromSeconds(timeoutSeconds.Value)));
+            ExecResult execResult;
+            try
+            {
+                IAgentRunner runner = execAgentRunnerFactory(snapshot, registry, executor);
+                AgentRunResult agentResult = runner.Run(request);
+                execResult = AgentExecResultAdapter.FromAgentResult(agentResult);
+            }
+            catch (NotSupportedException exception)
+            {
+                execResult = AgentExecResultAdapter.FromAgentBackendUnavailable(exception);
+            }
 
             if (IsJsonOutputRequested(jsonRequested, outputMode))
             {
@@ -548,6 +583,56 @@ public static class CliCommandFactory
         return jsonRequested || string.Equals(outputMode, "json", StringComparison.OrdinalIgnoreCase);
     }
 
+    private static IAgentRunner CreateDefaultExecAgentRunner(
+        CliEnvironmentSnapshot snapshot,
+        ToolRegistry registry,
+        IToolExecutor executor)
+    {
+        ArgumentNullException.ThrowIfNull(snapshot);
+        ArgumentNullException.ThrowIfNull(registry);
+        ArgumentNullException.ThrowIfNull(executor);
+
+        string model = snapshot.Configuration.Model;
+        if (string.IsNullOrWhiteSpace(model)
+            || string.Equals(model, "not configured", StringComparison.OrdinalIgnoreCase))
+        {
+            return new StaticAgentRunner(new AgentError(
+                "missing-model",
+                "Model is not configured. Set model in .caicli/config.json before running exec.",
+                Retryable: false));
+        }
+
+        SecretValue? apiKey = snapshot.Configuration.ApiKey;
+        if (apiKey is null)
+        {
+            return new StaticAgentRunner(new AgentError(
+                "missing-openai-api-key",
+                "OpenAI API key is missing. Set OPENAI_API_KEY or user config apiKey.",
+                Retryable: false));
+        }
+
+        if (!IsSupportedApiKeySource(snapshot.Configuration.ApiKeySource))
+        {
+            return new StaticAgentRunner(new AgentError(
+                "unsupported-api-key-source",
+                "Workspace config apiKey is not used for model calls. Set OPENAI_API_KEY or user config apiKey.",
+                Retryable: false));
+        }
+
+        IOpenAiResponsesGateway gateway = new SdkOpenAiResponsesGateway(apiKey.Value, snapshot.Configuration.BaseUrl);
+        IToolCallingModel modelClient = new OpenAiToolCallingModel(
+            model,
+            snapshot.Instructions.Instructions,
+            registry,
+            gateway);
+        return new OfflineAgentRunner(modelClient, executor);
+    }
+
+    private static bool IsSupportedApiKeySource(string apiKeySource)
+    {
+        return apiKeySource is "OPENAI_API_KEY" or "user config";
+    }
+
     private static void AddPositiveIntegerValidator(Option<int?> option, string optionName)
     {
         option.Validators.Add(result =>
@@ -676,5 +761,25 @@ public static class CliCommandFactory
         }
 
         return path;
+    }
+
+    private sealed class StaticAgentRunner(AgentError error) : IAgentRunner
+    {
+        public AgentRunResult Run(
+            AgentRunRequest request,
+            ConversationTranscript? transcript = null,
+            CancellationToken cancellationToken = default)
+        {
+            ArgumentNullException.ThrowIfNull(request);
+            cancellationToken.ThrowIfCancellationRequested();
+
+            AgentRunEvent errorEvent = new(
+                Type: "agent.error",
+                Sequence: 0,
+                Timestamp: DateTimeOffset.UtcNow,
+                Message: error.SafeMessage,
+                ErrorCode: error.LocalErrorCode);
+            return AgentRunResult.Failure(error, [], [errorEvent]);
+        }
     }
 }
