@@ -72,6 +72,14 @@ public sealed class OpenAiToolCallingModelTests
             Responses =
             [
                 new OpenAiResponseEnvelope(
+                    ResponseId: "resp_tool",
+                    Model: "gpt-test",
+                    Text: "",
+                    ToolCalls:
+                    [
+                        new OpenAiToolCall("call_status", "workspace.git_status", "{}")
+                    ]),
+                new OpenAiResponseEnvelope(
                     ResponseId: "resp_final",
                     Model: "gpt-test",
                     Text: "Working tree is clean.")
@@ -83,19 +91,18 @@ public sealed class OpenAiToolCallingModelTests
             registry,
             gateway);
 
+        AgentModelTurn firstTurn = model.Start(CreateRequest("check status"));
         AgentModelTurn turn = model.Continue(
             CreateRequest("check status"),
             [
                 new AgentToolCallResult(
-                    new AgentToolCallRequest(
-                        CallId: "call_status",
-                        ToolName: "workspace.git_status",
-                        ArgumentsJson: "{}"),
+                    firstTurn.ToolCalls.Single(),
                     ToolExecutionResult.Success("On branch main. nothing to commit."))
             ]);
 
-        OpenAiAgentRequest sentRequest = Assert.Single(gateway.AgentRequests);
+        OpenAiAgentRequest sentRequest = gateway.AgentRequests[1];
         Assert.Null(sentRequest.Prompt);
+        Assert.Equal("resp_tool", sentRequest.PreviousResponseId);
         Assert.Equal("Summarize tool output.", sentRequest.Instructions);
         Assert.Empty(sentRequest.Tools);
         OpenAiToolResultInput resultInput = Assert.Single(sentRequest.ToolResults);
@@ -152,6 +159,81 @@ public sealed class OpenAiToolCallingModelTests
     }
 
     [Fact]
+    public void Continue_before_start_throws_safe_lifecycle_error_without_calling_gateway()
+    {
+        ToolRegistry registry = new();
+        registry.Register(new StubTool("workspace.git_status", "Show git status.", """{"type":"object"}"""));
+        FakeGateway gateway = new();
+        OpenAiToolCallingModel model = new(
+            model: "gpt-test",
+            instructions: null,
+            registry,
+            gateway);
+
+        InvalidOperationException exception = Assert.Throws<InvalidOperationException>(
+            () => model.Continue(
+                CreateRequest("check status"),
+                [
+                    new AgentToolCallResult(
+                        new AgentToolCallRequest("call_status", "workspace.git_status", "{}"),
+                        ToolExecutionResult.Success("clean"))
+                ]));
+
+        Assert.Equal(
+            "OpenAI tool calling model must be started before continuing.",
+            exception.Message);
+        Assert.Empty(gateway.AgentRequests);
+    }
+
+    [Fact]
+    public void Start_after_previous_run_resets_previous_response_id_before_sending_request()
+    {
+        ToolRegistry registry = new();
+        registry.Register(new StubTool("workspace.git_status", "Show git status.", """{"type":"object"}"""));
+        FakeGateway gateway = new()
+        {
+            Responses =
+            [
+                new OpenAiResponseEnvelope(
+                    ResponseId: "resp_first_start",
+                    Model: "gpt-test",
+                    Text: "",
+                    ToolCalls:
+                    [
+                        new OpenAiToolCall("call_status", "workspace.git_status", "{}")
+                    ]),
+                new OpenAiResponseEnvelope(
+                    ResponseId: "resp_first_continue",
+                    Model: "gpt-test",
+                    Text: "done"),
+                new OpenAiResponseEnvelope(
+                    ResponseId: "resp_second_start",
+                    Model: "gpt-test",
+                    Text: "new run")
+            ]
+        };
+        OpenAiToolCallingModel model = new(
+            model: "gpt-test",
+            instructions: null,
+            registry,
+            gateway);
+
+        AgentModelTurn firstTurn = model.Start(CreateRequest("first run"));
+        model.Continue(
+            CreateRequest("first run"),
+            [
+                new AgentToolCallResult(
+                    firstTurn.ToolCalls.Single(),
+                    ToolExecutionResult.Success("clean"))
+            ]);
+        model.Start(CreateRequest("second run"));
+
+        Assert.Equal("resp_first_start", gateway.AgentRequests[1].PreviousResponseId);
+        Assert.Null(gateway.AgentRequests[2].PreviousResponseId);
+        Assert.Equal("second run", gateway.AgentRequests[2].Prompt);
+    }
+
+    [Fact]
     public void Continue_represents_tool_failure_as_safe_output_without_throwing()
     {
         ToolRegistry registry = new();
@@ -160,6 +242,14 @@ public sealed class OpenAiToolCallingModelTests
         {
             Responses =
             [
+                new OpenAiResponseEnvelope(
+                    ResponseId: "resp_shell",
+                    Model: "gpt-test",
+                    Text: "",
+                    ToolCalls:
+                    [
+                        new OpenAiToolCall("call_shell", "workspace.shell", "{}")
+                    ]),
                 new OpenAiResponseEnvelope(
                     ResponseId: "resp_retry",
                     Model: "gpt-test",
@@ -181,15 +271,16 @@ public sealed class OpenAiToolCallingModelTests
             retryable: false,
             approvalStatus: "denied");
 
+        AgentModelTurn firstTurn = model.Start(CreateRequest("run shell"));
         AgentModelTurn turn = model.Continue(
             CreateRequest("run shell"),
             [
                 new AgentToolCallResult(
-                    new AgentToolCallRequest("call_shell", "workspace.shell", "{}"),
+                    firstTurn.ToolCalls.Single(),
                     failure)
             ]);
 
-        OpenAiToolResultInput resultInput = Assert.Single(Assert.Single(gateway.AgentRequests).ToolResults);
+        OpenAiToolResultInput resultInput = Assert.Single(gateway.AgentRequests[1].ToolResults);
         Assert.Equal("call_shell", resultInput.CallId);
         Assert.Equal("workspace.shell", resultInput.ToolName);
         Assert.False(resultInput.Succeeded);
@@ -223,6 +314,11 @@ public sealed class OpenAiToolCallingModelTests
             OpenAiAgentRequest request,
             CancellationToken cancellationToken = default)
         {
+            if (responseIndex >= Responses.Count)
+            {
+                throw new InvalidOperationException("Fake gateway has no queued agent response.");
+            }
+
             AgentRequests.Add(request);
             return Responses[responseIndex++];
         }

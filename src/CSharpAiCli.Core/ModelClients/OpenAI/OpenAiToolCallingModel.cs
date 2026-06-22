@@ -30,6 +30,8 @@ public sealed class OpenAiToolCallingModel : IToolCallingModel
     {
         ArgumentNullException.ThrowIfNull(request);
 
+        previousResponseId = null;
+
         OpenAiAgentRequest agentRequest = new(
             Model: model,
             Prompt: request.Prompt,
@@ -52,6 +54,12 @@ public sealed class OpenAiToolCallingModel : IToolCallingModel
     {
         ArgumentNullException.ThrowIfNull(request);
         ArgumentNullException.ThrowIfNull(toolResults);
+
+        if (previousResponseId is null)
+        {
+            throw new InvalidOperationException(
+                "OpenAI tool calling model must be started before continuing.");
+        }
 
         OpenAiAgentRequest agentRequest = new(
             Model: model,
