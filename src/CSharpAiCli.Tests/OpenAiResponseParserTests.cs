@@ -45,6 +45,47 @@ public sealed class OpenAiResponseParserTests
     }
 
     [Fact]
+    public void To_agent_model_turn_prefers_tool_calls_when_text_is_also_present()
+    {
+        OpenAiResponseEnvelope response = new(
+            ResponseId: "resp_text_and_tool",
+            Model: "gpt-test",
+            Text: "final text",
+            ToolCalls:
+            [
+                new OpenAiToolCall("call_1", "workspace.git_status", "{}")
+            ]);
+
+        AgentModelTurn turn = OpenAiResponseParser.ToAgentModelTurn(response);
+
+        Assert.False(turn.IsFinal);
+        Assert.Null(turn.FinalText);
+        AgentToolCallRequest toolCall = Assert.Single(turn.ToolCalls);
+        Assert.Equal("call_1", toolCall.CallId);
+    }
+
+    [Fact]
+    public void To_agent_model_turn_uses_tool_calls_captured_at_envelope_construction()
+    {
+        List<OpenAiToolCall> toolCalls =
+        [
+            new OpenAiToolCall("call_1", "tool.first", "{}")
+        ];
+        OpenAiResponseEnvelope response = new(
+            ResponseId: "resp_mutable_tools",
+            Model: "gpt-test",
+            Text: "",
+            ToolCalls: toolCalls);
+
+        toolCalls.Add(new OpenAiToolCall("call_2", "tool.second", "{}"));
+
+        AgentModelTurn turn = OpenAiResponseParser.ToAgentModelTurn(response);
+
+        AgentToolCallRequest toolCall = Assert.Single(turn.ToolCalls);
+        Assert.Equal("call_1", toolCall.CallId);
+    }
+
+    [Fact]
     public void To_agent_model_turn_preserves_multiple_tool_call_order()
     {
         OpenAiResponseEnvelope response = new(

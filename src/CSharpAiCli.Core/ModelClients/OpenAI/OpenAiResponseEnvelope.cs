@@ -6,5 +6,5 @@ public sealed record OpenAiResponseEnvelope(
     string Text,
     IReadOnlyList<OpenAiToolCall>? ToolCalls = null)
 {
-    public IReadOnlyList<OpenAiToolCall> ToolCalls { get; init; } = ToolCalls ?? [];
+    public IReadOnlyList<OpenAiToolCall> ToolCalls { get; init; } = ToolCalls?.ToArray() ?? [];
 }
