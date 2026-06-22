@@ -83,10 +83,15 @@ public sealed class OpenAiToolDefinitionMapperTests
 
         string json = JsonSerializer.Serialize(definition);
 
-        Assert.Contains("\"type\":\"function\"", json, StringComparison.Ordinal);
-        Assert.Contains("\"name\":\"test.tool\"", json, StringComparison.Ordinal);
-        Assert.Contains("\"description\":\"Test tool.\"", json, StringComparison.Ordinal);
-        Assert.Contains("\"parameters\":{\"type\":\"object\"}", json, StringComparison.Ordinal);
+        using JsonDocument document = JsonDocument.Parse(json);
+        JsonElement root = document.RootElement;
+
+        Assert.Equal("function", root.GetProperty("type").GetString());
+        Assert.Equal("test.tool", root.GetProperty("name").GetString());
+        Assert.Equal("Test tool.", root.GetProperty("description").GetString());
+        Assert.Equal(JsonValueKind.Object, root.GetProperty("parameters").ValueKind);
+        Assert.Equal("object", root.GetProperty("parameters").GetProperty("type").GetString());
+        Assert.False(root.TryGetProperty("parametersSchema", out _));
     }
 
     private sealed class StubTool : ITool

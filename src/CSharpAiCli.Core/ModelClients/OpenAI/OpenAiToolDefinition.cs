@@ -30,5 +30,12 @@ public sealed record OpenAiToolDefinition
     public string ParametersSchema { get; init; }
 
     [JsonPropertyName("parameters")]
-    public JsonElement Parameters => JsonDocument.Parse(ParametersSchema).RootElement.Clone();
+    public JsonElement Parameters
+    {
+        get
+        {
+            using JsonDocument document = JsonDocument.Parse(ParametersSchema);
+            return document.RootElement.Clone();
+        }
+    }
 }
