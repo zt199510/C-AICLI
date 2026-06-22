@@ -136,6 +136,11 @@ public sealed class OfflineAgentRunner : IAgentRunner
 
             currentTurn = turn!;
             RecordModelTurn(events, currentTurn);
+            if (TryCreateTimeoutResult(deadlineUtc, recordedToolCalls, events, out timeoutResult))
+            {
+                return timeoutResult!;
+            }
+
             if (currentTurn.IsFinal)
             {
                 RecordFinalResponse(events, currentTurn.FinalText!);

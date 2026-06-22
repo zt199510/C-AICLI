@@ -299,6 +299,39 @@ public sealed class OfflineAgentRunnerTests
     }
 
     [Fact]
+    public void Run_returns_overall_timeout_when_continue_final_crosses_deadline()
+    {
+        ToolRegistry registry = new();
+        registry.Register(new EchoTool());
+        ToolExecutor executor = new(registry);
+        DateTimeOffset start = DateTimeOffset.Parse("2024-01-01T00:00:00Z");
+        bool deadlineCrossed = false;
+        FakeToolCallingModel model = new(
+            startTurn: AgentModelTurn.RequestTools(new AgentToolCallRequest(
+                CallId: "call_1",
+                ToolName: "test.echo",
+                ArgumentsJson: """{"text":"hello"}""")),
+            continueFactory: _ =>
+            {
+                deadlineCrossed = true;
+                return AgentModelTurn.Final("done");
+            });
+        OfflineAgentRunner runner = new(
+            model,
+            executor,
+            () => deadlineCrossed ? start.AddSeconds(2) : start);
+
+        AgentRunResult result = runner.Run(CreateRequest(
+            new AgentRunLimits(OverallTimeout: TimeSpan.FromSeconds(1))));
+
+        Assert.False(result.IsSuccess);
+        Assert.Equal("agent-overall-timeout-reached", result.Error?.LocalErrorCode);
+        Assert.Single(result.ToolCalls);
+        AgentRunEvent timeoutEvent = Assert.Single(result.Events, agentEvent => agentEvent.Type == "agent.error");
+        Assert.Equal("agent-overall-timeout-reached", timeoutEvent.ErrorCode);
+    }
+
+    [Fact]
     public void Run_returns_failure_when_model_start_observes_model_call_timeout()
     {
         OfflineAgentRunner runner = new(
