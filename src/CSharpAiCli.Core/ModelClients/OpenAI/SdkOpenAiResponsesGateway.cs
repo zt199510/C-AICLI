@@ -34,6 +34,14 @@ public sealed class SdkOpenAiResponsesGateway : IOpenAiResponsesGateway
 
     public Uri Endpoint => client.Endpoint;
 
+    public OpenAiResponseEnvelope CreateAgentResponse(
+        OpenAiAgentRequest request,
+        CancellationToken cancellationToken = default)
+    {
+        throw new NotSupportedException(
+            "OpenAI agent tool continuation is not implemented for the SDK gateway yet.");
+    }
+
     public OpenAiResponseEnvelope CreateResponse(
         string model,
         string prompt,

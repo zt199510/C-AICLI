@@ -636,6 +636,13 @@ public sealed class OpenAiResponsesModelClientTests
             OpenAiStreamingResponseUpdate.Completed("resp_fake", "gpt-test")
         ];
 
+        public OpenAiResponseEnvelope CreateAgentResponse(
+            OpenAiAgentRequest request,
+            CancellationToken cancellationToken = default)
+        {
+            throw new NotSupportedException();
+        }
+
         public OpenAiResponseEnvelope CreateResponse(
             string model,
             string prompt,
