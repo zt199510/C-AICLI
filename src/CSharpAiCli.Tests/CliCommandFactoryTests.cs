@@ -1098,6 +1098,52 @@ public sealed class CliCommandFactoryTests
     }
 
     [Fact]
+    public void Exec_session_persists_tool_call_recorded_by_runner_into_passed_transcript()
+    {
+        using TempDirectory temp = TempDirectory.Create();
+        using StringWriter output = new();
+        FakeConversationStore store = new();
+        TranscriptRecordingAgentRunner agentRunner = new(
+            callId: "call_tool_1",
+            toolName: "workspace.search",
+            argumentsJson: """{"query":"workspace"}""",
+            result: ToolExecutionResult.Success("3 matching files", "approved"));
+
+        int exitCode = CliCommandFactory
+            .Create(
+                output,
+                workspacePath => CreateSnapshot(
+                    workspacePath,
+                    apiKey: "sk-test-secret",
+                    apiKeySource: "OPENAI_API_KEY",
+                    model: "gpt-test"),
+                (_, _) => { },
+                _ => new FakeChatModelClient(ChatModelResult.Success(new ChatResponse("openai", "gpt-test", "resp", ""))),
+                writer => new TerminalChatStreamingRenderer(writer),
+                _ => store,
+                () => DateTimeOffset.Parse("2024-01-01T00:00:05Z"),
+                (_, _, _) => agentRunner)
+            .Parse(["exec", "--workspace", temp.Path, "--session", "smoke", "summarize workspace"])
+            .Invoke();
+
+        Assert.Equal(0, exitCode);
+        Assert.Equal("smoke", store.LoadedSessionName?.Value);
+        Assert.Equal("smoke", store.SavedSessionName?.Value);
+        Assert.NotNull(store.SavedTranscript);
+        Assert.Same(agentRunner.LastTranscript, store.SavedTranscript);
+        ConversationToolCall toolCall = Assert.Single(store.SavedTranscript.ToolCalls);
+        Assert.Equal("call_tool_1", toolCall.CallId);
+        Assert.Equal("workspace.search", toolCall.ToolName);
+        Assert.Equal("""{"query":"workspace"}""", toolCall.ArgumentsJson);
+        Assert.Equal("approved", toolCall.ApprovalStatus);
+        Assert.True(toolCall.Succeeded);
+        Assert.Equal("3 matching files", toolCall.OutputSummary);
+        Assert.Null(toolCall.FailureReason);
+        Assert.Null(toolCall.ErrorCode);
+        Assert.False(toolCall.Retryable);
+    }
+
+    [Fact]
     public void Exec_without_session_does_not_create_transcript()
     {
         using TempDirectory temp = TempDirectory.Create();
@@ -2015,6 +2061,31 @@ public sealed class CliCommandFactoryTests
             LastRequest = request;
             LastTranscript = transcript;
             return result;
+        }
+    }
+
+    private sealed class TranscriptRecordingAgentRunner(
+        string callId,
+        string toolName,
+        string argumentsJson,
+        ToolExecutionResult result) : IAgentRunner
+    {
+        public ConversationTranscript? LastTranscript { get; private set; }
+
+        public AgentRunResult Run(
+            AgentRunRequest request,
+            ConversationTranscript? transcript = null,
+            CancellationToken cancellationToken = default)
+        {
+            LastTranscript = transcript;
+            ConversationToolCall toolCall = ConversationToolCall.FromExecution(
+                callId,
+                toolName,
+                argumentsJson,
+                result,
+                DateTimeOffset.Parse("2024-01-01T00:00:06Z"));
+            transcript?.AddToolCall(toolCall);
+            return AgentRunResult.Success("agent completed task", [toolCall], []);
         }
     }
 
