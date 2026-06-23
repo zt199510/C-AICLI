@@ -57,6 +57,76 @@ public sealed class OfflineAgentRunnerTests
     }
 
     [Fact]
+    public void Run_executes_multiple_tools_in_one_model_turn_and_records_transcript_tool_calls()
+    {
+        ToolRegistry registry = new();
+        registry.Register(new EchoTool());
+        ToolExecutor executor = new(registry);
+        FakeToolCallingModel model = new(
+            startTurn: AgentModelTurn.RequestTools(
+                new AgentToolCallRequest(
+                    CallId: "call_echo_1",
+                    ToolName: "test.echo",
+                    ArgumentsJson: """{"text":"first"}"""),
+                new AgentToolCallRequest(
+                    CallId: "call_echo_2",
+                    ToolName: "test.echo",
+                    ArgumentsJson: """{"text":"second"}""")),
+            continueFactory: results =>
+            {
+                Assert.Equal(2, results.Count);
+                Assert.Equal("call_echo_1", results[0].Request.CallId);
+                Assert.True(results[0].Result.Succeeded);
+                Assert.Equal("first", results[0].Result.Summary);
+                Assert.Equal("call_echo_2", results[1].Request.CallId);
+                Assert.True(results[1].Result.Succeeded);
+                Assert.Equal("second", results[1].Result.Summary);
+                return AgentModelTurn.Final("tool said: " + string.Join(", ", results.Select(result => result.Result.Summary)));
+            });
+        DateTimeOffset now = DateTimeOffset.Parse("2024-01-01T00:00:05Z");
+        OfflineAgentRunner runner = new(model, executor, () => now);
+        ConversationTranscript transcript = ConversationTranscript.Create(
+            "smoke",
+            DateTimeOffset.Parse("2024-01-01T00:00:00Z"));
+
+        AgentRunResult result = runner.Run(CreateRequest(), transcript);
+
+        Assert.True(result.IsSuccess);
+        Assert.Equal("tool said: first, second", result.Text);
+        Assert.Equal(2, result.ToolCalls.Count);
+        Assert.Equal("call_echo_1", result.ToolCalls[0].CallId);
+        Assert.Equal("first", result.ToolCalls[0].OutputSummary);
+        Assert.Equal("call_echo_2", result.ToolCalls[1].CallId);
+        Assert.Equal("second", result.ToolCalls[1].OutputSummary);
+        Assert.Equal(2, transcript.ToolCalls.Count);
+        Assert.Equal("call_echo_1", transcript.ToolCalls[0].CallId);
+        Assert.Equal("first", transcript.ToolCalls[0].OutputSummary);
+        Assert.Equal("call_echo_2", transcript.ToolCalls[1].CallId);
+        Assert.Equal("second", transcript.ToolCalls[1].OutputSummary);
+
+        Assert.Equal(
+            new[]
+            {
+                "model.turn",
+                "tool.call",
+                "tool.result",
+                "tool.call",
+                "tool.result",
+                "model.turn",
+                "final.response"
+            },
+            result.Events.Select(agentEvent => agentEvent.Type).ToArray());
+        Assert.Equal(new long[] { 0, 1, 2, 3, 4, 5, 6 }, result.Events.Select(agentEvent => agentEvent.Sequence).ToArray());
+        Assert.Equal("test.echo", result.Events[1].Payload?["toolName"]);
+        Assert.Equal("call_echo_1", result.Events[1].Payload?["callId"]);
+        Assert.Equal("first", result.Events[2].Summary);
+        Assert.Equal("test.echo", result.Events[3].Payload?["toolName"]);
+        Assert.Equal("call_echo_2", result.Events[3].Payload?["callId"]);
+        Assert.Equal("second", result.Events[4].Summary);
+        Assert.Equal("tool said: first, second", result.Events[6].Summary);
+    }
+
+    [Fact]
     public void Run_records_tool_failure_and_continues_model_loop()
     {
         ToolExecutor executor = new(new ToolRegistry());
