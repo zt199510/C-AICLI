@@ -17,7 +17,7 @@
 
 验证：
 - 命令：`dotnet test C:\Users\10335\.config\superpowers\worktrees\C-AICLI\week-29-agent-run-loop-v1\src\CSharpAiCli.Tests\CSharpAiCli.Tests.csproj`
-- 结果：通过，398 passed，0 failed，0 skipped。
+- 结果：通过，400 passed，0 failed，0 skipped。
 - 命令：`dotnet build C:\Users\10335\.config\superpowers\worktrees\C-AICLI\week-29-agent-run-loop-v1\src\CSharpAiCli.Cli\CSharpAiCli.Cli.csproj`
 - 结果：通过，0 warnings，0 errors。
 - 说明：从 worktree 内直接运行 `dotnet test` 会受 root `global.json` 的 SDK `9.0.308` pin 影响；本轮验证使用 `C:\Users\10335` 工作目录和绝对 csproj 路径完成。
@@ -28,6 +28,7 @@
 - 默认 direct OpenAI SDK gateway 的真实工具调用 continuation 仍未启用；当配置 model/API key/source 后，默认 `exec` 会返回清晰的 `agent-backend-unavailable`。
 - 无 model、无 API key、unsupported API key source 都返回结构化 agent error，且不输出 secret。
 - `run` 仍用于成功的 deterministic local smoke task，例如 `run --workspace . --approve "create smoke note"`。
+- `--timeout-seconds` 会作为 overall timeout 约束模型调用与工具执行中观察 cancellation token 的操作。
 
 风险：
 - `SdkOpenAiResponsesGateway.CreateAgentResponse` 仍需实现真实 SDK tool calls / tool results 转译，否则 direct OpenAI agent loop 只能停留在 surface/contract 和 offline/fake coverage。
