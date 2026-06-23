@@ -42,7 +42,7 @@ public sealed class OfflineAgentRunner : IAgentRunner
             return timeoutResult!;
         }
 
-        if (!TryInvokeModelStart(request, limits, cancellationToken, recordedToolCalls, events, out AgentModelTurn? turn, out AgentRunResult? modelTimeoutResult))
+        if (!TryInvokeModelStart(request, limits, deadlineUtc, cancellationToken, recordedToolCalls, events, out AgentModelTurn? turn, out AgentRunResult? modelTimeoutResult))
         {
             return modelTimeoutResult!;
         }
@@ -104,10 +104,19 @@ public sealed class OfflineAgentRunner : IAgentRunner
                     CallId: toolCall.CallId,
                     Workspace: request.Workspace,
                     ArgumentsJson: toolCall.ArgumentsJson);
-                ToolExecutionResult executionResult = toolExecutor.Execute(
-                    toolCall.ToolName,
+                if (!TryExecuteTool(
+                    toolCall,
                     context,
-                    cancellationToken);
+                    deadlineUtc,
+                    cancellationToken,
+                    recordedToolCalls,
+                    events,
+                    out ToolExecutionResult executionResult,
+                    out AgentRunResult? toolTimeoutResult))
+                {
+                    return toolTimeoutResult!;
+                }
+
                 AgentToolCallResult toolResult = new(toolCall, executionResult);
                 toolResults.Add(toolResult);
 
@@ -129,7 +138,7 @@ public sealed class OfflineAgentRunner : IAgentRunner
                 return timeoutResult!;
             }
 
-            if (!TryInvokeModelContinue(request, toolResults, limits, cancellationToken, recordedToolCalls, events, out turn, out modelTimeoutResult))
+            if (!TryInvokeModelContinue(request, toolResults, limits, deadlineUtc, cancellationToken, recordedToolCalls, events, out turn, out modelTimeoutResult))
             {
                 return modelTimeoutResult!;
             }
@@ -162,25 +171,56 @@ public sealed class OfflineAgentRunner : IAgentRunner
     private bool TryInvokeModelStart(
         AgentRunRequest request,
         AgentRunLimits limits,
+        DateTimeOffset deadlineUtc,
         CancellationToken cancellationToken,
         IReadOnlyList<ConversationToolCall> recordedToolCalls,
         List<AgentRunEvent> events,
         out AgentModelTurn? turn,
         out AgentRunResult? result)
     {
-        using CancellationTokenSource timeoutSource = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
-        timeoutSource.CancelAfter(limits.ModelCallTimeout);
+        TimeSpan remainingOverallTimeout = deadlineUtc - utcNowProvider();
+        if (remainingOverallTimeout <= TimeSpan.Zero)
+        {
+            turn = null;
+            result = CreateOverallTimeoutResult(recordedToolCalls, events);
+            return false;
+        }
+
+        using CancellationTokenSource overallTimeoutSource = new();
+        using CancellationTokenSource modelTimeoutSource = new();
+        using CancellationTokenSource timeoutSource = CancellationTokenSource.CreateLinkedTokenSource(
+            cancellationToken,
+            overallTimeoutSource.Token,
+            modelTimeoutSource.Token);
+        overallTimeoutSource.CancelAfter(remainingOverallTimeout);
+        modelTimeoutSource.CancelAfter(limits.ModelCallTimeout);
         try
         {
             turn = model.Start(request, timeoutSource.Token);
             result = null;
             return true;
         }
-        catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested && timeoutSource.IsCancellationRequested)
+        catch (OperationCanceledException)
         {
+            if (cancellationToken.IsCancellationRequested)
+            {
+                throw;
+            }
+
             turn = null;
-            result = CreateModelCallTimeoutResult(recordedToolCalls, events);
-            return false;
+            if (overallTimeoutSource.IsCancellationRequested || utcNowProvider() > deadlineUtc)
+            {
+                result = CreateOverallTimeoutResult(recordedToolCalls, events);
+                return false;
+            }
+
+            if (modelTimeoutSource.IsCancellationRequested)
+            {
+                result = CreateModelCallTimeoutResult(recordedToolCalls, events);
+                return false;
+            }
+
+            throw;
         }
     }
 
@@ -188,25 +228,106 @@ public sealed class OfflineAgentRunner : IAgentRunner
         AgentRunRequest request,
         IReadOnlyList<AgentToolCallResult> toolResults,
         AgentRunLimits limits,
+        DateTimeOffset deadlineUtc,
         CancellationToken cancellationToken,
         IReadOnlyList<ConversationToolCall> recordedToolCalls,
         List<AgentRunEvent> events,
         out AgentModelTurn? turn,
         out AgentRunResult? result)
     {
-        using CancellationTokenSource timeoutSource = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
-        timeoutSource.CancelAfter(limits.ModelCallTimeout);
+        TimeSpan remainingOverallTimeout = deadlineUtc - utcNowProvider();
+        if (remainingOverallTimeout <= TimeSpan.Zero)
+        {
+            turn = null;
+            result = CreateOverallTimeoutResult(recordedToolCalls, events);
+            return false;
+        }
+
+        using CancellationTokenSource overallTimeoutSource = new();
+        using CancellationTokenSource modelTimeoutSource = new();
+        using CancellationTokenSource timeoutSource = CancellationTokenSource.CreateLinkedTokenSource(
+            cancellationToken,
+            overallTimeoutSource.Token,
+            modelTimeoutSource.Token);
+        overallTimeoutSource.CancelAfter(remainingOverallTimeout);
+        modelTimeoutSource.CancelAfter(limits.ModelCallTimeout);
         try
         {
             turn = model.Continue(request, toolResults, timeoutSource.Token);
             result = null;
             return true;
         }
-        catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested && timeoutSource.IsCancellationRequested)
+        catch (OperationCanceledException)
         {
+            if (cancellationToken.IsCancellationRequested)
+            {
+                throw;
+            }
+
             turn = null;
-            result = CreateModelCallTimeoutResult(recordedToolCalls, events);
+            if (overallTimeoutSource.IsCancellationRequested || utcNowProvider() > deadlineUtc)
+            {
+                result = CreateOverallTimeoutResult(recordedToolCalls, events);
+                return false;
+            }
+
+            if (modelTimeoutSource.IsCancellationRequested)
+            {
+                result = CreateModelCallTimeoutResult(recordedToolCalls, events);
+                return false;
+            }
+
+            throw;
+        }
+    }
+
+    private bool TryExecuteTool(
+        AgentToolCallRequest toolCall,
+        ToolExecutionContext context,
+        DateTimeOffset deadlineUtc,
+        CancellationToken cancellationToken,
+        IReadOnlyList<ConversationToolCall> recordedToolCalls,
+        List<AgentRunEvent> events,
+        out ToolExecutionResult executionResult,
+        out AgentRunResult? result)
+    {
+        TimeSpan remainingOverallTimeout = deadlineUtc - utcNowProvider();
+        if (remainingOverallTimeout <= TimeSpan.Zero)
+        {
+            executionResult = null!;
+            result = CreateOverallTimeoutResult(recordedToolCalls, events);
             return false;
+        }
+
+        using CancellationTokenSource overallTimeoutSource = new();
+        using CancellationTokenSource timeoutSource = CancellationTokenSource.CreateLinkedTokenSource(
+            cancellationToken,
+            overallTimeoutSource.Token);
+        overallTimeoutSource.CancelAfter(remainingOverallTimeout);
+        try
+        {
+            executionResult = toolExecutor.Execute(
+                toolCall.ToolName,
+                context,
+                timeoutSource.Token);
+            result = null;
+            return true;
+        }
+        catch (OperationCanceledException)
+        {
+            if (cancellationToken.IsCancellationRequested)
+            {
+                throw;
+            }
+
+            executionResult = null!;
+            if (overallTimeoutSource.IsCancellationRequested || utcNowProvider() > deadlineUtc)
+            {
+                result = CreateOverallTimeoutResult(recordedToolCalls, events);
+                return false;
+            }
+
+            throw;
         }
     }
 
@@ -217,6 +338,18 @@ public sealed class OfflineAgentRunner : IAgentRunner
         AgentError timeoutError = new(
             "agent-model-call-timeout-reached",
             "Agent model call reached the timeout.",
+            Retryable: false);
+        RecordError(events, timeoutError);
+        return AgentRunResult.Failure(timeoutError, recordedToolCalls, events);
+    }
+
+    private AgentRunResult CreateOverallTimeoutResult(
+        IReadOnlyList<ConversationToolCall> recordedToolCalls,
+        List<AgentRunEvent> events)
+    {
+        AgentError timeoutError = new(
+            "agent-overall-timeout-reached",
+            "Agent loop reached the overall timeout.",
             Retryable: false);
         RecordError(events, timeoutError);
         return AgentRunResult.Failure(timeoutError, recordedToolCalls, events);
@@ -234,12 +367,7 @@ public sealed class OfflineAgentRunner : IAgentRunner
             return false;
         }
 
-        AgentError timeoutError = new(
-            "agent-overall-timeout-reached",
-            "Agent loop reached the overall timeout.",
-            Retryable: false);
-        RecordError(events, timeoutError);
-        result = AgentRunResult.Failure(timeoutError, recordedToolCalls, events);
+        result = CreateOverallTimeoutResult(recordedToolCalls, events);
         return true;
     }
 

@@ -420,6 +420,26 @@ public sealed class OfflineAgentRunnerTests
     }
 
     [Fact]
+    public void Run_returns_overall_timeout_when_model_start_observes_overall_timeout_before_model_call_timeout()
+    {
+        OfflineAgentRunner runner = new(
+            new TimeoutObservingModel(timeoutOnStart: true),
+            new ToolExecutor(new ToolRegistry()),
+            () => DateTimeOffset.Parse("2024-01-01T00:00:05Z"));
+
+        AgentRunResult result = runner.Run(CreateRequest(
+            new AgentRunLimits(
+                OverallTimeout: TimeSpan.FromMilliseconds(1),
+                ModelCallTimeout: TimeSpan.FromSeconds(30))));
+
+        Assert.False(result.IsSuccess);
+        Assert.Equal("agent-overall-timeout-reached", result.Error?.LocalErrorCode);
+        Assert.Empty(result.ToolCalls);
+        AgentRunEvent timeoutEvent = Assert.Single(result.Events, agentEvent => agentEvent.Type == "agent.error");
+        Assert.Equal("agent-overall-timeout-reached", timeoutEvent.ErrorCode);
+    }
+
+    [Fact]
     public void Run_returns_failure_when_model_continue_observes_model_call_timeout()
     {
         ToolRegistry registry = new();
@@ -437,6 +457,37 @@ public sealed class OfflineAgentRunnerTests
         Assert.Single(result.ToolCalls);
         AgentRunEvent timeoutEvent = Assert.Single(result.Events, agentEvent => agentEvent.Type == "agent.error");
         Assert.Equal("agent-model-call-timeout-reached", timeoutEvent.ErrorCode);
+    }
+
+    [Fact]
+    public void Run_returns_overall_timeout_when_tool_execution_observes_overall_timeout()
+    {
+        ToolRegistry registry = new();
+        registry.Register(new TimeoutObservingTool());
+        ToolExecutor executor = new(registry);
+        FakeToolCallingModel model = new(
+            startTurn: AgentModelTurn.RequestTools(new AgentToolCallRequest(
+                CallId: "call_wait_1",
+                ToolName: "test.wait-for-cancellation",
+                ArgumentsJson: "{}")),
+            continueFactory: _ => AgentModelTurn.Final("unreachable"));
+        OfflineAgentRunner runner = new(
+            model,
+            executor,
+            () => DateTimeOffset.Parse("2024-01-01T00:00:05Z"));
+
+        AgentRunResult result = runner.Run(CreateRequest(
+            new AgentRunLimits(
+                OverallTimeout: TimeSpan.FromMilliseconds(1),
+                ModelCallTimeout: TimeSpan.FromSeconds(30))));
+
+        Assert.False(result.IsSuccess);
+        Assert.Equal("agent-overall-timeout-reached", result.Error?.LocalErrorCode);
+        Assert.Empty(result.ToolCalls);
+        Assert.Equal(
+            new[] { "model.turn", "tool.call", "agent.error" },
+            result.Events.Select(agentEvent => agentEvent.Type).ToArray());
+        Assert.Equal("agent-overall-timeout-reached", result.Events[^1].ErrorCode);
     }
 
     [Fact]
@@ -509,6 +560,23 @@ public sealed class OfflineAgentRunnerTests
             using JsonDocument document = JsonDocument.Parse(context.ArgumentsJson);
             string text = document.RootElement.GetProperty("text").GetString() ?? string.Empty;
             return ToolExecutionResult.Success(text);
+        }
+    }
+
+    private sealed class TimeoutObservingTool : ITool
+    {
+        public ToolDefinition Definition { get; } = new(
+            "test.wait-for-cancellation",
+            "Waits until the runner cancels the tool execution token.",
+            """{"type":"object"}""");
+
+        public ToolExecutionResult Execute(
+            ToolExecutionContext context,
+            CancellationToken cancellationToken = default)
+        {
+            cancellationToken.WaitHandle.WaitOne(TimeSpan.FromSeconds(1));
+            cancellationToken.ThrowIfCancellationRequested();
+            throw new InvalidOperationException("Expected overall timeout cancellation.");
         }
     }
 
