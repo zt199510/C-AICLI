@@ -55,7 +55,7 @@
 
 - 已验收：可配置 OpenAI 官方或兼容服务 base URL。
 - 已验收：可用 `caicli exec` 进行非交互任务执行，并支持 text/NDJSON 输出。
-- direct backend 具备 agent loop v1。
+- fake/offline agent loop v1 与 `exec` 事件/限制/会话契约已固化；direct OpenAI SDK 真实工具调用 continuation 仍 Deferred。
 - 审批和权限 profile 可配置、可诊断。
 - session 可恢复、可管理、可导出。
 - `AGENTS.md` 项目指令兼容。

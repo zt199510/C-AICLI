@@ -76,14 +76,16 @@ MCP and Gerber/TIFF workflow execution are enhanced capabilities and are not par
 
 ## 7. Run An Agentic Exec Task
 
+`exec` is the agentic v1 surface and contract. It is routed through `IAgentRunner`, emits model/tool/final/error events in the newline-delimited `--json` stream, supports loop limits and session transcripts, and returns exit code `0` on success, `1` on task failure, and `2` on argument error.
+
+Today, the offline/fake agent loop is implemented and tested, but the default direct OpenAI SDK gateway does not yet continue real tool-call loops. With the default direct SDK backend, agentic `exec` tasks that need tool-call continuation return `agent-backend-unavailable` until SDK tool calls and tool results are translated.
+
 ```powershell
 artifacts\release\caicli-0.1.0-win-x64\caicli.exe exec --workspace . "read README.md"
 artifacts\release\caicli-0.1.0-win-x64\caicli.exe exec --json --workspace . "read README.md"
 artifacts\release\caicli-0.1.0-win-x64\caicli.exe exec --output json --workspace . "read README.md"
 artifacts\release\caicli-0.1.0-win-x64\caicli.exe exec --output text --workspace . "read README.md"
 ```
-
-`exec` is the agentic v1 entry. It is routed through `IAgentRunner`, emits model/tool/final/error events in the newline-delimited `--json` stream, and returns exit code `0` on success, `1` on task failure, and `2` on argument error.
 
 Agent loop limits are available for non-interactive runs:
 
@@ -97,16 +99,13 @@ Use `--session` to record the transcript, including agent tool calls and summari
 artifacts\release\caicli-0.1.0-win-x64\caicli.exe exec --workspace . --session smoke-exec "inspect README.md"
 ```
 
-For direct-tool tasks that write files or run shell commands, pass `--approve`:
+For approved shell trials through the `exec` surface, pass `--approve`:
 
 ```powershell
-artifacts\release\caicli-0.1.0-win-x64\caicli.exe exec --workspace . --approve "create smoke note"
 artifacts\release\caicli-0.1.0-win-x64\caicli.exe exec --workspace . --approve "shell dir"
 ```
 
-Without `--approve`, approved-write and shell actions are denied.
-
-The offline/fake agent loop is implemented and tested. The default direct OpenAI SDK gateway does not yet continue real tool-call loops and returns `agent-backend-unavailable` until SDK tool calls and tool results are translated.
+Without `--approve`, approval-gated write and shell actions are denied.
 
 ## 8. Run A Local Smoke Task
 

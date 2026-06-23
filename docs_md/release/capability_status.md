@@ -10,7 +10,7 @@
 | `caicli chat` | Accepted | Uses direct OpenAI Responses path with streaming renderer and configured OpenAI-compatible base URL. |
 | `chat --session` | Accepted | Saves transcript v1 in the user profile. |
 | `session export/clear` | Accepted | Exports or deletes one transcript file by validated session name. |
-| `caicli exec` | Solidified | Agentic v1 task entry routed through `IAgentRunner`; emits model/tool/final/error events, supports `--output text|json`, loop limits, and approval-gated tool actions. |
+| `caicli exec` | Solidified | Agentic v1 surface routed through `IAgentRunner`; emits model/tool/final/error events and supports `--output text|json`, loop limits, approval-gated tool actions, and session transcript. Real direct SDK tool-call continuation is deferred. |
 | `caicli run` | Solidified | Deterministic direct-tool release smoke tasks: create smoke note, read file, run approved shell command. |
 | `tools list/call` | Solidified | Lists enabled tools and invokes one tool with JSON or `--arguments-file`. |
 | Workspace read/search tools | Accepted | Enforced by workspace guard. |
