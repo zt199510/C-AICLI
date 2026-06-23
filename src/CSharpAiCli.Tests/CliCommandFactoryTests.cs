@@ -1059,6 +1059,77 @@ public sealed class CliCommandFactoryTests
     }
 
     [Fact]
+    public void Exec_session_loads_transcript_passes_it_to_runner_and_saves()
+    {
+        using TempDirectory temp = TempDirectory.Create();
+        using StringWriter output = new();
+        FakeAgentRunner agentRunner = new(AgentRunResult.Success("agent completed task", [], []));
+        ConversationTranscript existing = ConversationTranscript.Create(
+            "smoke",
+            DateTimeOffset.Parse("2024-01-01T00:00:00Z"));
+        FakeConversationStore store = new()
+        {
+            Transcript = existing
+        };
+
+        int exitCode = CliCommandFactory
+            .Create(
+                output,
+                workspacePath => CreateSnapshot(
+                    workspacePath,
+                    apiKey: "sk-test-secret",
+                    apiKeySource: "OPENAI_API_KEY",
+                    model: "gpt-test"),
+                (_, _) => { },
+                _ => new FakeChatModelClient(ChatModelResult.Success(new ChatResponse("openai", "gpt-test", "resp", ""))),
+                writer => new TerminalChatStreamingRenderer(writer),
+                _ => store,
+                () => DateTimeOffset.Parse("2024-01-01T00:00:05Z"),
+                (_, _, _) => agentRunner)
+            .Parse(["exec", "--workspace", temp.Path, "--session", "smoke", "summarize workspace"])
+            .Invoke();
+
+        Assert.Equal(0, exitCode);
+        Assert.Equal("smoke", store.LoadedSessionName?.Value);
+        Assert.Equal("smoke", store.SavedSessionName?.Value);
+        Assert.Equal("smoke", agentRunner.LastRequest?.SessionName);
+        Assert.Same(existing, agentRunner.LastTranscript);
+        Assert.Same(existing, store.SavedTranscript);
+    }
+
+    [Fact]
+    public void Exec_without_session_does_not_create_transcript()
+    {
+        using TempDirectory temp = TempDirectory.Create();
+        using StringWriter output = new();
+        FakeAgentRunner agentRunner = new(AgentRunResult.Success("agent completed task", [], []));
+        FakeConversationStore store = new();
+
+        int exitCode = CliCommandFactory
+            .Create(
+                output,
+                workspacePath => CreateSnapshot(
+                    workspacePath,
+                    apiKey: "sk-test-secret",
+                    apiKeySource: "OPENAI_API_KEY",
+                    model: "gpt-test"),
+                (_, _) => { },
+                _ => new FakeChatModelClient(ChatModelResult.Success(new ChatResponse("openai", "gpt-test", "resp", ""))),
+                writer => new TerminalChatStreamingRenderer(writer),
+                _ => store,
+                () => DateTimeOffset.Parse("2024-01-01T00:00:05Z"),
+                (_, _, _) => agentRunner)
+            .Parse(["exec", "--workspace", temp.Path, "summarize workspace"])
+            .Invoke();
+
+        Assert.Equal(0, exitCode);
+        Assert.Null(store.LoadedSessionName);
+        Assert.Null(store.SavedSessionName);
+        Assert.Null(store.SavedTranscript);
+        Assert.Null(agentRunner.LastTranscript);
+    }
+
+    [Fact]
     public void Exec_output_rejects_unknown_value_before_running_task()
     {
         using TempDirectory temp = TempDirectory.Create();

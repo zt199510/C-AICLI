@@ -353,6 +353,10 @@ public static class CliCommandFactory
         {
             Description = "Overall agentic exec timeout in seconds.",
         };
+        Option<string> execSessionOption = new("--session")
+        {
+            Description = "Resume or create a named agentic exec transcript.",
+        };
         execOutputOption.DefaultValueFactory = _ => "text";
         execOutputOption.Validators.Add(result =>
         {
@@ -373,6 +377,7 @@ public static class CliCommandFactory
         execCommand.Options.Add(execMaxTurnsOption);
         execCommand.Options.Add(execMaxToolCallsOption);
         execCommand.Options.Add(execTimeoutSecondsOption);
+        execCommand.Options.Add(execSessionOption);
         execCommand.SetAction(parseResult =>
         {
             string? workspacePath = parseResult.GetValue(workspaceOption);
@@ -383,6 +388,7 @@ public static class CliCommandFactory
             int? maxTurns = parseResult.GetValue(execMaxTurnsOption);
             int? maxToolCalls = parseResult.GetValue(execMaxToolCallsOption);
             int? timeoutSeconds = parseResult.GetValue(execTimeoutSecondsOption);
+            string? session = parseResult.GetValue(execSessionOption);
             CliEnvironmentSnapshot snapshot = snapshotProvider(workspacePath);
             TryWriteCommandLog(commandLogger, "exec", snapshot);
 
@@ -395,13 +401,29 @@ public static class CliCommandFactory
                 task,
                 snapshot.Workspace,
                 snapshot.Instructions.Instructions,
+                session,
                 Limits: new AgentRunLimits(
                     MaxTurns: maxTurns,
                     MaxToolCalls: maxToolCalls,
                     ModelCallTimeout: timeoutSeconds is null ? null : TimeSpan.FromSeconds(timeoutSeconds.Value),
                     OverallTimeout: timeoutSeconds is null ? null : TimeSpan.FromSeconds(timeoutSeconds.Value)));
+            ConversationSessionName? sessionName = null;
+            ConversationTranscript? transcript = null;
+            IConversationStore? conversationStore = null;
+            if (!string.IsNullOrWhiteSpace(session))
+            {
+                sessionName = ConversationSessionName.Parse(session);
+                conversationStore = conversationStoreFactory(snapshot);
+                transcript = conversationStore.LoadOrCreate(sessionName, utcNowProvider());
+            }
+
             IAgentRunner runner = execAgentRunnerFactory(snapshot, registry, executor);
-            AgentRunResult agentResult = runner.Run(request);
+            AgentRunResult agentResult = runner.Run(request, transcript);
+            if (sessionName is not null && transcript is not null && conversationStore is not null)
+            {
+                conversationStore.Save(sessionName, transcript);
+            }
+
             ExecResult execResult = AgentExecResultAdapter.FromAgentResult(agentResult);
 
             if (IsJsonOutputRequested(jsonRequested, outputMode))
