@@ -186,6 +186,7 @@ public sealed class OfflineAgentRunner : IAgentRunner
             return false;
         }
 
+        bool modelTimeoutWins = limits.ModelCallTimeout <= remainingOverallTimeout;
         using CancellationTokenSource overallTimeoutSource = new();
         using CancellationTokenSource modelTimeoutSource = new();
         using CancellationTokenSource timeoutSource = CancellationTokenSource.CreateLinkedTokenSource(
@@ -208,6 +209,15 @@ public sealed class OfflineAgentRunner : IAgentRunner
             }
 
             turn = null;
+            if (modelTimeoutWins
+                && (modelTimeoutSource.IsCancellationRequested
+                    || overallTimeoutSource.IsCancellationRequested
+                    || utcNowProvider() > deadlineUtc))
+            {
+                result = CreateModelCallTimeoutResult(recordedToolCalls, events);
+                return false;
+            }
+
             if (overallTimeoutSource.IsCancellationRequested || utcNowProvider() > deadlineUtc)
             {
                 result = CreateOverallTimeoutResult(recordedToolCalls, events);
@@ -243,6 +253,7 @@ public sealed class OfflineAgentRunner : IAgentRunner
             return false;
         }
 
+        bool modelTimeoutWins = limits.ModelCallTimeout <= remainingOverallTimeout;
         using CancellationTokenSource overallTimeoutSource = new();
         using CancellationTokenSource modelTimeoutSource = new();
         using CancellationTokenSource timeoutSource = CancellationTokenSource.CreateLinkedTokenSource(
@@ -265,6 +276,15 @@ public sealed class OfflineAgentRunner : IAgentRunner
             }
 
             turn = null;
+            if (modelTimeoutWins
+                && (modelTimeoutSource.IsCancellationRequested
+                    || overallTimeoutSource.IsCancellationRequested
+                    || utcNowProvider() > deadlineUtc))
+            {
+                result = CreateModelCallTimeoutResult(recordedToolCalls, events);
+                return false;
+            }
+
             if (overallTimeoutSource.IsCancellationRequested || utcNowProvider() > deadlineUtc)
             {
                 result = CreateOverallTimeoutResult(recordedToolCalls, events);

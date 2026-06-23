@@ -460,6 +460,65 @@ public sealed class OfflineAgentRunnerTests
     }
 
     [Fact]
+    public void Run_returns_overall_timeout_when_model_continue_observes_overall_timeout_before_model_call_timeout()
+    {
+        ToolRegistry registry = new();
+        DateTimeOffset start = DateTimeOffset.Parse("2024-01-01T00:00:00Z");
+        DateTimeOffset now = start;
+        bool advanceClockAfterTool = false;
+        registry.Register(new ClockAdvancingTool(() => advanceClockAfterTool = true));
+        OfflineAgentRunner runner = new(
+            new TimeoutObservingModel(
+                timeoutOnStart: false,
+                toolName: "test.advance-clock",
+                argumentsJson: "{}"),
+            new ToolExecutor(registry),
+            () =>
+            {
+                if (advanceClockAfterTool)
+                {
+                    now = start.AddMilliseconds(900);
+                }
+
+                return now;
+            });
+
+        AgentRunResult result = runner.Run(CreateRequest(
+            new AgentRunLimits(
+                OverallTimeout: TimeSpan.FromSeconds(1),
+                ModelCallTimeout: TimeSpan.FromSeconds(30))));
+
+        Assert.False(result.IsSuccess);
+        Assert.Equal("agent-overall-timeout-reached", result.Error?.LocalErrorCode);
+        Assert.Single(result.ToolCalls);
+        AgentRunEvent timeoutEvent = Assert.Single(result.Events, agentEvent => agentEvent.Type == "agent.error");
+        Assert.Equal("agent-overall-timeout-reached", timeoutEvent.ErrorCode);
+    }
+
+    [Fact]
+    public void Run_returns_model_call_timeout_when_model_timeout_was_earlier_but_overall_is_expired_by_classification()
+    {
+        ToolRegistry registry = new();
+        registry.Register(new EchoTool());
+        DateTimeOffset now = DateTimeOffset.Parse("2024-01-01T00:00:00Z");
+        OfflineAgentRunner runner = new(
+            new DelayedCancellationThrowModel(() => now = now.AddSeconds(5)),
+            new ToolExecutor(registry),
+            () => now);
+
+        AgentRunResult result = runner.Run(CreateRequest(
+            new AgentRunLimits(
+                OverallTimeout: TimeSpan.FromSeconds(2),
+                ModelCallTimeout: TimeSpan.FromMilliseconds(1))));
+
+        Assert.False(result.IsSuccess);
+        Assert.Equal("agent-model-call-timeout-reached", result.Error?.LocalErrorCode);
+        Assert.Single(result.ToolCalls);
+        AgentRunEvent timeoutEvent = Assert.Single(result.Events, agentEvent => agentEvent.Type == "agent.error");
+        Assert.Equal("agent-model-call-timeout-reached", timeoutEvent.ErrorCode);
+    }
+
+    [Fact]
     public void Run_returns_overall_timeout_when_tool_execution_observes_overall_timeout()
     {
         ToolRegistry registry = new();
@@ -580,6 +639,22 @@ public sealed class OfflineAgentRunnerTests
         }
     }
 
+    private sealed class ClockAdvancingTool(Action advanceClock) : ITool
+    {
+        public ToolDefinition Definition { get; } = new(
+            "test.advance-clock",
+            "Advances the test clock.",
+            """{"type":"object"}""");
+
+        public ToolExecutionResult Execute(
+            ToolExecutionContext context,
+            CancellationToken cancellationToken = default)
+        {
+            advanceClock();
+            return ToolExecutionResult.Success("advanced");
+        }
+    }
+
     private sealed class FakeToolCallingModel(
         AgentModelTurn startTurn,
         Func<IReadOnlyList<AgentToolCallResult>, AgentModelTurn> continueFactory) : IToolCallingModel
@@ -600,7 +675,10 @@ public sealed class OfflineAgentRunnerTests
         }
     }
 
-    private sealed class TimeoutObservingModel(bool timeoutOnStart) : IToolCallingModel
+    private sealed class TimeoutObservingModel(
+        bool timeoutOnStart,
+        string toolName = "test.echo",
+        string argumentsJson = """{"text":"hello"}""") : IToolCallingModel
     {
         public AgentModelTurn Start(
             AgentRunRequest request,
@@ -613,8 +691,8 @@ public sealed class OfflineAgentRunnerTests
 
             return AgentModelTurn.RequestTools(new AgentToolCallRequest(
                 CallId: "call_1",
-                ToolName: "test.echo",
-                ArgumentsJson: """{"text":"hello"}"""));
+                ToolName: toolName,
+                ArgumentsJson: argumentsJson));
         }
 
         public AgentModelTurn Continue(
@@ -629,6 +707,30 @@ public sealed class OfflineAgentRunnerTests
         private static void WaitForCancellation(CancellationToken cancellationToken)
         {
             cancellationToken.WaitHandle.WaitOne(TimeSpan.FromSeconds(1));
+            cancellationToken.ThrowIfCancellationRequested();
+            throw new InvalidOperationException("Expected model call timeout cancellation.");
+        }
+    }
+
+    private sealed class DelayedCancellationThrowModel(Action afterCancellationObserved) : IToolCallingModel
+    {
+        public AgentModelTurn Start(
+            AgentRunRequest request,
+            CancellationToken cancellationToken = default)
+        {
+            return AgentModelTurn.RequestTools(new AgentToolCallRequest(
+                CallId: "call_1",
+                ToolName: "test.echo",
+                ArgumentsJson: """{"text":"hello"}"""));
+        }
+
+        public AgentModelTurn Continue(
+            AgentRunRequest request,
+            IReadOnlyList<AgentToolCallResult> toolResults,
+            CancellationToken cancellationToken = default)
+        {
+            cancellationToken.WaitHandle.WaitOne(TimeSpan.FromSeconds(1));
+            afterCancellationObserved();
             cancellationToken.ThrowIfCancellationRequested();
             throw new InvalidOperationException("Expected model call timeout cancellation.");
         }
