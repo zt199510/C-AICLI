@@ -555,7 +555,8 @@ public static class CliCommandFactory
 
         return parseResult.Invoke(new InvocationConfiguration
         {
-            EnableDefaultExceptionHandler = false,
+            EnableDefaultExceptionHandler = !IsExecCommand(parseResult),
+            Error = error,
         });
     }
 
@@ -614,12 +615,15 @@ public static class CliCommandFactory
                 Retryable: false));
         }
 
-        // Direct OpenAI agent calls are gated until SdkOpenAiResponsesGateway.CreateAgentResponse
-        // can translate tool calls and tool results through the Responses SDK.
         return new StaticAgentRunner(new AgentError(
             "agent-backend-unavailable",
             "Agent backend is unavailable.",
             Retryable: false));
+    }
+
+    private static bool IsExecCommand(ParseResult parseResult)
+    {
+        return string.Equals(parseResult.CommandResult.Command.Name, "exec", StringComparison.Ordinal);
     }
 
     private static bool IsSupportedApiKeySource(string apiKeySource)

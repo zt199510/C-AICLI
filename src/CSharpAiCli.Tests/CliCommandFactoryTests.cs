@@ -1349,6 +1349,25 @@ public sealed class CliCommandFactoryTests
     }
 
     [Fact]
+    public void Invoke_non_exec_action_exception_uses_default_exception_handling()
+    {
+        using TempDirectory temp = TempDirectory.Create();
+        using StringWriter output = new();
+        CliEnvironmentSnapshot snapshot = CreateSnapshot(
+            workspacePath: temp.Path,
+            apiKey: null,
+            apiKeySource: "missing",
+            model: "not configured",
+            userConfigPath: Path.Combine(temp.Path, ".caicli", "config.json"));
+        RootCommand command = CliCommandFactory.Create(output, _ => snapshot);
+
+        int exitCode = CliCommandFactory.Invoke(command, ["session", "export", "../secret"], output);
+
+        Assert.Equal(1, exitCode);
+        Assert.Contains("Session name contains invalid path characters.", output.ToString());
+    }
+
+    [Fact]
     public void Workspace_option_is_passed_to_doctor_command()
     {
         using StringWriter output = new();

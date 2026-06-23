@@ -24,25 +24,6 @@ public static class AgentExecResultAdapter
             ApprovalStatus: FindLastApprovalStatus(events));
     }
 
-    public static ExecResult FromAgentBackendUnavailable(NotSupportedException exception)
-    {
-        ArgumentNullException.ThrowIfNull(exception);
-
-        ExecEvent failed = new(
-            Type: "agent.error",
-            Sequence: 0,
-            Timestamp: DateTimeOffset.UtcNow,
-            Message: "Agent backend is unavailable.",
-            Summary: "Agent backend is unavailable.",
-            ErrorCode: "agent-backend-unavailable");
-
-        return ExecResult.Failure(
-            ExitCode: 1,
-            Summary: "Agent backend is unavailable.",
-            ErrorCode: "agent-backend-unavailable",
-            Events: [failed]);
-    }
-
     private static ExecEvent ToExecEvent(AgentRunEvent agentEvent)
     {
         return new ExecEvent(
