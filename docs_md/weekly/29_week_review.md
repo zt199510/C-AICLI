@@ -17,7 +17,7 @@
 
 验证：
 - 命令：`dotnet test C:\Users\10335\.config\superpowers\worktrees\C-AICLI\week-29-agent-run-loop-v1\src\CSharpAiCli.Tests\CSharpAiCli.Tests.csproj`
-- 结果：通过，400 passed，0 failed，0 skipped。
+- 结果：通过，402 passed，0 failed，0 skipped。
 - 命令：`dotnet build C:\Users\10335\.config\superpowers\worktrees\C-AICLI\week-29-agent-run-loop-v1\src\CSharpAiCli.Cli\CSharpAiCli.Cli.csproj`
 - 结果：通过，0 warnings，0 errors。
 - 说明：从 worktree 内直接运行 `dotnet test` 会受 root `global.json` 的 SDK `9.0.308` pin 影响；本轮验证使用 `C:\Users\10335` 工作目录和绝对 csproj 路径完成。
