@@ -9,7 +9,10 @@
 ## Model And Agent Behavior
 
 - `chat` uses the direct OpenAI Responses path.
-- `exec` and `run` are deterministic direct-tool task entries; they do not yet perform general natural-language planning or a full OpenAI tool loop.
+- `exec` is routed through `IAgentRunner` for agentic v1 behavior. It emits agent model/tool/final/error events and enforces loop limits such as `--max-turns`, `--max-tool-calls`, and `--timeout-seconds`.
+- `run` remains the deterministic direct-tool compatibility and smoke entry.
+- The offline/fake model agent loop and OpenAI response parsing/writeback contracts are implemented and tested.
+- The default direct OpenAI SDK gateway path for agent tool-call continuation is not yet enabled; real direct SDK tool loops return `agent-backend-unavailable` until SDK tool calls and tool results are translated.
 - The Microsoft Agent Framework project is an adapter boundary and experimental stub; the real framework runtime backend is Deferred.
 
 ## MCP And Project Packs

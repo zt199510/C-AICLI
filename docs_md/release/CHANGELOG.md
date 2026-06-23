@@ -29,4 +29,4 @@ Known deferred items:
 - Real MCP protocol handshake/tool discovery.
 - Real Gerber/TIFF toolchain execution.
 - Dotnet tool packaging.
-- OpenAI tool-calling orchestration for `run`; the first release uses deterministic direct-tool smoke tasks.
+- OpenAI SDK tool-call continuation for agentic `exec`; the current SDK gateway returns `agent-backend-unavailable` until tool calls/results are translated. `run` remains the deterministic direct-tool smoke path.

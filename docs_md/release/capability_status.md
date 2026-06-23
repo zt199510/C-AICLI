@@ -10,7 +10,7 @@
 | `caicli chat` | Accepted | Uses direct OpenAI Responses path with streaming renderer and configured OpenAI-compatible base URL. |
 | `chat --session` | Accepted | Saves transcript v1 in the user profile. |
 | `session export/clear` | Accepted | Exports or deletes one transcript file by validated session name. |
-| `caicli exec` | Solidified | Deterministic direct-tool task entry with NDJSON event stream support, `--output text|json`, and approval-gated tool actions. |
+| `caicli exec` | Solidified | Agentic v1 task entry routed through `IAgentRunner`; emits model/tool/final/error events, supports `--output text|json`, loop limits, and approval-gated tool actions. |
 | `caicli run` | Solidified | Deterministic direct-tool release smoke tasks: create smoke note, read file, run approved shell command. |
 | `tools list/call` | Solidified | Lists enabled tools and invokes one tool with JSON or `--arguments-file`. |
 | Workspace read/search tools | Accepted | Enforced by workspace guard. |
@@ -27,6 +27,7 @@
 | MCP real protocol handshake | Deferred | Config/list/doctor and generic bridge exist; real discovery/execution is not enabled. |
 | Gerber/TIFF real workflow execution | Deferred | Project pack status/profile MVP exists; real toolchain execution is not enabled. |
 | Dotnet tool package | Deferred | Windows self-contained package is the first release artifact. |
+| Direct OpenAI SDK agent tool loop | Deferred | Offline/fake agent loop contracts are implemented and tested, but the default SDK gateway still returns `agent-backend-unavailable` for tool-call continuation until SDK tool calls/results are translated. |
 
 ## Release Decision
 

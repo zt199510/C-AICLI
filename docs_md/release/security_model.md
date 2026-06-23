@@ -23,7 +23,7 @@ The release MVP uses a single-file exact-text patch tool.
 - Patch apply rechecks the file content before writing.
 - Dirty workspace state is included in the preview.
 - Default production approval denies file edits unless an explicit approval policy allows them.
-- Patch operations are recorded as transcript tool calls when run through the agent loop.
+- Patch operations are recorded as transcript tool calls when run through `exec --session` and the agent loop.
 
 ## Shell Execution
 
@@ -37,7 +37,7 @@ Shell execution is restricted:
 
 ## Tool Disable Controls
 
-Users can disable tools through `disabledTools` in user or workspace config. Disabled tools are not registered in the CLI tool registry, so direct calls and deterministic `run` tasks fail safely with `unknown-tool`.
+Users can disable tools through `disabledTools` in user or workspace config. Disabled tools are not registered in the CLI tool registry, so direct calls, agentic `exec` tool calls, and deterministic `run` tasks fail safely with `unknown-tool`.
 
 ## Secrets
 
@@ -50,6 +50,7 @@ Users can disable tools through `disabledTools` in user or workspace config. Dis
 
 - Command logs are written under `<workspace>\.caicli\logs` when the workspace is usable.
 - Chat transcripts are written under `%USERPROFILE%\.caicli\sessions`.
+- `exec --session` records agent transcripts, including tool call requests and summarized tool results.
 - `CAICLI_USER_PROFILE` can redirect user config and sessions for smoke tests or portable verification.
 - Transcript file names are derived from validated session names and cannot traverse directories.
 

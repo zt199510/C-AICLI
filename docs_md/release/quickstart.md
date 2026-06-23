@@ -74,7 +74,7 @@ artifacts\release\caicli-0.1.0-win-x64\caicli.exe workflow list
 
 MCP and Gerber/TIFF workflow execution are enhanced capabilities and are not part of the direct backend MVP.
 
-## 7. Run A Deterministic Exec Task
+## 7. Run An Agentic Exec Task
 
 ```powershell
 artifacts\release\caicli-0.1.0-win-x64\caicli.exe exec --workspace . "read README.md"
@@ -83,7 +83,19 @@ artifacts\release\caicli-0.1.0-win-x64\caicli.exe exec --output json --workspace
 artifacts\release\caicli-0.1.0-win-x64\caicli.exe exec --output text --workspace . "read README.md"
 ```
 
-`exec` emits a newline-delimited JSON event stream in `--json` mode and returns exit code `0` on success, `1` on task failure, and `2` on argument error.
+`exec` is the agentic v1 entry. It is routed through `IAgentRunner`, emits model/tool/final/error events in the newline-delimited `--json` stream, and returns exit code `0` on success, `1` on task failure, and `2` on argument error.
+
+Agent loop limits are available for non-interactive runs:
+
+```powershell
+artifacts\release\caicli-0.1.0-win-x64\caicli.exe exec --workspace . --max-turns 4 --max-tool-calls 8 --timeout-seconds 60 "inspect README.md"
+```
+
+Use `--session` to record the transcript, including agent tool calls and summarized tool results:
+
+```powershell
+artifacts\release\caicli-0.1.0-win-x64\caicli.exe exec --workspace . --session smoke-exec "inspect README.md"
+```
 
 For direct-tool tasks that write files or run shell commands, pass `--approve`:
 
@@ -94,6 +106,8 @@ artifacts\release\caicli-0.1.0-win-x64\caicli.exe exec --workspace . --approve "
 
 Without `--approve`, approved-write and shell actions are denied.
 
+The offline/fake agent loop is implemented and tested. The default direct OpenAI SDK gateway does not yet continue real tool-call loops and returns `agent-backend-unavailable` until SDK tool calls and tool results are translated.
+
 ## 8. Run A Local Smoke Task
 
 ```powershell
@@ -101,6 +115,7 @@ artifacts\release\caicli-0.1.0-win-x64\caicli.exe run --workspace . --approve "c
 ```
 
 This deterministic smoke task creates or updates `caicli-smoke.txt` in the workspace. Without `--approve`, the write is denied.
+`run` remains the deterministic direct-tool compatibility path for release smoke checks.
 
 ## 9. Inspect And Call Tools
 

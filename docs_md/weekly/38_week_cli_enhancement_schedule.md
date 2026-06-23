@@ -31,7 +31,7 @@
 |---:|---|---|---|---|
 | 27 | `27_week_config_base_url.plan.md` | 已验收 | 支持 `OPENAI_BASE_URL`、user config `baseUrl`、`config set/list/unset` 和配置诊断增强。 | `chat` 可使用自定义 base URL；`doctor/config` 显示来源且不泄露 key。 |
 | 28 | `28_week_exec_json_events.plan.md` | 已验收 | 新增 `caicli exec` 和 `--json` NDJSON 事件流。 | exec 可用于脚本/CI；旧 `run` smoke 路径保持兼容。 |
-| 29 | `29_week_agent_run_loop_v1.plan.md` | 下一步 | 实现 direct agent loop v1：模型规划、工具调用、结果回写、最终回答。 | fake model 可驱动工具调用；loop limits 生效。 |
+| 29 | `29_week_agent_run_loop_v1.plan.md` | 已稳固 | `exec` 进入 agentic v1：模型事件、工具调用、结果回写、最终回答。 | fake model 可驱动工具调用；loop limits 和 `exec --session` transcript 生效。 |
 | 30 | `30_week_approval_permission_profiles.plan.md` | 计划中 | 新增审批模式和工具风险等级。 | 默认不静默写文件/跑 shell；审批结果进入 text/JSON event。 |
 | 31 | `31_week_session_resume_management.plan.md` | 计划中 | 增强 session 管理和 `chat/exec --resume`。 | session 可 list/show/rename/delete/export markdown。 |
 | 32 | `32_week_project_instructions_agents_md.plan.md` | 计划中 | 支持 `AGENTS.md` 和层级项目指令。 | chat/exec 使用 workspace 指令，doctor 显示来源。 |
