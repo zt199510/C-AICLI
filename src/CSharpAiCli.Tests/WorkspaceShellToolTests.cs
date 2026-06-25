@@ -40,6 +40,72 @@ public sealed class WorkspaceShellToolTests
     }
 
     [Fact]
+    public void Execute_requests_approval_with_shell_risk_metadata_and_reason_for_ordinary_command()
+    {
+        using TempDirectory temp = TempDirectory.Create();
+        RecordingApprovalPolicy approvalPolicy = new(ApprovalDecision.Deny("Denied by recording policy."));
+        WorkspaceShellTool tool = new(
+            new AssertingShellRunner(),
+            approvalPolicy);
+
+        ToolExecutionResult result = tool.Execute(CreateContext(
+            temp.Path,
+            """{"command":"dotnet --version","cwd":"src"}"""));
+
+        Assert.False(result.Succeeded);
+        ApprovalRequest request = approvalPolicy.SingleRequest;
+        Assert.Equal("workspace.run_shell", request.Operation);
+        Assert.Equal(ToolRiskLevel.Shell, request.RiskLevel);
+        Assert.NotNull(request.Metadata);
+        IReadOnlyDictionary<string, string> metadata = request.Metadata;
+        Assert.Equal("dotnet --version", metadata["command"]);
+        Assert.Equal("src", metadata["cwd"]);
+        Assert.Equal("Shell command execution requires approval.", metadata["reason"]);
+    }
+
+    [Fact]
+    public void Execute_requests_approval_with_dangerous_shell_risk_and_detector_reason()
+    {
+        using TempDirectory temp = TempDirectory.Create();
+        RecordingApprovalPolicy approvalPolicy = new(ApprovalDecision.Deny("Denied by recording policy."));
+        WorkspaceShellTool tool = new(
+            new AssertingShellRunner(),
+            approvalPolicy);
+
+        ToolExecutionResult result = tool.Execute(CreateContext(
+            temp.Path,
+            """{"command":"rm -rf ."}"""));
+
+        Assert.False(result.Succeeded);
+        ApprovalRequest request = approvalPolicy.SingleRequest;
+        Assert.Equal(ToolRiskLevel.DangerousShell, request.RiskLevel);
+        Assert.NotNull(request.Metadata);
+        IReadOnlyDictionary<string, string> metadata = request.Metadata;
+        Assert.Equal("rm -rf .", metadata["command"]);
+        Assert.Equal(".", metadata["cwd"]);
+        Assert.Equal("Command contains a destructive delete pattern.", metadata["reason"]);
+    }
+
+    [Fact]
+    public void Execute_denies_dangerous_shell_by_policy_before_runner_executes()
+    {
+        using TempDirectory temp = TempDirectory.Create();
+        CountingShellRunner shellRunner = new();
+        WorkspaceShellTool tool = new(
+            shellRunner,
+            ApprovalPolicyResolver.Resolve(ApprovalMode.Always));
+
+        ToolExecutionResult result = tool.Execute(CreateContext(
+            temp.Path,
+            """{"command":"rm -rf ."}"""));
+
+        Assert.False(result.Succeeded);
+        Assert.Equal("approval-denied", result.ErrorCode);
+        Assert.Equal("dangerous-shell-denied", result.ApprovalStatus);
+        Assert.Equal(0, shellRunner.RunCount);
+    }
+
+    [Fact]
     public void Execute_returns_failure_for_dangerous_command()
     {
         using TempDirectory temp = TempDirectory.Create();
@@ -159,6 +225,44 @@ public sealed class WorkspaceShellToolTests
             {
                 Directory.Delete(Path, recursive: true);
             }
+        }
+    }
+
+    private sealed class RecordingApprovalPolicy(ApprovalDecision decision) : IApprovalPolicy
+    {
+        private readonly List<ApprovalRequest> requests = [];
+
+        public ApprovalRequest SingleRequest => Assert.Single(requests);
+
+        public ApprovalDecision RequestApproval(ApprovalRequest request)
+        {
+            requests.Add(request);
+            return decision;
+        }
+    }
+
+    private sealed class AssertingShellRunner : IShellRunner
+    {
+        public ShellCommandResult Run(
+            WorkspaceContext workspace,
+            ShellCommandRequest request,
+            CancellationToken cancellationToken = default)
+        {
+            throw new InvalidOperationException("Shell runner should not execute for denied approval.");
+        }
+    }
+
+    private sealed class CountingShellRunner : IShellRunner
+    {
+        public int RunCount { get; private set; }
+
+        public ShellCommandResult Run(
+            WorkspaceContext workspace,
+            ShellCommandRequest request,
+            CancellationToken cancellationToken = default)
+        {
+            RunCount++;
+            return ShellCommandResult.Failure("unexpected-shell-run", "Shell runner was invoked.");
         }
     }
 }

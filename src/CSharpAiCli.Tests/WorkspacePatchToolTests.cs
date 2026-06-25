@@ -40,6 +40,37 @@ public sealed class WorkspacePatchToolTests
     }
 
     [Fact]
+    public void Execute_requests_approval_with_patch_risk_metadata_and_preview_context()
+    {
+        using TempDirectory temp = TempDirectory.Create();
+        string filePath = Path.Combine(temp.Path, "notes.txt");
+        File.WriteAllText(filePath, "hello world");
+        RecordingApprovalPolicy approvalPolicy = new(ApprovalDecision.Deny("Denied by recording policy."));
+        WorkspacePatchTool tool = new(
+            new SingleFilePatchApplier(
+                new WorkspaceGuard(),
+                new StaticDirtyWorkspaceDetector(new DirtyWorkspaceStatus(true, "2 changed path(s)"))),
+            approvalPolicy);
+
+        ToolExecutionResult result = tool.Execute(CreateContext(
+            temp.Path,
+            """{"path":"notes.txt","find":"hello","replace":"hi"}"""));
+
+        Assert.False(result.Succeeded);
+        ApprovalRequest request = approvalPolicy.SingleRequest;
+        Assert.Equal("workspace.apply_patch", request.Operation);
+        Assert.Equal(ToolRiskLevel.Write, request.RiskLevel);
+        Assert.Contains("Replace 1 occurrence(s) in notes.txt", request.Summary, StringComparison.Ordinal);
+        Assert.Contains("2 changed path(s)", request.Summary, StringComparison.Ordinal);
+        Assert.Contains("--- a/notes.txt", request.Diff, StringComparison.Ordinal);
+        Assert.True(request.IsDirtyWorkspace);
+        Assert.NotNull(request.Metadata);
+        IReadOnlyDictionary<string, string> metadata = request.Metadata;
+        Assert.Equal("notes.txt", metadata["path"]);
+        Assert.Equal("Patch application modifies workspace files and requires approval.", metadata["reason"]);
+    }
+
+    [Fact]
     public void Execute_returns_argument_failure_for_missing_fields()
     {
         using TempDirectory temp = TempDirectory.Create();
@@ -116,6 +147,19 @@ public sealed class WorkspacePatchToolTests
     private sealed class StaticDirtyWorkspaceDetector(DirtyWorkspaceStatus status) : IDirtyWorkspaceDetector
     {
         public DirtyWorkspaceStatus Detect(WorkspaceContext workspace) => status;
+    }
+
+    private sealed class RecordingApprovalPolicy(ApprovalDecision decision) : IApprovalPolicy
+    {
+        private readonly List<ApprovalRequest> requests = [];
+
+        public ApprovalRequest SingleRequest => Assert.Single(requests);
+
+        public ApprovalDecision RequestApproval(ApprovalRequest request)
+        {
+            requests.Add(request);
+            return decision;
+        }
     }
 
     private sealed class PatchToolCallingModel : IToolCallingModel

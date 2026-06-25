@@ -36,6 +36,12 @@ public sealed class WorkspaceShellTool : ITool
             return failure;
         }
 
+        bool isDangerous = DangerousCommandDetector.IsDangerous(request.Command, out string dangerReason);
+        ToolRiskLevel riskLevel = isDangerous ? ToolRiskLevel.DangerousShell : Definition.RiskLevel;
+        string approvalReason = isDangerous
+            ? dangerReason
+            : "Shell command execution requires approval.";
+
         ApprovalDecision approval = approvalPolicy.RequestApproval(new ApprovalRequest(
             Operation: Definition.Name,
             Summary: $"Run shell command in workspace: {request.Command}",
@@ -44,8 +50,10 @@ public sealed class WorkspaceShellTool : ITool
             Metadata: new Dictionary<string, string>
             {
                 ["command"] = request.Command,
-                ["cwd"] = request.WorkingDirectory
-            }));
+                ["cwd"] = request.WorkingDirectory,
+                ["reason"] = approvalReason
+            },
+            RiskLevel: riskLevel));
 
         if (!approval.Approved)
         {

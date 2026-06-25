@@ -38,7 +38,13 @@ public sealed class WorkspacePatchTool : ITool
             Operation: Definition.Name,
             Summary: preview.Summary,
             Diff: preview.Diff,
-            IsDirtyWorkspace: preview.DirtyWorkspace.IsDirty));
+            IsDirtyWorkspace: preview.DirtyWorkspace.IsDirty,
+            Metadata: new Dictionary<string, string>
+            {
+                ["path"] = operation.Path,
+                ["reason"] = "Patch application modifies workspace files and requires approval."
+            },
+            RiskLevel: Definition.RiskLevel));
 
         if (!approval.Approved)
         {
