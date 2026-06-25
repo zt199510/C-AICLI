@@ -472,9 +472,8 @@ public static class CliCommandFactory
             bool approve = parseResult.GetValue(runApproveOption);
             CliEnvironmentSnapshot snapshot = snapshotProvider(workspacePath);
             TryWriteCommandLog(commandLogger, "run", snapshot);
-            IApprovalPolicy approvalPolicy = approve
-                ? new AlwaysApproveApprovalPolicy()
-                : new DefaultDenyApprovalPolicy();
+            ApprovalMode? cliApprovalMode = approve ? ApprovalMode.Always : null;
+            IApprovalPolicy approvalPolicy = ApprovalPolicyResolver.Resolve(snapshot.Configuration.ApprovalMode, cliApprovalMode);
             ToolRegistry registry = CliToolFactory.CreateRegistry(snapshot, approvalPolicy);
             ToolExecutor executor = new(registry);
             ExecRunner runner = new(approvalPolicy);

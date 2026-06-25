@@ -958,6 +958,24 @@ public sealed class CliCommandFactoryTests
     }
 
     [Fact]
+    public void Run_approve_dangerous_shell_reports_dangerous_approval_status()
+    {
+        using TempDirectory temp = TempDirectory.Create();
+        using StringWriter output = new();
+
+        int exitCode = CliCommandFactory
+            .Create(output, workspacePath => CreateSnapshot(workspacePath))
+            .Parse(["run", "--workspace", temp.Path, "--approve", "shell rm -rf ."])
+            .Invoke();
+
+        string text = output.ToString();
+        Assert.Equal(1, exitCode);
+        Assert.Contains("status: failed", text);
+        Assert.Contains("approvalStatus: dangerous-shell-denied", text);
+        Assert.DoesNotContain("approvalStatus: approved", text, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void Run_create_smoke_note_respects_patch_tool_disable()
     {
         using TempDirectory temp = TempDirectory.Create();
