@@ -1134,6 +1134,182 @@ public sealed class CliCommandFactoryTests
     }
 
     [Fact]
+    public void Exec_approval_always_allows_injected_runner_tool_call()
+    {
+        using TempDirectory temp = TempDirectory.Create();
+        File.WriteAllText(Path.Combine(temp.Path, "note.txt"), "before");
+        using StringWriter output = new();
+        ExecutorToolCallAgentRunner agentRunner = new(
+            "workspace.apply_patch",
+            """{"path":"note.txt","find":"before","replace":"after"}""");
+
+        int exitCode = CliCommandFactory
+            .Create(
+                output,
+                workspacePath => CreateSnapshot(workspacePath),
+                (_, _) => { },
+                _ => new FakeChatModelClient(ChatModelResult.Success(new ChatResponse("openai", "gpt-test", "resp", ""))),
+                writer => new TerminalChatStreamingRenderer(writer),
+                _ => new FakeConversationStore(),
+                () => DateTimeOffset.Parse("2024-01-01T00:00:00Z"),
+                (_, _, executor) =>
+                {
+                    agentRunner.Executor = executor;
+                    return agentRunner;
+                })
+            .Parse(["exec", "--workspace", temp.Path, "--approval", "always", "update note"])
+            .Invoke();
+
+        string text = output.ToString();
+        Assert.Equal(0, exitCode);
+        Assert.Contains("approvalStatus=approved", text);
+        Assert.Contains("result: success", text);
+        Assert.Equal("after", File.ReadAllText(Path.Combine(temp.Path, "note.txt")));
+    }
+
+    [Fact]
+    public void Exec_approval_never_takes_priority_over_approve()
+    {
+        using TempDirectory temp = TempDirectory.Create();
+        File.WriteAllText(Path.Combine(temp.Path, "note.txt"), "before");
+        using StringWriter output = new();
+        ExecutorToolCallAgentRunner agentRunner = new(
+            "workspace.apply_patch",
+            """{"path":"note.txt","find":"before","replace":"after"}""");
+
+        int exitCode = CliCommandFactory
+            .Create(
+                output,
+                workspacePath => CreateSnapshot(workspacePath),
+                (_, _) => { },
+                _ => new FakeChatModelClient(ChatModelResult.Success(new ChatResponse("openai", "gpt-test", "resp", ""))),
+                writer => new TerminalChatStreamingRenderer(writer),
+                _ => new FakeConversationStore(),
+                () => DateTimeOffset.Parse("2024-01-01T00:00:00Z"),
+                (_, _, executor) =>
+                {
+                    agentRunner.Executor = executor;
+                    return agentRunner;
+                })
+            .Parse(["exec", "--workspace", temp.Path, "--approval", "never", "--approve", "update note"])
+            .Invoke();
+
+        string text = output.ToString();
+        Assert.Equal(1, exitCode);
+        Assert.Contains("errorCode=approval-denied", text);
+        Assert.Contains("approvalStatus=denied", text);
+        Assert.Contains("result: failure", text);
+        Assert.Equal("before", File.ReadAllText(Path.Combine(temp.Path, "note.txt")));
+    }
+
+    [Fact]
+    public void Exec_invalid_approval_rejects_before_logging_or_running_agent()
+    {
+        using TempDirectory temp = TempDirectory.Create();
+        File.WriteAllText(Path.Combine(temp.Path, "note.txt"), "before");
+        using StringWriter output = new();
+        List<string> loggedCommands = [];
+        FakeAgentRunner agentRunner = new(AgentRunResult.Success("should not run", [], []));
+        RootCommand command = CliCommandFactory.Create(
+            output,
+            workspacePath => CreateSnapshot(workspacePath),
+            (commandName, _) => loggedCommands.Add(commandName),
+            _ => new FakeChatModelClient(ChatModelResult.Success(new ChatResponse("openai", "gpt-test", "resp", ""))),
+            writer => new TerminalChatStreamingRenderer(writer),
+            _ => new FakeConversationStore(),
+            () => DateTimeOffset.Parse("2024-01-01T00:00:00Z"),
+            (_, _, _) => agentRunner);
+
+        int exitCode = CliCommandFactory.Invoke(
+            command,
+            ["exec", "--workspace", temp.Path, "--approval", "maybe", "update note"],
+            output);
+
+        string text = output.ToString();
+        Assert.Equal(2, exitCode);
+        Assert.Empty(loggedCommands);
+        Assert.Null(agentRunner.LastRequest);
+        Assert.Contains("Invalid value for --approval. Allowed values are never, on-request, on-failure, and always.", text);
+        Assert.Equal("before", File.ReadAllText(Path.Combine(temp.Path, "note.txt")));
+    }
+
+    [Fact]
+    public void Exec_approve_legacy_still_allows_injected_runner_tool_call()
+    {
+        using TempDirectory temp = TempDirectory.Create();
+        File.WriteAllText(Path.Combine(temp.Path, "note.txt"), "before");
+        using StringWriter output = new();
+        ExecutorToolCallAgentRunner agentRunner = new(
+            "workspace.apply_patch",
+            """{"path":"note.txt","find":"before","replace":"after"}""");
+
+        int exitCode = CliCommandFactory
+            .Create(
+                output,
+                workspacePath => CreateSnapshot(workspacePath),
+                (_, _) => { },
+                _ => new FakeChatModelClient(ChatModelResult.Success(new ChatResponse("openai", "gpt-test", "resp", ""))),
+                writer => new TerminalChatStreamingRenderer(writer),
+                _ => new FakeConversationStore(),
+                () => DateTimeOffset.Parse("2024-01-01T00:00:00Z"),
+                (_, _, executor) =>
+                {
+                    agentRunner.Executor = executor;
+                    return agentRunner;
+                })
+            .Parse(["exec", "--workspace", temp.Path, "--approve", "update note"])
+            .Invoke();
+
+        string text = output.ToString();
+        Assert.Equal(0, exitCode);
+        Assert.Contains("approvalStatus=approved", text);
+        Assert.Contains("result: success", text);
+        Assert.Equal("after", File.ReadAllText(Path.Combine(temp.Path, "note.txt")));
+    }
+
+    [Fact]
+    public void Exec_uses_configured_approval_mode_without_cli_override()
+    {
+        using TempDirectory temp = TempDirectory.Create();
+        File.WriteAllText(Path.Combine(temp.Path, "note.txt"), "before");
+        using StringWriter output = new();
+        ExecutorToolCallAgentRunner agentRunner = new(
+            "workspace.apply_patch",
+            """{"path":"note.txt","find":"before","replace":"after"}""");
+        CliEnvironmentSnapshot snapshot = CreateSnapshot(temp.Path)
+            with
+            {
+                Configuration = CreateSnapshot(temp.Path).Configuration with
+                {
+                    ApprovalMode = ApprovalMode.Always,
+                    ApprovalModeSource = "workspace config"
+                }
+            };
+
+        int exitCode = CliCommandFactory
+            .Create(
+                output,
+                _ => snapshot,
+                (_, _) => { },
+                _ => new FakeChatModelClient(ChatModelResult.Success(new ChatResponse("openai", "gpt-test", "resp", ""))),
+                writer => new TerminalChatStreamingRenderer(writer),
+                _ => new FakeConversationStore(),
+                () => DateTimeOffset.Parse("2024-01-01T00:00:00Z"),
+                (_, _, executor) =>
+                {
+                    agentRunner.Executor = executor;
+                    return agentRunner;
+                })
+            .Parse(["exec", "--workspace", temp.Path, "update note"])
+            .Invoke();
+
+        string text = output.ToString();
+        Assert.Equal(0, exitCode);
+        Assert.Contains("approvalStatus=approved", text);
+        Assert.Equal("after", File.ReadAllText(Path.Combine(temp.Path, "note.txt")));
+    }
+
+    [Fact]
     public void Exec_session_loads_transcript_passes_it_to_runner_and_saves()
     {
         using TempDirectory temp = TempDirectory.Create();
@@ -2185,6 +2361,57 @@ public sealed class CliCommandFactoryTests
                 DateTimeOffset.Parse("2024-01-01T00:00:06Z"));
             transcript?.AddToolCall(toolCall);
             return AgentRunResult.Success("agent completed task", [toolCall], []);
+        }
+    }
+
+    private sealed class ExecutorToolCallAgentRunner(
+        string toolName,
+        string argumentsJson) : IAgentRunner
+    {
+        public IToolExecutor? Executor { get; set; }
+
+        public AgentRunRequest? LastRequest { get; private set; }
+
+        public AgentRunResult Run(
+            AgentRunRequest request,
+            ConversationTranscript? transcript = null,
+            CancellationToken cancellationToken = default)
+        {
+            LastRequest = request;
+            IToolExecutor executor = Executor ?? throw new InvalidOperationException("Executor was not injected.");
+            ToolExecutionResult result = executor.Execute(
+                toolName,
+                new ToolExecutionContext("call_tool_1", request.Workspace, argumentsJson),
+                cancellationToken);
+
+            AgentRunEvent toolEvent = new(
+                Type: result.Succeeded ? "tool.completed" : "tool.failed",
+                Sequence: 0,
+                Timestamp: DateTimeOffset.Parse("2024-01-01T00:00:00Z"),
+                Summary: result.Summary,
+                Payload: new Dictionary<string, string>
+                {
+                    ["toolName"] = toolName
+                },
+                ErrorCode: result.ErrorCode,
+                ApprovalStatus: result.ApprovalStatus);
+
+            ConversationToolCall toolCall = ConversationToolCall.FromExecution(
+                "call_tool_1",
+                toolName,
+                argumentsJson,
+                result,
+                DateTimeOffset.Parse("2024-01-01T00:00:00Z"));
+
+            return result.Succeeded
+                ? AgentRunResult.Success(result.Summary, [toolCall], [toolEvent])
+                : AgentRunResult.Failure(
+                    new AgentError(
+                        result.ErrorCode ?? "tool-call-failed",
+                        result.Summary,
+                        result.Retryable),
+                    [toolCall],
+                    [toolEvent]);
         }
     }
 
