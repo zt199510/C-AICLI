@@ -10,6 +10,8 @@ public sealed class CliConfigFile
 
     public string? AgentBackend { get; init; }
 
+    public string? ApprovalMode { get; init; }
+
     public string[]? DisabledTools { get; init; }
 
     public Dictionary<string, McpServerConfig>? McpServers { get; init; }

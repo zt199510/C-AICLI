@@ -44,6 +44,153 @@ public sealed class ConfigLoaderTests
         Assert.Equal("https://openai.example.test/v1", config.BaseUrl);
     }
 
+    [Fact]
+    public void ApprovalMode_enum_exposes_supported_modes()
+    {
+        string[] names = Enum.GetNames<ApprovalMode>();
+
+        Assert.Contains("Never", names);
+        Assert.Contains("OnRequest", names);
+        Assert.Contains("OnFailure", names);
+        Assert.Contains("Always", names);
+    }
+
+    [Fact]
+    public void CliConfigFile_deserializes_approval_mode_from_camel_case_json()
+    {
+        CliConfigFile? config = JsonSerializer.Deserialize<CliConfigFile>(
+            """{ "approvalMode": "on-request" }""",
+            new JsonSerializerOptions(JsonSerializerDefaults.Web));
+
+        Assert.NotNull(config);
+        Assert.Equal("on-request", config.ApprovalMode);
+    }
+
+    [Theory]
+    [InlineData("never", ApprovalMode.Never)]
+    [InlineData("on-request", ApprovalMode.OnRequest)]
+    [InlineData("on-failure", ApprovalMode.OnFailure)]
+    [InlineData("always", ApprovalMode.Always)]
+    public void Load_accepts_supported_approval_modes_from_workspace_config(string value, ApprovalMode expectedMode)
+    {
+        string root = CreateTempDirectory();
+
+        try
+        {
+            string userProfile = Path.Combine(root, "home");
+            string workspaceRoot = Path.Combine(root, "workspace");
+            Directory.CreateDirectory(userProfile);
+            Directory.CreateDirectory(workspaceRoot);
+
+            string workspaceConfigPath = Path.Combine(workspaceRoot, ".caicli", "config.json");
+            Directory.CreateDirectory(Path.GetDirectoryName(workspaceConfigPath)!);
+            File.WriteAllText(workspaceConfigPath, $$"""
+            {
+              "approvalMode": "{{value}}"
+            }
+            """);
+
+            WorkspaceContext workspace = WorkspaceContext.Detect(workspaceRoot, root);
+            EffectiveConfiguration configuration = ConfigLoader.Load(
+                workspace,
+                userProfile: userProfile,
+                openAiApiKey: "");
+
+            Assert.Equal(expectedMode, configuration.ApprovalMode);
+            Assert.Equal("workspace config", configuration.ApprovalModeSource);
+            Assert.Contains(workspaceConfigPath, configuration.LoadedConfigPaths);
+        }
+        finally
+        {
+            Directory.Delete(root, recursive: true);
+        }
+    }
+
+    [Fact]
+    public void Load_uses_approval_mode_priority_user_workspace_default()
+    {
+        string root = CreateTempDirectory();
+
+        try
+        {
+            string userProfile = Path.Combine(root, "home");
+            string workspaceRoot = Path.Combine(root, "workspace");
+            Directory.CreateDirectory(userProfile);
+            Directory.CreateDirectory(workspaceRoot);
+
+            string userConfigPath = Path.Combine(userProfile, ".caicli", "config.json");
+            string workspaceConfigPath = Path.Combine(workspaceRoot, ".caicli", "config.json");
+            WriteApprovalModeConfig(userConfigPath, "always");
+            WriteApprovalModeConfig(workspaceConfigPath, "never");
+
+            WorkspaceContext workspace = WorkspaceContext.Detect(workspaceRoot, root);
+            EffectiveConfiguration userConfiguration = ConfigLoader.Load(
+                workspace,
+                userProfile: userProfile,
+                openAiApiKey: "");
+            File.Delete(userConfigPath);
+            EffectiveConfiguration workspaceConfiguration = ConfigLoader.Load(
+                workspace,
+                userProfile: userProfile,
+                openAiApiKey: "");
+            File.Delete(workspaceConfigPath);
+            EffectiveConfiguration defaultConfiguration = ConfigLoader.Load(
+                workspace,
+                userProfile: userProfile,
+                openAiApiKey: "");
+
+            Assert.Equal(ApprovalMode.Always, userConfiguration.ApprovalMode);
+            Assert.Equal("user config", userConfiguration.ApprovalModeSource);
+            Assert.Contains(userConfigPath, userConfiguration.LoadedConfigPaths);
+            Assert.Equal(ApprovalMode.Never, workspaceConfiguration.ApprovalMode);
+            Assert.Equal("workspace config", workspaceConfiguration.ApprovalModeSource);
+            Assert.Contains(workspaceConfigPath, workspaceConfiguration.LoadedConfigPaths);
+            Assert.Equal(ApprovalMode.OnRequest, defaultConfiguration.ApprovalMode);
+            Assert.Equal("default", defaultConfiguration.ApprovalModeSource);
+        }
+        finally
+        {
+            Directory.Delete(root, recursive: true);
+        }
+    }
+
+    [Fact]
+    public void Load_warns_for_invalid_approval_mode_without_leaking_value_and_falls_back_to_workspace()
+    {
+        string root = CreateTempDirectory();
+
+        try
+        {
+            string userProfile = Path.Combine(root, "home");
+            string workspaceRoot = Path.Combine(root, "workspace");
+            Directory.CreateDirectory(userProfile);
+            Directory.CreateDirectory(workspaceRoot);
+
+            string userConfigPath = Path.Combine(userProfile, ".caicli", "config.json");
+            string workspaceConfigPath = Path.Combine(workspaceRoot, ".caicli", "config.json");
+            WriteApprovalModeConfig(userConfigPath, "sk-user-secret");
+            WriteApprovalModeConfig(workspaceConfigPath, "on-failure");
+
+            WorkspaceContext workspace = WorkspaceContext.Detect(workspaceRoot, root);
+            EffectiveConfiguration configuration = ConfigLoader.Load(
+                workspace,
+                userProfile: userProfile,
+                openAiApiKey: "");
+
+            Assert.Equal(ApprovalMode.OnFailure, configuration.ApprovalMode);
+            Assert.Equal("workspace config", configuration.ApprovalModeSource);
+            Assert.Contains(userConfigPath, configuration.LoadedConfigPaths);
+            Assert.Contains(configuration.Warnings, warning =>
+                warning.Contains("ignored invalid approvalMode", StringComparison.Ordinal)
+                && warning.Contains("user config", StringComparison.Ordinal));
+            Assert.DoesNotContain("sk-user-secret", string.Join(Environment.NewLine, configuration.Warnings), StringComparison.Ordinal);
+        }
+        finally
+        {
+            Directory.Delete(root, recursive: true);
+        }
+    }
+
     [Theory]
     [InlineData(" https://gateway.example.test/v1 ", "https://gateway.example.test/v1")]
     [InlineData("http://localhost:8080/v1", "http://localhost:8080/v1")]
@@ -924,6 +1071,16 @@ public sealed class ConfigLoaderTests
   ""model"": ""{model}"",
   ""apiKey"": ""{apiKey}""{backendLine}{baseUrlLine}
 }}");
+    }
+
+    private static void WriteApprovalModeConfig(string path, string approvalMode)
+    {
+        Directory.CreateDirectory(Path.GetDirectoryName(path)!);
+        File.WriteAllText(path, $$"""
+        {
+          "approvalMode": "{{approvalMode}}"
+        }
+        """);
     }
 
     private static string CreateTempDirectory()

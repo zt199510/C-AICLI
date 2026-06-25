@@ -28,6 +28,7 @@ public sealed record DoctorReport(IReadOnlyList<string> Lines)
             $"base URL: {snapshot.Configuration.BaseUrl} ({snapshot.Configuration.BaseUrlSource})",
             $"api key: {apiKeyStatus}",
             $"agent backend: {snapshot.Configuration.AgentBackend} ({snapshot.Configuration.AgentBackendSource})",
+            $"approval mode: {FormatApprovalMode(snapshot.Configuration.ApprovalMode)} ({snapshot.Configuration.ApprovalModeSource})",
             $"agent backend status: {FormatAgentBackendStatus(snapshot.Configuration.AgentBackend)}"
         ];
 
@@ -56,6 +57,18 @@ public sealed record DoctorReport(IReadOnlyList<string> Lines)
             WorkspaceStatus.Ready => "ready",
             WorkspaceStatus.Missing => "missing",
             WorkspaceStatus.NotDirectory => "not directory",
+            _ => "unknown"
+        };
+    }
+
+    private static string FormatApprovalMode(ApprovalMode approvalMode)
+    {
+        return approvalMode switch
+        {
+            ApprovalMode.Never => "never",
+            ApprovalMode.OnRequest => "on-request",
+            ApprovalMode.OnFailure => "on-failure",
+            ApprovalMode.Always => "always",
             _ => "unknown"
         };
     }

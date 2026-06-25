@@ -29,6 +29,8 @@ public sealed class ConfigReportTests
         Assert.Contains("baseUrlSource: workspace config", text);
         Assert.Contains("agentBackend: direct", text);
         Assert.Contains("agentBackendSource: default", text);
+        Assert.Contains("approvalMode: on-request", text);
+        Assert.Contains("approvalModeSource: default", text);
         Assert.Contains("apiKey: missing", text);
         Assert.Contains("apiKeySource: missing", text);
         Assert.Contains("loadedConfigPaths: none", text);

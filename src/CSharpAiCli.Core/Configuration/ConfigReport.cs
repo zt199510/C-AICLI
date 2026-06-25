@@ -26,6 +26,8 @@ public sealed record ConfigReport(IReadOnlyList<string> Lines)
             $"baseUrlSource: {configuration.BaseUrlSource}",
             $"agentBackend: {configuration.AgentBackend}",
             $"agentBackendSource: {configuration.AgentBackendSource}",
+            $"approvalMode: {FormatApprovalMode(configuration.ApprovalMode)}",
+            $"approvalModeSource: {configuration.ApprovalModeSource}",
             $"disabledTools: {FormatDisabledTools(configuration.DisabledTools)}",
             $"apiKey: {apiKeyStatus}",
             $"apiKeySource: {configuration.ApiKeySource}",
@@ -57,6 +59,18 @@ public sealed record ConfigReport(IReadOnlyList<string> Lines)
             WorkspaceStatus.Ready => "ready",
             WorkspaceStatus.Missing => "missing",
             WorkspaceStatus.NotDirectory => "not directory",
+            _ => "unknown"
+        };
+    }
+
+    private static string FormatApprovalMode(ApprovalMode approvalMode)
+    {
+        return approvalMode switch
+        {
+            ApprovalMode.Never => "never",
+            ApprovalMode.OnRequest => "on-request",
+            ApprovalMode.OnFailure => "on-failure",
+            ApprovalMode.Always => "always",
             _ => "unknown"
         };
     }

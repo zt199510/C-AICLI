@@ -26,6 +26,7 @@ public sealed class DoctorReportTests
         Assert.Contains("base URL: https://api.openai.com/v1 (default)", text);
         Assert.Contains("api key: missing (missing)", text);
         Assert.Contains("agent backend: direct (default)", text);
+        Assert.Contains("approval mode: on-request (default)", text);
         Assert.Contains("agent backend status: available", text);
     }
 

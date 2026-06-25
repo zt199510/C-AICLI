@@ -19,5 +19,9 @@ public sealed record EffectiveConfiguration(
 
     public string BaseUrlSource { get; init; } = "default";
 
+    public ApprovalMode ApprovalMode { get; init; } = ApprovalMode.OnRequest;
+
+    public string ApprovalModeSource { get; init; } = "default";
+
     public bool HasApiKey => ApiKey is not null;
 }

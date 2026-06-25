@@ -53,6 +53,7 @@ public static class ConfigLoader
 
         (string model, string modelSource) = SelectModel(openAiModel, userConfig, workspaceConfig);
         (string effectiveAgentBackend, string agentBackendSource) = SelectAgentBackend(agentBackend, userConfig, workspaceConfig, warnings);
+        (ApprovalMode approvalMode, string approvalModeSource) = SelectApprovalMode(userConfig, workspaceConfig, warnings);
         (string baseUrl, string baseUrlSource) = SelectBaseUrl(openAiBaseUrl, userConfig, workspaceConfig, warnings);
         (SecretValue? apiKey, string apiKeySource) = SelectApiKey(openAiApiKey, userConfig);
 
@@ -72,7 +73,9 @@ public static class ConfigLoader
             ConfigSources: configSources)
         {
             BaseUrl = baseUrl,
-            BaseUrlSource = baseUrlSource
+            BaseUrlSource = baseUrlSource,
+            ApprovalMode = approvalMode,
+            ApprovalModeSource = approvalModeSource
         };
     }
 
@@ -125,6 +128,7 @@ public static class ConfigLoader
             || !string.IsNullOrWhiteSpace(config.ApiKey)
             || !string.IsNullOrWhiteSpace(config.BaseUrl)
             || !string.IsNullOrWhiteSpace(config.AgentBackend)
+            || !string.IsNullOrWhiteSpace(config.ApprovalMode)
             || config.DisabledTools is { Length: > 0 }
             || config.McpServers is { Count: > 0 }
             || config.WorkflowProfiles is { Count: > 0 };
@@ -200,6 +204,34 @@ public static class ConfigLoader
         }
 
         return false;
+    }
+
+    public static bool TryNormalizeApprovalMode(string? value, out ApprovalMode approvalMode)
+    {
+        approvalMode = ApprovalMode.OnRequest;
+        if (string.IsNullOrWhiteSpace(value))
+        {
+            return false;
+        }
+
+        string normalized = value.Trim().ToLowerInvariant();
+        switch (normalized)
+        {
+            case "never":
+                approvalMode = ApprovalMode.Never;
+                return true;
+            case "on-request":
+                approvalMode = ApprovalMode.OnRequest;
+                return true;
+            case "on-failure":
+                approvalMode = ApprovalMode.OnFailure;
+                return true;
+            case "always":
+                approvalMode = ApprovalMode.Always;
+                return true;
+            default:
+                return false;
+        }
     }
 
     private static (string BaseUrl, string Source) SelectBaseUrl(
@@ -335,6 +367,43 @@ public static class ConfigLoader
         }
 
         return ("direct", "default");
+    }
+
+    private static (ApprovalMode Mode, string Source) SelectApprovalMode(
+        CliConfigFile? userConfig,
+        CliConfigFile? workspaceConfig,
+        List<string> warnings)
+    {
+        if (TryNormalizeApprovalMode(userConfig?.ApprovalMode, warnings, "user config", out ApprovalMode mode))
+        {
+            return (mode, "user config");
+        }
+
+        if (TryNormalizeApprovalMode(workspaceConfig?.ApprovalMode, warnings, "workspace config", out mode))
+        {
+            return (mode, "workspace config");
+        }
+
+        return (ApprovalMode.OnRequest, "default");
+    }
+
+    private static bool TryNormalizeApprovalMode(
+        string? value,
+        List<string> warnings,
+        string source,
+        out ApprovalMode approvalMode)
+    {
+        if (TryNormalizeApprovalMode(value, out approvalMode))
+        {
+            return true;
+        }
+
+        if (!string.IsNullOrWhiteSpace(value))
+        {
+            warnings.Add($"ignored invalid approvalMode from {source}");
+        }
+
+        return false;
     }
 
     private static bool TryNormalizeBackend(
