@@ -834,18 +834,93 @@ public sealed class CliCommandFactoryTests
     public void Tools_call_refuses_patch_without_approval()
     {
         using TempDirectory temp = TempDirectory.Create();
+        using StringWriter output = new();
+
+        int exitCode = InvokeToolsCallPatch(temp, output, []);
+
+        Assert.Equal(1, exitCode);
+        Assert.Contains("errorCode: approval-denied", output.ToString());
+        Assert.Contains("approvalStatus: approval-required", output.ToString());
+        Assert.Equal("before", File.ReadAllText(Path.Combine(temp.Path, "note.txt")));
+    }
+
+    [Fact]
+    public void Tools_call_approval_always_applies_patch()
+    {
+        using TempDirectory temp = TempDirectory.Create();
+        using StringWriter output = new();
+
+        int exitCode = InvokeToolsCallPatch(temp, output, ["--approval", "always"]);
+
+        Assert.Equal(0, exitCode);
+        Assert.Contains("approvalStatus: approved", output.ToString());
+        Assert.Equal("after", File.ReadAllText(Path.Combine(temp.Path, "note.txt")));
+    }
+
+    [Fact]
+    public void Tools_call_approval_never_denies_patch()
+    {
+        using TempDirectory temp = TempDirectory.Create();
+        using StringWriter output = new();
+
+        int exitCode = InvokeToolsCallPatch(temp, output, ["--approval", "never"]);
+
+        Assert.Equal(1, exitCode);
+        Assert.Contains("errorCode: approval-denied", output.ToString());
+        Assert.Contains("approvalStatus: denied", output.ToString());
+        Assert.Equal("before", File.ReadAllText(Path.Combine(temp.Path, "note.txt")));
+    }
+
+    [Fact]
+    public void Tools_call_approve_still_applies_patch()
+    {
+        using TempDirectory temp = TempDirectory.Create();
+        using StringWriter output = new();
+
+        int exitCode = InvokeToolsCallPatch(temp, output, ["--approve"]);
+
+        Assert.Equal(0, exitCode);
+        Assert.Contains("approvalStatus: approved", output.ToString());
+        Assert.Equal("after", File.ReadAllText(Path.Combine(temp.Path, "note.txt")));
+    }
+
+    [Fact]
+    public void Tools_call_approval_option_takes_priority_over_approve()
+    {
+        using TempDirectory temp = TempDirectory.Create();
+        using StringWriter output = new();
+
+        int exitCode = InvokeToolsCallPatch(temp, output, ["--approval", "never", "--approve"]);
+
+        Assert.Equal(1, exitCode);
+        Assert.Contains("errorCode: approval-denied", output.ToString());
+        Assert.Contains("approvalStatus: denied", output.ToString());
+        Assert.Equal("before", File.ReadAllText(Path.Combine(temp.Path, "note.txt")));
+    }
+
+    [Fact]
+    public void Tools_call_invalid_approval_rejects_before_invoking_tool()
+    {
+        using TempDirectory temp = TempDirectory.Create();
         File.WriteAllText(Path.Combine(temp.Path, "note.txt"), "before");
         string argumentsPath = Path.Combine(temp.Path, "arguments.json");
         File.WriteAllText(argumentsPath, """{"path":"note.txt","find":"before","replace":"after"}""");
         using StringWriter output = new();
+        List<string> loggedCommands = [];
+        RootCommand command = CliCommandFactory.Create(
+            output,
+            workspacePath => CreateSnapshot(workspacePath),
+            (commandName, _) => loggedCommands.Add(commandName));
 
-        int exitCode = CliCommandFactory
-            .Create(output, workspacePath => CreateSnapshot(workspacePath))
-            .Parse(["tools", "call", "--workspace", temp.Path, "workspace.apply_patch", "--arguments-file", argumentsPath])
-            .Invoke();
+        int exitCode = CliCommandFactory.Invoke(
+            command,
+            ["tools", "call", "--workspace", temp.Path, "--approval", "maybe", "workspace.apply_patch", "--arguments-file", argumentsPath],
+            output);
 
-        Assert.Equal(1, exitCode);
-        Assert.Contains("errorCode: approval-denied", output.ToString());
+        string text = output.ToString();
+        Assert.Equal(2, exitCode);
+        Assert.Empty(loggedCommands);
+        Assert.Contains("Invalid value for --approval. Allowed values are never, on-request, on-failure, and always.", text);
         Assert.Equal("before", File.ReadAllText(Path.Combine(temp.Path, "note.txt")));
     }
 
@@ -1961,6 +2036,30 @@ public sealed class CliCommandFactoryTests
     {
         JsonNode? node = JsonNode.Parse(File.ReadAllText(path));
         return Assert.IsType<JsonObject>(node);
+    }
+
+    private static int InvokeToolsCallPatch(TempDirectory temp, StringWriter output, string[] approvalArgs)
+    {
+        File.WriteAllText(Path.Combine(temp.Path, "note.txt"), "before");
+        string argumentsPath = Path.Combine(temp.Path, "arguments.json");
+        File.WriteAllText(argumentsPath, """{"path":"note.txt","find":"before","replace":"after"}""");
+
+        List<string> args =
+        [
+            "tools",
+            "call",
+            "--workspace",
+            temp.Path
+        ];
+        args.AddRange(approvalArgs);
+        args.Add("workspace.apply_patch");
+        args.Add("--arguments-file");
+        args.Add(argumentsPath);
+
+        return CliCommandFactory
+            .Create(output, workspacePath => CreateSnapshot(workspacePath))
+            .Parse([.. args])
+            .Invoke();
     }
 
     private sealed class TempDirectory : IDisposable

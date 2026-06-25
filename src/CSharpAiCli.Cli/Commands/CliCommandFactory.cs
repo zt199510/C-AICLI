@@ -288,6 +288,23 @@ public static class CliCommandFactory
         {
             Description = "Approve file edit or shell actions for this call.",
         };
+        Option<string> toolsApprovalOption = new("--approval")
+        {
+            Description = "Set approval mode for this call: never, on-request, on-failure, or always.",
+        };
+        toolsApprovalOption.Validators.Add(result =>
+        {
+            if (result.Implicit)
+            {
+                return;
+            }
+
+            string? approvalMode = result.GetValueOrDefault<string>();
+            if (!ConfigLoader.TryNormalizeApprovalMode(approvalMode, out _))
+            {
+                result.AddError("Invalid value for --approval. Allowed values are never, on-request, on-failure, and always.");
+            }
+        });
         Option<string> toolArgumentsFileOption = new("--arguments-file")
         {
             Description = "Read JSON object arguments from a file.",
@@ -295,6 +312,7 @@ public static class CliCommandFactory
         toolsCallCommand.Arguments.Add(toolNameArgument);
         toolsCallCommand.Arguments.Add(toolArgumentsArgument);
         toolsCallCommand.Options.Add(toolsApproveOption);
+        toolsCallCommand.Options.Add(toolsApprovalOption);
         toolsCallCommand.Options.Add(toolArgumentsFileOption);
         toolsCallCommand.SetAction(parseResult =>
         {
@@ -308,11 +326,13 @@ public static class CliCommandFactory
             }
 
             bool approve = parseResult.GetValue(toolsApproveOption);
+            string? approvalModeValue = parseResult.GetValue(toolsApprovalOption);
             CliEnvironmentSnapshot snapshot = snapshotProvider(workspacePath);
+            ApprovalMode? cliApprovalMode = GetToolsApprovalOverride(approvalModeValue, parseResult.GetResult(toolsApprovalOption), approve);
             TryWriteCommandLog(commandLogger, "tools call", snapshot);
             ToolRegistry registry = CliToolFactory.CreateRegistry(
                 snapshot,
-                approve ? new AlwaysApproveApprovalPolicy() : new DefaultDenyApprovalPolicy());
+                ApprovalPolicyResolver.Resolve(snapshot.Configuration.ApprovalMode, cliApprovalMode));
             ToolExecutor executor = new(registry);
             ToolExecutionResult result = executor.Execute(
                 toolName,
@@ -599,6 +619,20 @@ public static class CliCommandFactory
     private static bool IsJsonOutputRequested(bool jsonRequested, string outputMode)
     {
         return jsonRequested || string.Equals(outputMode, "json", StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static ApprovalMode? GetToolsApprovalOverride(
+        string? approvalModeValue,
+        System.CommandLine.Parsing.OptionResult? approvalOptionResult,
+        bool approve)
+    {
+        if (approvalOptionResult is { Implicit: false } &&
+            ConfigLoader.TryNormalizeApprovalMode(approvalModeValue, out ApprovalMode mode))
+        {
+            return mode;
+        }
+
+        return approve ? ApprovalMode.Always : null;
     }
 
     private static IAgentRunner CreateDefaultExecAgentRunner(
