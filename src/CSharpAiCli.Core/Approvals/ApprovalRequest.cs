@@ -5,4 +5,5 @@ public sealed record ApprovalRequest(
     string Summary,
     string? Diff,
     bool IsDirtyWorkspace,
-    IReadOnlyDictionary<string, string>? Metadata = null);
+    IReadOnlyDictionary<string, string>? Metadata = null,
+    ToolRiskLevel RiskLevel = ToolRiskLevel.Write);
