@@ -844,6 +844,26 @@ public sealed class CliCommandFactoryTests
         Assert.Equal("before", File.ReadAllText(Path.Combine(temp.Path, "note.txt")));
     }
 
+    [Theory]
+    [InlineData("on-request", "Approval is required, but this CLI cannot request interactive approval.")]
+    [InlineData("on-failure", "Approval after failure is not available because sandbox retry escalation is not implemented.")]
+    public void Tools_call_interactive_approval_modes_report_approval_required_for_write_tool(
+        string approvalMode,
+        string expectedSummary)
+    {
+        using TempDirectory temp = TempDirectory.Create();
+        using StringWriter output = new();
+
+        int exitCode = InvokeToolsCallPatch(temp, output, ["--approval", approvalMode]);
+
+        string text = output.ToString();
+        Assert.Equal(1, exitCode);
+        Assert.Contains("errorCode: approval-denied", text);
+        Assert.Contains("approvalStatus: approval-required", text);
+        Assert.Contains(expectedSummary, text);
+        Assert.Equal("before", File.ReadAllText(Path.Combine(temp.Path, "note.txt")));
+    }
+
     [Fact]
     public void Tools_call_approval_always_applies_patch()
     {
@@ -869,6 +889,87 @@ public sealed class CliCommandFactoryTests
         Assert.Contains("errorCode: approval-denied", output.ToString());
         Assert.Contains("approvalStatus: denied", output.ToString());
         Assert.Equal("before", File.ReadAllText(Path.Combine(temp.Path, "note.txt")));
+    }
+
+    [Fact]
+    public void Tools_call_without_approval_refuses_shell_without_executing_command()
+    {
+        using TempDirectory temp = TempDirectory.Create();
+        using StringWriter output = new();
+        string argumentsPath = Path.Combine(temp.Path, "arguments.json");
+        string markerPath = Path.Combine(temp.Path, "shell-marker.txt");
+        File.WriteAllText(argumentsPath, """{"command":"dotnet --version > shell-marker.txt"}""");
+
+        int exitCode = CliCommandFactory
+            .Create(output, workspacePath => CreateSnapshot(workspacePath))
+            .Parse(["tools", "call", "--workspace", temp.Path, "workspace.run_shell", "--arguments-file", argumentsPath])
+            .Invoke();
+
+        string text = output.ToString();
+        Assert.Equal(1, exitCode);
+        Assert.Contains("errorCode: approval-denied", text);
+        Assert.Contains("approvalStatus: approval-required", text);
+        Assert.False(File.Exists(markerPath));
+    }
+
+    [Fact]
+    public void Tools_call_approval_always_runs_safe_shell_command()
+    {
+        using TempDirectory temp = TempDirectory.Create();
+        using StringWriter output = new();
+        string argumentsPath = Path.Combine(temp.Path, "arguments.json");
+        File.WriteAllText(argumentsPath, """{"command":"dotnet --version","timeoutMilliseconds":10000}""");
+
+        int exitCode = CliCommandFactory
+            .Create(output, workspacePath => CreateSnapshot(workspacePath))
+            .Parse([
+                "tools",
+                "call",
+                "--workspace",
+                temp.Path,
+                "--approval",
+                "always",
+                "workspace.run_shell",
+                "--arguments-file",
+                argumentsPath
+            ])
+            .Invoke();
+
+        string text = output.ToString();
+        Assert.Equal(0, exitCode);
+        Assert.Contains("status: succeeded", text);
+        Assert.Contains("approvalStatus: approved", text);
+        Assert.Contains("stdout:", text);
+    }
+
+    [Fact]
+    public void Tools_call_approval_always_reports_dangerous_shell_denial()
+    {
+        using TempDirectory temp = TempDirectory.Create();
+        using StringWriter output = new();
+        string argumentsPath = Path.Combine(temp.Path, "arguments.json");
+        File.WriteAllText(argumentsPath, """{"command":"rm -rf ."}""");
+
+        int exitCode = CliCommandFactory
+            .Create(output, workspacePath => CreateSnapshot(workspacePath))
+            .Parse([
+                "tools",
+                "call",
+                "--workspace",
+                temp.Path,
+                "--approval",
+                "always",
+                "workspace.run_shell",
+                "--arguments-file",
+                argumentsPath
+            ])
+            .Invoke();
+
+        string text = output.ToString();
+        Assert.Equal(1, exitCode);
+        Assert.Contains("errorCode: approval-denied", text);
+        Assert.Contains("approvalStatus: dangerous-shell-denied", text);
+        Assert.DoesNotContain("approvalStatus: approved", text, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -1149,6 +1250,49 @@ public sealed class CliCommandFactoryTests
         Assert.Equal("success", result["payload"]?["status"]?.GetValue<string>());
         Assert.Equal(0, result["payload"]?["exitCode"]?.GetValue<int>());
         Assert.DoesNotContain("sk-test-secret", output.ToString(), StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Exec_json_output_includes_approval_status_for_tool_event_and_result()
+    {
+        using TempDirectory temp = TempDirectory.Create();
+        File.WriteAllText(Path.Combine(temp.Path, "note.txt"), "before");
+        using StringWriter output = new();
+        ExecutorToolCallAgentRunner agentRunner = new(
+            "workspace.apply_patch",
+            """{"path":"note.txt","find":"before","replace":"after"}""");
+
+        int exitCode = CliCommandFactory
+            .Create(
+                output,
+                workspacePath => CreateSnapshot(workspacePath),
+                (_, _) => { },
+                _ => new FakeChatModelClient(ChatModelResult.Success(new ChatResponse("openai", "gpt-test", "resp", ""))),
+                writer => new TerminalChatStreamingRenderer(writer),
+                _ => new FakeConversationStore(),
+                () => DateTimeOffset.Parse("2024-01-01T00:00:00Z"),
+                (_, _, executor) =>
+                {
+                    agentRunner.Executor = executor;
+                    return agentRunner;
+                })
+            .Parse(["exec", "--json", "--workspace", temp.Path, "--approval", "always", "update note"])
+            .Invoke();
+
+        string[] lines = output.ToString()
+            .TrimEnd()
+            .Split(Environment.NewLine, StringSplitOptions.RemoveEmptyEntries);
+
+        Assert.Equal(0, exitCode);
+        Assert.Equal(2, lines.Length);
+        JsonObject toolEvent = Assert.IsType<JsonObject>(JsonNode.Parse(lines[0]));
+        JsonObject result = Assert.IsType<JsonObject>(JsonNode.Parse(lines[^1]));
+        Assert.Equal("tool.completed", toolEvent["type"]?.GetValue<string>());
+        Assert.Equal("approved", toolEvent["approvalStatus"]?.GetValue<string>());
+        Assert.Equal("exec.result", result["type"]?.GetValue<string>());
+        Assert.Equal("approved", result["approvalStatus"]?.GetValue<string>());
+        Assert.Equal("success", result["payload"]?["status"]?.GetValue<string>());
+        Assert.Equal("after", File.ReadAllText(Path.Combine(temp.Path, "note.txt")));
     }
 
     [Fact]
