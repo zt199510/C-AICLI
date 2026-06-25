@@ -24,7 +24,8 @@ public sealed class WorkspaceFileReadTool : ITool
     public ToolDefinition Definition { get; } = new(
         "workspace.read_text",
         "Read a UTF-8 text file from the current workspace.",
-        """{"type":"object","properties":{"path":{"type":"string"}},"required":["path"]}""");
+        """{"type":"object","properties":{"path":{"type":"string"}},"required":["path"]}""",
+        ToolRiskLevel.Read);
 
     public ToolExecutionResult Execute(
         ToolExecutionContext context,

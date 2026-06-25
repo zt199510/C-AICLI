@@ -30,7 +30,8 @@ public sealed class WorkspaceSearchTool : ITool
     public ToolDefinition Definition { get; } = new(
         "workspace.search_text",
         "Search text files inside the current workspace.",
-        """{"type":"object","properties":{"query":{"type":"string"},"path":{"type":"string"},"maxResults":{"type":"integer"}},"required":["query"]}""");
+        """{"type":"object","properties":{"query":{"type":"string"},"path":{"type":"string"},"maxResults":{"type":"integer"}},"required":["query"]}""",
+        ToolRiskLevel.Read);
 
     public ToolExecutionResult Execute(
         ToolExecutionContext context,

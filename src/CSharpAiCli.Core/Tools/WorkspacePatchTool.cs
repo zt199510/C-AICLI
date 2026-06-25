@@ -19,7 +19,8 @@ public sealed class WorkspacePatchTool : ITool
     public ToolDefinition Definition { get; } = new(
         "workspace.apply_patch",
         "Preview and apply a single-file exact-text replacement patch in the current workspace.",
-        """{"type":"object","properties":{"path":{"type":"string"},"find":{"type":"string"},"replace":{"type":"string"}},"required":["path","find","replace"]}""");
+        """{"type":"object","properties":{"path":{"type":"string"},"find":{"type":"string"},"replace":{"type":"string"}},"required":["path","find","replace"]}""",
+        ToolRiskLevel.Write);
 
     public ToolExecutionResult Execute(
         ToolExecutionContext context,

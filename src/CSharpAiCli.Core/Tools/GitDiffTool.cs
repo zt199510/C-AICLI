@@ -14,7 +14,8 @@ public sealed class GitDiffTool : ITool
     public ToolDefinition Definition { get; } = new(
         "git.diff",
         "Show git diff for the current workspace.",
-        """{"type":"object"}""");
+        """{"type":"object"}""",
+        ToolRiskLevel.Read);
 
     public ToolExecutionResult Execute(
         ToolExecutionContext context,

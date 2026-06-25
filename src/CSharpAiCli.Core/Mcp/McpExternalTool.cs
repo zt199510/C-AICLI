@@ -17,7 +17,8 @@ public sealed class McpExternalTool : ITool
     public ToolDefinition Definition => new(
         $"mcp.{server.Name}.call",
         $"Call MCP server '{server.Name}' through {server.TransportSummary}.",
-        """{"type":"object"}""");
+        """{"type":"object"}""",
+        ToolRiskLevel.Shell);
 
     public ToolExecutionResult Execute(
         ToolExecutionContext context,

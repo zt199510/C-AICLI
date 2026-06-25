@@ -22,7 +22,8 @@ public sealed class WorkspaceShellTool : ITool
     public ToolDefinition Definition { get; } = new(
         "workspace.run_shell",
         "Run an approved shell command inside the current workspace.",
-        """{"type":"object","properties":{"command":{"type":"string"},"cwd":{"type":"string"},"timeoutMilliseconds":{"type":"integer"},"maxStdoutBytes":{"type":"integer"},"maxStderrBytes":{"type":"integer"}},"required":["command"]}""");
+        """{"type":"object","properties":{"command":{"type":"string"},"cwd":{"type":"string"},"timeoutMilliseconds":{"type":"integer"},"maxStdoutBytes":{"type":"integer"},"maxStderrBytes":{"type":"integer"}},"required":["command"]}""",
+        ToolRiskLevel.Shell);
 
     public ToolExecutionResult Execute(
         ToolExecutionContext context,

@@ -14,7 +14,8 @@ public sealed class GitStatusTool : ITool
     public ToolDefinition Definition { get; } = new(
         "git.status",
         "Summarize git status for the current workspace.",
-        """{"type":"object"}""");
+        """{"type":"object"}""",
+        ToolRiskLevel.Read);
 
     public ToolExecutionResult Execute(
         ToolExecutionContext context,
