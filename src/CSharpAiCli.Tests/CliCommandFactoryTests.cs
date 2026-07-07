@@ -1928,17 +1928,17 @@ public sealed class CliCommandFactoryTests
             Summaries =
             [
                 new ConversationTranscriptSummary(
-                    "alpha",
-                    DateTimeOffset.Parse("2024-01-01T00:00:00Z"),
-                    DateTimeOffset.Parse("2024-01-01T00:01:00Z"),
-                    TurnCount: 2,
-                    ToolCallCount: 1),
-                new ConversationTranscriptSummary(
                     "beta",
                     DateTimeOffset.Parse("2024-01-02T00:00:00Z"),
                     DateTimeOffset.Parse("2024-01-02T00:03:00Z"),
                     TurnCount: 4,
-                    ToolCallCount: 3)
+                    ToolCallCount: 3),
+                new ConversationTranscriptSummary(
+                    "alpha",
+                    DateTimeOffset.Parse("2024-01-01T00:00:00Z"),
+                    DateTimeOffset.Parse("2024-01-01T00:01:00Z"),
+                    TurnCount: 2,
+                    ToolCallCount: 1)
             ]
         };
 
@@ -1955,9 +1955,13 @@ public sealed class CliCommandFactoryTests
 
         string text = output.ToString();
         Assert.Equal(0, exitCode);
-        Assert.Contains("C# AI CLI sessions", text);
-        Assert.Contains("- alpha created=2024-01-01T00:00:00.0000000+00:00 updated=2024-01-01T00:01:00.0000000+00:00 turns=2 toolCalls=1", text);
-        Assert.Contains("- beta created=2024-01-02T00:00:00.0000000+00:00 updated=2024-01-02T00:03:00.0000000+00:00 turns=4 toolCalls=3", text);
+        Assert.Equal(
+            [
+                "C# AI CLI sessions",
+                "- alpha created=2024-01-01T00:00:00.0000000+00:00 updated=2024-01-01T00:01:00.0000000+00:00 turns=2 toolCalls=1",
+                "- beta created=2024-01-02T00:00:00.0000000+00:00 updated=2024-01-02T00:03:00.0000000+00:00 turns=4 toolCalls=3"
+            ],
+            text.Split(Environment.NewLine, StringSplitOptions.RemoveEmptyEntries));
     }
 
     [Fact]
