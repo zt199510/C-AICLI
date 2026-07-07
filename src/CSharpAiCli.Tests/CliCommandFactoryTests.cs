@@ -2066,7 +2066,7 @@ public sealed class CliCommandFactoryTests
     }
 
     [Fact]
-    public void Session_export_and_clear_manage_transcript_file()
+    public void Session_export_defaults_to_json_transcript_file()
     {
         using TempDirectory temp = TempDirectory.Create();
         string userHome = Path.Combine(temp.Path, "user-home");
@@ -2100,6 +2100,147 @@ public sealed class CliCommandFactoryTests
 
         Assert.Equal(0, exportExitCode);
         Assert.Contains("\"sessionName\": \"smoke\"", exportOutput.ToString());
+    }
+
+    [Fact]
+    public void Session_export_format_json_prints_json_transcript_file()
+    {
+        using TempDirectory temp = TempDirectory.Create();
+        string userHome = Path.Combine(temp.Path, "user-home");
+        string workspace = Path.Combine(temp.Path, "workspace");
+        Directory.CreateDirectory(workspace);
+        string sessionDirectory = Path.Combine(userHome, ".caicli", "sessions");
+        Directory.CreateDirectory(sessionDirectory);
+        File.WriteAllText(Path.Combine(sessionDirectory, "smoke.transcript.json"), """
+        {
+          "schemaVersion": 1,
+          "sessionName": "smoke",
+          "createdAtUtc": "2024-01-01T00:00:00+00:00",
+          "updatedAtUtc": "2024-01-01T00:00:00+00:00",
+          "messages": [],
+          "toolCalls": [],
+          "errors": []
+        }
+        """);
+        using StringWriter exportOutput = new();
+        CliEnvironmentSnapshot snapshot = CreateSnapshot(
+            workspacePath: workspace,
+            apiKey: null,
+            apiKeySource: "missing",
+            model: "not configured",
+            userConfigPath: Path.Combine(userHome, ".caicli", "config.json"));
+
+        int exportExitCode = CliCommandFactory
+            .Create(exportOutput, _ => snapshot)
+            .Parse(["session", "export", "--format", "json", "smoke"])
+            .Invoke();
+
+        Assert.Equal(0, exportExitCode);
+        Assert.Contains("\"sessionName\": \"smoke\"", exportOutput.ToString());
+    }
+
+    [Fact]
+    public void Session_export_format_markdown_prints_safe_readable_transcript()
+    {
+        using StringWriter output = new();
+        ConversationTranscript transcript = ConversationTranscript.Create(
+            "smoke",
+            DateTimeOffset.Parse("2024-01-01T00:00:00Z"));
+        transcript.AddUserMessage("hello assistant", DateTimeOffset.Parse("2024-01-01T00:00:01Z"));
+        transcript.AddAssistantMessage(new ChatResponse(
+            Provider: "openai",
+            Model: "gpt-test",
+            ResponseId: "resp_test",
+            Text: "hello user"), DateTimeOffset.Parse("2024-01-01T00:00:02Z"));
+        transcript.AddError(new ModelError(
+            Provider: "openai",
+            Operation: "responses.create",
+            StatusCode: null,
+            LocalErrorCode: "missing-openai-api-key",
+            SafeMessage: "safe message without secret",
+            Retryable: false), DateTimeOffset.Parse("2024-01-01T00:00:03Z"));
+        transcript.AddToolCall(ConversationToolCall.FromExecution(
+            "call_test",
+            "workspace.read_text",
+            """{"apiKey":"sk-tool-secret","path":"note.txt"}""",
+            ToolExecutionResult.Success("read safe summary"),
+            DateTimeOffset.Parse("2024-01-01T00:00:04Z")));
+        FakeConversationStore store = new()
+        {
+            Transcript = transcript
+        };
+
+        int exitCode = CliCommandFactory
+            .Create(
+                output,
+                workspacePath => CreateSnapshot(workspacePath),
+                (_, _) => { },
+                _ => new FakeChatModelClient(ChatModelResult.Success(new ChatResponse("openai", "gpt-test", "resp", ""))),
+                writer => new TerminalChatStreamingRenderer(writer),
+                _ => store,
+                () => DateTimeOffset.Parse("2024-01-01T00:00:05Z"))
+            .Parse(["session", "export", "--format", "markdown", "smoke"])
+            .Invoke();
+
+        string text = output.ToString();
+        Assert.Equal(0, exitCode);
+        Assert.Equal("smoke", store.TryLoadedSessionName?.Value);
+        Assert.Contains("# Session: smoke", text);
+        Assert.Contains("- Created: 2024-01-01T00:00:00.0000000+00:00", text);
+        Assert.Contains("- Updated: 2024-01-01T00:00:04.0000000+00:00", text);
+        Assert.Contains("- Turns: 2", text);
+        Assert.Contains("- Tool calls: 1", text);
+        Assert.Contains("### User - 2024-01-01T00:00:01.0000000+00:00", text);
+        Assert.Contains("hello assistant", text);
+        Assert.Contains("### Assistant - 2024-01-01T00:00:02.0000000+00:00", text);
+        Assert.Contains("hello user", text);
+        Assert.Contains("## Errors", text);
+        Assert.Contains("- 2024-01-01T00:00:03.0000000+00:00 missing-openai-api-key: safe message without secret", text);
+        Assert.Contains("## Tool Calls", text);
+        Assert.Contains("- 2024-01-01T00:00:04.0000000+00:00 workspace.read_text succeeded: read safe summary", text);
+        Assert.DoesNotContain("sk-", text, StringComparison.Ordinal);
+        Assert.DoesNotContain("apiKey", text, StringComparison.Ordinal);
+        Assert.DoesNotContain("ArgumentsJson", text, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Session_export_format_rejects_invalid_value()
+    {
+        using StringWriter output = new();
+        RootCommand command = CliCommandFactory.Create(output, workspacePath => CreateSnapshot(workspacePath));
+
+        int exitCode = CliCommandFactory.Invoke(command, ["session", "export", "--format", "xml", "smoke"], output);
+
+        Assert.Equal(2, exitCode);
+        Assert.Contains("Invalid value for --format. Allowed values are json and markdown.", output.ToString());
+    }
+
+    [Fact]
+    public void Session_clear_deletes_transcript_file()
+    {
+        using TempDirectory temp = TempDirectory.Create();
+        string userHome = Path.Combine(temp.Path, "user-home");
+        string workspace = Path.Combine(temp.Path, "workspace");
+        Directory.CreateDirectory(workspace);
+        string sessionDirectory = Path.Combine(userHome, ".caicli", "sessions");
+        Directory.CreateDirectory(sessionDirectory);
+        File.WriteAllText(Path.Combine(sessionDirectory, "smoke.transcript.json"), """
+        {
+          "schemaVersion": 1,
+          "sessionName": "smoke",
+          "createdAtUtc": "2024-01-01T00:00:00+00:00",
+          "updatedAtUtc": "2024-01-01T00:00:00+00:00",
+          "messages": [],
+          "toolCalls": [],
+          "errors": []
+        }
+        """);
+        CliEnvironmentSnapshot snapshot = CreateSnapshot(
+            workspacePath: workspace,
+            apiKey: null,
+            apiKeySource: "missing",
+            model: "not configured",
+            userConfigPath: Path.Combine(userHome, ".caicli", "config.json"));
 
         using StringWriter clearOutput = new();
         int clearExitCode = CliCommandFactory

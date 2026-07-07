@@ -1,6 +1,7 @@
 using System.CommandLine;
 using System.CommandLine.Parsing;
 using System.Globalization;
+using System.Text.RegularExpressions;
 using System.Text.Json;
 using CSharpAiCli.Core;
 
@@ -525,7 +526,7 @@ public static class CliCommandFactory
         Command sessionCommand = new("session", "Manage local conversation transcripts.");
         Command sessionListCommand = new("list", "List local session summaries.");
         Command sessionShowCommand = new("show", "Show one local session summary.");
-        Command sessionExportCommand = new("export", "Print one session transcript JSON.");
+        Command sessionExportCommand = new("export", "Print one session transcript.");
         Command sessionClearCommand = new("clear", "Delete one session transcript.");
         Command sessionDeleteCommand = new("delete", "Delete one local session transcript.");
         Command sessionRenameCommand = new("rename", "Rename one local session transcript.");
@@ -533,6 +534,20 @@ public static class CliCommandFactory
         {
             Description = "The session name.",
         };
+        Option<string> sessionExportFormatOption = new("--format")
+        {
+            Description = "Select export format: json or markdown.",
+            DefaultValueFactory = _ => "json",
+        };
+        sessionExportFormatOption.Validators.Add(result =>
+        {
+            string format = result.GetValueOrDefault<string>() ?? "json";
+            if (!string.Equals(format, "json", StringComparison.OrdinalIgnoreCase) &&
+                !string.Equals(format, "markdown", StringComparison.OrdinalIgnoreCase))
+            {
+                result.AddError("Invalid value for --format. Allowed values are json and markdown.");
+            }
+        });
         Argument<string> sessionRenameSourceArgument = new("old")
         {
             Description = "The current session name.",
@@ -543,6 +558,7 @@ public static class CliCommandFactory
         };
         sessionShowCommand.Arguments.Add(sessionNameArgument);
         sessionExportCommand.Arguments.Add(sessionNameArgument);
+        sessionExportCommand.Options.Add(sessionExportFormatOption);
         sessionClearCommand.Arguments.Add(sessionNameArgument);
         sessionDeleteCommand.Arguments.Add(sessionNameArgument);
         sessionRenameCommand.Arguments.Add(sessionRenameSourceArgument);
@@ -567,9 +583,10 @@ public static class CliCommandFactory
         {
             string? workspacePath = parseResult.GetValue(workspaceOption);
             string name = parseResult.GetValue(sessionNameArgument) ?? string.Empty;
+            string format = parseResult.GetValue(sessionExportFormatOption) ?? "json";
             CliEnvironmentSnapshot snapshot = snapshotProvider(workspacePath);
             TryWriteCommandLog(commandLogger, "session export", snapshot);
-            return ExportSession(output, snapshot, name);
+            return ExportSession(output, snapshot, conversationStoreFactory(snapshot), name, format);
         });
         sessionClearCommand.SetAction(parseResult =>
         {
@@ -967,21 +984,98 @@ public static class CliCommandFactory
         return 0;
     }
 
-    private static int ExportSession(TextWriter output, CliEnvironmentSnapshot snapshot, string name)
+    private static int ExportSession(
+        TextWriter output,
+        CliEnvironmentSnapshot snapshot,
+        IConversationStore conversationStore,
+        string name,
+        string format)
     {
         ConversationSessionName sessionName = ConversationSessionName.Parse(name);
+        if (string.Equals(format, "markdown", StringComparison.OrdinalIgnoreCase))
+        {
+            if (!conversationStore.TryLoad(sessionName, out ConversationTranscript? transcript) || transcript is null)
+            {
+                WriteSessionNotFound(output);
+                return 1;
+            }
+
+            WriteSessionMarkdown(output, transcript);
+            return 0;
+        }
+
         string path = ResolveSessionPath(snapshot, sessionName);
         if (!File.Exists(path))
         {
-            output.WriteLine("status: failed");
-            output.WriteLine("errorCode: session-not-found");
-            output.WriteLine("summary:");
-            output.WriteLine("Session transcript was not found.");
+            WriteSessionNotFound(output);
             return 1;
         }
 
         output.Write(File.ReadAllText(path));
         return 0;
+    }
+
+    private static void WriteSessionMarkdown(TextWriter output, ConversationTranscript transcript)
+    {
+        output.WriteLine($"# Session: {RedactSecrets(transcript.SessionName)}");
+        output.WriteLine();
+        output.WriteLine($"- Created: {transcript.CreatedAtUtc.ToString("O", CultureInfo.InvariantCulture)}");
+        output.WriteLine($"- Updated: {transcript.UpdatedAtUtc.ToString("O", CultureInfo.InvariantCulture)}");
+        output.WriteLine($"- Turns: {transcript.Messages.Count}");
+        output.WriteLine($"- Tool calls: {transcript.ToolCalls.Count}");
+        output.WriteLine();
+        output.WriteLine("## Messages");
+
+        foreach (ConversationMessage message in transcript.Messages)
+        {
+            output.WriteLine();
+            output.WriteLine($"### {ToDisplayRole(message.Role)} - {message.CreatedAtUtc.ToString("O", CultureInfo.InvariantCulture)}");
+            output.WriteLine(RedactSecrets(message.Content));
+        }
+
+        if (transcript.Errors.Count > 0)
+        {
+            output.WriteLine();
+            output.WriteLine("## Errors");
+            output.WriteLine();
+            foreach (ConversationError error in transcript.Errors)
+            {
+                string errorCode = string.IsNullOrWhiteSpace(error.LocalErrorCode)
+                    ? "error"
+                    : error.LocalErrorCode;
+                output.WriteLine($"- {error.CreatedAtUtc.ToString("O", CultureInfo.InvariantCulture)} {errorCode}: {RedactSecrets(error.SafeMessage)}");
+            }
+        }
+
+        if (transcript.ToolCalls.Count > 0)
+        {
+            output.WriteLine();
+            output.WriteLine("## Tool Calls");
+            output.WriteLine();
+            foreach (ConversationToolCall toolCall in transcript.ToolCalls)
+            {
+                string status = toolCall.Succeeded ? "succeeded" : "failed";
+                string summary = toolCall.Succeeded
+                    ? toolCall.OutputSummary ?? string.Empty
+                    : toolCall.FailureReason ?? toolCall.ErrorCode ?? string.Empty;
+                output.WriteLine($"- {toolCall.CompletedAtUtc.ToString("O", CultureInfo.InvariantCulture)} {toolCall.ToolName} {status}: {RedactSecrets(summary)}");
+            }
+        }
+    }
+
+    private static string ToDisplayRole(string role)
+    {
+        if (string.IsNullOrWhiteSpace(role))
+        {
+            return "Message";
+        }
+
+        return char.ToUpperInvariant(role[0]) + role[1..];
+    }
+
+    private static string RedactSecrets(string value)
+    {
+        return Regex.Replace(value ?? string.Empty, @"sk-[A-Za-z0-9_-]+", "[redacted]", RegexOptions.CultureInvariant);
     }
 
     private static int DeleteSession(
