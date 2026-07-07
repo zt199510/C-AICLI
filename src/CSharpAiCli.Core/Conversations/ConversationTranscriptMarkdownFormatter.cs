@@ -28,7 +28,7 @@ public static class ConversationTranscriptMarkdownFormatter
         ArgumentNullException.ThrowIfNull(transcript);
 
         StringBuilder builder = new();
-        builder.AppendLine($"# Session: {NormalizeSingleLine(transcript.SessionName)}");
+        builder.AppendLine($"# Session: {NormalizeMarkdownMetadata(transcript.SessionName)}");
         builder.AppendLine();
         builder.AppendLine($"- Created: {transcript.CreatedAtUtc.ToString("O", CultureInfo.InvariantCulture)}");
         builder.AppendLine($"- Updated: {transcript.UpdatedAtUtc.ToString("O", CultureInfo.InvariantCulture)}");
@@ -57,7 +57,7 @@ public static class ConversationTranscriptMarkdownFormatter
             {
                 string errorCode = string.IsNullOrWhiteSpace(error.LocalErrorCode)
                     ? "error"
-                    : NormalizeSingleLine(error.LocalErrorCode);
+                    : NormalizeMarkdownMetadata(error.LocalErrorCode);
                 builder.AppendLine($"- {error.CreatedAtUtc.ToString("O", CultureInfo.InvariantCulture)} {errorCode}");
                 AppendFencedBlock(builder, RedactSecrets(error.SafeMessage));
             }
@@ -76,9 +76,9 @@ public static class ConversationTranscriptMarkdownFormatter
                     : toolCall.FailureReason ?? toolCall.ErrorCode ?? string.Empty;
                 string errorCode = toolCall.Succeeded || string.IsNullOrWhiteSpace(toolCall.ErrorCode)
                     ? string.Empty
-                    : $" {NormalizeSingleLine(toolCall.ErrorCode)}";
+                    : $" {NormalizeMarkdownMetadata(toolCall.ErrorCode)}";
                 builder.AppendLine(
-                    $"- {toolCall.CompletedAtUtc.ToString("O", CultureInfo.InvariantCulture)} {NormalizeSingleLine(toolCall.ToolName)} {status}{errorCode}");
+                    $"- {toolCall.CompletedAtUtc.ToString("O", CultureInfo.InvariantCulture)} {NormalizeMarkdownMetadata(toolCall.ToolName)} {status}{errorCode}");
                 AppendFencedBlock(builder, RedactSecrets(summary));
             }
         }
@@ -88,7 +88,7 @@ public static class ConversationTranscriptMarkdownFormatter
 
     private static string ToDisplayRole(string role)
     {
-        string normalizedRole = NormalizeSingleLine(role);
+        string normalizedRole = NormalizeMarkdownMetadata(role);
         if (string.IsNullOrWhiteSpace(normalizedRole))
         {
             return "Message";
@@ -100,6 +100,40 @@ public static class ConversationTranscriptMarkdownFormatter
     private static string NormalizeSingleLine(string value)
     {
         return WhitespacePattern.Replace(RedactSecrets(value), " ").Trim();
+    }
+
+    private static string NormalizeMarkdownMetadata(string value)
+    {
+        return EscapeMarkdownMetadata(NormalizeSingleLine(value));
+    }
+
+    private static string EscapeMarkdownMetadata(string value)
+    {
+        StringBuilder escaped = new(value.Length);
+        for (int index = 0; index < value.Length; index++)
+        {
+            char character = value[index];
+            escaped.Append(character switch
+            {
+                '&' => "&amp;",
+                '<' => "&lt;",
+                '>' => "&gt;",
+                '[' => "&#91;",
+                ']' => "&#93;",
+                '(' => "&#40;",
+                ')' => "&#41;",
+                '!' => "&#33;",
+                '#' => "&#35;",
+                '*' => "&#42;",
+                '-' when index + 1 < value.Length && value[index + 1] == ' ' => "&#45;",
+                '+' => "&#43;",
+                '`' => "&#96;",
+                '\\' => "&#92;",
+                _ => character,
+            });
+        }
+
+        return escaped.ToString();
     }
 
     private static string RedactSecrets(string value)

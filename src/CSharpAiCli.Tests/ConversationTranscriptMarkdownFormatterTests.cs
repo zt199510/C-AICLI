@@ -6,6 +6,98 @@ namespace CSharpAiCli.Tests;
 public sealed class ConversationTranscriptMarkdownFormatterTests
 {
     [Fact]
+    public void Format_escapes_hostile_session_name_metadata_outside_fences()
+    {
+        ConversationTranscript transcript = ConversationTranscript.Create(
+            "session <script>alert(1)</script> [click me](https://example.test) ![alt](image.png) # heading - item",
+            DateTimeOffset.Parse("2024-01-01T00:00:00Z"));
+
+        string markdown = ConversationTranscriptMarkdownFormatter.Format(transcript);
+
+        string outsideFences = RemoveFencedBlocks(markdown);
+        AssertHostileMetadataIsNotLive(outsideFences);
+        Assert.Contains("session", outsideFences, StringComparison.Ordinal);
+        Assert.Contains("heading", outsideFences, StringComparison.Ordinal);
+        Assert.Contains("item", outsideFences, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Format_escapes_hostile_message_role_metadata_outside_fences()
+    {
+        ConversationTranscript transcript = ConversationTranscript.Create(
+            "smoke",
+            DateTimeOffset.Parse("2024-01-01T00:00:00Z"));
+        transcript.Messages.Add(new ConversationMessage(
+            Role: "operator <div>raw</div> [click me](https://example.test) ![alt](image.png) # heading - item",
+            CreatedAtUtc: DateTimeOffset.Parse("2024-01-01T00:00:01Z"),
+            Content: "hello",
+            Provider: null,
+            Model: null,
+            ResponseId: null));
+
+        string markdown = ConversationTranscriptMarkdownFormatter.Format(transcript);
+
+        string outsideFences = RemoveFencedBlocks(markdown);
+        AssertHostileMetadataIsNotLive(outsideFences);
+        Assert.Contains("Operator", outsideFences, StringComparison.Ordinal);
+        Assert.Contains("heading", outsideFences, StringComparison.Ordinal);
+        Assert.Contains("item", outsideFences, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Format_escapes_hostile_error_code_metadata_outside_fences()
+    {
+        ConversationTranscript transcript = ConversationTranscript.Create(
+            "smoke",
+            DateTimeOffset.Parse("2024-01-01T00:00:00Z"));
+        transcript.Errors.Add(new ConversationError(
+            CreatedAtUtc: DateTimeOffset.Parse("2024-01-01T00:00:02Z"),
+            Provider: "openai",
+            Operation: "chat",
+            StatusCode: 500,
+            LocalErrorCode: "model_failed <script>alert(1)</script> [click me](https://example.test) ![alt](image.png) # heading - item",
+            SafeMessage: "safe",
+            Retryable: false));
+
+        string markdown = ConversationTranscriptMarkdownFormatter.Format(transcript);
+
+        string outsideFences = RemoveFencedBlocks(markdown);
+        AssertHostileMetadataIsNotLive(outsideFences);
+        Assert.Contains("model_failed", outsideFences, StringComparison.Ordinal);
+        Assert.Contains("heading", outsideFences, StringComparison.Ordinal);
+        Assert.Contains("item", outsideFences, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Format_escapes_hostile_tool_name_and_error_code_metadata_outside_fences()
+    {
+        ConversationTranscript transcript = ConversationTranscript.Create(
+            "smoke",
+            DateTimeOffset.Parse("2024-01-01T00:00:00Z"));
+        transcript.AddToolCall(new ConversationToolCall(
+            CreatedAtUtc: DateTimeOffset.Parse("2024-01-01T00:00:04Z"),
+            CallId: "call_read",
+            ToolName: "workspace.read_text <div>raw</div> [click me](https://example.test) ![alt](image.png) # heading - item",
+            ArgumentsJson: "{}",
+            ApprovalStatus: "approved",
+            CompletedAtUtc: DateTimeOffset.Parse("2024-01-01T00:00:05Z"),
+            Succeeded: false,
+            OutputSummary: null,
+            FailureReason: "failed",
+            ErrorCode: "tool_failed <script>alert(1)</script> [click me](https://example.test) ![alt](image.png) ## heading * item",
+            Retryable: false));
+
+        string markdown = ConversationTranscriptMarkdownFormatter.Format(transcript);
+
+        string outsideFences = RemoveFencedBlocks(markdown);
+        AssertHostileMetadataIsNotLive(outsideFences);
+        Assert.Contains("workspace.read_text", outsideFences, StringComparison.Ordinal);
+        Assert.Contains("tool_failed", outsideFences, StringComparison.Ordinal);
+        Assert.Contains("heading", outsideFences, StringComparison.Ordinal);
+        Assert.Contains("item", outsideFences, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void Format_fences_multiline_markdown_and_raw_html_message_content()
     {
         ConversationTranscript transcript = ConversationTranscript.Create(
@@ -219,6 +311,18 @@ public sealed class ConversationTranscriptMarkdownFormatterTests
         }
 
         return string.Join(Environment.NewLine, outsideLines);
+    }
+
+    private static void AssertHostileMetadataIsNotLive(string outsideFences)
+    {
+        Assert.DoesNotContain("<script", outsideFences, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("<div", outsideFences, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("[click me]", outsideFences, StringComparison.Ordinal);
+        Assert.DoesNotContain("![alt]", outsideFences, StringComparison.Ordinal);
+        Assert.DoesNotContain("# heading", outsideFences, StringComparison.Ordinal);
+        Assert.DoesNotContain("## heading", outsideFences, StringComparison.Ordinal);
+        Assert.DoesNotContain("- item", outsideFences, StringComparison.Ordinal);
+        Assert.DoesNotContain("* item", outsideFences, StringComparison.Ordinal);
     }
 
     private static readonly Regex FenceLinePattern = new(
