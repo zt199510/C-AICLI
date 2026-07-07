@@ -1,5 +1,6 @@
 using System.CommandLine;
 using System.CommandLine.Parsing;
+using System.Globalization;
 using System.Text.Json;
 using CSharpAiCli.Core;
 
@@ -485,6 +486,7 @@ public static class CliCommandFactory
         });
 
         Command sessionCommand = new("session", "Manage local conversation transcripts.");
+        Command sessionListCommand = new("list", "List local session summaries.");
         Command sessionExportCommand = new("export", "Print one session transcript JSON.");
         Command sessionClearCommand = new("clear", "Delete one session transcript.");
         Argument<string> sessionNameArgument = new("name")
@@ -493,6 +495,14 @@ public static class CliCommandFactory
         };
         sessionExportCommand.Arguments.Add(sessionNameArgument);
         sessionClearCommand.Arguments.Add(sessionNameArgument);
+        sessionListCommand.SetAction(parseResult =>
+        {
+            string? workspacePath = parseResult.GetValue(workspaceOption);
+            CliEnvironmentSnapshot snapshot = snapshotProvider(workspacePath);
+            TryWriteCommandLog(commandLogger, "session list", snapshot);
+            WriteSessionList(output, conversationStoreFactory(snapshot).ListSummaries());
+            return 0;
+        });
         sessionExportCommand.SetAction(parseResult =>
         {
             string? workspacePath = parseResult.GetValue(workspaceOption);
@@ -509,6 +519,7 @@ public static class CliCommandFactory
             TryWriteCommandLog(commandLogger, "session clear", snapshot);
             return ClearSession(output, snapshot, name);
         });
+        sessionCommand.Subcommands.Add(sessionListCommand);
         sessionCommand.Subcommands.Add(sessionExportCommand);
         sessionCommand.Subcommands.Add(sessionClearCommand);
 
@@ -769,6 +780,22 @@ public static class CliCommandFactory
 
         output.WriteLine("summary:");
         output.WriteLine(result.Summary);
+    }
+
+    private static void WriteSessionList(TextWriter output, IReadOnlyList<ConversationTranscriptSummary> summaries)
+    {
+        output.WriteLine("C# AI CLI sessions");
+        if (summaries.Count == 0)
+        {
+            output.WriteLine("status: empty");
+            return;
+        }
+
+        foreach (ConversationTranscriptSummary summary in summaries.OrderBy(summary => summary.Name, StringComparer.Ordinal))
+        {
+            output.WriteLine(
+                $"- {summary.Name} created={summary.CreatedAtUtc.ToString("O", CultureInfo.InvariantCulture)} updated={summary.UpdatedAtUtc.ToString("O", CultureInfo.InvariantCulture)} turns={summary.TurnCount} toolCalls={summary.ToolCallCount}");
+        }
     }
 
     private static int ExportSession(TextWriter output, CliEnvironmentSnapshot snapshot, string name)

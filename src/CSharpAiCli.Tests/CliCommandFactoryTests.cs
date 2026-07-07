@@ -1920,6 +1920,92 @@ public sealed class CliCommandFactoryTests
     }
 
     [Fact]
+    public void Session_list_writes_session_summaries()
+    {
+        using StringWriter output = new();
+        FakeConversationStore store = new()
+        {
+            Summaries =
+            [
+                new ConversationTranscriptSummary(
+                    "alpha",
+                    DateTimeOffset.Parse("2024-01-01T00:00:00Z"),
+                    DateTimeOffset.Parse("2024-01-01T00:01:00Z"),
+                    TurnCount: 2,
+                    ToolCallCount: 1),
+                new ConversationTranscriptSummary(
+                    "beta",
+                    DateTimeOffset.Parse("2024-01-02T00:00:00Z"),
+                    DateTimeOffset.Parse("2024-01-02T00:03:00Z"),
+                    TurnCount: 4,
+                    ToolCallCount: 3)
+            ]
+        };
+
+        RootCommand command = CliCommandFactory.Create(
+            output,
+            CreateSnapshot,
+            (_, _) => { },
+            _ => new FakeChatModelClient(ChatModelResult.Success(new ChatResponse("openai", "gpt-test", "resp_test", "ok"))),
+            writer => new TerminalChatStreamingRenderer(writer),
+            _ => store,
+            () => DateTimeOffset.Parse("2024-01-03T00:00:00Z"));
+
+        int exitCode = CliCommandFactory.Invoke(command, ["session", "list"], output);
+
+        string text = output.ToString();
+        Assert.Equal(0, exitCode);
+        Assert.Contains("C# AI CLI sessions", text);
+        Assert.Contains("- alpha created=2024-01-01T00:00:00.0000000+00:00 updated=2024-01-01T00:01:00.0000000+00:00 turns=2 toolCalls=1", text);
+        Assert.Contains("- beta created=2024-01-02T00:00:00.0000000+00:00 updated=2024-01-02T00:03:00.0000000+00:00 turns=4 toolCalls=3", text);
+    }
+
+    [Fact]
+    public void Session_list_writes_empty_status_for_empty_store()
+    {
+        using StringWriter output = new();
+        FakeConversationStore store = new();
+
+        RootCommand command = CliCommandFactory.Create(
+            output,
+            CreateSnapshot,
+            (_, _) => { },
+            _ => new FakeChatModelClient(ChatModelResult.Success(new ChatResponse("openai", "gpt-test", "resp_test", "ok"))),
+            writer => new TerminalChatStreamingRenderer(writer),
+            _ => store,
+            () => DateTimeOffset.Parse("2024-01-03T00:00:00Z"));
+
+        int exitCode = CliCommandFactory.Invoke(command, ["session", "list"], output);
+
+        string text = output.ToString();
+        Assert.Equal(0, exitCode);
+        Assert.Contains("C# AI CLI sessions", text);
+        Assert.Contains("status: empty", text);
+    }
+
+    [Fact]
+    public void Session_list_writes_command_log_through_delegate()
+    {
+        using StringWriter output = new();
+        List<string> loggedCommands = [];
+        FakeConversationStore store = new();
+
+        RootCommand command = CliCommandFactory.Create(
+            output,
+            CreateSnapshot,
+            (commandName, _) => loggedCommands.Add(commandName),
+            _ => new FakeChatModelClient(ChatModelResult.Success(new ChatResponse("openai", "gpt-test", "resp_test", "ok"))),
+            writer => new TerminalChatStreamingRenderer(writer),
+            _ => store,
+            () => DateTimeOffset.Parse("2024-01-03T00:00:00Z"));
+
+        int exitCode = CliCommandFactory.Invoke(command, ["session", "list"], output);
+
+        Assert.Equal(0, exitCode);
+        Assert.Equal(["session list"], loggedCommands);
+    }
+
+    [Fact]
     public void Invoke_non_exec_action_exception_uses_default_exception_handling()
     {
         using TempDirectory temp = TempDirectory.Create();
@@ -2637,6 +2723,7 @@ public sealed class CliCommandFactoryTests
         public ConversationTranscript Transcript { get; init; } = ConversationTranscript.Create(
             "smoke",
             DateTimeOffset.Parse("2024-01-01T00:00:00Z"));
+        public IReadOnlyList<ConversationTranscriptSummary> Summaries { get; init; } = [];
 
         public ConversationTranscript LoadOrCreate(ConversationSessionName sessionName, DateTimeOffset nowUtc)
         {
@@ -2649,6 +2736,11 @@ public sealed class CliCommandFactoryTests
             SavedSessionName = sessionName;
             SavedTranscript = transcript;
             return Path.Combine("user-home", ".caicli", "sessions", $"{sessionName.FileSafeName}.transcript.json");
+        }
+
+        public IReadOnlyList<ConversationTranscriptSummary> ListSummaries()
+        {
+            return Summaries;
         }
     }
 }
