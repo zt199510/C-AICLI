@@ -225,6 +225,76 @@ public sealed class ConversationTranscriptMarkdownFormatterTests
     }
 
     [Fact]
+    public void Format_redacts_escaped_quotes_inside_json_secret_values()
+    {
+        ConversationTranscript transcript = ConversationTranscript.Create(
+            "smoke",
+            DateTimeOffset.Parse("2024-01-01T00:00:00Z"));
+        transcript.AddUserMessage(
+            """payload {\"password\":\"pa\\\"ss\",\"client_secret\":\"cli\\\"ent-secret\"} done""",
+            DateTimeOffset.Parse("2024-01-01T00:00:01Z"));
+
+        string markdown = ConversationTranscriptMarkdownFormatter.Format(transcript);
+
+        Assert.Contains("""{\"password\":\"[redacted]\",\"client_secret\":\"[redacted]\"}""", markdown, StringComparison.Ordinal);
+        Assert.DoesNotContain("""pa\\""", markdown, StringComparison.Ordinal);
+        Assert.DoesNotContain("""\"ss""", markdown, StringComparison.Ordinal);
+        Assert.DoesNotContain("""cli\\""", markdown, StringComparison.Ordinal);
+        Assert.DoesNotContain("ent-secret", markdown, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Format_redacts_escaped_quotes_inside_key_value_secret_values()
+    {
+        ConversationTranscript transcript = ConversationTranscript.Create(
+            "smoke",
+            DateTimeOffset.Parse("2024-01-01T00:00:00Z"));
+        transcript.AddUserMessage(
+            """password=\"pa\\\"ss\" access_token=\"tok\\\"en-secret\" done""",
+            DateTimeOffset.Parse("2024-01-01T00:00:01Z"));
+
+        string markdown = ConversationTranscriptMarkdownFormatter.Format(transcript);
+
+        Assert.Contains("""password=[redacted] access_token=[redacted] done""", markdown, StringComparison.Ordinal);
+        Assert.DoesNotContain("""pa\\""", markdown, StringComparison.Ordinal);
+        Assert.DoesNotContain("""\"ss""", markdown, StringComparison.Ordinal);
+        Assert.DoesNotContain("""tok\\""", markdown, StringComparison.Ordinal);
+        Assert.DoesNotContain("en-secret", markdown, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Format_uses_safe_fallbacks_for_null_message_role_and_tool_name()
+    {
+        ConversationTranscript transcript = ConversationTranscript.Create(
+            "smoke",
+            DateTimeOffset.Parse("2024-01-01T00:00:00Z"));
+        transcript.Messages.Add(new ConversationMessage(
+            Role: null!,
+            CreatedAtUtc: DateTimeOffset.Parse("2024-01-01T00:00:01Z"),
+            Content: "hello",
+            Provider: null,
+            Model: null,
+            ResponseId: null));
+        transcript.AddToolCall(new ConversationToolCall(
+            CreatedAtUtc: DateTimeOffset.Parse("2024-01-01T00:00:04Z"),
+            CallId: "call_read",
+            ToolName: null!,
+            ArgumentsJson: "{}",
+            ApprovalStatus: "approved",
+            CompletedAtUtc: DateTimeOffset.Parse("2024-01-01T00:00:05Z"),
+            Succeeded: true,
+            OutputSummary: "ok",
+            FailureReason: null,
+            ErrorCode: null,
+            Retryable: false));
+
+        string markdown = ConversationTranscriptMarkdownFormatter.Format(transcript);
+
+        Assert.Contains("### Message - 2024-01-01T00:00:01.0000000+00:00", markdown, StringComparison.Ordinal);
+        Assert.Contains("- 2024-01-01T00:00:05.0000000+00:00 tool succeeded", markdown, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void Format_fences_error_safe_message_markdown_and_raw_html()
     {
         ConversationTranscript transcript = ConversationTranscript.Create(

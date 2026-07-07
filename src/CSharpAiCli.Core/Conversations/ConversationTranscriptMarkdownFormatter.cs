@@ -10,11 +10,17 @@ public static class ConversationTranscriptMarkdownFormatter
         "OPENAI_API_KEY|apiKey|api_key|api-key|api[_-]?key|access[_-]?token|accessToken|refresh[_-]?token|refreshToken|client[_-]?secret|clientSecret|AWS_SECRET_ACCESS_KEY|aws[_-]?secret[_-]?access[_-]?key|awsSecretAccessKey|token|password|secret";
 
     private static readonly Regex WhitespacePattern = new(@"\s+", RegexOptions.CultureInvariant);
+    private static readonly Regex EscapedJsonSecretPattern = new(
+        $$"""(\\"(?i:{{SecretKeyNamePattern}})\\"\s*:\s*\\")(?:\\\\\\"|\\\\.|\\(?!")|[^"\\])*(\\")""",
+        RegexOptions.CultureInvariant);
     private static readonly Regex JsonSecretPattern = new(
-        $$"""("(?i:{{SecretKeyNamePattern}})"\s*:\s*")[^"]*(")""",
+        $$"""("(?i:{{SecretKeyNamePattern}})"\s*:\s*")(?:\\.|[^"\\])*(")""",
+        RegexOptions.CultureInvariant);
+    private static readonly Regex EscapedKeyValueSecretPattern = new(
+        $$"""\b(?i:{{SecretKeyNamePattern}})\b(\s*[:=]\s*)(?:\\"(?:\\\\\\"|\\\\.|\\(?!")|[^"\\])*\\"|\\'(?:\\\\\\'|\\\\.|\\(?!')|[^'\\])*\\')""",
         RegexOptions.CultureInvariant);
     private static readonly Regex KeyValueSecretPattern = new(
-        $$"""\b(?i:{{SecretKeyNamePattern}})\b(\s*[:=]\s*)(?:"[^"]*"|'[^']*'|Bearer\s+[A-Za-z0-9._~+/=-]+|[^\s,;]+)""",
+        $$"""\b(?i:{{SecretKeyNamePattern}})\b(\s*[:=]\s*)(?:"(?:\\.|[^"\\])*"|'(?:\\.|[^'\\])*'|Bearer\s+[A-Za-z0-9._~+/=-]+|[^\s,;]+)""",
         RegexOptions.CultureInvariant);
     private static readonly Regex BearerTokenPattern = new(
         @"\bBearer\s+[A-Za-z0-9._~+/=-]+",
@@ -81,7 +87,7 @@ public static class ConversationTranscriptMarkdownFormatter
                     ? string.Empty
                     : $" {NormalizeMarkdownMetadata(toolCall.ErrorCode)}";
                 builder.AppendLine(
-                    $"- {toolCall.CompletedAtUtc.ToString("O", CultureInfo.InvariantCulture)} {NormalizeMarkdownMetadata(toolCall.ToolName)} {status}{errorCode}");
+                    $"- {toolCall.CompletedAtUtc.ToString("O", CultureInfo.InvariantCulture)} {ToDisplayToolName(toolCall.ToolName)} {status}{errorCode}");
                 AppendFencedBlock(builder, RedactSecrets(summary));
             }
         }
@@ -89,7 +95,7 @@ public static class ConversationTranscriptMarkdownFormatter
         return builder.ToString().TrimEnd();
     }
 
-    private static string ToDisplayRole(string role)
+    private static string ToDisplayRole(string? role)
     {
         string normalizedRole = NormalizeMarkdownMetadata(role);
         if (string.IsNullOrWhiteSpace(normalizedRole))
@@ -100,12 +106,20 @@ public static class ConversationTranscriptMarkdownFormatter
         return char.ToUpperInvariant(normalizedRole[0]) + normalizedRole[1..];
     }
 
-    private static string NormalizeSingleLine(string value)
+    private static string ToDisplayToolName(string? toolName)
+    {
+        string normalizedToolName = NormalizeMarkdownMetadata(toolName);
+        return string.IsNullOrWhiteSpace(normalizedToolName)
+            ? "tool"
+            : normalizedToolName;
+    }
+
+    private static string NormalizeSingleLine(string? value)
     {
         return WhitespacePattern.Replace(RedactSecrets(value), " ").Trim();
     }
 
-    private static string NormalizeMarkdownMetadata(string value)
+    private static string NormalizeMarkdownMetadata(string? value)
     {
         return EscapeMarkdownMetadata(NormalizeSingleLine(value));
     }
@@ -139,11 +153,22 @@ public static class ConversationTranscriptMarkdownFormatter
         return escaped.ToString();
     }
 
-    private static string RedactSecrets(string value)
+    private static string RedactSecrets(string? value)
     {
         string redacted = value ?? string.Empty;
+        redacted = EscapedJsonSecretPattern.Replace(redacted, "$1[redacted]$2");
         redacted = JsonSecretPattern.Replace(redacted, "$1[redacted]$2");
-        redacted = KeyValueSecretPattern.Replace(redacted, match =>
+        redacted = RedactKeyValueSecrets(EscapedKeyValueSecretPattern, redacted);
+        redacted = RedactKeyValueSecrets(KeyValueSecretPattern, redacted);
+        redacted = BearerTokenPattern.Replace(redacted, "Bearer [redacted]");
+        redacted = OpenAiKeyPattern.Replace(redacted, "[redacted]");
+        redacted = GitHubTokenPattern.Replace(redacted, "[redacted]");
+        return redacted;
+    }
+
+    private static string RedactKeyValueSecrets(Regex pattern, string value)
+    {
+        return pattern.Replace(value, match =>
         {
             Group separator = match.Groups[1];
             if (!separator.Success)
@@ -154,10 +179,6 @@ public static class ConversationTranscriptMarkdownFormatter
             int prefixLength = separator.Index - match.Index;
             return match.Value[..prefixLength] + separator.Value + "[redacted]";
         });
-        redacted = BearerTokenPattern.Replace(redacted, "Bearer [redacted]");
-        redacted = OpenAiKeyPattern.Replace(redacted, "[redacted]");
-        redacted = GitHubTokenPattern.Replace(redacted, "[redacted]");
-        return redacted;
     }
 
     private static void AppendFencedBlock(StringBuilder builder, string content)
