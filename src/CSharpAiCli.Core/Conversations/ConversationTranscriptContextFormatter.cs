@@ -10,14 +10,14 @@ public static class ConversationTranscriptContextFormatter
 
         StringBuilder builder = new();
         builder.AppendLine("Conversation transcript context");
-        builder.AppendLine($"session: {transcript.SessionName}");
+        builder.AppendLine($"session: {NormalizeSingleLine(transcript.SessionName)}");
 
         if (transcript.Messages.Count > 0)
         {
             builder.AppendLine("messages:");
             foreach (ConversationMessage message in transcript.Messages)
             {
-                builder.AppendLine($"- {message.Role}: {message.Content}");
+                builder.AppendLine($"- {NormalizeSingleLine(message.Role)}: {NormalizeSingleLine(message.Content)}");
             }
         }
 
@@ -29,10 +29,10 @@ public static class ConversationTranscriptContextFormatter
                 builder.Append("- ");
                 if (!string.IsNullOrWhiteSpace(error.LocalErrorCode))
                 {
-                    builder.Append($"localErrorCode={error.LocalErrorCode} ");
+                    builder.Append($"localErrorCode={NormalizeSingleLine(error.LocalErrorCode)} ");
                 }
 
-                builder.AppendLine($"safeMessage={error.SafeMessage}");
+                builder.AppendLine($"safeMessage={NormalizeSingleLine(error.SafeMessage)}");
             }
         }
 
@@ -43,15 +43,15 @@ public static class ConversationTranscriptContextFormatter
             {
                 string status = toolCall.Succeeded ? "succeeded" : "failed";
                 string? summary = toolCall.Succeeded ? toolCall.OutputSummary : toolCall.FailureReason;
-                builder.Append($"- {toolCall.ToolName}: {status}");
+                builder.Append($"- {NormalizeSingleLine(toolCall.ToolName)}: {status}");
                 if (!string.IsNullOrWhiteSpace(toolCall.ErrorCode))
                 {
-                    builder.Append($" errorCode={toolCall.ErrorCode}");
+                    builder.Append($" errorCode={NormalizeSingleLine(toolCall.ErrorCode)}");
                 }
 
                 if (!string.IsNullOrWhiteSpace(summary))
                 {
-                    builder.Append($" summary={summary}");
+                    builder.Append($" summary={NormalizeSingleLine(summary)}");
                 }
 
                 builder.AppendLine();
@@ -72,5 +72,15 @@ public static class ConversationTranscriptContextFormatter
             "current prompt:",
             Environment.NewLine,
             currentPrompt);
+    }
+
+    private static string NormalizeSingleLine(string? value)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+        {
+            return string.Empty;
+        }
+
+        return string.Join(' ', value.Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries));
     }
 }

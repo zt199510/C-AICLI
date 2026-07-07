@@ -2190,6 +2190,74 @@ public sealed class CliCommandFactoryTests
     }
 
     [Fact]
+    public void Session_export_format_markdown_with_file_store_prints_safe_readable_transcript_from_disk()
+    {
+        using TempDirectory temp = TempDirectory.Create();
+        string userHome = Path.Combine(temp.Path, "user-home");
+        string workspace = Path.Combine(temp.Path, "workspace");
+        Directory.CreateDirectory(workspace);
+        string sessionDirectory = Path.Combine(userHome, ".caicli", "sessions");
+        Directory.CreateDirectory(sessionDirectory);
+        File.WriteAllText(Path.Combine(sessionDirectory, "smoke.transcript.json"), """
+        {
+          "schemaVersion": 1,
+          "sessionName": "smoke",
+          "createdAtUtc": "2024-01-01T00:00:00+00:00",
+          "updatedAtUtc": "2024-01-01T00:00:04+00:00",
+          "messages": [
+            {
+              "role": "user",
+              "createdAtUtc": "2024-01-01T00:00:01+00:00",
+              "content": "hello from disk",
+              "provider": null,
+              "model": null,
+              "responseId": null
+            }
+          ],
+          "toolCalls": [
+            {
+              "createdAtUtc": "2024-01-01T00:00:02+00:00",
+              "callId": "call_test",
+              "toolName": "workspace.read_text",
+              "argumentsJson": "{\"apiKey\":\"sk-tool-secret\",\"path\":\"note.txt\"}",
+              "approvalStatus": "approved",
+              "completedAtUtc": "2024-01-01T00:00:03+00:00",
+              "succeeded": true,
+              "outputSummary": "read note from disk",
+              "failureReason": null,
+              "errorCode": null,
+              "retryable": false
+            }
+          ],
+          "errors": []
+        }
+        """);
+        using StringWriter exportOutput = new();
+        CliEnvironmentSnapshot snapshot = CreateSnapshot(
+            workspacePath: workspace,
+            apiKey: null,
+            apiKeySource: "missing",
+            model: "not configured",
+            userConfigPath: Path.Combine(userHome, ".caicli", "config.json"));
+
+        int exportExitCode = CliCommandFactory
+            .Create(exportOutput, _ => snapshot)
+            .Parse(["session", "export", "--format", "markdown", "smoke"])
+            .Invoke();
+
+        string text = exportOutput.ToString();
+        Assert.Equal(0, exportExitCode);
+        Assert.Contains("# Session: smoke", text);
+        Assert.Contains("hello from disk", text);
+        Assert.Contains("workspace.read_text succeeded", text);
+        Assert.Contains("read note from disk", text);
+        Assert.DoesNotContain("ArgumentsJson", text, StringComparison.Ordinal);
+        Assert.DoesNotContain("argumentsJson", text, StringComparison.Ordinal);
+        Assert.DoesNotContain("sk-tool-secret", text, StringComparison.Ordinal);
+        Assert.DoesNotContain("apiKey", text, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void Session_export_format_markdown_prints_safe_readable_transcript()
     {
         using StringWriter output = new();
@@ -2563,6 +2631,114 @@ public sealed class CliCommandFactoryTests
     }
 
     [Fact]
+    public void Session_rename_with_file_store_moves_transcript_file_and_updates_session_name()
+    {
+        using TempDirectory temp = TempDirectory.Create();
+        string userHome = Path.Combine(temp.Path, "user-home");
+        string workspace = Path.Combine(temp.Path, "workspace");
+        Directory.CreateDirectory(workspace);
+        string sessionDirectory = Path.Combine(userHome, ".caicli", "sessions");
+        Directory.CreateDirectory(sessionDirectory);
+        string sourcePath = Path.Combine(sessionDirectory, "smoke.transcript.json");
+        string destinationPath = Path.Combine(sessionDirectory, "archive.transcript.json");
+        File.WriteAllText(sourcePath, """
+        {
+          "schemaVersion": 1,
+          "sessionName": "smoke",
+          "createdAtUtc": "2024-01-01T00:00:00+00:00",
+          "updatedAtUtc": "2024-01-01T00:00:01+00:00",
+          "messages": [
+            {
+              "role": "user",
+              "createdAtUtc": "2024-01-01T00:00:01+00:00",
+              "content": "keep me",
+              "provider": null,
+              "model": null,
+              "responseId": null
+            }
+          ],
+          "toolCalls": [],
+          "errors": []
+        }
+        """);
+        using StringWriter output = new();
+        CliEnvironmentSnapshot snapshot = CreateSnapshot(
+            workspacePath: workspace,
+            apiKey: null,
+            apiKeySource: "missing",
+            model: "not configured",
+            userConfigPath: Path.Combine(userHome, ".caicli", "config.json"));
+
+        int exitCode = CliCommandFactory
+            .Create(output, _ => snapshot)
+            .Parse(["session", "rename", "smoke", "archive"])
+            .Invoke();
+
+        Assert.Equal(0, exitCode);
+        Assert.False(File.Exists(sourcePath));
+        Assert.True(File.Exists(destinationPath));
+        JsonObject json = ReadJsonObject(destinationPath);
+        Assert.Equal("archive", json["sessionName"]?.GetValue<string>());
+        Assert.Equal("keep me", json["messages"]?[0]?["content"]?.GetValue<string>());
+        Assert.Contains("status: renamed", output.ToString());
+    }
+
+    [Fact]
+    public void Session_rename_with_file_store_preserves_files_when_destination_exists()
+    {
+        using TempDirectory temp = TempDirectory.Create();
+        string userHome = Path.Combine(temp.Path, "user-home");
+        string workspace = Path.Combine(temp.Path, "workspace");
+        Directory.CreateDirectory(workspace);
+        string sessionDirectory = Path.Combine(userHome, ".caicli", "sessions");
+        Directory.CreateDirectory(sessionDirectory);
+        string sourcePath = Path.Combine(sessionDirectory, "smoke.transcript.json");
+        string destinationPath = Path.Combine(sessionDirectory, "archive.transcript.json");
+        File.WriteAllText(sourcePath, """
+        {
+          "schemaVersion": 1,
+          "sessionName": "smoke",
+          "createdAtUtc": "2024-01-01T00:00:00+00:00",
+          "updatedAtUtc": "2024-01-01T00:00:00+00:00",
+          "messages": [],
+          "toolCalls": [],
+          "errors": []
+        }
+        """);
+        File.WriteAllText(destinationPath, """
+        {
+          "schemaVersion": 1,
+          "sessionName": "archive",
+          "createdAtUtc": "2024-01-02T00:00:00+00:00",
+          "updatedAtUtc": "2024-01-02T00:00:00+00:00",
+          "messages": [],
+          "toolCalls": [],
+          "errors": []
+        }
+        """);
+        string originalSourceJson = File.ReadAllText(sourcePath);
+        string originalDestinationJson = File.ReadAllText(destinationPath);
+        using StringWriter output = new();
+        CliEnvironmentSnapshot snapshot = CreateSnapshot(
+            workspacePath: workspace,
+            apiKey: null,
+            apiKeySource: "missing",
+            model: "not configured",
+            userConfigPath: Path.Combine(userHome, ".caicli", "config.json"));
+
+        int exitCode = CliCommandFactory
+            .Create(output, _ => snapshot)
+            .Parse(["session", "rename", "smoke", "archive"])
+            .Invoke();
+
+        Assert.Equal(1, exitCode);
+        Assert.Equal(originalSourceJson, File.ReadAllText(sourcePath));
+        Assert.Equal(originalDestinationJson, File.ReadAllText(destinationPath));
+        Assert.Contains("status: failed", output.ToString());
+        Assert.Contains("errorCode: session-rename-failed", output.ToString());
+    }
+
+    [Fact]
     public void Session_rename_failure_returns_generic_safe_failure_output()
     {
         using StringWriter output = new();
@@ -2650,6 +2826,45 @@ public sealed class CliCommandFactoryTests
                 "session: smoke"
             ],
             text.Split(Environment.NewLine, StringSplitOptions.RemoveEmptyEntries));
+    }
+
+    [Fact]
+    public void Session_delete_with_file_store_removes_transcript_file()
+    {
+        using TempDirectory temp = TempDirectory.Create();
+        string userHome = Path.Combine(temp.Path, "user-home");
+        string workspace = Path.Combine(temp.Path, "workspace");
+        Directory.CreateDirectory(workspace);
+        string sessionDirectory = Path.Combine(userHome, ".caicli", "sessions");
+        Directory.CreateDirectory(sessionDirectory);
+        string sessionPath = Path.Combine(sessionDirectory, "smoke.transcript.json");
+        File.WriteAllText(sessionPath, """
+        {
+          "schemaVersion": 1,
+          "sessionName": "smoke",
+          "createdAtUtc": "2024-01-01T00:00:00+00:00",
+          "updatedAtUtc": "2024-01-01T00:00:00+00:00",
+          "messages": [],
+          "toolCalls": [],
+          "errors": []
+        }
+        """);
+        using StringWriter output = new();
+        CliEnvironmentSnapshot snapshot = CreateSnapshot(
+            workspacePath: workspace,
+            apiKey: null,
+            apiKeySource: "missing",
+            model: "not configured",
+            userConfigPath: Path.Combine(userHome, ".caicli", "config.json"));
+
+        int exitCode = CliCommandFactory
+            .Create(output, _ => snapshot)
+            .Parse(["session", "delete", "smoke"])
+            .Invoke();
+
+        Assert.Equal(0, exitCode);
+        Assert.False(File.Exists(sessionPath));
+        Assert.Contains("status: deleted", output.ToString());
     }
 
     [Fact]
@@ -2786,6 +3001,41 @@ public sealed class CliCommandFactoryTests
 
         Assert.Equal(1, exitCode);
         Assert.Contains("Session name contains invalid path characters.", output.ToString());
+    }
+
+    public static TheoryData<string[]> InvalidSessionNameCommandCases => new()
+    {
+        new[] { "session", "show", "../secret" },
+        new[] { "session", "delete", "../secret" },
+        new[] { "session", "rename", "../secret", "archive" },
+        new[] { "session", "rename", "smoke", "../secret" },
+        new[] { "session", "export", "--format", "markdown", "../secret" },
+    };
+
+    [Theory]
+    [MemberData(nameof(InvalidSessionNameCommandCases))]
+    public void Session_commands_reject_invalid_session_names_without_creating_files(string[] args)
+    {
+        using TempDirectory temp = TempDirectory.Create();
+        using StringWriter output = new();
+        string userHome = Path.Combine(temp.Path, "user-home");
+        string workspace = Path.Combine(temp.Path, "workspace");
+        Directory.CreateDirectory(workspace);
+        string sessionDirectory = Path.Combine(userHome, ".caicli", "sessions");
+        CliEnvironmentSnapshot snapshot = CreateSnapshot(
+            workspacePath: workspace,
+            apiKey: null,
+            apiKeySource: "missing",
+            model: "not configured",
+            userConfigPath: Path.Combine(userHome, ".caicli", "config.json"));
+
+        RootCommand command = CliCommandFactory.Create(output, _ => snapshot);
+
+        int exitCode = CliCommandFactory.Invoke(command, args, output);
+
+        Assert.NotEqual(0, exitCode);
+        Assert.Contains("Session name contains invalid path characters.", output.ToString());
+        Assert.False(Directory.Exists(sessionDirectory));
     }
 
     [Fact]
