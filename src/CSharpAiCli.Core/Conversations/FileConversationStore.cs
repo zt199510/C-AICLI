@@ -42,11 +42,39 @@ public sealed class FileConversationStore : IConversationStore
             .ToArray();
     }
 
+    public IReadOnlyList<ConversationTranscriptSummary> ListSummaries()
+    {
+        if (!Directory.Exists(sessionDirectory))
+        {
+            return [];
+        }
+
+        return Directory.EnumerateFiles(sessionDirectory, "*.transcript.json", SearchOption.TopDirectoryOnly)
+            .Select(path => ConversationTranscriptSummary.FromTranscript(LoadTranscript(path)))
+            .OrderBy(summary => summary.Name, StringComparer.Ordinal)
+            .ToArray();
+    }
+
     public bool Exists(ConversationSessionName sessionName)
     {
         ArgumentNullException.ThrowIfNull(sessionName);
 
         return File.Exists(GetPath(sessionName));
+    }
+
+    public bool TryGetSummary(ConversationSessionName sessionName, out ConversationTranscriptSummary? summary)
+    {
+        ArgumentNullException.ThrowIfNull(sessionName);
+
+        string path = GetPath(sessionName);
+        if (!File.Exists(path))
+        {
+            summary = null;
+            return false;
+        }
+
+        summary = ConversationTranscriptSummary.FromTranscript(LoadTranscript(path));
+        return true;
     }
 
     public ConversationTranscript LoadOrCreate(ConversationSessionName sessionName, DateTimeOffset nowUtc)

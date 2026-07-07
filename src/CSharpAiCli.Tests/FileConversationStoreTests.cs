@@ -136,6 +136,78 @@ public sealed class FileConversationStoreTests
     }
 
     [Fact]
+    public void Try_get_summary_returns_transcript_metadata_and_counts()
+    {
+        using TempDirectory temp = TempDirectory.Create();
+        FileConversationStore store = new(Path.Combine(temp.Path, ".caicli", "sessions"));
+        ConversationSessionName sessionName = ConversationSessionName.Parse("smoke");
+        ConversationTranscript transcript = ConversationTranscript.Create(
+            sessionName.Value,
+            DateTimeOffset.Parse("2024-01-01T00:00:00Z"));
+        transcript.AddUserMessage("first", DateTimeOffset.Parse("2024-01-01T00:00:01Z"));
+        transcript.AddAssistantMessage(
+            new ChatResponse("first reply", "openai", "gpt-test", "response-1"),
+            DateTimeOffset.Parse("2024-01-01T00:00:02Z"));
+        transcript.AddUserMessage("second", DateTimeOffset.Parse("2024-01-01T00:00:03Z"));
+        transcript.AddAssistantMessage(
+            new ChatResponse("second reply", "openai", "gpt-test", "response-2"),
+            DateTimeOffset.Parse("2024-01-01T00:00:04Z"));
+        transcript.AddToolCall(new ConversationToolCall(
+            CreatedAtUtc: DateTimeOffset.Parse("2024-01-01T00:00:05Z"),
+            CallId: "call-1",
+            ToolName: "shell",
+            ArgumentsJson: "{}",
+            ApprovalStatus: "approved",
+            CompletedAtUtc: DateTimeOffset.Parse("2024-01-01T00:00:06Z"),
+            Succeeded: true,
+            OutputSummary: "ok",
+            FailureReason: null,
+            ErrorCode: null,
+            Retryable: false));
+        store.Save(sessionName, transcript);
+
+        bool found = store.TryGetSummary(sessionName, out ConversationTranscriptSummary? summary);
+
+        Assert.True(found);
+        Assert.NotNull(summary);
+        Assert.Equal("smoke", summary.Name);
+        Assert.Equal(DateTimeOffset.Parse("2024-01-01T00:00:00Z"), summary.CreatedAtUtc);
+        Assert.Equal(DateTimeOffset.Parse("2024-01-01T00:00:06Z"), summary.UpdatedAtUtc);
+        Assert.Equal(2, summary.TurnCount);
+        Assert.Equal(1, summary.ToolCallCount);
+    }
+
+    [Fact]
+    public void List_summaries_returns_logical_names_in_name_order()
+    {
+        using TempDirectory temp = TempDirectory.Create();
+        FileConversationStore store = new(Path.Combine(temp.Path, ".caicli", "sessions"));
+        ConversationSessionName zulu = ConversationSessionName.Parse("zulu");
+        ConversationSessionName releaseNotes = ConversationSessionName.Parse("release notes");
+        ConversationSessionName alpha = ConversationSessionName.Parse("alpha");
+        DateTimeOffset now = DateTimeOffset.Parse("2024-01-01T00:00:00Z");
+        store.Save(zulu, ConversationTranscript.Create(zulu.Value, now));
+        store.Save(releaseNotes, ConversationTranscript.Create(releaseNotes.Value, now));
+        store.Save(alpha, ConversationTranscript.Create(alpha.Value, now));
+
+        IReadOnlyList<ConversationTranscriptSummary> summaries = store.ListSummaries();
+
+        Assert.Equal(["alpha", "release notes", "zulu"], summaries.Select(summary => summary.Name).ToArray());
+    }
+
+    [Fact]
+    public void Try_get_summary_reports_false_when_session_is_missing()
+    {
+        using TempDirectory temp = TempDirectory.Create();
+        FileConversationStore store = new(Path.Combine(temp.Path, ".caicli", "sessions"));
+
+        bool found = store.TryGetSummary(ConversationSessionName.Parse("missing"), out ConversationTranscriptSummary? summary);
+
+        Assert.False(found);
+        Assert.Null(summary);
+    }
+
+    [Fact]
     public void Exists_reports_whether_session_file_is_present()
     {
         using TempDirectory temp = TempDirectory.Create();
