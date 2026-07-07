@@ -37,9 +37,7 @@ public sealed class FileConversationStore : IConversationStore
         }
 
         return Directory.EnumerateFiles(sessionDirectory, "*.transcript.json", SearchOption.TopDirectoryOnly)
-            .Select(path => Path.GetFileName(path))
-            .Where(fileName => fileName.EndsWith(".transcript.json", StringComparison.Ordinal))
-            .Select(fileName => fileName[..^".transcript.json".Length])
+            .Select(path => LoadTranscript(path).SessionName)
             .Order(StringComparer.Ordinal)
             .ToArray();
     }
@@ -61,23 +59,7 @@ public sealed class FileConversationStore : IConversationStore
             return ConversationTranscript.Create(sessionName.Value, nowUtc);
         }
 
-        string json = File.ReadAllText(path);
-        using JsonDocument document = JsonDocument.Parse(json);
-        if (!document.RootElement.TryGetProperty("schemaVersion", out JsonElement schemaVersionElement) ||
-            schemaVersionElement.ValueKind != JsonValueKind.Number ||
-            !schemaVersionElement.TryGetInt32(out int schemaVersion) ||
-            schemaVersion != ConversationTranscript.CurrentSchemaVersion)
-        {
-            throw new InvalidOperationException("Conversation transcript is missing or uses an unsupported schema version.");
-        }
-
-        ConversationTranscript? transcript = JsonSerializer.Deserialize<ConversationTranscript>(json, JsonOptions);
-        if (transcript is null)
-        {
-            throw new InvalidOperationException("Conversation transcript is missing or uses an unsupported schema version.");
-        }
-
-        return transcript;
+        return LoadTranscript(path);
     }
 
     public bool Rename(ConversationSessionName sourceSessionName, ConversationSessionName destinationSessionName)
@@ -92,7 +74,21 @@ public sealed class FileConversationStore : IConversationStore
             return false;
         }
 
-        File.Move(sourcePath, destinationPath);
+        ConversationTranscript sourceTranscript = LoadTranscript(sourcePath);
+        ConversationTranscript destinationTranscript = new()
+        {
+            SchemaVersion = sourceTranscript.SchemaVersion,
+            SessionName = destinationSessionName.Value,
+            CreatedAtUtc = sourceTranscript.CreatedAtUtc,
+            UpdatedAtUtc = sourceTranscript.UpdatedAtUtc,
+            Messages = sourceTranscript.Messages,
+            ToolCalls = sourceTranscript.ToolCalls,
+            Errors = sourceTranscript.Errors,
+        };
+
+        string json = JsonSerializer.Serialize(destinationTranscript, JsonOptions);
+        File.WriteAllText(destinationPath, json);
+        File.Delete(sourcePath);
         return true;
     }
 
@@ -120,6 +116,27 @@ public sealed class FileConversationStore : IConversationStore
 
         File.Delete(path);
         return true;
+    }
+
+    private static ConversationTranscript LoadTranscript(string path)
+    {
+        string json = File.ReadAllText(path);
+        using JsonDocument document = JsonDocument.Parse(json);
+        if (!document.RootElement.TryGetProperty("schemaVersion", out JsonElement schemaVersionElement) ||
+            schemaVersionElement.ValueKind != JsonValueKind.Number ||
+            !schemaVersionElement.TryGetInt32(out int schemaVersion) ||
+            schemaVersion != ConversationTranscript.CurrentSchemaVersion)
+        {
+            throw new InvalidOperationException("Conversation transcript is missing or uses an unsupported schema version.");
+        }
+
+        ConversationTranscript? transcript = JsonSerializer.Deserialize<ConversationTranscript>(json, JsonOptions);
+        if (transcript is null)
+        {
+            throw new InvalidOperationException("Conversation transcript is missing or uses an unsupported schema version.");
+        }
+
+        return transcript;
     }
 
     private string GetPath(ConversationSessionName sessionName)

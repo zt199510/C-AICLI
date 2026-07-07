@@ -110,6 +110,21 @@ public sealed class FileConversationStoreTests
     }
 
     [Fact]
+    public void List_session_names_returns_logical_transcript_names()
+    {
+        using TempDirectory temp = TempDirectory.Create();
+        FileConversationStore store = new(Path.Combine(temp.Path, ".caicli", "sessions"));
+        ConversationSessionName sessionName = ConversationSessionName.Parse("release notes");
+        store.Save(
+            sessionName,
+            ConversationTranscript.Create(sessionName.Value, DateTimeOffset.Parse("2024-01-01T00:00:00Z")));
+
+        IReadOnlyList<string> sessionNames = store.ListSessionNames();
+
+        Assert.Equal(["release notes"], sessionNames);
+    }
+
+    [Fact]
     public void List_session_names_returns_empty_collection_when_session_directory_is_missing()
     {
         using TempDirectory temp = TempDirectory.Create();
@@ -162,6 +177,27 @@ public sealed class FileConversationStoreTests
             source.Value,
             DateTimeOffset.Parse("2024-01-01T00:00:00Z"));
         transcript.AddUserMessage("keep me", DateTimeOffset.Parse("2024-01-01T00:00:01Z"));
+        transcript.AddToolCall(new ConversationToolCall(
+            CreatedAtUtc: DateTimeOffset.Parse("2024-01-01T00:00:02Z"),
+            CallId: "call-1",
+            ToolName: "shell",
+            ArgumentsJson: "{}",
+            ApprovalStatus: "approved",
+            CompletedAtUtc: DateTimeOffset.Parse("2024-01-01T00:00:03Z"),
+            Succeeded: true,
+            OutputSummary: "ok",
+            FailureReason: null,
+            ErrorCode: null,
+            Retryable: false));
+        transcript.AddError(
+            new ModelError(
+                Provider: "openai",
+                Operation: "responses",
+                StatusCode: 429,
+                LocalErrorCode: "rate_limit",
+                SafeMessage: "try later",
+                Retryable: true),
+            DateTimeOffset.Parse("2024-01-01T00:00:04Z"));
         store.Save(source, transcript);
 
         Assert.True(store.Rename(source, destination));
@@ -169,7 +205,14 @@ public sealed class FileConversationStoreTests
         Assert.False(store.Exists(source));
         Assert.True(store.Exists(destination));
         ConversationTranscript renamed = store.LoadOrCreate(destination, DateTimeOffset.Parse("2024-01-01T00:01:00Z"));
+        Assert.Equal(destination.Value, renamed.SessionName);
         Assert.Equal("keep me", Assert.Single(renamed.Messages).Content);
+        ConversationToolCall toolCall = Assert.Single(renamed.ToolCalls);
+        Assert.Equal("call-1", toolCall.CallId);
+        Assert.Equal("ok", toolCall.OutputSummary);
+        ConversationError error = Assert.Single(renamed.Errors);
+        Assert.Equal("rate_limit", error.LocalErrorCode);
+        Assert.Equal("try later", error.SafeMessage);
     }
 
     [Fact]
