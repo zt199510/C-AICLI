@@ -4,14 +4,25 @@ public sealed class McpExternalTool : ITool
 {
     private readonly McpServerDefinition server;
     private readonly IMcpToolInvoker invoker;
+    private readonly IApprovalPolicy approvalPolicy;
 
     public McpExternalTool(McpServerDefinition server, IMcpToolInvoker invoker)
+        : this(server, invoker, ApprovalPolicyResolver.Resolve(ApprovalMode.Never))
+    {
+    }
+
+    public McpExternalTool(
+        McpServerDefinition server,
+        IMcpToolInvoker invoker,
+        IApprovalPolicy approvalPolicy)
     {
         ArgumentNullException.ThrowIfNull(server);
         ArgumentNullException.ThrowIfNull(invoker);
+        ArgumentNullException.ThrowIfNull(approvalPolicy);
 
         this.server = server;
         this.invoker = invoker;
+        this.approvalPolicy = approvalPolicy;
     }
 
     public ToolDefinition Definition => new(
@@ -33,6 +44,30 @@ public sealed class McpExternalTool : ITool
                 "MCP server is not active.");
         }
 
-        return invoker.Invoke(new McpToolRequest(server.Name, context.ArgumentsJson), cancellationToken);
+        ToolDefinition definition = Definition;
+        ApprovalDecision approval = approvalPolicy.RequestApproval(new ApprovalRequest(
+            Operation: definition.Name,
+            Summary: $"Call MCP server '{server.Name}'.",
+            Diff: null,
+            IsDirtyWorkspace: false,
+            Metadata: new Dictionary<string, string>
+            {
+                ["server"] = server.Name,
+                ["reason"] = "MCP external tool invocation requires approval."
+            },
+            RiskLevel: definition.RiskLevel));
+
+        if (!approval.Approved)
+        {
+            return ToolExecutionResult.Failure(
+                "approval-denied",
+                approval.SafeMessage,
+                approvalStatus: approval.Status);
+        }
+
+        ToolExecutionResult result = invoker.Invoke(new McpToolRequest(server.Name, context.ArgumentsJson), cancellationToken);
+        return result.ApprovalStatus == "not-required"
+            ? result with { ApprovalStatus = approval.Status }
+            : result;
     }
 }
