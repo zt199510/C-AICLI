@@ -2010,6 +2010,106 @@ public sealed class CliCommandFactoryTests
     }
 
     [Fact]
+    public void Session_show_writes_session_summary()
+    {
+        using StringWriter output = new();
+        FakeConversationStore store = new()
+        {
+            Summaries =
+            [
+                new ConversationTranscriptSummary(
+                    "smoke",
+                    DateTimeOffset.Parse("2024-01-01T00:00:00Z"),
+                    DateTimeOffset.Parse("2024-01-01T00:05:00Z"),
+                    TurnCount: 2,
+                    ToolCallCount: 1)
+            ]
+        };
+
+        RootCommand command = CliCommandFactory.Create(
+            output,
+            CreateSnapshot,
+            (_, _) => { },
+            _ => new FakeChatModelClient(ChatModelResult.Success(new ChatResponse("openai", "gpt-test", "resp_test", "ok"))),
+            writer => new TerminalChatStreamingRenderer(writer),
+            _ => store,
+            () => DateTimeOffset.Parse("2024-01-03T00:00:00Z"));
+
+        int exitCode = CliCommandFactory.Invoke(command, ["session", "show", "smoke"], output);
+
+        string text = output.ToString();
+        Assert.Equal(0, exitCode);
+        Assert.Equal(
+            [
+                "C# AI CLI session",
+                "name: smoke",
+                "createdAtUtc: 2024-01-01T00:00:00.0000000+00:00",
+                "updatedAtUtc: 2024-01-01T00:05:00.0000000+00:00",
+                "turnCount: 2",
+                "toolCallCount: 1"
+            ],
+            text.Split(Environment.NewLine, StringSplitOptions.RemoveEmptyEntries));
+    }
+
+    [Fact]
+    public void Session_show_missing_session_returns_session_not_found()
+    {
+        using StringWriter output = new();
+        FakeConversationStore store = new();
+
+        RootCommand command = CliCommandFactory.Create(
+            output,
+            CreateSnapshot,
+            (_, _) => { },
+            _ => new FakeChatModelClient(ChatModelResult.Success(new ChatResponse("openai", "gpt-test", "resp_test", "ok"))),
+            writer => new TerminalChatStreamingRenderer(writer),
+            _ => store,
+            () => DateTimeOffset.Parse("2024-01-03T00:00:00Z"));
+
+        int exitCode = CliCommandFactory.Invoke(command, ["session", "show", "missing"], output);
+
+        string text = output.ToString();
+        Assert.Equal(1, exitCode);
+        Assert.Contains("status: failed", text);
+        Assert.Contains("errorCode: session-not-found", text);
+        Assert.Contains("summary:", text);
+        Assert.Contains("Session transcript was not found.", text);
+    }
+
+    [Fact]
+    public void Session_show_writes_command_log_through_delegate()
+    {
+        using StringWriter output = new();
+        List<string> loggedCommands = [];
+        FakeConversationStore store = new()
+        {
+            Summaries =
+            [
+                new ConversationTranscriptSummary(
+                    "smoke",
+                    DateTimeOffset.Parse("2024-01-01T00:00:00Z"),
+                    DateTimeOffset.Parse("2024-01-01T00:05:00Z"),
+                    TurnCount: 2,
+                    ToolCallCount: 1)
+            ]
+        };
+
+        RootCommand command = CliCommandFactory.Create(
+            output,
+            CreateSnapshot,
+            (commandName, _) => loggedCommands.Add(commandName),
+            _ => new FakeChatModelClient(ChatModelResult.Success(new ChatResponse("openai", "gpt-test", "resp_test", "ok"))),
+            writer => new TerminalChatStreamingRenderer(writer),
+            _ => store,
+            () => DateTimeOffset.Parse("2024-01-03T00:00:00Z"));
+
+        int exitCode = CliCommandFactory.Invoke(command, ["session", "show", "smoke"], output);
+
+        Assert.Equal(0, exitCode);
+        Assert.Equal(["session show"], loggedCommands);
+    }
+
+    [Fact]
     public void Invoke_non_exec_action_exception_uses_default_exception_handling()
     {
         using TempDirectory temp = TempDirectory.Create();
@@ -2745,6 +2845,13 @@ public sealed class CliCommandFactoryTests
         public IReadOnlyList<ConversationTranscriptSummary> ListSummaries()
         {
             return Summaries;
+        }
+
+        public bool TryGetSummary(ConversationSessionName sessionName, out ConversationTranscriptSummary? summary)
+        {
+            summary = Summaries.FirstOrDefault(candidate =>
+                string.Equals(candidate.Name, sessionName.Value, StringComparison.Ordinal));
+            return summary is not null;
         }
     }
 }

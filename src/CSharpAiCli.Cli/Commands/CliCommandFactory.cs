@@ -487,12 +487,14 @@ public static class CliCommandFactory
 
         Command sessionCommand = new("session", "Manage local conversation transcripts.");
         Command sessionListCommand = new("list", "List local session summaries.");
+        Command sessionShowCommand = new("show", "Show one local session summary.");
         Command sessionExportCommand = new("export", "Print one session transcript JSON.");
         Command sessionClearCommand = new("clear", "Delete one session transcript.");
         Argument<string> sessionNameArgument = new("name")
         {
             Description = "The session name.",
         };
+        sessionShowCommand.Arguments.Add(sessionNameArgument);
         sessionExportCommand.Arguments.Add(sessionNameArgument);
         sessionClearCommand.Arguments.Add(sessionNameArgument);
         sessionListCommand.SetAction(parseResult =>
@@ -502,6 +504,14 @@ public static class CliCommandFactory
             TryWriteCommandLog(commandLogger, "session list", snapshot);
             WriteSessionList(output, conversationStoreFactory(snapshot).ListSummaries());
             return 0;
+        });
+        sessionShowCommand.SetAction(parseResult =>
+        {
+            string? workspacePath = parseResult.GetValue(workspaceOption);
+            string name = parseResult.GetValue(sessionNameArgument) ?? string.Empty;
+            CliEnvironmentSnapshot snapshot = snapshotProvider(workspacePath);
+            TryWriteCommandLog(commandLogger, "session show", snapshot);
+            return ShowSession(output, conversationStoreFactory(snapshot), name);
         });
         sessionExportCommand.SetAction(parseResult =>
         {
@@ -520,6 +530,7 @@ public static class CliCommandFactory
             return ClearSession(output, snapshot, name);
         });
         sessionCommand.Subcommands.Add(sessionListCommand);
+        sessionCommand.Subcommands.Add(sessionShowCommand);
         sessionCommand.Subcommands.Add(sessionExportCommand);
         sessionCommand.Subcommands.Add(sessionClearCommand);
 
@@ -796,6 +807,27 @@ public static class CliCommandFactory
             output.WriteLine(
                 $"- {summary.Name} created={summary.CreatedAtUtc.ToString("O", CultureInfo.InvariantCulture)} updated={summary.UpdatedAtUtc.ToString("O", CultureInfo.InvariantCulture)} turns={summary.TurnCount} toolCalls={summary.ToolCallCount}");
         }
+    }
+
+    private static int ShowSession(TextWriter output, IConversationStore conversationStore, string name)
+    {
+        ConversationSessionName sessionName = ConversationSessionName.Parse(name);
+        if (!conversationStore.TryGetSummary(sessionName, out ConversationTranscriptSummary? summary) || summary is null)
+        {
+            output.WriteLine("status: failed");
+            output.WriteLine("errorCode: session-not-found");
+            output.WriteLine("summary:");
+            output.WriteLine("Session transcript was not found.");
+            return 1;
+        }
+
+        output.WriteLine("C# AI CLI session");
+        output.WriteLine($"name: {summary.Name}");
+        output.WriteLine($"createdAtUtc: {summary.CreatedAtUtc.ToString("O", CultureInfo.InvariantCulture)}");
+        output.WriteLine($"updatedAtUtc: {summary.UpdatedAtUtc.ToString("O", CultureInfo.InvariantCulture)}");
+        output.WriteLine($"turnCount: {summary.TurnCount}");
+        output.WriteLine($"toolCallCount: {summary.ToolCallCount}");
+        return 0;
     }
 
     private static int ExportSession(TextWriter output, CliEnvironmentSnapshot snapshot, string name)
