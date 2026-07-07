@@ -103,13 +103,9 @@ Use `--session` to record the transcript, including agent tool calls and summari
 artifacts\release\caicli-0.1.0-win-x64\caicli.exe exec --workspace . --session smoke-exec "inspect README.md"
 ```
 
-For approved shell trials through the `exec` surface, pass `--approval always`:
+`exec` supports `--approval <mode>` to select the approval policy used when an agent loop reaches write or shell tool calls. This option is part of the `exec` contract, but with the default direct SDK backend, real tool-call continuation is still unavailable for shell/write tasks and may return `agent-backend-unavailable`. Use the `tools call --approval always workspace.run_shell` example below for an actionable shell smoke trial.
 
-```powershell
-artifacts\release\caicli-0.1.0-win-x64\caicli.exe exec --workspace . --approval always "shell dir"
-```
-
-Without an approving mode, approval-gated write and shell actions are denied. In the non-interactive CLI, the default `on-request` mode reports `approval-required` because interactive approval is not available. `on-failure` also reports `approval-required` because sandbox retry escalation is not implemented. The legacy `--approve` option remains supported and maps through the same risk-aware resolver.
+Without an approving mode, approval-gated write and shell actions are denied. In the non-interactive CLI, the default `on-request` mode reports `approvalStatus` `approval-required` because interactive approval is not available. `on-failure` also reports `approvalStatus` `approval-required` because sandbox retry escalation is not implemented. Approval-policy denials use `errorCode` `approval-denied`. The legacy `--approve` option remains supported and maps through the same risk-aware resolver.
 
 Text output and `exec --json` events/results include `approvalStatus` for approval-gated tool activity.
 
@@ -142,7 +138,7 @@ Set-Content -Path shell-args.json -Value '{"command":"dotnet --version","timeout
 artifacts\release\caicli-0.1.0-win-x64\caicli.exe tools call --workspace . --approval always workspace.run_shell --arguments-file shell-args.json
 ```
 
-The legacy `--approve` option remains supported for compatibility. Dangerous shell commands are denied with `dangerous-shell-denied`, even under `--approval always` or legacy `--approve`.
+The legacy `--approve` option remains supported for compatibility. Dangerous shell commands are denied with `errorCode` `approval-denied` and `approvalStatus` `dangerous-shell-denied`, even under `--approval always` or legacy `--approve`.
 
 ## 10. Export Or Clear A Session
 

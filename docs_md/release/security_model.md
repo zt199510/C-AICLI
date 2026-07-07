@@ -37,10 +37,10 @@ Write and shell tools use the effective approval mode:
 
 - `always`: approve ordinary write and shell actions.
 - `never`: deny approval-required write and shell actions.
-- `on-request`: deny in the non-interactive CLI and report `approval-required`, because interactive approval is not available.
-- `on-failure`: deny in the non-interactive CLI and report `approval-required`, because sandbox retry escalation is not implemented.
+- `on-request`: deny in the non-interactive CLI and report `approvalStatus` `approval-required`, because interactive approval is not available.
+- `on-failure`: deny in the non-interactive CLI and report `approvalStatus` `approval-required`, because sandbox retry escalation is not implemented.
 
-Dangerous shell commands are denied before execution with `dangerous-shell-denied`, even under `always` or `--approve`.
+Dangerous shell commands are denied before execution with `approvalStatus` set to `dangerous-shell-denied`, even under `always` or `--approve`. Approval-policy denials still use the failure `errorCode` `approval-denied`; `approvalStatus` carries the specific approval decision.
 
 `tools call` and `exec` support `--approval <mode>`. The legacy `--approve` option remains compatible and maps to an approving mode through the same risk-aware resolver when no explicit `--approval` value is supplied. `run` remains the deterministic direct-tool compatibility path; it does not have `--approval`, but its existing `--approve` option maps through the same resolver, and configured `approvalMode` applies when `--approve` is not supplied.
 
@@ -62,7 +62,7 @@ Shell execution is restricted:
 
 - The working directory must remain inside the workspace.
 - Ordinary commands require approval.
-- Dangerous command patterns are denied before execution with `dangerous-shell-denied`.
+- Dangerous command patterns are denied before execution with `errorCode` `approval-denied` and `approvalStatus` `dangerous-shell-denied`.
 - Commands have timeouts and stdout/stderr byte limits.
 - Timeout, denied approval, and non-zero exit are returned as safe tool failures.
 
