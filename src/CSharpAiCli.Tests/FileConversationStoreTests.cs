@@ -208,6 +208,92 @@ public sealed class FileConversationStoreTests
     }
 
     [Fact]
+    public void List_summaries_rejects_transcript_with_unsupported_schema_version()
+    {
+        using TempDirectory temp = TempDirectory.Create();
+        string sessionDirectory = Path.Combine(temp.Path, ".caicli", "sessions");
+        Directory.CreateDirectory(sessionDirectory);
+        File.WriteAllText(
+            Path.Combine(sessionDirectory, "smoke.transcript.json"),
+            """
+            {
+              "schemaVersion": 2,
+              "sessionName": "smoke",
+              "createdAtUtc": "2024-01-01T00:00:00+00:00",
+              "updatedAtUtc": "2024-01-01T00:00:00+00:00",
+              "messages": [],
+              "toolCalls": [],
+              "errors": []
+            }
+            """);
+        FileConversationStore store = new(sessionDirectory);
+
+        Assert.Throws<InvalidOperationException>(() => store.ListSummaries());
+    }
+
+    [Fact]
+    public void List_summaries_rejects_transcript_with_malformed_json()
+    {
+        using TempDirectory temp = TempDirectory.Create();
+        string sessionDirectory = Path.Combine(temp.Path, ".caicli", "sessions");
+        Directory.CreateDirectory(sessionDirectory);
+        File.WriteAllText(
+            Path.Combine(sessionDirectory, "smoke.transcript.json"),
+            """
+            {
+              "schemaVersion": 1,
+            """);
+        FileConversationStore store = new(sessionDirectory);
+
+        Assert.Throws<InvalidOperationException>(() => store.ListSummaries());
+    }
+
+    [Fact]
+    public void Try_get_summary_throws_for_existing_transcript_with_unsupported_schema_version()
+    {
+        using TempDirectory temp = TempDirectory.Create();
+        string sessionDirectory = Path.Combine(temp.Path, ".caicli", "sessions");
+        Directory.CreateDirectory(sessionDirectory);
+        File.WriteAllText(
+            Path.Combine(sessionDirectory, "smoke.transcript.json"),
+            """
+            {
+              "schemaVersion": 2,
+              "sessionName": "smoke",
+              "createdAtUtc": "2024-01-01T00:00:00+00:00",
+              "updatedAtUtc": "2024-01-01T00:00:00+00:00",
+              "messages": [],
+              "toolCalls": [],
+              "errors": []
+            }
+            """);
+        FileConversationStore store = new(sessionDirectory);
+
+        Assert.Throws<InvalidOperationException>(() => store.TryGetSummary(
+            ConversationSessionName.Parse("smoke"),
+            out _));
+    }
+
+    [Fact]
+    public void Try_get_summary_throws_for_existing_transcript_with_malformed_json()
+    {
+        using TempDirectory temp = TempDirectory.Create();
+        string sessionDirectory = Path.Combine(temp.Path, ".caicli", "sessions");
+        Directory.CreateDirectory(sessionDirectory);
+        File.WriteAllText(
+            Path.Combine(sessionDirectory, "smoke.transcript.json"),
+            """
+            {
+              "schemaVersion": 1,
+            """);
+        FileConversationStore store = new(sessionDirectory);
+
+        Assert.Throws<InvalidOperationException>(() => store.TryGetSummary(
+            ConversationSessionName.Parse("smoke"),
+            out _));
+    }
+
+    [Fact]
     public void Exists_reports_whether_session_file_is_present()
     {
         using TempDirectory temp = TempDirectory.Create();

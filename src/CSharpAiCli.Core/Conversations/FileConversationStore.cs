@@ -148,23 +148,32 @@ public sealed class FileConversationStore : IConversationStore
 
     private static ConversationTranscript LoadTranscript(string path)
     {
-        string json = File.ReadAllText(path);
-        using JsonDocument document = JsonDocument.Parse(json);
-        if (!document.RootElement.TryGetProperty("schemaVersion", out JsonElement schemaVersionElement) ||
-            schemaVersionElement.ValueKind != JsonValueKind.Number ||
-            !schemaVersionElement.TryGetInt32(out int schemaVersion) ||
-            schemaVersion != ConversationTranscript.CurrentSchemaVersion)
+        try
         {
-            throw new InvalidOperationException("Conversation transcript is missing or uses an unsupported schema version.");
-        }
+            string json = File.ReadAllText(path);
+            using JsonDocument document = JsonDocument.Parse(json);
+            if (!document.RootElement.TryGetProperty("schemaVersion", out JsonElement schemaVersionElement) ||
+                schemaVersionElement.ValueKind != JsonValueKind.Number ||
+                !schemaVersionElement.TryGetInt32(out int schemaVersion) ||
+                schemaVersion != ConversationTranscript.CurrentSchemaVersion)
+            {
+                throw new InvalidOperationException("Conversation transcript is missing or uses an unsupported schema version.");
+            }
 
-        ConversationTranscript? transcript = JsonSerializer.Deserialize<ConversationTranscript>(json, JsonOptions);
-        if (transcript is null)
+            ConversationTranscript? transcript = JsonSerializer.Deserialize<ConversationTranscript>(json, JsonOptions);
+            if (transcript is null)
+            {
+                throw new InvalidOperationException("Conversation transcript is missing or uses an unsupported schema version.");
+            }
+
+            return transcript;
+        }
+        catch (JsonException exception)
         {
-            throw new InvalidOperationException("Conversation transcript is missing or uses an unsupported schema version.");
+            throw new InvalidOperationException(
+                "Conversation transcript is missing or uses an unsupported schema version.",
+                exception);
         }
-
-        return transcript;
     }
 
     private string GetPath(ConversationSessionName sessionName)
