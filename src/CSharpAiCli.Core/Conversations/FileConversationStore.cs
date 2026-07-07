@@ -29,6 +29,28 @@ public sealed class FileConversationStore : IConversationStore
         return new FileConversationStore(Path.Combine(root, "sessions"));
     }
 
+    public IReadOnlyList<string> ListSessionNames()
+    {
+        if (!Directory.Exists(sessionDirectory))
+        {
+            return [];
+        }
+
+        return Directory.EnumerateFiles(sessionDirectory, "*.transcript.json", SearchOption.TopDirectoryOnly)
+            .Select(path => Path.GetFileName(path))
+            .Where(fileName => fileName.EndsWith(".transcript.json", StringComparison.Ordinal))
+            .Select(fileName => fileName[..^".transcript.json".Length])
+            .Order(StringComparer.Ordinal)
+            .ToArray();
+    }
+
+    public bool Exists(ConversationSessionName sessionName)
+    {
+        ArgumentNullException.ThrowIfNull(sessionName);
+
+        return File.Exists(GetPath(sessionName));
+    }
+
     public ConversationTranscript LoadOrCreate(ConversationSessionName sessionName, DateTimeOffset nowUtc)
     {
         ArgumentNullException.ThrowIfNull(sessionName);
@@ -58,6 +80,22 @@ public sealed class FileConversationStore : IConversationStore
         return transcript;
     }
 
+    public bool Rename(ConversationSessionName sourceSessionName, ConversationSessionName destinationSessionName)
+    {
+        ArgumentNullException.ThrowIfNull(sourceSessionName);
+        ArgumentNullException.ThrowIfNull(destinationSessionName);
+
+        string sourcePath = GetPath(sourceSessionName);
+        string destinationPath = GetPath(destinationSessionName);
+        if (!File.Exists(sourcePath) || File.Exists(destinationPath))
+        {
+            return false;
+        }
+
+        File.Move(sourcePath, destinationPath);
+        return true;
+    }
+
     public string Save(ConversationSessionName sessionName, ConversationTranscript transcript)
     {
         ArgumentNullException.ThrowIfNull(sessionName);
@@ -68,6 +106,20 @@ public sealed class FileConversationStore : IConversationStore
         string json = JsonSerializer.Serialize(transcript, JsonOptions);
         File.WriteAllText(path, json);
         return path;
+    }
+
+    public bool Delete(ConversationSessionName sessionName)
+    {
+        ArgumentNullException.ThrowIfNull(sessionName);
+
+        string path = GetPath(sessionName);
+        if (!File.Exists(path))
+        {
+            return false;
+        }
+
+        File.Delete(path);
+        return true;
     }
 
     private string GetPath(ConversationSessionName sessionName)
