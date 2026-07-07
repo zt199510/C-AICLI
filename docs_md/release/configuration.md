@@ -43,6 +43,21 @@ Accepted backend values:
 
 The `framework` backend is currently an experimental adapter boundary. The release MVP uses `direct`.
 
+Priority for approval mode:
+
+1. `%USERPROFILE%\.caicli\config.json`
+2. `<workspace>\.caicli\config.json`
+3. `on-request`
+
+There is no environment variable override for approval mode. Config JSON supports these `approvalMode` values:
+
+- `never`
+- `on-request`
+- `on-failure`
+- `always`
+
+`doctor`, `config get`, and `config list` report the effective approval mode and source. `config set approvalMode` is not implemented; edit user or workspace JSON directly when you need to change approval behavior.
+
 Tool execution can be disabled from user or workspace config:
 
 ```json
@@ -63,7 +78,8 @@ Disabled tool names are merged from user and workspace config. A disabled tool i
   "model": "gpt-4.1-mini",
   "baseUrl": "https://api.openai.com/v1",
   "apiKey": "<your-api-key>",
-  "agentBackend": "direct"
+  "agentBackend": "direct",
+  "approvalMode": "on-request"
 }
 ```
 
@@ -74,6 +90,7 @@ Disabled tool names are merged from user and workspace config. A disabled tool i
   "model": "gpt-4.1-mini",
   "baseUrl": "https://gateway.example.test/v1",
   "agentBackend": "direct",
+  "approvalMode": "on-request",
   "disabledTools": [],
   "mcpServers": {
     "disabled-example": {
@@ -106,7 +123,7 @@ caicli config set apiKey <your-api-key>
 caicli config unset baseUrl
 ```
 
-`config get` and `config list` print the effective non-secret configuration and sources. They include model, base URL, backend, disabled tools, config paths, warnings, and API key presence/source, but never the API key value.
+`config get` and `config list` print the effective non-secret configuration and sources. They include model, base URL, backend, approval mode, disabled tools, config paths, warnings, and API key presence/source, but never the API key value.
 
 `config set` and `config unset` write scalar values in user config only. Supported scalar keys are `model`, `baseUrl`, `agentBackend`, and `apiKey`. Edit results print status, key, scope, and path without echoing the written value.
 
@@ -122,4 +139,4 @@ caicli workflow list
 caicli workflow validate cpp
 ```
 
-`config get`, `config list`, `doctor`, and command logs report whether an API key is present and where it came from, but do not print the key value. `doctor` also reports model/source, base URL/source, backend/source, and backend status.
+`config get`, `config list`, `doctor`, and command logs report whether an API key is present and where it came from, but do not print the key value. `doctor` also reports model/source, base URL/source, backend/source, approval mode/source, and backend status.

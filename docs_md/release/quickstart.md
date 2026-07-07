@@ -25,6 +25,7 @@ Without a configured key, `doctor` should still succeed and report:
 ```text
 api key: missing (missing)
 agent backend: direct (default)
+approval mode: on-request (default)
 agent backend status: available
 ```
 
@@ -43,9 +44,12 @@ Or create `%USERPROFILE%\.caicli\config.json`:
 {
   "model": "gpt-4.1-mini",
   "apiKey": "<your key>",
-  "agentBackend": "direct"
+  "agentBackend": "direct",
+  "approvalMode": "on-request"
 }
 ```
+
+`approvalMode` can be `never`, `on-request`, `on-failure`, or `always`. User config takes priority over workspace config, and the default is `on-request`. There is no environment variable for approval mode. `config set approvalMode` is not implemented; edit the JSON file directly.
 
 ## 4. Send A Chat Prompt
 
@@ -99,13 +103,15 @@ Use `--session` to record the transcript, including agent tool calls and summari
 artifacts\release\caicli-0.1.0-win-x64\caicli.exe exec --workspace . --session smoke-exec "inspect README.md"
 ```
 
-For approved shell trials through the `exec` surface, pass `--approve`:
+For approved shell trials through the `exec` surface, pass `--approval always`:
 
 ```powershell
-artifacts\release\caicli-0.1.0-win-x64\caicli.exe exec --workspace . --approve "shell dir"
+artifacts\release\caicli-0.1.0-win-x64\caicli.exe exec --workspace . --approval always "shell dir"
 ```
 
-Without `--approve`, approval-gated write and shell actions are denied.
+Without an approving mode, approval-gated write and shell actions are denied. In the non-interactive CLI, the default `on-request` mode reports `approval-required` because interactive approval is not available. `on-failure` also reports `approval-required` because sandbox retry escalation is not implemented. The legacy `--approve` option remains supported and maps through the same risk-aware resolver.
+
+Text output and `exec --json` events/results include `approvalStatus` for approval-gated tool activity.
 
 ## 8. Run A Local Smoke Task
 
@@ -113,8 +119,8 @@ Without `--approve`, approval-gated write and shell actions are denied.
 artifacts\release\caicli-0.1.0-win-x64\caicli.exe run --workspace . --approve "create smoke note"
 ```
 
-This deterministic smoke task creates or updates `caicli-smoke.txt` in the workspace. Without `--approve`, the write is denied.
-`run` remains the deterministic direct-tool compatibility path for release smoke checks.
+This deterministic smoke task creates or updates `caicli-smoke.txt` in the workspace. Under the default `on-request` approval mode, the write is denied without `--approve`.
+`run` remains the deterministic direct-tool compatibility path for release smoke checks. It does not support `--approval`; configured `approvalMode` applies when `--approve` is not supplied, and the existing `--approve` option remains for compatibility.
 
 ## 9. Inspect And Call Tools
 
@@ -128,6 +134,15 @@ For JSON-heavy tool calls on Windows PowerShell, prefer an argument file:
 Set-Content -Path args.json -Value '{"path":"README.md"}'
 artifacts\release\caicli-0.1.0-win-x64\caicli.exe tools call --workspace . workspace.read_text --arguments-file args.json
 ```
+
+Read tools do not require approval. For approval-gated write or shell tool calls, use `--approval <mode>`:
+
+```powershell
+Set-Content -Path shell-args.json -Value '{"command":"dotnet --version","timeoutMilliseconds":10000}'
+artifacts\release\caicli-0.1.0-win-x64\caicli.exe tools call --workspace . --approval always workspace.run_shell --arguments-file shell-args.json
+```
+
+The legacy `--approve` option remains supported for compatibility. Dangerous shell commands are denied with `dangerous-shell-denied`, even under `--approval always` or legacy `--approve`.
 
 ## 10. Export Or Clear A Session
 

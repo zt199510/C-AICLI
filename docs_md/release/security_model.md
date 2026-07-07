@@ -15,6 +15,37 @@ File and command tools resolve paths before use and require paths to stay inside
 - Binary and oversized text reads.
 - Shell cwd outside the workspace.
 
+## Approval Modes And Tool Risk
+
+The CLI uses an approval mode plus per-tool risk metadata to decide whether a tool call may run. Config JSON supports `approvalMode` values:
+
+- `never`
+- `on-request`
+- `on-failure`
+- `always`
+
+The effective approval mode is selected from user config, then workspace config, then the default `on-request`. There is no environment variable for approval mode. `doctor`, `config get`, and `config list` report the effective approval mode and source.
+
+Tool risk levels are:
+
+- `read`: read-only workspace and git inspection tools. Read tools do not need approval.
+- `write`: file-editing tools such as patch apply.
+- `shell`: ordinary shell execution inside the workspace.
+- `dangerous-shell`: shell commands matching dangerous command patterns.
+
+Write and shell tools use the effective approval mode:
+
+- `always`: approve ordinary write and shell actions.
+- `never`: deny approval-required write and shell actions.
+- `on-request`: deny in the non-interactive CLI and report `approval-required`, because interactive approval is not available.
+- `on-failure`: deny in the non-interactive CLI and report `approval-required`, because sandbox retry escalation is not implemented.
+
+Dangerous shell commands are denied before execution with `dangerous-shell-denied`, even under `always` or `--approve`.
+
+`tools call` and `exec` support `--approval <mode>`. The legacy `--approve` option remains compatible and maps to an approving mode through the same risk-aware resolver when no explicit `--approval` value is supplied. `run` remains the deterministic direct-tool compatibility path; it does not have `--approval`, but its existing `--approve` option maps through the same resolver, and configured `approvalMode` applies when `--approve` is not supplied.
+
+Approval status is included in text output and in `exec` JSON events/results through `approvalStatus`.
+
 ## File Editing
 
 The release MVP uses a single-file exact-text patch tool.
@@ -22,7 +53,7 @@ The release MVP uses a single-file exact-text patch tool.
 - Patch preview runs before apply.
 - Patch apply rechecks the file content before writing.
 - Dirty workspace state is included in the preview.
-- Default production approval denies file edits unless an explicit approval policy allows them.
+- File edits require approval unless the effective approval mode or CLI override approves them.
 - Patch operations are recorded as transcript tool calls when run through `exec --session` and the agent loop.
 
 ## Shell Execution
@@ -30,8 +61,8 @@ The release MVP uses a single-file exact-text patch tool.
 Shell execution is restricted:
 
 - The working directory must remain inside the workspace.
-- Commands require approval.
-- Dangerous command patterns are denied before execution.
+- Ordinary commands require approval.
+- Dangerous command patterns are denied before execution with `dangerous-shell-denied`.
 - Commands have timeouts and stdout/stderr byte limits.
 - Timeout, denied approval, and non-zero exit are returned as safe tool failures.
 
