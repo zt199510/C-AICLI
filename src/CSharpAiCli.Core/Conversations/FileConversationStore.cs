@@ -4,6 +4,8 @@ namespace CSharpAiCli.Core;
 
 public sealed class FileConversationStore : IConversationStore
 {
+    private const string InvalidTranscriptMessage = "Conversation transcript is missing or uses an unsupported schema version.";
+
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web)
     {
         WriteIndented = true,
@@ -157,22 +159,38 @@ public sealed class FileConversationStore : IConversationStore
                 !schemaVersionElement.TryGetInt32(out int schemaVersion) ||
                 schemaVersion != ConversationTranscript.CurrentSchemaVersion)
             {
-                throw new InvalidOperationException("Conversation transcript is missing or uses an unsupported schema version.");
+                throw new InvalidOperationException(InvalidTranscriptMessage);
             }
 
             ConversationTranscript? transcript = JsonSerializer.Deserialize<ConversationTranscript>(json, JsonOptions);
             if (transcript is null)
             {
-                throw new InvalidOperationException("Conversation transcript is missing or uses an unsupported schema version.");
+                throw new InvalidOperationException(InvalidTranscriptMessage);
             }
+
+            ValidateTranscriptShape(transcript);
 
             return transcript;
         }
         catch (JsonException exception)
         {
             throw new InvalidOperationException(
-                "Conversation transcript is missing or uses an unsupported schema version.",
+                InvalidTranscriptMessage,
                 exception);
+        }
+    }
+
+    private static void ValidateTranscriptShape(ConversationTranscript transcript)
+    {
+        if (string.IsNullOrWhiteSpace(transcript.SessionName) ||
+            transcript.CreatedAtUtc == default ||
+            transcript.UpdatedAtUtc == default ||
+            transcript.Messages is null ||
+            transcript.ToolCalls is null ||
+            transcript.Errors is null ||
+            transcript.Messages.Any(message => message is null))
+        {
+            throw new InvalidOperationException(InvalidTranscriptMessage);
         }
     }
 

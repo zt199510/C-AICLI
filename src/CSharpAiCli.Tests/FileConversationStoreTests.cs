@@ -294,6 +294,82 @@ public sealed class FileConversationStoreTests
     }
 
     [Fact]
+    public void List_summaries_rejects_transcript_missing_required_fields()
+    {
+        using TempDirectory temp = TempDirectory.Create();
+        string sessionDirectory = Path.Combine(temp.Path, ".caicli", "sessions");
+        Directory.CreateDirectory(sessionDirectory);
+        File.WriteAllText(
+            Path.Combine(sessionDirectory, "smoke.transcript.json"),
+            """
+            {
+              "schemaVersion": 1
+            }
+            """);
+        FileConversationStore store = new(sessionDirectory);
+
+        Assert.Throws<InvalidOperationException>(() => store.ListSummaries());
+    }
+
+    [Theory]
+    [InlineData("messages")]
+    [InlineData("toolCalls")]
+    [InlineData("errors")]
+    public void Try_get_summary_throws_for_existing_transcript_with_null_collection(string nullCollectionName)
+    {
+        using TempDirectory temp = TempDirectory.Create();
+        string sessionDirectory = Path.Combine(temp.Path, ".caicli", "sessions");
+        Directory.CreateDirectory(sessionDirectory);
+        string messagesJson = nullCollectionName == "messages" ? "null" : "[]";
+        string toolCallsJson = nullCollectionName == "toolCalls" ? "null" : "[]";
+        string errorsJson = nullCollectionName == "errors" ? "null" : "[]";
+        File.WriteAllText(
+            Path.Combine(sessionDirectory, "smoke.transcript.json"),
+            $$"""
+            {
+              "schemaVersion": 1,
+              "sessionName": "smoke",
+              "createdAtUtc": "2024-01-01T00:00:00+00:00",
+              "updatedAtUtc": "2024-01-01T00:00:00+00:00",
+              "messages": {{messagesJson}},
+              "toolCalls": {{toolCallsJson}},
+              "errors": {{errorsJson}}
+            }
+            """);
+        FileConversationStore store = new(sessionDirectory);
+
+        Assert.Throws<InvalidOperationException>(() => store.TryGetSummary(
+            ConversationSessionName.Parse("smoke"),
+            out _));
+    }
+
+    [Fact]
+    public void Try_get_summary_throws_for_existing_transcript_with_null_message()
+    {
+        using TempDirectory temp = TempDirectory.Create();
+        string sessionDirectory = Path.Combine(temp.Path, ".caicli", "sessions");
+        Directory.CreateDirectory(sessionDirectory);
+        File.WriteAllText(
+            Path.Combine(sessionDirectory, "smoke.transcript.json"),
+            """
+            {
+              "schemaVersion": 1,
+              "sessionName": "smoke",
+              "createdAtUtc": "2024-01-01T00:00:00+00:00",
+              "updatedAtUtc": "2024-01-01T00:00:00+00:00",
+              "messages": [null],
+              "toolCalls": [],
+              "errors": []
+            }
+            """);
+        FileConversationStore store = new(sessionDirectory);
+
+        Assert.Throws<InvalidOperationException>(() => store.TryGetSummary(
+            ConversationSessionName.Parse("smoke"),
+            out _));
+    }
+
+    [Fact]
     public void Exists_reports_whether_session_file_is_present()
     {
         using TempDirectory temp = TempDirectory.Create();
