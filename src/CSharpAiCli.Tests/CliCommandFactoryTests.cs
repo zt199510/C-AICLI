@@ -2070,10 +2070,14 @@ public sealed class CliCommandFactoryTests
 
         string text = output.ToString();
         Assert.Equal(1, exitCode);
-        Assert.Contains("status: failed", text);
-        Assert.Contains("errorCode: session-not-found", text);
-        Assert.Contains("summary:", text);
-        Assert.Contains("Session transcript was not found.", text);
+        Assert.Equal(
+            [
+                "status: failed",
+                "errorCode: session-not-found",
+                "summary:",
+                "Session transcript was not found."
+            ],
+            text.Split(Environment.NewLine, StringSplitOptions.RemoveEmptyEntries));
     }
 
     [Fact]
