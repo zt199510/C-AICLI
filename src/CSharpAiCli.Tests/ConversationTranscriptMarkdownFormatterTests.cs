@@ -169,6 +169,62 @@ public sealed class ConversationTranscriptMarkdownFormatterTests
     }
 
     [Fact]
+    public void Format_redacts_common_oauth_and_cloud_secret_names()
+    {
+        ConversationTranscript transcript = ConversationTranscript.Create(
+            "smoke",
+            DateTimeOffset.Parse("2024-01-01T00:00:00Z"));
+        transcript.AddUserMessage(
+            "message access_token=access-secret \"client_secret\":\"json-client-secret\"",
+            DateTimeOffset.Parse("2024-01-01T00:00:01Z"));
+        transcript.Errors.Add(new ConversationError(
+            CreatedAtUtc: DateTimeOffset.Parse("2024-01-01T00:00:02Z"),
+            Provider: "openai",
+            Operation: "chat",
+            StatusCode: 500,
+            LocalErrorCode: "model_failed",
+            SafeMessage: "error refresh_token=refresh-secret",
+            Retryable: false));
+        transcript.AddToolCall(new ConversationToolCall(
+            CreatedAtUtc: DateTimeOffset.Parse("2024-01-01T00:00:04Z"),
+            CallId: "call_read",
+            ToolName: "workspace.read_text",
+            ArgumentsJson: "{}",
+            ApprovalStatus: "approved",
+            CompletedAtUtc: DateTimeOffset.Parse("2024-01-01T00:00:05Z"),
+            Succeeded: true,
+            OutputSummary: "output client_secret=client-secret",
+            FailureReason: null,
+            ErrorCode: null,
+            Retryable: false));
+        transcript.AddToolCall(new ConversationToolCall(
+            CreatedAtUtc: DateTimeOffset.Parse("2024-01-01T00:00:06Z"),
+            CallId: "call_write",
+            ToolName: "workspace.write_text",
+            ArgumentsJson: "{}",
+            ApprovalStatus: "approved",
+            CompletedAtUtc: DateTimeOffset.Parse("2024-01-01T00:00:07Z"),
+            Succeeded: false,
+            OutputSummary: null,
+            FailureReason: "failure AWS_SECRET_ACCESS_KEY=aws-secret",
+            ErrorCode: "tool_failed",
+            Retryable: false));
+
+        string markdown = ConversationTranscriptMarkdownFormatter.Format(transcript);
+
+        Assert.Contains("access_token=[redacted]", markdown, StringComparison.Ordinal);
+        Assert.Contains("\"client_secret\":\"[redacted]\"", markdown, StringComparison.Ordinal);
+        Assert.Contains("refresh_token=[redacted]", markdown, StringComparison.Ordinal);
+        Assert.Contains("client_secret=[redacted]", markdown, StringComparison.Ordinal);
+        Assert.Contains("AWS_SECRET_ACCESS_KEY=[redacted]", markdown, StringComparison.Ordinal);
+        Assert.DoesNotContain("access-secret", markdown, StringComparison.Ordinal);
+        Assert.DoesNotContain("json-client-secret", markdown, StringComparison.Ordinal);
+        Assert.DoesNotContain("refresh-secret", markdown, StringComparison.Ordinal);
+        Assert.DoesNotContain("client-secret", markdown, StringComparison.Ordinal);
+        Assert.DoesNotContain("aws-secret", markdown, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void Format_fences_error_safe_message_markdown_and_raw_html()
     {
         ConversationTranscript transcript = ConversationTranscript.Create(

@@ -6,12 +6,15 @@ namespace CSharpAiCli.Core;
 
 public static class ConversationTranscriptMarkdownFormatter
 {
+    private const string SecretKeyNamePattern =
+        "OPENAI_API_KEY|apiKey|api_key|api-key|api[_-]?key|access[_-]?token|accessToken|refresh[_-]?token|refreshToken|client[_-]?secret|clientSecret|AWS_SECRET_ACCESS_KEY|aws[_-]?secret[_-]?access[_-]?key|awsSecretAccessKey|token|password|secret";
+
     private static readonly Regex WhitespacePattern = new(@"\s+", RegexOptions.CultureInvariant);
     private static readonly Regex JsonSecretPattern = new(
-        """("(?i:OPENAI_API_KEY|apiKey|api_key|api-key|token|password|secret)"\s*:\s*")[^"]*(")""",
+        $$"""("(?i:{{SecretKeyNamePattern}})"\s*:\s*")[^"]*(")""",
         RegexOptions.CultureInvariant);
     private static readonly Regex KeyValueSecretPattern = new(
-        @"\b(?i:OPENAI_API_KEY|apiKey|api[_-]?key|token|password|secret)\b(\s*[:=]\s*)(?:""[^""]*""|'[^']*'|Bearer\s+[A-Za-z0-9._~+/=-]+|[^\s,;]+)",
+        $$"""\b(?i:{{SecretKeyNamePattern}})\b(\s*[:=]\s*)(?:"[^"]*"|'[^']*'|Bearer\s+[A-Za-z0-9._~+/=-]+|[^\s,;]+)""",
         RegexOptions.CultureInvariant);
     private static readonly Regex BearerTokenPattern = new(
         @"\bBearer\s+[A-Za-z0-9._~+/=-]+",
