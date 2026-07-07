@@ -11,7 +11,7 @@ public static class ConversationTranscriptMarkdownFormatter
         """("(?i:OPENAI_API_KEY|apiKey|api_key|api-key|token|password|secret)"\s*:\s*")[^"]*(")""",
         RegexOptions.CultureInvariant);
     private static readonly Regex KeyValueSecretPattern = new(
-        @"\b(?i:OPENAI_API_KEY|apiKey|api[_-]?key|token|password|secret)\b(\s*[:=]\s*)(?:""[^""]*""|'[^']*'|[^\s,;]+)",
+        @"\b(?i:OPENAI_API_KEY|apiKey|api[_-]?key|token|password|secret)\b(\s*[:=]\s*)(?:""[^""]*""|'[^']*'|Bearer\s+[A-Za-z0-9._~+/=-]+|[^\s,;]+)",
         RegexOptions.CultureInvariant);
     private static readonly Regex BearerTokenPattern = new(
         @"\bBearer\s+[A-Za-z0-9._~+/=-]+",
@@ -58,7 +58,8 @@ public static class ConversationTranscriptMarkdownFormatter
                 string errorCode = string.IsNullOrWhiteSpace(error.LocalErrorCode)
                     ? "error"
                     : NormalizeSingleLine(error.LocalErrorCode);
-                builder.AppendLine($"- {error.CreatedAtUtc.ToString("O", CultureInfo.InvariantCulture)} {errorCode}: {NormalizeSingleLine(error.SafeMessage)}");
+                builder.AppendLine($"- {error.CreatedAtUtc.ToString("O", CultureInfo.InvariantCulture)} {errorCode}");
+                AppendFencedBlock(builder, RedactSecrets(error.SafeMessage));
             }
         }
 
@@ -73,8 +74,12 @@ public static class ConversationTranscriptMarkdownFormatter
                 string summary = toolCall.Succeeded
                     ? toolCall.OutputSummary ?? string.Empty
                     : toolCall.FailureReason ?? toolCall.ErrorCode ?? string.Empty;
+                string errorCode = toolCall.Succeeded || string.IsNullOrWhiteSpace(toolCall.ErrorCode)
+                    ? string.Empty
+                    : $" {NormalizeSingleLine(toolCall.ErrorCode)}";
                 builder.AppendLine(
-                    $"- {toolCall.CompletedAtUtc.ToString("O", CultureInfo.InvariantCulture)} {NormalizeSingleLine(toolCall.ToolName)} {status}: {NormalizeSingleLine(summary)}");
+                    $"- {toolCall.CompletedAtUtc.ToString("O", CultureInfo.InvariantCulture)} {NormalizeSingleLine(toolCall.ToolName)} {status}{errorCode}");
+                AppendFencedBlock(builder, RedactSecrets(summary));
             }
         }
 
@@ -116,6 +121,14 @@ public static class ConversationTranscriptMarkdownFormatter
         redacted = OpenAiKeyPattern.Replace(redacted, "[redacted]");
         redacted = GitHubTokenPattern.Replace(redacted, "[redacted]");
         return redacted;
+    }
+
+    private static void AppendFencedBlock(StringBuilder builder, string content)
+    {
+        string fence = CreateFence(content);
+        builder.AppendLine(fence);
+        builder.AppendLine(content);
+        builder.AppendLine(fence);
     }
 
     private static string CreateFence(string content)

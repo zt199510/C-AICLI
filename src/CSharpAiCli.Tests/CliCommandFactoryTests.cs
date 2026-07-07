@@ -2245,9 +2245,11 @@ public sealed class CliCommandFactoryTests
         Assert.Contains("### Assistant - 2024-01-01T00:00:02.0000000+00:00", text);
         Assert.Contains("hello user", text);
         Assert.Contains("## Errors", text);
-        Assert.Contains("- 2024-01-01T00:00:03.0000000+00:00 missing-openai-api-key: safe message without secret", text);
+        Assert.Contains("- 2024-01-01T00:00:03.0000000+00:00 missing-openai-api-key", text);
+        Assert.Contains("safe message without secret", text);
         Assert.Contains("## Tool Calls", text);
-        Assert.Contains("- 2024-01-01T00:00:04.0000000+00:00 workspace.read_text succeeded: read safe summary", text);
+        Assert.Contains("- 2024-01-01T00:00:04.0000000+00:00 workspace.read_text succeeded", text);
+        Assert.Contains("read safe summary", text);
         Assert.DoesNotContain("sk-", text, StringComparison.Ordinal);
         Assert.DoesNotContain("apiKey", text, StringComparison.Ordinal);
         Assert.DoesNotContain("ArgumentsJson", text, StringComparison.Ordinal);
