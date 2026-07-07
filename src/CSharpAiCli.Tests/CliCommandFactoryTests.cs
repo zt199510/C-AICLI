@@ -2206,6 +2206,154 @@ public sealed class CliCommandFactoryTests
     }
 
     [Fact]
+    public void Session_delete_calls_store_and_writes_ordered_success_output()
+    {
+        using StringWriter output = new();
+        FakeConversationStore store = new()
+        {
+            DeleteResult = true
+        };
+
+        RootCommand command = CliCommandFactory.Create(
+            output,
+            CreateSnapshot,
+            (_, _) => { },
+            _ => new FakeChatModelClient(ChatModelResult.Success(new ChatResponse("openai", "gpt-test", "resp_test", "ok"))),
+            writer => new TerminalChatStreamingRenderer(writer),
+            _ => store,
+            () => DateTimeOffset.Parse("2024-01-03T00:00:00Z"));
+
+        int exitCode = CliCommandFactory.Invoke(command, ["session", "delete", "smoke"], output);
+
+        string text = output.ToString();
+        Assert.Equal(0, exitCode);
+        Assert.Equal("smoke", store.DeletedSessionName?.Value);
+        Assert.Equal(
+            [
+                "status: deleted",
+                "session: smoke"
+            ],
+            text.Split(Environment.NewLine, StringSplitOptions.RemoveEmptyEntries));
+    }
+
+    [Fact]
+    public void Session_delete_missing_session_returns_session_not_found()
+    {
+        using StringWriter output = new();
+        FakeConversationStore store = new()
+        {
+            DeleteResult = false
+        };
+
+        RootCommand command = CliCommandFactory.Create(
+            output,
+            CreateSnapshot,
+            (_, _) => { },
+            _ => new FakeChatModelClient(ChatModelResult.Success(new ChatResponse("openai", "gpt-test", "resp_test", "ok"))),
+            writer => new TerminalChatStreamingRenderer(writer),
+            _ => store,
+            () => DateTimeOffset.Parse("2024-01-03T00:00:00Z"));
+
+        int exitCode = CliCommandFactory.Invoke(command, ["session", "delete", "missing"], output);
+
+        string text = output.ToString();
+        Assert.Equal(1, exitCode);
+        Assert.Equal("missing", store.DeletedSessionName?.Value);
+        Assert.Equal(
+            [
+                "status: not-found",
+                "errorCode: session-not-found"
+            ],
+            text.Split(Environment.NewLine, StringSplitOptions.RemoveEmptyEntries));
+    }
+
+    [Fact]
+    public void Session_clear_calls_store_delete_and_preserves_success_output()
+    {
+        using StringWriter output = new();
+        FakeConversationStore store = new()
+        {
+            DeleteResult = true
+        };
+
+        RootCommand command = CliCommandFactory.Create(
+            output,
+            CreateSnapshot,
+            (_, _) => { },
+            _ => new FakeChatModelClient(ChatModelResult.Success(new ChatResponse("openai", "gpt-test", "resp_test", "ok"))),
+            writer => new TerminalChatStreamingRenderer(writer),
+            _ => store,
+            () => DateTimeOffset.Parse("2024-01-03T00:00:00Z"));
+
+        int exitCode = CliCommandFactory.Invoke(command, ["session", "clear", "smoke"], output);
+
+        string text = output.ToString();
+        Assert.Equal(0, exitCode);
+        Assert.Equal("smoke", store.DeletedSessionName?.Value);
+        Assert.Equal(
+            [
+                "status: cleared",
+                "session: smoke"
+            ],
+            text.Split(Environment.NewLine, StringSplitOptions.RemoveEmptyEntries));
+    }
+
+    [Fact]
+    public void Session_clear_missing_session_preserves_not_found_exit_zero_output()
+    {
+        using StringWriter output = new();
+        FakeConversationStore store = new()
+        {
+            DeleteResult = false
+        };
+
+        RootCommand command = CliCommandFactory.Create(
+            output,
+            CreateSnapshot,
+            (_, _) => { },
+            _ => new FakeChatModelClient(ChatModelResult.Success(new ChatResponse("openai", "gpt-test", "resp_test", "ok"))),
+            writer => new TerminalChatStreamingRenderer(writer),
+            _ => store,
+            () => DateTimeOffset.Parse("2024-01-03T00:00:00Z"));
+
+        int exitCode = CliCommandFactory.Invoke(command, ["session", "clear", "missing"], output);
+
+        string text = output.ToString();
+        Assert.Equal(0, exitCode);
+        Assert.Equal("missing", store.DeletedSessionName?.Value);
+        Assert.Equal(
+            [
+                "status: not-found"
+            ],
+            text.Split(Environment.NewLine, StringSplitOptions.RemoveEmptyEntries));
+    }
+
+    [Fact]
+    public void Session_delete_writes_command_log_through_delegate()
+    {
+        using StringWriter output = new();
+        List<string> loggedCommands = [];
+        FakeConversationStore store = new()
+        {
+            DeleteResult = true
+        };
+
+        RootCommand command = CliCommandFactory.Create(
+            output,
+            CreateSnapshot,
+            (commandName, _) => loggedCommands.Add(commandName),
+            _ => new FakeChatModelClient(ChatModelResult.Success(new ChatResponse("openai", "gpt-test", "resp_test", "ok"))),
+            writer => new TerminalChatStreamingRenderer(writer),
+            _ => store,
+            () => DateTimeOffset.Parse("2024-01-03T00:00:00Z"));
+
+        int exitCode = CliCommandFactory.Invoke(command, ["session", "delete", "smoke"], output);
+
+        Assert.Equal(0, exitCode);
+        Assert.Equal(["session delete"], loggedCommands);
+    }
+
+    [Fact]
     public void Invoke_non_exec_action_exception_uses_default_exception_handling()
     {
         using TempDirectory temp = TempDirectory.Create();
@@ -2922,7 +3070,9 @@ public sealed class CliCommandFactoryTests
         public ConversationTranscript? SavedTranscript { get; private set; }
         public ConversationSessionName? RenamedSourceSessionName { get; private set; }
         public ConversationSessionName? RenamedDestinationSessionName { get; private set; }
+        public ConversationSessionName? DeletedSessionName { get; private set; }
         public bool RenameResult { get; init; }
+        public bool DeleteResult { get; init; }
         public ConversationTranscript Transcript { get; init; } = ConversationTranscript.Create(
             "smoke",
             DateTimeOffset.Parse("2024-01-01T00:00:00Z"));
@@ -2958,6 +3108,12 @@ public sealed class CliCommandFactoryTests
             RenamedSourceSessionName = sourceSessionName;
             RenamedDestinationSessionName = destinationSessionName;
             return RenameResult;
+        }
+
+        public bool Delete(ConversationSessionName sessionName)
+        {
+            DeletedSessionName = sessionName;
+            return DeleteResult;
         }
     }
 }

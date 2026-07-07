@@ -490,6 +490,7 @@ public static class CliCommandFactory
         Command sessionShowCommand = new("show", "Show one local session summary.");
         Command sessionExportCommand = new("export", "Print one session transcript JSON.");
         Command sessionClearCommand = new("clear", "Delete one session transcript.");
+        Command sessionDeleteCommand = new("delete", "Delete one local session transcript.");
         Command sessionRenameCommand = new("rename", "Rename one local session transcript.");
         Argument<string> sessionNameArgument = new("name")
         {
@@ -506,6 +507,7 @@ public static class CliCommandFactory
         sessionShowCommand.Arguments.Add(sessionNameArgument);
         sessionExportCommand.Arguments.Add(sessionNameArgument);
         sessionClearCommand.Arguments.Add(sessionNameArgument);
+        sessionDeleteCommand.Arguments.Add(sessionNameArgument);
         sessionRenameCommand.Arguments.Add(sessionRenameSourceArgument);
         sessionRenameCommand.Arguments.Add(sessionRenameDestinationArgument);
         sessionListCommand.SetAction(parseResult =>
@@ -538,7 +540,15 @@ public static class CliCommandFactory
             string name = parseResult.GetValue(sessionNameArgument) ?? string.Empty;
             CliEnvironmentSnapshot snapshot = snapshotProvider(workspacePath);
             TryWriteCommandLog(commandLogger, "session clear", snapshot);
-            return ClearSession(output, snapshot, name);
+            return DeleteSession(output, conversationStoreFactory(snapshot), name, "cleared", missingExitCode: 0, writeMissingErrorCode: false);
+        });
+        sessionDeleteCommand.SetAction(parseResult =>
+        {
+            string? workspacePath = parseResult.GetValue(workspaceOption);
+            string name = parseResult.GetValue(sessionNameArgument) ?? string.Empty;
+            CliEnvironmentSnapshot snapshot = snapshotProvider(workspacePath);
+            TryWriteCommandLog(commandLogger, "session delete", snapshot);
+            return DeleteSession(output, conversationStoreFactory(snapshot), name, "deleted", missingExitCode: 1, writeMissingErrorCode: true);
         });
         sessionRenameCommand.SetAction(parseResult =>
         {
@@ -553,6 +563,7 @@ public static class CliCommandFactory
         sessionCommand.Subcommands.Add(sessionShowCommand);
         sessionCommand.Subcommands.Add(sessionExportCommand);
         sessionCommand.Subcommands.Add(sessionClearCommand);
+        sessionCommand.Subcommands.Add(sessionDeleteCommand);
         sessionCommand.Subcommands.Add(sessionRenameCommand);
 
         Command chatCommand = new("chat", "Send one prompt to the configured model.");
@@ -868,18 +879,27 @@ public static class CliCommandFactory
         return 0;
     }
 
-    private static int ClearSession(TextWriter output, CliEnvironmentSnapshot snapshot, string name)
+    private static int DeleteSession(
+        TextWriter output,
+        IConversationStore conversationStore,
+        string name,
+        string successStatus,
+        int missingExitCode,
+        bool writeMissingErrorCode)
     {
         ConversationSessionName sessionName = ConversationSessionName.Parse(name);
-        string path = ResolveSessionPath(snapshot, sessionName);
-        if (!File.Exists(path))
+        if (!conversationStore.Delete(sessionName))
         {
             output.WriteLine("status: not-found");
-            return 0;
+            if (writeMissingErrorCode)
+            {
+                output.WriteLine("errorCode: session-not-found");
+            }
+
+            return missingExitCode;
         }
 
-        File.Delete(path);
-        output.WriteLine("status: cleared");
+        output.WriteLine($"status: {successStatus}");
         output.WriteLine($"session: {sessionName.Value}");
         return 0;
     }
