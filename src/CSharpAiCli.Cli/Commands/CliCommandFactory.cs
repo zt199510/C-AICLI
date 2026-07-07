@@ -490,13 +490,24 @@ public static class CliCommandFactory
         Command sessionShowCommand = new("show", "Show one local session summary.");
         Command sessionExportCommand = new("export", "Print one session transcript JSON.");
         Command sessionClearCommand = new("clear", "Delete one session transcript.");
+        Command sessionRenameCommand = new("rename", "Rename one local session transcript.");
         Argument<string> sessionNameArgument = new("name")
         {
             Description = "The session name.",
         };
+        Argument<string> sessionRenameSourceArgument = new("old")
+        {
+            Description = "The current session name.",
+        };
+        Argument<string> sessionRenameDestinationArgument = new("new")
+        {
+            Description = "The new session name.",
+        };
         sessionShowCommand.Arguments.Add(sessionNameArgument);
         sessionExportCommand.Arguments.Add(sessionNameArgument);
         sessionClearCommand.Arguments.Add(sessionNameArgument);
+        sessionRenameCommand.Arguments.Add(sessionRenameSourceArgument);
+        sessionRenameCommand.Arguments.Add(sessionRenameDestinationArgument);
         sessionListCommand.SetAction(parseResult =>
         {
             string? workspacePath = parseResult.GetValue(workspaceOption);
@@ -529,10 +540,20 @@ public static class CliCommandFactory
             TryWriteCommandLog(commandLogger, "session clear", snapshot);
             return ClearSession(output, snapshot, name);
         });
+        sessionRenameCommand.SetAction(parseResult =>
+        {
+            string? workspacePath = parseResult.GetValue(workspaceOption);
+            string source = parseResult.GetValue(sessionRenameSourceArgument) ?? string.Empty;
+            string destination = parseResult.GetValue(sessionRenameDestinationArgument) ?? string.Empty;
+            CliEnvironmentSnapshot snapshot = snapshotProvider(workspacePath);
+            TryWriteCommandLog(commandLogger, "session rename", snapshot);
+            return RenameSession(output, conversationStoreFactory(snapshot), source, destination);
+        });
         sessionCommand.Subcommands.Add(sessionListCommand);
         sessionCommand.Subcommands.Add(sessionShowCommand);
         sessionCommand.Subcommands.Add(sessionExportCommand);
         sessionCommand.Subcommands.Add(sessionClearCommand);
+        sessionCommand.Subcommands.Add(sessionRenameCommand);
 
         Command chatCommand = new("chat", "Send one prompt to the configured model.");
         Argument<string> promptArgument = new("prompt")
@@ -861,6 +882,25 @@ public static class CliCommandFactory
         output.WriteLine("status: cleared");
         output.WriteLine($"session: {sessionName.Value}");
         return 0;
+    }
+
+    private static int RenameSession(TextWriter output, IConversationStore conversationStore, string source, string destination)
+    {
+        ConversationSessionName sourceSessionName = ConversationSessionName.Parse(source);
+        ConversationSessionName destinationSessionName = ConversationSessionName.Parse(destination);
+        if (conversationStore.Rename(sourceSessionName, destinationSessionName))
+        {
+            output.WriteLine("status: renamed");
+            output.WriteLine($"from: {sourceSessionName.Value}");
+            output.WriteLine($"to: {destinationSessionName.Value}");
+            return 0;
+        }
+
+        output.WriteLine("status: failed");
+        output.WriteLine("errorCode: session-rename-failed");
+        output.WriteLine("summary:");
+        output.WriteLine("Session could not be renamed because the source is missing or the destination already exists.");
+        return 1;
     }
 
     private static string ResolveSessionPath(CliEnvironmentSnapshot snapshot, ConversationSessionName sessionName)

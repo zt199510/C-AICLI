@@ -2114,6 +2114,98 @@ public sealed class CliCommandFactoryTests
     }
 
     [Fact]
+    public void Session_rename_calls_store_and_writes_ordered_success_output()
+    {
+        using StringWriter output = new();
+        FakeConversationStore store = new()
+        {
+            RenameResult = true
+        };
+
+        RootCommand command = CliCommandFactory.Create(
+            output,
+            CreateSnapshot,
+            (_, _) => { },
+            _ => new FakeChatModelClient(ChatModelResult.Success(new ChatResponse("openai", "gpt-test", "resp_test", "ok"))),
+            writer => new TerminalChatStreamingRenderer(writer),
+            _ => store,
+            () => DateTimeOffset.Parse("2024-01-03T00:00:00Z"));
+
+        int exitCode = CliCommandFactory.Invoke(command, ["session", "rename", "smoke", "archive"], output);
+
+        string text = output.ToString();
+        Assert.Equal(0, exitCode);
+        Assert.Equal("smoke", store.RenamedSourceSessionName?.Value);
+        Assert.Equal("archive", store.RenamedDestinationSessionName?.Value);
+        Assert.Equal(
+            [
+                "status: renamed",
+                "from: smoke",
+                "to: archive"
+            ],
+            text.Split(Environment.NewLine, StringSplitOptions.RemoveEmptyEntries));
+    }
+
+    [Fact]
+    public void Session_rename_failure_returns_generic_safe_failure_output()
+    {
+        using StringWriter output = new();
+        FakeConversationStore store = new()
+        {
+            RenameResult = false
+        };
+
+        RootCommand command = CliCommandFactory.Create(
+            output,
+            CreateSnapshot,
+            (_, _) => { },
+            _ => new FakeChatModelClient(ChatModelResult.Success(new ChatResponse("openai", "gpt-test", "resp_test", "ok"))),
+            writer => new TerminalChatStreamingRenderer(writer),
+            _ => store,
+            () => DateTimeOffset.Parse("2024-01-03T00:00:00Z"));
+
+        int exitCode = CliCommandFactory.Invoke(command, ["session", "rename", "missing", "archive"], output);
+
+        string text = output.ToString();
+        Assert.Equal(1, exitCode);
+        Assert.Equal("missing", store.RenamedSourceSessionName?.Value);
+        Assert.Equal("archive", store.RenamedDestinationSessionName?.Value);
+        Assert.Equal(
+            [
+                "status: failed",
+                "errorCode: session-rename-failed",
+                "summary:",
+                "Session could not be renamed because the source is missing or the destination already exists."
+            ],
+            text.Split(Environment.NewLine, StringSplitOptions.RemoveEmptyEntries));
+    }
+
+    [Fact]
+    public void Session_rename_writes_command_log_through_delegate()
+    {
+        using StringWriter output = new();
+        List<string> loggedCommands = [];
+        FakeConversationStore store = new()
+        {
+            RenameResult = true
+        };
+
+        RootCommand command = CliCommandFactory.Create(
+            output,
+            CreateSnapshot,
+            (commandName, _) => loggedCommands.Add(commandName),
+            _ => new FakeChatModelClient(ChatModelResult.Success(new ChatResponse("openai", "gpt-test", "resp_test", "ok"))),
+            writer => new TerminalChatStreamingRenderer(writer),
+            _ => store,
+            () => DateTimeOffset.Parse("2024-01-03T00:00:00Z"));
+
+        int exitCode = CliCommandFactory.Invoke(command, ["session", "rename", "smoke", "archive"], output);
+
+        Assert.Equal(0, exitCode);
+        Assert.Equal(["session rename"], loggedCommands);
+    }
+
+    [Fact]
     public void Invoke_non_exec_action_exception_uses_default_exception_handling()
     {
         using TempDirectory temp = TempDirectory.Create();
@@ -2828,6 +2920,9 @@ public sealed class CliCommandFactoryTests
         public ConversationSessionName? LoadedSessionName { get; private set; }
         public ConversationSessionName? SavedSessionName { get; private set; }
         public ConversationTranscript? SavedTranscript { get; private set; }
+        public ConversationSessionName? RenamedSourceSessionName { get; private set; }
+        public ConversationSessionName? RenamedDestinationSessionName { get; private set; }
+        public bool RenameResult { get; init; }
         public ConversationTranscript Transcript { get; init; } = ConversationTranscript.Create(
             "smoke",
             DateTimeOffset.Parse("2024-01-01T00:00:00Z"));
@@ -2856,6 +2951,13 @@ public sealed class CliCommandFactoryTests
             summary = Summaries.FirstOrDefault(candidate =>
                 string.Equals(candidate.Name, sessionName.Value, StringComparison.Ordinal));
             return summary is not null;
+        }
+
+        public bool Rename(ConversationSessionName sourceSessionName, ConversationSessionName destinationSessionName)
+        {
+            RenamedSourceSessionName = sourceSessionName;
+            RenamedDestinationSessionName = destinationSessionName;
+            return RenameResult;
         }
     }
 }
