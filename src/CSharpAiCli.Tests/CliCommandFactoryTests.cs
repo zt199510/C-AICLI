@@ -2140,6 +2140,56 @@ public sealed class CliCommandFactoryTests
     }
 
     [Fact]
+    public void Session_export_format_json_does_not_create_conversation_store()
+    {
+        using TempDirectory temp = TempDirectory.Create();
+        string userHome = Path.Combine(temp.Path, "user-home");
+        string workspace = Path.Combine(temp.Path, "workspace");
+        Directory.CreateDirectory(workspace);
+        string sessionDirectory = Path.Combine(userHome, ".caicli", "sessions");
+        Directory.CreateDirectory(sessionDirectory);
+        File.WriteAllText(Path.Combine(sessionDirectory, "smoke.transcript.json"), """
+        {
+          "schemaVersion": 1,
+          "sessionName": "smoke",
+          "createdAtUtc": "2024-01-01T00:00:00+00:00",
+          "updatedAtUtc": "2024-01-01T00:00:00+00:00",
+          "messages": [],
+          "toolCalls": [],
+          "errors": []
+        }
+        """);
+        using StringWriter exportOutput = new();
+        CliEnvironmentSnapshot snapshot = CreateSnapshot(
+            workspacePath: workspace,
+            apiKey: null,
+            apiKeySource: "missing",
+            model: "not configured",
+            userConfigPath: Path.Combine(userHome, ".caicli", "config.json"));
+        int storeFactoryCalls = 0;
+
+        int exportExitCode = CliCommandFactory
+            .Create(
+                exportOutput,
+                _ => snapshot,
+                (_, _) => { },
+                _ => new FakeChatModelClient(ChatModelResult.Success(new ChatResponse("openai", "gpt-test", "resp", ""))),
+                writer => new TerminalChatStreamingRenderer(writer),
+                _ =>
+                {
+                    storeFactoryCalls++;
+                    return new FakeConversationStore();
+                },
+                () => DateTimeOffset.Parse("2024-01-01T00:00:05Z"))
+            .Parse(["session", "export", "--format", "json", "smoke"])
+            .Invoke();
+
+        Assert.Equal(0, exportExitCode);
+        Assert.Equal(0, storeFactoryCalls);
+        Assert.Contains("\"sessionName\": \"smoke\"", exportOutput.ToString());
+    }
+
+    [Fact]
     public void Session_export_format_markdown_prints_safe_readable_transcript()
     {
         using StringWriter output = new();
@@ -2201,6 +2251,36 @@ public sealed class CliCommandFactoryTests
         Assert.DoesNotContain("sk-", text, StringComparison.Ordinal);
         Assert.DoesNotContain("apiKey", text, StringComparison.Ordinal);
         Assert.DoesNotContain("ArgumentsJson", text, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Session_export_format_markdown_accepts_case_insensitive_value()
+    {
+        using StringWriter output = new();
+        ConversationTranscript transcript = ConversationTranscript.Create(
+            "smoke",
+            DateTimeOffset.Parse("2024-01-01T00:00:00Z"));
+        transcript.AddUserMessage("hello assistant", DateTimeOffset.Parse("2024-01-01T00:00:01Z"));
+        FakeConversationStore store = new()
+        {
+            Transcript = transcript
+        };
+
+        int exitCode = CliCommandFactory
+            .Create(
+                output,
+                workspacePath => CreateSnapshot(workspacePath),
+                (_, _) => { },
+                _ => new FakeChatModelClient(ChatModelResult.Success(new ChatResponse("openai", "gpt-test", "resp", ""))),
+                writer => new TerminalChatStreamingRenderer(writer),
+                _ => store,
+                () => DateTimeOffset.Parse("2024-01-01T00:00:05Z"))
+            .Parse(["session", "export", "--format", "Markdown", "smoke"])
+            .Invoke();
+
+        Assert.Equal(0, exitCode);
+        Assert.Equal("smoke", store.TryLoadedSessionName?.Value);
+        Assert.Contains("# Session: smoke", output.ToString());
     }
 
     [Fact]
