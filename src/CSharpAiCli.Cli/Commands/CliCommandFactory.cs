@@ -371,6 +371,10 @@ public static class CliCommandFactory
         {
             Description = "Resume or create a named agentic exec transcript.",
         };
+        Option<string> execResumeOption = new("--resume")
+        {
+            Description = "Resume an existing named agentic exec transcript.",
+        };
         execOutputOption.DefaultValueFactory = _ => "text";
         execOutputOption.Validators.Add(result =>
         {
@@ -393,6 +397,7 @@ public static class CliCommandFactory
         execCommand.Options.Add(execMaxToolCallsOption);
         execCommand.Options.Add(execTimeoutSecondsOption);
         execCommand.Options.Add(execSessionOption);
+        execCommand.Options.Add(execResumeOption);
         execCommand.SetAction(parseResult =>
         {
             string? workspacePath = parseResult.GetValue(workspaceOption);
@@ -405,18 +410,26 @@ public static class CliCommandFactory
             int? maxToolCalls = parseResult.GetValue(execMaxToolCallsOption);
             int? timeoutSeconds = parseResult.GetValue(execTimeoutSecondsOption);
             string? session = parseResult.GetValue(execSessionOption);
+            string? resume = parseResult.GetValue(execResumeOption);
             CliEnvironmentSnapshot snapshot = snapshotProvider(workspacePath);
             ApprovalMode? cliApprovalMode = GetApprovalOverride(approvalModeValue, parseResult.GetResult(execApprovalOption), approve);
             TryWriteCommandLog(commandLogger, "exec", snapshot);
 
+            if (!string.IsNullOrWhiteSpace(session) && !string.IsNullOrWhiteSpace(resume))
+            {
+                WriteSessionOptionConflict(output);
+                return 1;
+            }
+
             IApprovalPolicy approvalPolicy = ApprovalPolicyResolver.Resolve(snapshot.Configuration.ApprovalMode, cliApprovalMode);
             ToolRegistry registry = CliToolFactory.CreateRegistry(snapshot, approvalPolicy);
             ToolExecutor executor = new(registry);
+            string? effectiveSession = !string.IsNullOrWhiteSpace(resume) ? resume : session;
             AgentRunRequest request = new(
                 task,
                 snapshot.Workspace,
                 snapshot.Instructions.Instructions,
-                session,
+                effectiveSession,
                 Limits: new AgentRunLimits(
                     MaxTurns: maxTurns,
                     MaxToolCalls: maxToolCalls,
@@ -425,10 +438,16 @@ public static class CliCommandFactory
             ConversationSessionName? sessionName = null;
             ConversationTranscript? transcript = null;
             IConversationStore? conversationStore = null;
-            if (!string.IsNullOrWhiteSpace(session))
+            if (!string.IsNullOrWhiteSpace(effectiveSession))
             {
-                sessionName = ConversationSessionName.Parse(session);
+                sessionName = ConversationSessionName.Parse(effectiveSession);
                 conversationStore = conversationStoreFactory(snapshot);
+                if (!string.IsNullOrWhiteSpace(resume) && !conversationStore.Exists(sessionName))
+                {
+                    WriteSessionNotFound(output);
+                    return 1;
+                }
+
                 transcript = conversationStore.LoadOrCreate(sessionName, utcNowProvider());
             }
 
@@ -575,31 +594,50 @@ public static class CliCommandFactory
         {
             Description = "Resume or create a named chat session.",
         };
+        Option<string> resumeOption = new("--resume")
+        {
+            Description = "Resume an existing named chat session.",
+        };
         chatCommand.Arguments.Add(promptArgument);
         chatCommand.Options.Add(sessionOption);
+        chatCommand.Options.Add(resumeOption);
         chatCommand.SetAction(parseResult =>
         {
             string? workspacePath = parseResult.GetValue(workspaceOption);
             string prompt = parseResult.GetValue(promptArgument) ?? string.Empty;
             string? session = parseResult.GetValue(sessionOption);
+            string? resume = parseResult.GetValue(resumeOption);
             CliEnvironmentSnapshot snapshot = snapshotProvider(workspacePath);
             TryWriteCommandLog(commandLogger, "chat", snapshot);
 
-            IChatModelClient chatModelClient = chatModelClientFactory(snapshot);
-            IChatStreamingRenderer renderer = streamingRendererFactory(output);
-            ChatRequest request = new(prompt, session, snapshot.Instructions.Instructions);
+            if (!string.IsNullOrWhiteSpace(session) && !string.IsNullOrWhiteSpace(resume))
+            {
+                WriteSessionOptionConflict(output);
+                return 1;
+            }
 
+            string? effectiveSession = !string.IsNullOrWhiteSpace(resume) ? resume : session;
             ConversationSessionName? sessionName = null;
             ConversationTranscript? transcript = null;
             IConversationStore? conversationStore = null;
             DateTimeOffset nowUtc = default;
-            if (!string.IsNullOrWhiteSpace(session))
+            if (!string.IsNullOrWhiteSpace(effectiveSession))
             {
-                sessionName = ConversationSessionName.Parse(session);
+                sessionName = ConversationSessionName.Parse(effectiveSession);
                 conversationStore = conversationStoreFactory(snapshot);
+                if (!string.IsNullOrWhiteSpace(resume) && !conversationStore.Exists(sessionName))
+                {
+                    WriteSessionNotFound(output);
+                    return 1;
+                }
+
                 nowUtc = utcNowProvider();
                 transcript = conversationStore.LoadOrCreate(sessionName, nowUtc);
             }
+
+            IChatModelClient chatModelClient = chatModelClientFactory(snapshot);
+            IChatStreamingRenderer renderer = streamingRendererFactory(output);
+            ChatRequest request = new(prompt, effectiveSession, snapshot.Instructions.Instructions);
 
             ChatModelResult result = chatModelClient.SendStreaming(request, renderer);
             if (sessionName is not null && transcript is not null && conversationStore is not null)
@@ -823,6 +861,22 @@ public static class CliCommandFactory
 
         output.WriteLine("summary:");
         output.WriteLine(result.Summary);
+    }
+
+    private static void WriteSessionNotFound(TextWriter output)
+    {
+        output.WriteLine("status: failed");
+        output.WriteLine("errorCode: session-not-found");
+        output.WriteLine("summary:");
+        output.WriteLine("Session transcript was not found.");
+    }
+
+    private static void WriteSessionOptionConflict(TextWriter output)
+    {
+        output.WriteLine("status: failed");
+        output.WriteLine("errorCode: session-option-conflict");
+        output.WriteLine("summary:");
+        output.WriteLine("Use either --session or --resume, not both.");
     }
 
     private static void WriteSessionList(TextWriter output, IReadOnlyList<ConversationTranscriptSummary> summaries)
