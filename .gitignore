@@ -4,6 +4,7 @@ obj/
 TestResults/
 *.trx
 artifacts/
+.worktrees/
 
 # User-specific IDE files
 .vs/
