@@ -182,17 +182,25 @@ public sealed class OpenAiResponsesModelClient : IChatModelClient
         out string model,
         out SecretValue? apiKey)
     {
-        prompt = request.Prompt.Trim();
+        string currentPrompt = request.Prompt.Trim();
+        prompt = currentPrompt;
         model = snapshot.Configuration.Model;
         apiKey = snapshot.Configuration.ApiKey;
 
-        if (string.IsNullOrWhiteSpace(prompt))
+        if (string.IsNullOrWhiteSpace(currentPrompt))
         {
             return CreateError(
                 statusCode: null,
                 localErrorCode: "empty-prompt",
                 safeMessage: "Chat prompt is empty. Pass a prompt as caicli chat \"<prompt>\".",
                 retryable: false);
+        }
+
+        if (request.TranscriptContext is not null)
+        {
+            prompt = ConversationTranscriptContextFormatter.FormatWithCurrentPrompt(
+                request.TranscriptContext,
+                currentPrompt);
         }
 
         if (string.IsNullOrWhiteSpace(model)

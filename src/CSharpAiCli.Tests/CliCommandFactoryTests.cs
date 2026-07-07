@@ -1562,7 +1562,6 @@ public sealed class CliCommandFactoryTests
             DateTimeOffset.Parse("2024-01-01T00:00:00Z"));
         FakeConversationStore store = new()
         {
-            ExistsResult = true,
             Transcript = existing
         };
 
@@ -1584,10 +1583,11 @@ public sealed class CliCommandFactoryTests
             .Invoke();
 
         Assert.Equal(0, exitCode);
-        Assert.Equal("smoke", store.ExistsSessionName?.Value);
-        Assert.Equal("smoke", store.LoadedSessionName?.Value);
+        Assert.Equal("smoke", store.TryLoadedSessionName?.Value);
+        Assert.Null(store.LoadedSessionName);
         Assert.Equal("smoke", store.SavedSessionName?.Value);
         Assert.Equal("smoke", agentRunner.LastRequest?.SessionName);
+        Assert.Same(existing, agentRunner.LastRequest?.TranscriptContext);
         Assert.Same(existing, agentRunner.LastTranscript);
         Assert.Same(existing, store.SavedTranscript);
     }
@@ -1600,7 +1600,7 @@ public sealed class CliCommandFactoryTests
         FakeAgentRunner agentRunner = new(AgentRunResult.Success("agent completed task", [], []));
         FakeConversationStore store = new()
         {
-            ExistsResult = false
+            TryLoadResult = false
         };
 
         int exitCode = CliCommandFactory
@@ -1626,9 +1626,51 @@ public sealed class CliCommandFactoryTests
         Assert.Contains("errorCode: session-not-found", text);
         Assert.Contains("summary:", text);
         Assert.Contains("Session transcript was not found.", text);
-        Assert.Equal("missing", store.ExistsSessionName?.Value);
+        Assert.Equal("missing", store.TryLoadedSessionName?.Value);
+        Assert.Null(store.ExistsSessionName);
         Assert.Null(store.LoadedSessionName);
         Assert.Null(store.SavedSessionName);
+        Assert.Null(agentRunner.LastRequest);
+    }
+
+    [Fact]
+    public void Exec_json_resume_missing_renders_json_failure_without_running_agent()
+    {
+        using TempDirectory temp = TempDirectory.Create();
+        using StringWriter output = new();
+        FakeAgentRunner agentRunner = new(AgentRunResult.Success("agent completed task", [], []));
+        FakeConversationStore store = new()
+        {
+            TryLoadResult = false
+        };
+
+        int exitCode = CliCommandFactory
+            .Create(
+                output,
+                workspacePath => CreateSnapshot(
+                    workspacePath,
+                    apiKey: "sk-test-secret",
+                    apiKeySource: "OPENAI_API_KEY",
+                    model: "gpt-test"),
+                (_, _) => { },
+                _ => new FakeChatModelClient(ChatModelResult.Success(new ChatResponse("openai", "gpt-test", "resp", ""))),
+                writer => new TerminalChatStreamingRenderer(writer),
+                _ => store,
+                () => DateTimeOffset.Parse("2024-01-01T00:00:05Z"),
+                (_, _, _) => agentRunner)
+            .Parse(["exec", "--json", "--workspace", temp.Path, "--resume", "missing", "summarize workspace"])
+            .Invoke();
+
+        string[] lines = output.ToString().TrimEnd().Split(Environment.NewLine);
+        JsonObject result = Assert.IsType<JsonObject>(JsonNode.Parse(Assert.Single(lines)));
+        Assert.Equal(1, exitCode);
+        Assert.Equal("exec.result", result["type"]?.GetValue<string>());
+        Assert.Equal("session-not-found", result["errorCode"]?.GetValue<string>());
+        Assert.Equal("Session transcript was not found.", result["summary"]?.GetValue<string>());
+        JsonObject payload = Assert.IsType<JsonObject>(result["payload"]);
+        Assert.Equal("failure", payload["status"]?.GetValue<string>());
+        Assert.Equal(1, payload["exitCode"]?.GetValue<int>());
+        Assert.Equal("missing", store.TryLoadedSessionName?.Value);
         Assert.Null(agentRunner.LastRequest);
     }
 
@@ -1661,6 +1703,44 @@ public sealed class CliCommandFactoryTests
         Assert.Contains("session-option-conflict", output.ToString());
         Assert.Null(store.ExistsSessionName);
         Assert.Null(store.LoadedSessionName);
+        Assert.Null(agentRunner.LastRequest);
+    }
+
+    [Fact]
+    public void Exec_output_json_session_and_resume_conflict_renders_json_failure_without_running_agent()
+    {
+        using TempDirectory temp = TempDirectory.Create();
+        using StringWriter output = new();
+        FakeAgentRunner agentRunner = new(AgentRunResult.Success("agent completed task", [], []));
+        FakeConversationStore store = new();
+
+        int exitCode = CliCommandFactory
+            .Create(
+                output,
+                workspacePath => CreateSnapshot(
+                    workspacePath,
+                    apiKey: "sk-test-secret",
+                    apiKeySource: "OPENAI_API_KEY",
+                    model: "gpt-test"),
+                (_, _) => { },
+                _ => new FakeChatModelClient(ChatModelResult.Success(new ChatResponse("openai", "gpt-test", "resp", ""))),
+                writer => new TerminalChatStreamingRenderer(writer),
+                _ => store,
+                () => DateTimeOffset.Parse("2024-01-01T00:00:05Z"),
+                (_, _, _) => agentRunner)
+            .Parse(["exec", "--workspace", temp.Path, "--output", "json", "--session", "smoke", "--resume", "smoke", "summarize workspace"])
+            .Invoke();
+
+        string[] lines = output.ToString().TrimEnd().Split(Environment.NewLine);
+        JsonObject result = Assert.IsType<JsonObject>(JsonNode.Parse(Assert.Single(lines)));
+        Assert.Equal(1, exitCode);
+        Assert.Equal("exec.result", result["type"]?.GetValue<string>());
+        Assert.Equal("session-option-conflict", result["errorCode"]?.GetValue<string>());
+        Assert.Equal("Use either --session or --resume, not both.", result["summary"]?.GetValue<string>());
+        JsonObject payload = Assert.IsType<JsonObject>(result["payload"]);
+        Assert.Equal("failure", payload["status"]?.GetValue<string>());
+        Assert.Equal(1, payload["exitCode"]?.GetValue<int>());
+        Assert.Null(store.TryLoadedSessionName);
         Assert.Null(agentRunner.LastRequest);
     }
 
@@ -2823,7 +2903,6 @@ public sealed class CliCommandFactoryTests
             DateTimeOffset.Parse("2024-01-01T00:00:00Z"));
         FakeConversationStore store = new()
         {
-            ExistsResult = true,
             Transcript = existing
         };
 
@@ -2841,8 +2920,9 @@ public sealed class CliCommandFactoryTests
 
         Assert.Equal(0, exitCode);
         Assert.Equal("smoke", chatClient.LastRequest?.SessionName);
-        Assert.Equal("smoke", store.ExistsSessionName?.Value);
-        Assert.Equal("smoke", store.LoadedSessionName?.Value);
+        Assert.Same(existing, chatClient.LastRequest?.TranscriptContext);
+        Assert.Equal("smoke", store.TryLoadedSessionName?.Value);
+        Assert.Null(store.LoadedSessionName);
         Assert.Equal("smoke", store.SavedSessionName?.Value);
         Assert.Same(existing, store.SavedTranscript);
         ConversationTranscript savedTranscript = Assert.IsType<ConversationTranscript>(store.SavedTranscript);
@@ -2859,10 +2939,10 @@ public sealed class CliCommandFactoryTests
             Provider: "openai",
             Model: "gpt-test",
             ResponseId: "resp_test",
-            Text: "fake model output")));
+        Text: "fake model output")));
         FakeConversationStore store = new()
         {
-            ExistsResult = false
+            TryLoadResult = false
         };
 
         int exitCode = CliCommandFactory
@@ -2883,7 +2963,8 @@ public sealed class CliCommandFactoryTests
         Assert.Contains("errorCode: session-not-found", text);
         Assert.Contains("summary:", text);
         Assert.Contains("Session transcript was not found.", text);
-        Assert.Equal("missing", store.ExistsSessionName?.Value);
+        Assert.Equal("missing", store.TryLoadedSessionName?.Value);
+        Assert.Null(store.ExistsSessionName);
         Assert.Null(store.LoadedSessionName);
         Assert.Null(store.SavedSessionName);
         Assert.Null(chatClient.LastRequest);
@@ -3289,6 +3370,7 @@ public sealed class CliCommandFactoryTests
     private sealed class FakeConversationStore : IConversationStore
     {
         public ConversationSessionName? ExistsSessionName { get; private set; }
+        public ConversationSessionName? TryLoadedSessionName { get; private set; }
         public ConversationSessionName? LoadedSessionName { get; private set; }
         public ConversationSessionName? SavedSessionName { get; private set; }
         public ConversationTranscript? SavedTranscript { get; private set; }
@@ -3296,6 +3378,7 @@ public sealed class CliCommandFactoryTests
         public ConversationSessionName? RenamedDestinationSessionName { get; private set; }
         public ConversationSessionName? DeletedSessionName { get; private set; }
         public bool ExistsResult { get; init; } = true;
+        public bool TryLoadResult { get; init; } = true;
         public bool RenameResult { get; init; }
         public bool DeleteResult { get; init; }
         public ConversationTranscript Transcript { get; init; } = ConversationTranscript.Create(
@@ -3307,6 +3390,13 @@ public sealed class CliCommandFactoryTests
         {
             ExistsSessionName = sessionName;
             return ExistsResult;
+        }
+
+        public bool TryLoad(ConversationSessionName sessionName, out ConversationTranscript? transcript)
+        {
+            TryLoadedSessionName = sessionName;
+            transcript = TryLoadResult ? Transcript : null;
+            return TryLoadResult;
         }
 
         public ConversationTranscript LoadOrCreate(ConversationSessionName sessionName, DateTimeOffset nowUtc)

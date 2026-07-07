@@ -22,6 +22,41 @@ public sealed class FileConversationStoreTests
     }
 
     [Fact]
+    public void Try_load_returns_false_without_creating_file_when_session_is_missing()
+    {
+        using TempDirectory temp = TempDirectory.Create();
+        string sessionDirectory = Path.Combine(temp.Path, ".caicli", "sessions");
+        FileConversationStore store = new(sessionDirectory);
+        ConversationSessionName sessionName = ConversationSessionName.Parse("missing");
+
+        bool found = store.TryLoad(sessionName, out ConversationTranscript? transcript);
+
+        Assert.False(found);
+        Assert.Null(transcript);
+        Assert.False(File.Exists(Path.Combine(sessionDirectory, "missing.transcript.json")));
+    }
+
+    [Fact]
+    public void Try_load_returns_existing_transcript()
+    {
+        using TempDirectory temp = TempDirectory.Create();
+        FileConversationStore store = new(Path.Combine(temp.Path, ".caicli", "sessions"));
+        ConversationSessionName sessionName = ConversationSessionName.Parse("smoke");
+        ConversationTranscript transcript = ConversationTranscript.Create(
+            sessionName.Value,
+            DateTimeOffset.Parse("2024-01-01T00:00:00Z"));
+        transcript.AddUserMessage("first", DateTimeOffset.Parse("2024-01-01T00:00:01Z"));
+        store.Save(sessionName, transcript);
+
+        bool found = store.TryLoad(sessionName, out ConversationTranscript? restored);
+
+        Assert.True(found);
+        Assert.NotNull(restored);
+        Assert.Equal("smoke", restored.SessionName);
+        Assert.Equal("first", Assert.Single(restored.Messages).Content);
+    }
+
+    [Fact]
     public void Save_writes_versioned_json_to_session_file()
     {
         using TempDirectory temp = TempDirectory.Create();

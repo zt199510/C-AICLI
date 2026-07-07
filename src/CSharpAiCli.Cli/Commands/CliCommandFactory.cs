@@ -417,14 +417,46 @@ public static class CliCommandFactory
 
             if (!string.IsNullOrWhiteSpace(session) && !string.IsNullOrWhiteSpace(resume))
             {
-                WriteSessionOptionConflict(output);
-                return 1;
+                return WriteExecLocalValidationFailure(
+                    output,
+                    "session-option-conflict",
+                    "Use either --session or --resume, not both.",
+                    jsonRequested,
+                    outputMode);
             }
 
             IApprovalPolicy approvalPolicy = ApprovalPolicyResolver.Resolve(snapshot.Configuration.ApprovalMode, cliApprovalMode);
             ToolRegistry registry = CliToolFactory.CreateRegistry(snapshot, approvalPolicy);
             ToolExecutor executor = new(registry);
             string? effectiveSession = !string.IsNullOrWhiteSpace(resume) ? resume : session;
+            ConversationSessionName? sessionName = null;
+            ConversationTranscript? transcript = null;
+            ConversationTranscript? transcriptContext = null;
+            IConversationStore? conversationStore = null;
+            if (!string.IsNullOrWhiteSpace(effectiveSession))
+            {
+                sessionName = ConversationSessionName.Parse(effectiveSession);
+                conversationStore = conversationStoreFactory(snapshot);
+                if (!string.IsNullOrWhiteSpace(resume))
+                {
+                    if (!conversationStore.TryLoad(sessionName, out transcript) || transcript is null)
+                    {
+                        return WriteExecLocalValidationFailure(
+                            output,
+                            "session-not-found",
+                            "Session transcript was not found.",
+                            jsonRequested,
+                            outputMode);
+                    }
+
+                    transcriptContext = transcript;
+                }
+                else
+                {
+                    transcript = conversationStore.LoadOrCreate(sessionName, utcNowProvider());
+                }
+            }
+
             AgentRunRequest request = new(
                 task,
                 snapshot.Workspace,
@@ -434,22 +466,8 @@ public static class CliCommandFactory
                     MaxTurns: maxTurns,
                     MaxToolCalls: maxToolCalls,
                     ModelCallTimeout: timeoutSeconds is null ? null : TimeSpan.FromSeconds(timeoutSeconds.Value),
-                    OverallTimeout: timeoutSeconds is null ? null : TimeSpan.FromSeconds(timeoutSeconds.Value)));
-            ConversationSessionName? sessionName = null;
-            ConversationTranscript? transcript = null;
-            IConversationStore? conversationStore = null;
-            if (!string.IsNullOrWhiteSpace(effectiveSession))
-            {
-                sessionName = ConversationSessionName.Parse(effectiveSession);
-                conversationStore = conversationStoreFactory(snapshot);
-                if (!string.IsNullOrWhiteSpace(resume) && !conversationStore.Exists(sessionName))
-                {
-                    WriteSessionNotFound(output);
-                    return 1;
-                }
-
-                transcript = conversationStore.LoadOrCreate(sessionName, utcNowProvider());
-            }
+                    OverallTimeout: timeoutSeconds is null ? null : TimeSpan.FromSeconds(timeoutSeconds.Value)),
+                TranscriptContext: transcriptContext);
 
             IAgentRunner runner = execAgentRunnerFactory(snapshot, registry, executor);
             AgentRunResult agentResult = runner.Run(request, transcript);
@@ -619,25 +637,33 @@ public static class CliCommandFactory
             string? effectiveSession = !string.IsNullOrWhiteSpace(resume) ? resume : session;
             ConversationSessionName? sessionName = null;
             ConversationTranscript? transcript = null;
+            ConversationTranscript? transcriptContext = null;
             IConversationStore? conversationStore = null;
             DateTimeOffset nowUtc = default;
             if (!string.IsNullOrWhiteSpace(effectiveSession))
             {
                 sessionName = ConversationSessionName.Parse(effectiveSession);
                 conversationStore = conversationStoreFactory(snapshot);
-                if (!string.IsNullOrWhiteSpace(resume) && !conversationStore.Exists(sessionName))
-                {
-                    WriteSessionNotFound(output);
-                    return 1;
-                }
-
                 nowUtc = utcNowProvider();
-                transcript = conversationStore.LoadOrCreate(sessionName, nowUtc);
+                if (!string.IsNullOrWhiteSpace(resume))
+                {
+                    if (!conversationStore.TryLoad(sessionName, out transcript) || transcript is null)
+                    {
+                        WriteSessionNotFound(output);
+                        return 1;
+                    }
+
+                    transcriptContext = transcript;
+                }
+                else
+                {
+                    transcript = conversationStore.LoadOrCreate(sessionName, nowUtc);
+                }
             }
 
             IChatModelClient chatModelClient = chatModelClientFactory(snapshot);
             IChatStreamingRenderer renderer = streamingRendererFactory(output);
-            ChatRequest request = new(prompt, effectiveSession, snapshot.Instructions.Instructions);
+            ChatRequest request = new(prompt, effectiveSession, snapshot.Instructions.Instructions, transcriptContext);
 
             ChatModelResult result = chatModelClient.SendStreaming(request, renderer);
             if (sessionName is not null && transcript is not null && conversationStore is not null)
@@ -863,20 +889,45 @@ public static class CliCommandFactory
         output.WriteLine(result.Summary);
     }
 
+    private static int WriteExecLocalValidationFailure(
+        TextWriter output,
+        string errorCode,
+        string summary,
+        bool jsonRequested,
+        string outputMode)
+    {
+        if (IsJsonOutputRequested(jsonRequested, outputMode))
+        {
+            ExecResult result = ExecResult.Failure(
+                ExitCode: 1,
+                Summary: summary,
+                ErrorCode: errorCode,
+                Events: []);
+            ExecJsonRenderer renderer = new(output);
+            WriteExecOutput(renderer, result);
+            return result.ExitCode;
+        }
+
+        WriteSafeFailure(output, errorCode, summary);
+        return 1;
+    }
+
     private static void WriteSessionNotFound(TextWriter output)
     {
-        output.WriteLine("status: failed");
-        output.WriteLine("errorCode: session-not-found");
-        output.WriteLine("summary:");
-        output.WriteLine("Session transcript was not found.");
+        WriteSafeFailure(output, "session-not-found", "Session transcript was not found.");
     }
 
     private static void WriteSessionOptionConflict(TextWriter output)
     {
+        WriteSafeFailure(output, "session-option-conflict", "Use either --session or --resume, not both.");
+    }
+
+    private static void WriteSafeFailure(TextWriter output, string errorCode, string summary)
+    {
         output.WriteLine("status: failed");
-        output.WriteLine("errorCode: session-option-conflict");
+        output.WriteLine($"errorCode: {errorCode}");
         output.WriteLine("summary:");
-        output.WriteLine("Use either --session or --resume, not both.");
+        output.WriteLine(summary);
     }
 
     private static void WriteSessionList(TextWriter output, IReadOnlyList<ConversationTranscriptSummary> summaries)

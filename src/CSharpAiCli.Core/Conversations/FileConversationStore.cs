@@ -92,6 +92,21 @@ public sealed class FileConversationStore : IConversationStore
         return LoadTranscript(path);
     }
 
+    public bool TryLoad(ConversationSessionName sessionName, out ConversationTranscript? transcript)
+    {
+        ArgumentNullException.ThrowIfNull(sessionName);
+
+        string path = GetPath(sessionName);
+        if (!File.Exists(path))
+        {
+            transcript = null;
+            return false;
+        }
+
+        transcript = LoadTranscript(path);
+        return true;
+    }
+
     public bool Rename(ConversationSessionName sourceSessionName, ConversationSessionName destinationSessionName)
     {
         ArgumentNullException.ThrowIfNull(sourceSessionName);

@@ -14,6 +14,11 @@ public interface IConversationStore
         throw new NotSupportedException("This conversation store does not support retrieving session summaries.");
     }
 
+    bool TryLoad(ConversationSessionName sessionName, out ConversationTranscript? transcript)
+    {
+        throw new NotSupportedException("This conversation store does not support loading existing sessions.");
+    }
+
     ConversationTranscript LoadOrCreate(ConversationSessionName sessionName, DateTimeOffset nowUtc);
 
     bool Rename(ConversationSessionName sourceSessionName, ConversationSessionName destinationSessionName) =>
