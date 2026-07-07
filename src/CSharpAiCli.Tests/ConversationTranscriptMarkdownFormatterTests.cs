@@ -175,7 +175,11 @@ public sealed class ConversationTranscriptMarkdownFormatterTests
             "smoke",
             DateTimeOffset.Parse("2024-01-01T00:00:00Z"));
         transcript.AddUserMessage(
-            "message access_token=access-secret \"client_secret\":\"json-client-secret\"",
+            """
+            message access_token=access-secret "client_secret":"json-client-secret"
+            GOOGLE_API_KEY=google-secret ANTHROPIC_API_KEY=anthropic-secret GITHUB_TOKEN=github-secret AZURE_CLIENT_SECRET=azure-secret
+            "GOOGLE_API_KEY":"json-google-secret" \"AZURE_CLIENT_SECRET\":\"escaped-azure-secret\"
+            """,
             DateTimeOffset.Parse("2024-01-01T00:00:01Z"));
         transcript.Errors.Add(new ConversationError(
             CreatedAtUtc: DateTimeOffset.Parse("2024-01-01T00:00:02Z"),
@@ -217,11 +221,23 @@ public sealed class ConversationTranscriptMarkdownFormatterTests
         Assert.Contains("refresh_token=[redacted]", markdown, StringComparison.Ordinal);
         Assert.Contains("client_secret=[redacted]", markdown, StringComparison.Ordinal);
         Assert.Contains("AWS_SECRET_ACCESS_KEY=[redacted]", markdown, StringComparison.Ordinal);
+        Assert.Contains("GOOGLE_API_KEY=[redacted]", markdown, StringComparison.Ordinal);
+        Assert.Contains("ANTHROPIC_API_KEY=[redacted]", markdown, StringComparison.Ordinal);
+        Assert.Contains("GITHUB_TOKEN=[redacted]", markdown, StringComparison.Ordinal);
+        Assert.Contains("AZURE_CLIENT_SECRET=[redacted]", markdown, StringComparison.Ordinal);
+        Assert.Contains("\"GOOGLE_API_KEY\":\"[redacted]\"", markdown, StringComparison.Ordinal);
+        Assert.Contains("\\\"AZURE_CLIENT_SECRET\\\":\\\"[redacted]\\\"", markdown, StringComparison.Ordinal);
         Assert.DoesNotContain("access-secret", markdown, StringComparison.Ordinal);
         Assert.DoesNotContain("json-client-secret", markdown, StringComparison.Ordinal);
         Assert.DoesNotContain("refresh-secret", markdown, StringComparison.Ordinal);
         Assert.DoesNotContain("client-secret", markdown, StringComparison.Ordinal);
         Assert.DoesNotContain("aws-secret", markdown, StringComparison.Ordinal);
+        Assert.DoesNotContain("google-secret", markdown, StringComparison.Ordinal);
+        Assert.DoesNotContain("anthropic-secret", markdown, StringComparison.Ordinal);
+        Assert.DoesNotContain("github-secret", markdown, StringComparison.Ordinal);
+        Assert.DoesNotContain("azure-secret", markdown, StringComparison.Ordinal);
+        Assert.DoesNotContain("json-google-secret", markdown, StringComparison.Ordinal);
+        Assert.DoesNotContain("escaped-azure-secret", markdown, StringComparison.Ordinal);
     }
 
     [Fact]

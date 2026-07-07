@@ -7,7 +7,8 @@ namespace CSharpAiCli.Core;
 public static class ConversationTranscriptMarkdownFormatter
 {
     private const string SecretKeyNamePattern =
-        "OPENAI_API_KEY|apiKey|api_key|api-key|api[_-]?key|access[_-]?token|accessToken|refresh[_-]?token|refreshToken|client[_-]?secret|clientSecret|AWS_SECRET_ACCESS_KEY|aws[_-]?secret[_-]?access[_-]?key|awsSecretAccessKey|token|password|secret";
+        @"(?:[A-Za-z0-9]+[_-]+)*(?:api[_-]?key|access[_-]?token|refresh[_-]?token|token|client[_-]?secret|secret[_-]?access[_-]?key|password|secret)" +
+        "|apiKey|accessToken|refreshToken|clientSecret|awsSecretAccessKey";
 
     private static readonly Regex WhitespacePattern = new(@"\s+", RegexOptions.CultureInvariant);
     private static readonly Regex EscapedJsonSecretPattern = new(
