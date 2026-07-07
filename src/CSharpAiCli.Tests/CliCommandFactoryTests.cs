@@ -831,6 +831,47 @@ public sealed class CliCommandFactoryTests
     }
 
     [Fact]
+    public void Tools_call_returns_unknown_tool_when_mcp_tool_is_disabled()
+    {
+        using StringWriter output = new();
+        CliEnvironmentSnapshot snapshot = CreateSnapshot(
+            workspacePath: null,
+            apiKey: null,
+            apiKeySource: "missing",
+            model: "not configured",
+            configSources:
+            [
+                new CliConfigFileSource(
+                    "workspace config",
+                    "workspace-config.json",
+                    new CliConfigFile
+                    {
+                        McpServers = new Dictionary<string, McpServerConfig>
+                        {
+                            ["active"] = new()
+                            {
+                                Enabled = true,
+                                Transport = "stdio",
+                                Command = "mcp-active"
+                            }
+                        }
+                    })
+            ],
+            disabledTools: new HashSet<string>(StringComparer.Ordinal)
+            {
+                "mcp.active.call"
+            });
+
+        int exitCode = CliCommandFactory
+            .Create(output, _ => snapshot)
+            .Parse(["tools", "call", "mcp.active.call", """{"tool":"echo"}"""])
+            .Invoke();
+
+        Assert.Equal(1, exitCode);
+        Assert.Contains("errorCode: unknown-tool", output.ToString());
+    }
+
+    [Fact]
     public void Tools_call_refuses_patch_without_approval()
     {
         using TempDirectory temp = TempDirectory.Create();

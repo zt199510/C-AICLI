@@ -91,6 +91,31 @@ public sealed class ExecRunnerTests
         Assert.Equal("unsupported-run-task", result.Events[1].ErrorCode);
     }
 
+    [Fact]
+    public void Run_create_smoke_note_seed_requests_write_risk_with_reason_metadata()
+    {
+        using TempDirectory temp = TempDirectory.Create();
+        WorkspaceContext workspace = new(
+            RootPath: temp.Path,
+            ConfigPath: Path.Combine(temp.Path, ".caicli", "config.json"),
+            Status: WorkspaceStatus.Ready);
+        ExecRequest request = new(
+            Task: "create smoke note",
+            WorkspaceRoot: temp.Path);
+        RecordingApprovalPolicy approvalPolicy = new(ApprovalDecision.Deny("Denied by recording policy."));
+        ExecRunner runner = new(approvalPolicy);
+
+        ExecResult result = runner.Run(request, workspace, new MissingSmokeNotePatchExecutor());
+
+        Assert.False(result.IsSuccess);
+        ApprovalRequest approvalRequest = approvalPolicy.SingleRequest;
+        Assert.Equal("workspace.apply_patch", approvalRequest.Operation);
+        Assert.Equal(ToolRiskLevel.Write, approvalRequest.RiskLevel);
+        Assert.NotNull(approvalRequest.Metadata);
+        Assert.Equal("caicli-smoke.txt", approvalRequest.Metadata["path"]);
+        Assert.Equal("Smoke note seed creation writes a workspace file and requires approval.", approvalRequest.Metadata["reason"]);
+    }
+
     private sealed class RecordingToolExecutor : IToolExecutor
     {
         public List<(string ToolName, ToolExecutionContext Context)> Calls { get; } = new();
@@ -108,6 +133,31 @@ public sealed class ExecRunnerTests
             }
 
             return ToolExecutionResult.Failure("unexpected-tool", "Unexpected tool invocation.");
+        }
+    }
+
+    private sealed class MissingSmokeNotePatchExecutor : IToolExecutor
+    {
+        public ToolExecutionResult Execute(
+            string toolName,
+            ToolExecutionContext context,
+            CancellationToken cancellationToken = default)
+        {
+            Assert.Equal("workspace.apply_patch", toolName);
+            return ToolExecutionResult.Failure("file-not-found", "File was not found.");
+        }
+    }
+
+    private sealed class RecordingApprovalPolicy(ApprovalDecision decision) : IApprovalPolicy
+    {
+        private readonly List<ApprovalRequest> requests = [];
+
+        public ApprovalRequest SingleRequest => Assert.Single(requests);
+
+        public ApprovalDecision RequestApproval(ApprovalRequest request)
+        {
+            requests.Add(request);
+            return decision;
         }
     }
 

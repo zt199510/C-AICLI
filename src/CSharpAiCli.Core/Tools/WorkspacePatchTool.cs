@@ -57,11 +57,11 @@ public sealed class WorkspacePatchTool : ITool
         cancellationToken.ThrowIfCancellationRequested();
         PatchApplyResult applyResult = patchApplier.Apply(context.Workspace, preview);
         return applyResult.Succeeded
-            ? ToolExecutionResult.Success(applyResult.Summary, applyResult.ApprovalStatus)
+            ? ToolExecutionResult.Success(applyResult.Summary, approval.Status)
             : ToolExecutionResult.Failure(
                 applyResult.ErrorCode ?? "patch-apply-failed",
                 applyResult.Summary,
-                approvalStatus: applyResult.ApprovalStatus);
+                approvalStatus: approval.Status);
     }
 
     private static bool TryReadOperation(

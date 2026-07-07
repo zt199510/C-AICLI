@@ -236,8 +236,10 @@ public sealed class ExecRunner : IExecRunner
             IsDirtyWorkspace: false,
             Metadata: new Dictionary<string, string>
             {
-                ["path"] = SmokeNotePath
-            }));
+                ["path"] = SmokeNotePath,
+                ["reason"] = "Smoke note seed creation writes a workspace file and requires approval."
+            },
+            RiskLevel: ToolRiskLevel.Write));
 
         if (!approval.Approved)
         {

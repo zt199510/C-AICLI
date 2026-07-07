@@ -24,9 +24,11 @@ internal static class CliToolFactory
         RegisterIfEnabled(registry, snapshot, new GitStatusTool(workspaceGuard));
         RegisterIfEnabled(registry, snapshot, new GitDiffTool(workspaceGuard));
 
-        new McpToolBridge(new UnavailableMcpToolInvoker(), approvalPolicy).RegisterTools(
-            registry,
-            McpConfigurationLoader.Load(snapshot.Configuration));
+        McpToolBridge mcpToolBridge = new(new UnavailableMcpToolInvoker(), approvalPolicy);
+        foreach (ITool tool in mcpToolBridge.CreateTools(McpConfigurationLoader.Load(snapshot.Configuration)))
+        {
+            RegisterIfEnabled(registry, snapshot, tool);
+        }
 
         return registry;
     }

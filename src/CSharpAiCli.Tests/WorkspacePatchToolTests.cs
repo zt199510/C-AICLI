@@ -100,6 +100,23 @@ public sealed class WorkspacePatchToolTests
     }
 
     [Fact]
+    public void Execute_apply_failure_after_approval_reports_approval_status()
+    {
+        using TempDirectory temp = TempDirectory.Create();
+        WorkspacePatchTool tool = new(
+            new FailingApplyPatchApplier(),
+            new AlwaysApproveApprovalPolicy());
+
+        ToolExecutionResult result = tool.Execute(CreateContext(
+            temp.Path,
+            """{"path":"notes.txt","find":"before","replace":"after"}"""));
+
+        Assert.False(result.Succeeded);
+        Assert.Equal("patch-apply-failed", result.ErrorCode);
+        Assert.Equal("approved", result.ApprovalStatus);
+    }
+
+    [Fact]
     public void Patch_tool_records_approval_status_in_offline_agent_transcript()
     {
         using TempDirectory temp = TempDirectory.Create();
@@ -159,6 +176,28 @@ public sealed class WorkspacePatchToolTests
         {
             requests.Add(request);
             return decision;
+        }
+    }
+
+    private sealed class FailingApplyPatchApplier : IPatchApplier
+    {
+        public PatchPreview Preview(WorkspaceContext workspace, PatchOperation operation)
+        {
+            return new PatchPreview(
+                operation,
+                Path.Combine(workspace.RootPath, operation.Path),
+                "hash",
+                1,
+                "Replace 1 occurrence(s) in notes.txt.",
+                "--- a/notes.txt",
+                new DirtyWorkspaceStatus(false, "clean"));
+        }
+
+        public PatchApplyResult Apply(WorkspaceContext workspace, PatchPreview preview)
+        {
+            return PatchApplyResult.Failure(
+                "patch-apply-failed",
+                "Patch could not be applied.");
         }
     }
 

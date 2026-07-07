@@ -9,6 +9,8 @@
 - `tools call` 支持 `--approval <mode>`，并保留 legacy `--approve` 兼容行为。
 - `exec` 支持 `--approval <mode>`，并将审批结果纳入 agent/tool event 输出。
 - shell 与 patch 工具的 approval request 已包含 risk level、command/path 和 reason 等 metadata。
+- MCP 外部工具调用已纳入审批边界，会在调用 `IMcpToolInvoker` 前按 shell 风险请求审批。
+- `disabledTools` 已覆盖 MCP 工具 ID，MCP 与 patch 的审批后结果会一致暴露本地 approvalStatus。
 - dangerous shell 会给出明确风险状态；被拒绝时以 `dangerous-shell-denied` 作为 approvalStatus 暴露。
 - 更新安全模型、配置说明、quickstart 等文档，并增加 approval mode、dangerous command、`--approve` 兼容等测试覆盖。
 
@@ -16,7 +18,7 @@
 - 命令：`dotnet build 'C:\Users\10335\.config\superpowers\worktrees\C-AICLI\week-30-approval-permission-profiles\src\CSharpAiCli.sln'`
 - 结果：通过，0 warnings，0 errors。
 - 命令：`dotnet test 'C:\Users\10335\.config\superpowers\worktrees\C-AICLI\week-30-approval-permission-profiles\src\CSharpAiCli.sln'`
-- 结果：通过，455 passed，0 failed，0 skipped。
+- 结果：通过，461 passed，0 failed，0 skipped。
 - 说明：上述命令由 controller 从 `C:\Users\10335` 工作目录运行；因为 worktree 的 `global.json` pin 到 SDK `9.0.308`，而本机可用 .NET SDK 为 `10.0.301`，所以使用 worktree 外部工作目录加绝对 solution 路径完成 net9.0 项目的 build/test。
 
 运行时说明：

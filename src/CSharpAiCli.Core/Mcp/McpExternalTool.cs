@@ -66,8 +66,6 @@ public sealed class McpExternalTool : ITool
         }
 
         ToolExecutionResult result = invoker.Invoke(new McpToolRequest(server.Name, context.ArgumentsJson), cancellationToken);
-        return result.ApprovalStatus == "not-required"
-            ? result with { ApprovalStatus = approval.Status }
-            : result;
+        return result with { ApprovalStatus = approval.Status };
     }
 }

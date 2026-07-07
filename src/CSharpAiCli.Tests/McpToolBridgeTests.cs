@@ -100,7 +100,7 @@ public sealed class McpToolBridgeTests
     }
 
     [Fact]
-    public void Enabled_mcp_tool_preserves_invoker_approval_status_when_invoker_sets_one()
+    public void Enabled_mcp_tool_reports_local_approval_status_when_invoker_sets_one()
     {
         McpConfiguration configuration = new(
             [
@@ -116,7 +116,7 @@ public sealed class McpToolBridgeTests
             CreateContext("""{"tool":"echo"}"""));
 
         Assert.True(result.Succeeded);
-        Assert.Equal("mcp-invoker-approved", result.ApprovalStatus);
+        Assert.Equal("approved", result.ApprovalStatus);
         Assert.Equal(1, invoker.InvocationCount);
     }
 
