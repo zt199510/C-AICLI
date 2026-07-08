@@ -238,9 +238,31 @@ public static class CliCommandFactory
         });
 
         Command reviewCommand = new("review", "Review the current git diff with the configured model.");
+        Option<bool> reviewJsonOption = new("--json")
+        {
+            Description = "Write a single JSON review result object.",
+        };
+        Option<string> reviewOutputOption = new("--output")
+        {
+            Description = "Select text or json output.",
+        };
+        reviewOutputOption.DefaultValueFactory = _ => "text";
+        reviewOutputOption.Validators.Add(result =>
+        {
+            string outputMode = result.GetValueOrDefault<string>() ?? "text";
+            if (!string.Equals(outputMode, "text", StringComparison.OrdinalIgnoreCase) &&
+                !string.Equals(outputMode, "json", StringComparison.OrdinalIgnoreCase))
+            {
+                result.AddError("Invalid value for --output. Allowed values are text and json.");
+            }
+        });
+        reviewCommand.Options.Add(reviewJsonOption);
+        reviewCommand.Options.Add(reviewOutputOption);
         reviewCommand.SetAction(parseResult =>
         {
             string? workspacePath = parseResult.GetValue(workspaceOption);
+            bool jsonRequested = parseResult.GetValue(reviewJsonOption);
+            string outputMode = parseResult.GetValue(reviewOutputOption) ?? "text";
             CliEnvironmentSnapshot snapshot = workspaceSnapshotProvider(workspacePath);
 
             GitDiffTool gitDiffTool = new(new WorkspaceGuard());
@@ -250,7 +272,7 @@ public static class CliCommandFactory
                 "{}"));
             if (!gitDiff.Succeeded)
             {
-                WriteToolResult(output, gitDiff);
+                WriteReviewReport(output, ReviewReport.ToolFailure(gitDiff), jsonRequested, outputMode);
                 return 1;
             }
 
@@ -259,11 +281,11 @@ public static class CliCommandFactory
             ChatModelResult result = chatModelClientFactory(snapshot).Send(request);
             if (result.Response is not null)
             {
-                output.WriteLine(result.Response.Text);
+                WriteReviewReport(output, ReviewReport.Completed(result.Response), jsonRequested, outputMode);
                 return 0;
             }
 
-            WriteReviewModelFailure(output, result);
+            WriteReviewReport(output, ReviewReport.ModelFailure(result), jsonRequested, outputMode);
             return 1;
         });
 
@@ -1151,17 +1173,18 @@ public static class CliCommandFactory
         output.WriteLine(result.Summary);
     }
 
-    private static void WriteReviewModelFailure(TextWriter output, ChatModelResult result)
+    private static void WriteReviewReport(
+        TextWriter output,
+        ReviewReport report,
+        bool jsonRequested,
+        string outputMode)
     {
-        ModelError error = result.Error ?? new ModelError(
-            Provider: "unknown",
-            Operation: "unknown",
-            StatusCode: null,
-            LocalErrorCode: "model-call-failed",
-            SafeMessage: "Model call failed without a detailed error.",
-            Retryable: false);
+        ArgumentNullException.ThrowIfNull(output);
+        ArgumentNullException.ThrowIfNull(report);
 
-        WriteSafeFailure(output, error.LocalErrorCode ?? "model-call-failed", error.SafeMessage);
+        output.WriteLine(IsJsonOutputRequested(jsonRequested, outputMode)
+            ? report.ToJson()
+            : report.ToDisplayText());
     }
 
     private static void WriteConfigEditResult(TextWriter output, ConfigFileEditResult result)

@@ -146,6 +146,160 @@ public sealed class CliCommandFactoryTests
     }
 
     [Fact]
+    public void Review_command_text_success_writes_findings_first_with_metadata()
+    {
+        using TempDirectory temp = TempDirectory.Create();
+        string filePath = InitializeGitRepository(temp.Path);
+        File.AppendAllText(filePath, "changed\n");
+        using StringWriter output = new();
+        string findingsText = """
+        Findings:
+        - src/Example.cs:10: Important issue.
+        """;
+        FakeChatModelClient chatClient = new(ChatModelResult.Success(new ChatResponse(
+            Provider: "openai",
+            Model: "gpt-test",
+            ResponseId: "resp_test",
+            Text: findingsText)));
+
+        int exitCode = CliCommandFactory.Invoke(
+            CliCommandFactory.Create(
+                output,
+                workspacePath => CreateSnapshot(workspacePath, apiKey: "sk-test", apiKeySource: "OPENAI_API_KEY", model: "gpt-test"),
+                (_, _) => throw new InvalidOperationException("review must not write command logs"),
+                _ => chatClient),
+            ["review", "--workspace", temp.Path],
+            output);
+
+        string text = output.ToString();
+        Assert.Equal(0, exitCode);
+        Assert.StartsWith(findingsText, text, StringComparison.Ordinal);
+        Assert.True(
+            text.IndexOf("status: completed", StringComparison.Ordinal) > text.IndexOf("Important issue.", StringComparison.Ordinal),
+            text);
+        Assert.Contains("provider: openai", text, StringComparison.Ordinal);
+        Assert.Contains("model: gpt-test", text, StringComparison.Ordinal);
+        Assert.Contains("responseId: resp_test", text, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Review_command_json_success_writes_single_result_object()
+    {
+        using TempDirectory temp = TempDirectory.Create();
+        string filePath = InitializeGitRepository(temp.Path);
+        File.AppendAllText(filePath, "changed\n");
+        using StringWriter output = new();
+        FakeChatModelClient chatClient = new(ChatModelResult.Success(new ChatResponse(
+            Provider: "openai",
+            Model: "gpt-test",
+            ResponseId: "resp_test",
+            Text: "review report")));
+
+        int exitCode = CliCommandFactory.Invoke(
+            CliCommandFactory.Create(
+                output,
+                workspacePath => CreateSnapshot(workspacePath, apiKey: "sk-test", apiKeySource: "OPENAI_API_KEY", model: "gpt-test"),
+                (_, _) => throw new InvalidOperationException("review must not write command logs"),
+                _ => chatClient),
+            ["review", "--json", "--workspace", temp.Path],
+            output);
+
+        JsonObject json = AssertSingleReviewJsonResult(output);
+        Assert.Equal(0, exitCode);
+        Assert.Equal("completed", json["status"]?.GetValue<string>());
+        Assert.Equal("openai", json["provider"]?.GetValue<string>());
+        Assert.Equal("gpt-test", json["model"]?.GetValue<string>());
+        Assert.Equal("resp_test", json["responseId"]?.GetValue<string>());
+        Assert.Equal("review report", json["findingsText"]?.GetValue<string>());
+    }
+
+    [Fact]
+    public void Review_command_json_success_includes_empty_findings_text()
+    {
+        using TempDirectory temp = TempDirectory.Create();
+        string filePath = InitializeGitRepository(temp.Path);
+        File.AppendAllText(filePath, "changed\n");
+        using StringWriter output = new();
+        FakeChatModelClient chatClient = new(ChatModelResult.Success(new ChatResponse(
+            Provider: "openai",
+            Model: "gpt-test",
+            ResponseId: "resp_test",
+            Text: "")));
+
+        int exitCode = CliCommandFactory.Invoke(
+            CliCommandFactory.Create(
+                output,
+                workspacePath => CreateSnapshot(workspacePath, apiKey: "sk-test", apiKeySource: "OPENAI_API_KEY", model: "gpt-test"),
+                (_, _) => throw new InvalidOperationException("review must not write command logs"),
+                _ => chatClient),
+            ["review", "--json", "--workspace", temp.Path],
+            output);
+
+        JsonObject json = AssertSingleReviewJsonResult(output);
+        Assert.Equal(0, exitCode);
+        Assert.True(json.ContainsKey("findingsText"));
+        Assert.Equal(string.Empty, json["findingsText"]?.GetValue<string>());
+    }
+
+    [Fact]
+    public void Review_command_output_json_success_writes_single_result_object()
+    {
+        using TempDirectory temp = TempDirectory.Create();
+        string filePath = InitializeGitRepository(temp.Path);
+        File.AppendAllText(filePath, "changed\n");
+        using StringWriter output = new();
+        FakeChatModelClient chatClient = new(ChatModelResult.Success(new ChatResponse(
+            Provider: "openai",
+            Model: "gpt-test",
+            ResponseId: "resp_test",
+            Text: "review report")));
+
+        int exitCode = CliCommandFactory.Invoke(
+            CliCommandFactory.Create(
+                output,
+                workspacePath => CreateSnapshot(workspacePath, apiKey: "sk-test", apiKeySource: "OPENAI_API_KEY", model: "gpt-test"),
+                (_, _) => throw new InvalidOperationException("review must not write command logs"),
+                _ => chatClient),
+            ["review", "--output", "json", "--workspace", temp.Path],
+            output);
+
+        JsonObject json = AssertSingleReviewJsonResult(output);
+        Assert.Equal(0, exitCode);
+        Assert.Equal("completed", json["status"]?.GetValue<string>());
+        Assert.Equal("review report", json["findingsText"]?.GetValue<string>());
+    }
+
+    [Fact]
+    public void Review_output_rejects_unknown_value_before_calling_model_or_logger()
+    {
+        using TempDirectory temp = TempDirectory.Create();
+        string filePath = InitializeGitRepository(temp.Path);
+        File.AppendAllText(filePath, "changed\n");
+        using StringWriter output = new();
+        bool loggerInvoked = false;
+        FakeChatModelClient chatClient = new(ChatModelResult.Success(new ChatResponse(
+            Provider: "openai",
+            Model: "gpt-test",
+            ResponseId: "resp_test",
+            Text: "review report")));
+
+        int exitCode = CliCommandFactory.Invoke(
+            CliCommandFactory.Create(
+                output,
+                workspacePath => CreateSnapshot(workspacePath, apiKey: "sk-test", apiKeySource: "OPENAI_API_KEY", model: "gpt-test"),
+                (_, _) => loggerInvoked = true,
+                _ => chatClient),
+            ["review", "--output", "banana", "--workspace", temp.Path],
+            output);
+
+        Assert.Equal(2, exitCode);
+        Assert.False(loggerInvoked);
+        Assert.Null(chatClient.LastNonStreamingPrompt);
+        Assert.Null(chatClient.LastStreamingPrompt);
+        Assert.Contains("Invalid value for --output. Allowed values are text and json.", output.ToString(), StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void Review_command_returns_model_failure_without_streaming()
     {
         using TempDirectory temp = TempDirectory.Create();
@@ -179,6 +333,45 @@ public sealed class CliCommandFactoryTests
     }
 
     [Fact]
+    public void Review_command_json_model_failure_writes_safe_failure_without_streaming_or_logging()
+    {
+        using TempDirectory temp = TempDirectory.Create();
+        string filePath = InitializeGitRepository(temp.Path);
+        File.AppendAllText(filePath, "changed\n");
+        using StringWriter output = new();
+        bool loggerInvoked = false;
+        FakeChatModelClient chatClient = new(ChatModelResult.Failure(new ModelError(
+            Provider: "openai",
+            Operation: "responses.create",
+            StatusCode: 429,
+            LocalErrorCode: "rate-limited",
+            SafeMessage: "OpenAI request was rate limited.",
+            Retryable: true)));
+
+        int exitCode = CliCommandFactory.Invoke(
+            CliCommandFactory.Create(
+                output,
+                workspacePath => CreateSnapshot(workspacePath, apiKey: "sk-test", apiKeySource: "OPENAI_API_KEY", model: "gpt-test"),
+                (_, _) => loggerInvoked = true,
+                _ => chatClient),
+            ["review", "--json", "--workspace", temp.Path],
+            output);
+
+        JsonObject json = AssertSingleReviewJsonResult(output);
+        Assert.Equal(1, exitCode);
+        Assert.False(loggerInvoked);
+        Assert.NotNull(chatClient.LastNonStreamingPrompt);
+        Assert.Null(chatClient.LastStreamingPrompt);
+        Assert.Equal("failed", json["status"]?.GetValue<string>());
+        Assert.Equal("rate-limited", json["errorCode"]?.GetValue<string>());
+        Assert.Equal("OpenAI request was rate limited.", json["safeMessage"]?.GetValue<string>());
+        Assert.Equal("openai", json["provider"]?.GetValue<string>());
+        Assert.Equal("responses.create", json["operation"]?.GetValue<string>());
+        Assert.Equal(429, json["statusCode"]?.GetValue<int>());
+        Assert.True(json["retryable"]?.GetValue<bool>());
+    }
+
+    [Fact]
     public void Review_command_returns_git_diff_failure_without_calling_model()
     {
         using TempDirectory temp = TempDirectory.Create();
@@ -204,6 +397,35 @@ public sealed class CliCommandFactoryTests
         Assert.Null(chatClient.LastStreamingPrompt);
         Assert.Contains("status: failed", text, StringComparison.Ordinal);
         Assert.Contains("errorCode: git-not-repository", text, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Review_command_json_git_diff_failure_writes_single_result_object_without_calling_model()
+    {
+        using TempDirectory temp = TempDirectory.Create();
+        using StringWriter output = new();
+        FakeChatModelClient chatClient = new(ChatModelResult.Success(new ChatResponse(
+            Provider: "openai",
+            Model: "gpt-test",
+            ResponseId: "resp_test",
+            Text: "review report")));
+
+        int exitCode = CliCommandFactory.Invoke(
+            CliCommandFactory.Create(
+                output,
+                workspacePath => CreateSnapshot(workspacePath, apiKey: "sk-test", apiKeySource: "OPENAI_API_KEY", model: "gpt-test"),
+                (_, _) => throw new InvalidOperationException("review must not write command logs"),
+                _ => chatClient),
+            ["review", "--output", "json", "--workspace", temp.Path],
+            output);
+
+        JsonObject json = AssertSingleReviewJsonResult(output);
+        Assert.Equal(1, exitCode);
+        Assert.Null(chatClient.LastNonStreamingPrompt);
+        Assert.Null(chatClient.LastStreamingPrompt);
+        Assert.Equal("failed", json["status"]?.GetValue<string>());
+        Assert.Equal("git-not-repository", json["errorCode"]?.GetValue<string>());
+        Assert.False(string.IsNullOrWhiteSpace(json["safeMessage"]?.GetValue<string>()));
     }
 
     [Fact]
@@ -4876,6 +5098,14 @@ public sealed class CliCommandFactoryTests
         string[] lines = output.ToString().TrimEnd().Split(Environment.NewLine);
         JsonObject result = Assert.IsType<JsonObject>(JsonNode.Parse(Assert.Single(lines)));
         Assert.Equal("exec.result", result["type"]?.GetValue<string>());
+        return result;
+    }
+
+    private static JsonObject AssertSingleReviewJsonResult(StringWriter output)
+    {
+        string[] lines = output.ToString().TrimEnd().Split(Environment.NewLine);
+        JsonObject result = Assert.IsType<JsonObject>(JsonNode.Parse(Assert.Single(lines)));
+        Assert.Equal("review.result", result["type"]?.GetValue<string>());
         return result;
     }
 
