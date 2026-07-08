@@ -14,7 +14,7 @@ public sealed class WorkspaceInstructionLoader : IInstructionLoader
     ];
 
     private static readonly StringComparison PathStringComparison =
-        OperatingSystem.IsWindows() || OperatingSystem.IsMacOS()
+        OperatingSystem.IsWindows()
             ? StringComparison.OrdinalIgnoreCase
             : StringComparison.Ordinal;
 
