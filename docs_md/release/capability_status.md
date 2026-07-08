@@ -12,7 +12,7 @@
 | `chat --session` | Accepted | Saves transcript v1 in the user profile. |
 | `chat --resume` | Accepted | Requires an existing transcript and sends normalized prior transcript context with the current prompt. |
 | `session list/show/rename/delete/export/clear` | Accepted | Lists local transcript summaries, shows one summary, renames or deletes one transcript by validated session name, exports JSON or markdown, and keeps `clear` as a compatibility alias for delete. |
-| `caicli exec` | Solidified | Agentic v1 surface routed through `IAgentRunner`; emits model/tool/final/error events and supports `--cwd`, `--output text|json`, loop limits, approval-gated tool actions, session transcript, and `--resume` context. Real direct SDK tool-call continuation is deferred. |
+| `caicli exec` | Solidified | Agentic v1 surface routed through `IAgentRunner`; emits model/tool/final/error events and supports `--cwd` instruction target selection, `--output text|json`, loop limits, approval-gated tool actions, session transcript, and `--resume` context. Real direct SDK tool-call continuation is deferred. |
 | `caicli run` | Solidified | Deterministic direct-tool release smoke tasks: create smoke note, read file, run approved shell command. |
 | `tools list/call` | Solidified | Lists enabled tools and invokes one tool with JSON or `--arguments-file`. |
 | Workspace read/search tools | Accepted | Enforced by workspace guard. |
