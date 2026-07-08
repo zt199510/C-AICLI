@@ -237,6 +237,37 @@ public static class CliCommandFactory
             return result.Succeeded ? 0 : 1;
         });
 
+        Command reviewCommand = new("review", "Review the current git diff with the configured model.");
+        reviewCommand.SetAction(parseResult =>
+        {
+            string? workspacePath = parseResult.GetValue(workspaceOption);
+            CliEnvironmentSnapshot snapshot = workspaceSnapshotProvider(workspacePath);
+            TryWriteCommandLog(commandLogger, "review", snapshot);
+
+            GitDiffTool gitDiffTool = new(new WorkspaceGuard());
+            ToolExecutionResult gitDiff = gitDiffTool.Execute(new ToolExecutionContext(
+                "cli_review",
+                snapshot.Workspace,
+                "{}"));
+            if (!gitDiff.Succeeded)
+            {
+                WriteToolResult(output, gitDiff);
+                return 1;
+            }
+
+            string prompt = ReviewPromptBuilder.Build(gitDiff.Summary);
+            ChatRequest request = new(prompt, Instructions: snapshot.Instructions.Instructions);
+            ChatModelResult result = chatModelClientFactory(snapshot).Send(request);
+            if (result.Response is not null)
+            {
+                output.WriteLine(result.Response.Text);
+                return 0;
+            }
+
+            WriteReviewModelFailure(output, result);
+            return 1;
+        });
+
         Command configCommand = new("config", "Inspect CLI configuration.");
         Command configGetCommand = new("get", "Print the effective configuration summary.");
         configGetCommand.SetAction(parseResult =>
@@ -932,6 +963,7 @@ public static class CliCommandFactory
         rootCommand.Subcommands.Add(doctorCommand);
         rootCommand.Subcommands.Add(statusCommand);
         rootCommand.Subcommands.Add(diffCommand);
+        rootCommand.Subcommands.Add(reviewCommand);
         rootCommand.Subcommands.Add(configCommand);
         rootCommand.Subcommands.Add(mcpCommand);
         rootCommand.Subcommands.Add(workflowCommand);
@@ -1118,6 +1150,19 @@ public static class CliCommandFactory
 
         output.WriteLine("summary:");
         output.WriteLine(result.Summary);
+    }
+
+    private static void WriteReviewModelFailure(TextWriter output, ChatModelResult result)
+    {
+        ModelError error = result.Error ?? new ModelError(
+            Provider: "unknown",
+            Operation: "unknown",
+            StatusCode: null,
+            LocalErrorCode: "model-call-failed",
+            SafeMessage: "Model call failed without a detailed error.",
+            Retryable: false);
+
+        WriteSafeFailure(output, error.LocalErrorCode ?? "model-call-failed", error.SafeMessage);
     }
 
     private static void WriteConfigEditResult(TextWriter output, ConfigFileEditResult result)

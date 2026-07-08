@@ -92,6 +92,117 @@ public sealed class CliCommandFactoryTests
     }
 
     [Fact]
+    public void Review_command_sends_current_diff_to_non_streaming_model_and_logs_command()
+    {
+        using TempDirectory temp = TempDirectory.Create();
+        string filePath = InitializeGitRepository(temp.Path);
+        File.AppendAllText(filePath, "changed\n");
+        using StringWriter output = new();
+        List<string> loggedCommands = [];
+        string? receivedWorkspace = null;
+        FakeChatModelClient chatClient = new(ChatModelResult.Success(new ChatResponse(
+            Provider: "openai",
+            Model: "gpt-test",
+            ResponseId: "resp_test",
+            Text: "review report")));
+        CliEnvironmentSnapshot snapshot = CreateSnapshot(
+            temp.Path,
+            apiKey: "sk-test",
+            apiKeySource: "OPENAI_API_KEY",
+            model: "gpt-test")
+            with
+            {
+                Instructions = InstructionLoadResult.Loaded("Use the project review style.", Path.Combine(temp.Path, "AICLI.md"))
+            };
+
+        int exitCode = CliCommandFactory.Invoke(
+            CliCommandFactory.Create(
+                output,
+                workspacePath =>
+                {
+                    receivedWorkspace = workspacePath;
+                    return snapshot;
+                },
+                (commandName, _) => loggedCommands.Add(commandName),
+                _ => chatClient),
+            ["review", "--workspace", temp.Path],
+            output);
+
+        string text = output.ToString();
+        Assert.Equal(0, exitCode);
+        Assert.Equal(temp.Path, receivedWorkspace);
+        Assert.Equal(["review"], loggedCommands);
+        Assert.Null(chatClient.LastStreamingPrompt);
+        Assert.NotNull(chatClient.LastNonStreamingPrompt);
+        Assert.Contains("code review", chatClient.LastNonStreamingPrompt, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("diff --git", chatClient.LastNonStreamingPrompt, StringComparison.Ordinal);
+        Assert.Contains("+changed", chatClient.LastNonStreamingPrompt, StringComparison.Ordinal);
+        Assert.Equal("Use the project review style.", chatClient.LastRequest?.Instructions);
+        Assert.Contains("review report", text, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Review_command_returns_model_failure_without_streaming()
+    {
+        using TempDirectory temp = TempDirectory.Create();
+        string filePath = InitializeGitRepository(temp.Path);
+        File.AppendAllText(filePath, "changed\n");
+        using StringWriter output = new();
+        FakeChatModelClient chatClient = new(ChatModelResult.Failure(new ModelError(
+            Provider: "openai",
+            Operation: "responses.create",
+            StatusCode: null,
+            LocalErrorCode: "missing-openai-api-key",
+            SafeMessage: "OpenAI API key is missing.",
+            Retryable: false)));
+
+        int exitCode = CliCommandFactory.Invoke(
+            CliCommandFactory.Create(
+                output,
+                workspacePath => CreateSnapshot(workspacePath, apiKey: null, apiKeySource: "missing", model: "gpt-test"),
+                (_, _) => { },
+                _ => chatClient),
+            ["review", "--workspace", temp.Path],
+            output);
+
+        string text = output.ToString();
+        Assert.Equal(1, exitCode);
+        Assert.NotNull(chatClient.LastNonStreamingPrompt);
+        Assert.Null(chatClient.LastStreamingPrompt);
+        Assert.Contains("status: failed", text, StringComparison.Ordinal);
+        Assert.Contains("missing-openai-api-key", text, StringComparison.Ordinal);
+        Assert.Contains("OpenAI API key is missing.", text, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Review_command_returns_git_diff_failure_without_calling_model()
+    {
+        using TempDirectory temp = TempDirectory.Create();
+        using StringWriter output = new();
+        FakeChatModelClient chatClient = new(ChatModelResult.Success(new ChatResponse(
+            Provider: "openai",
+            Model: "gpt-test",
+            ResponseId: "resp_test",
+            Text: "review report")));
+
+        int exitCode = CliCommandFactory.Invoke(
+            CliCommandFactory.Create(
+                output,
+                workspacePath => CreateSnapshot(workspacePath, apiKey: "sk-test", apiKeySource: "OPENAI_API_KEY", model: "gpt-test"),
+                (_, _) => { },
+                _ => chatClient),
+            ["review", "--workspace", temp.Path],
+            output);
+
+        string text = output.ToString();
+        Assert.Equal(1, exitCode);
+        Assert.Null(chatClient.LastNonStreamingPrompt);
+        Assert.Null(chatClient.LastStreamingPrompt);
+        Assert.Contains("status: failed", text, StringComparison.Ordinal);
+        Assert.Contains("errorCode: git-not-repository", text, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void Diff_temp_repo_commit_ignores_configured_prepare_commit_msg_hook()
     {
         using TempDirectory temp = TempDirectory.Create();
