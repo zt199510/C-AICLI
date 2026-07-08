@@ -132,7 +132,7 @@ public sealed class ConversationTranscriptMarkdownFormatterTests
 
         Assert.Contains("### User - 2024-01-01T00:00:01.0000000+00:00", markdown, StringComparison.Ordinal);
         string normalizedMarkdown = markdown.Replace("\r\n", "\n", StringComparison.Ordinal);
-        Assert.Contains("""
+        string expectedFencedContent = """
         ````
         # injected heading
         <div onclick="steal()">raw html</div>
@@ -140,7 +140,8 @@ public sealed class ConversationTranscriptMarkdownFormatterTests
         nested fence
         ```
         ````
-        """, normalizedMarkdown, StringComparison.Ordinal);
+        """.Replace("\r\n", "\n", StringComparison.Ordinal);
+        Assert.Contains(expectedFencedContent, normalizedMarkdown, StringComparison.Ordinal);
 
         string outsideFences = RemoveFencedBlocks(markdown);
         Assert.DoesNotContain("# injected heading", outsideFences, StringComparison.Ordinal);
