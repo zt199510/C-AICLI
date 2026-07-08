@@ -20,6 +20,7 @@ public sealed class WorkspaceInstructionLoaderTests
             Assert.False(result.HasInstructions);
             Assert.Null(result.Instructions);
             Assert.Null(result.SourcePath);
+            Assert.Empty(result.Sources);
             Assert.Empty(result.Warnings);
         }
         finally
@@ -116,9 +117,12 @@ public sealed class WorkspaceInstructionLoaderTests
             string featureDirectory = Path.Combine(sourceDirectory, "feature");
             Directory.CreateDirectory(featureDirectory);
 
-            File.WriteAllText(Path.Combine(root, "AGENTS.md"), "Root instructions.");
-            File.WriteAllText(Path.Combine(sourceDirectory, "AICLI.md"), "Source instructions.");
-            File.WriteAllText(Path.Combine(featureDirectory, "AGENTS.md"), "Feature instructions.");
+            string rootInstructionPath = Path.Combine(root, "AGENTS.md");
+            string sourceInstructionPath = Path.Combine(sourceDirectory, "AICLI.md");
+            string featureInstructionPath = Path.Combine(featureDirectory, "AGENTS.md");
+            File.WriteAllText(rootInstructionPath, "Root instructions.");
+            File.WriteAllText(sourceInstructionPath, "Source instructions.");
+            File.WriteAllText(featureInstructionPath, "Feature instructions.");
             File.WriteAllText(Path.Combine(featureDirectory, "AICLI.md"), "Legacy feature instructions.");
 
             WorkspaceContext workspace = WorkspaceContext.Detect(root, root);
@@ -134,6 +138,24 @@ public sealed class WorkspaceInstructionLoaderTests
                     "Source instructions.",
                     "Feature instructions."),
                 result.Instructions);
+            Assert.Equal(rootInstructionPath, result.SourcePath);
+            Assert.Collection(
+                result.Sources,
+                source =>
+                {
+                    Assert.Equal(rootInstructionPath, source.SourcePath);
+                    Assert.Equal(0, source.Order);
+                },
+                source =>
+                {
+                    Assert.Equal(sourceInstructionPath, source.SourcePath);
+                    Assert.Equal(1, source.Order);
+                },
+                source =>
+                {
+                    Assert.Equal(featureInstructionPath, source.SourcePath);
+                    Assert.Equal(2, source.Order);
+                });
             Assert.Empty(result.Warnings);
         }
         finally
@@ -197,6 +219,7 @@ public sealed class WorkspaceInstructionLoaderTests
             Assert.False(result.HasInstructions);
             Assert.Null(result.Instructions);
             Assert.Null(result.SourcePath);
+            Assert.Empty(result.Sources);
             string warning = Assert.Single(result.Warnings);
             Assert.Contains("outside the workspace", warning);
             Assert.Contains(outsideRoot, warning);
@@ -235,6 +258,7 @@ public sealed class WorkspaceInstructionLoaderTests
             Assert.False(result.HasInstructions);
             Assert.Null(result.Instructions);
             Assert.Null(result.SourcePath);
+            Assert.Empty(result.Sources);
             string warning = Assert.Single(result.Warnings);
             Assert.Contains("outside the workspace", warning);
             Assert.DoesNotContain("outside-secret", warning, StringComparison.Ordinal);
@@ -330,6 +354,7 @@ public sealed class WorkspaceInstructionLoaderTests
             InstructionLoadResult result = loader.Load(workspace);
 
             Assert.False(result.HasInstructions);
+            Assert.Empty(result.Sources);
             Assert.Empty(result.Warnings);
         }
         finally

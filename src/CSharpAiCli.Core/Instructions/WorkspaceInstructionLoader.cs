@@ -105,8 +105,8 @@ public sealed class WorkspaceInstructionLoader : IInstructionLoader
     private InstructionLoadResult LoadFromDirectories(string workspaceRoot, IReadOnlyList<string> directories)
     {
         List<string> loadedInstructions = [];
+        List<InstructionSource> sources = [];
         List<string> warnings = [];
-        string? sourcePath = null;
 
         foreach (string directory in directories)
         {
@@ -143,8 +143,8 @@ public sealed class WorkspaceInstructionLoader : IInstructionLoader
                 continue;
             }
 
-            sourcePath ??= instructionPath;
             loadedInstructions.Add(instructions);
+            sources.Add(new InstructionSource(instructionPath, sources.Count));
         }
 
         if (loadedInstructions.Count == 0)
@@ -154,7 +154,7 @@ public sealed class WorkspaceInstructionLoader : IInstructionLoader
 
         return InstructionLoadResult.Loaded(
             string.Join($"{Environment.NewLine}{Environment.NewLine}", loadedInstructions),
-            sourcePath!,
+            sources,
             warnings);
     }
 
