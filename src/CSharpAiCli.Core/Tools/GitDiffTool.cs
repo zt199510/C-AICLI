@@ -96,7 +96,7 @@ public sealed class GitDiffTool : ITool
 
         GitCommandResult trackedFiles = gitCommandRunner.RunArgumentList(
             workspaceRoot,
-            ["ls-files", "-z", "--", CliCommandLogPathspec]);
+            ["diff-files", "--name-only", "-z", "--", CliCommandLogPathspec]);
         if (!trackedFiles.Succeeded)
         {
             return GitDiffReadResult.Failed(ToGitFailure(trackedFiles));

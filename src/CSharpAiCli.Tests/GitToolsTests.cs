@@ -172,6 +172,60 @@ public sealed class GitToolsTests
     }
 
     [Fact]
+    public void Git_diff_uses_unstaged_candidate_list_without_rendering_clean_tracked_paths()
+    {
+        using TempDirectory temp = TempDirectory.Create();
+        FakeGitCommandRunner runner = new(args =>
+        {
+            if (args is ["rev-parse", "--verify", "HEAD"])
+            {
+                return SuccessfulGitResult(string.Empty);
+            }
+
+            if (args.FirstOrDefault() == "diff-index")
+            {
+                return SuccessfulGitResult(string.Empty);
+            }
+
+            if (args is ["diff-files", "--name-only", "-z", "--", ":(exclude).caicli/logs/**"])
+            {
+                return SuccessfulGitResult(string.Empty);
+            }
+
+            if (args is ["ls-files", "-z", "--", ":(exclude).caicli/logs/**"])
+            {
+                return SuccessfulGitResult("deps/sub\0");
+            }
+
+            if (args is ["show", ":0:deps/sub"])
+            {
+                return FailedGitResult(exitCode: 128, stderr: "fatal: path 'deps/sub' is a gitlink\n");
+            }
+
+            if (args is ["config", "--bool", "core.ignorecase"])
+            {
+                return FailedGitResult(exitCode: 1, stderr: string.Empty);
+            }
+
+            if (args is ["ls-files", "--others", "--exclude-standard", "-z"])
+            {
+                return SuccessfulGitResult(string.Empty);
+            }
+
+            return SuccessfulGitResult(string.Empty);
+        });
+        GitDiffTool tool = new(new WorkspaceGuard(), runner);
+
+        ToolExecutionResult result = tool.Execute(CreateContext(temp.Path));
+
+        Assert.True(result.Succeeded);
+        Assert.Equal("no diff", result.Summary);
+        Assert.Contains(runner.Commands, command => command is ["diff-files", "--name-only", "-z", "--", ":(exclude).caicli/logs/**"]);
+        Assert.DoesNotContain(runner.Commands, command => command.FirstOrDefault() == "show");
+        Assert.DoesNotContain(runner.Commands, command => command.Contains("--no-index", StringComparer.Ordinal));
+    }
+
+    [Fact]
     public void Git_diff_reports_staged_tracked_file_in_temporary_repo()
     {
         using TempDirectory temp = TempDirectory.Create();
