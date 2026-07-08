@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using System.Text;
 using CSharpAiCli.Core;
 
 namespace CSharpAiCli.Tests;
@@ -45,6 +46,76 @@ public sealed class GitToolsTests
         Assert.True(result.Succeeded);
         Assert.Contains("diff --git", result.Summary, StringComparison.Ordinal);
         Assert.Contains("+changed", result.Summary, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Git_diff_does_not_run_configured_external_diff_helper()
+    {
+        using TempDirectory temp = TempDirectory.Create();
+        string filePath = InitializeGitRepository(temp.Path);
+        string markerPath = Path.Combine(temp.Path, "external-diff-ran.marker");
+        string helperPath = WriteExternalDiffHelper(temp.Path, markerPath);
+        RunGit(temp.Path, "config", "diff.external", "sh '" + NormalizeGitPath(helperPath) + "'");
+        File.AppendAllText(filePath, "changed\n");
+        GitDiffTool tool = new(new WorkspaceGuard());
+
+        ToolExecutionResult result = tool.Execute(CreateContext(temp.Path));
+
+        Assert.True(result.Succeeded);
+        Assert.Contains("+changed", result.Summary, StringComparison.Ordinal);
+        Assert.False(File.Exists(markerPath), "Configured external diff helper should not be invoked.");
+    }
+
+    [Fact]
+    public void Git_diff_disables_external_helpers_for_all_diff_commands()
+    {
+        using TempDirectory temp = TempDirectory.Create();
+        FakeGitCommandRunner runner = new(args =>
+        {
+            if (args is ["rev-parse", "--verify", "HEAD"])
+            {
+                return SuccessfulGitResult(string.Empty);
+            }
+
+            if (args is ["config", "--bool", "core.ignorecase"])
+            {
+                return FailedGitResult(exitCode: 1, stderr: string.Empty);
+            }
+
+            if (args is ["ls-files", "--others", "--exclude-standard", "-z"])
+            {
+                return SuccessfulGitResult("untracked.txt\0");
+            }
+
+            if (args.Contains("--no-index", StringComparer.Ordinal))
+            {
+                return new GitCommandResult(
+                    Succeeded: true,
+                    ExitCode: 1,
+                    Stdout: "diff --git a/untracked.txt b/untracked.txt\n+fresh\n",
+                    Stderr: string.Empty,
+                    StdoutTruncated: false,
+                    StderrTruncated: false,
+                    ErrorCode: null,
+                    Summary: "Git command completed with exit code 1.");
+            }
+
+            return SuccessfulGitResult(string.Empty);
+        });
+        GitDiffTool tool = new(new WorkspaceGuard(), runner);
+
+        ToolExecutionResult result = tool.Execute(CreateContext(temp.Path, """{"stat":true}"""));
+
+        Assert.True(result.Succeeded);
+        IReadOnlyList<string[]> diffCommands = runner.Commands
+            .Where(command => command.FirstOrDefault() == "diff")
+            .ToList();
+        Assert.Equal(3, diffCommands.Count);
+        Assert.All(diffCommands, command =>
+        {
+            Assert.Contains("--no-ext-diff", command);
+            Assert.Contains("--no-textconv", command);
+        });
     }
 
     [Fact]
@@ -112,6 +183,25 @@ public sealed class GitToolsTests
 
         Assert.True(result.Succeeded);
         Assert.Equal("no diff", result.Summary);
+    }
+
+    [Fact]
+    public void Git_diff_preserves_case_variant_caicli_logs_when_repo_is_case_sensitive()
+    {
+        using TempDirectory temp = TempDirectory.Create();
+        InitializeGitRepository(temp.Path);
+        RunGit(temp.Path, "config", "core.ignorecase", "false");
+        string logsPath = Path.Combine(temp.Path, ".caicli", "Logs");
+        Directory.CreateDirectory(logsPath);
+        File.WriteAllText(Path.Combine(logsPath, "user.log"), "user content\n");
+        GitDiffTool tool = new(new WorkspaceGuard());
+
+        ToolExecutionResult result = tool.Execute(CreateContext(temp.Path));
+
+        Assert.True(result.Succeeded);
+        Assert.Contains(".caicli/Logs/user.log", result.Summary, StringComparison.Ordinal);
+        Assert.Contains("+user content", result.Summary, StringComparison.Ordinal);
+        Assert.DoesNotContain("no diff", result.Summary, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -291,6 +381,73 @@ public sealed class GitToolsTests
     }
 
     [Fact]
+    public void Git_diff_warns_and_bounds_aggregate_output_from_many_untracked_files()
+    {
+        using TempDirectory temp = TempDirectory.Create();
+        InitializeGitRepository(temp.Path);
+        for (int index = 0; index < 24; index++)
+        {
+            string fileName = $"untracked-{index:D2}.txt";
+            File.WriteAllText(Path.Combine(temp.Path, fileName), new string((char)('a' + index % 26), 4096) + "\n");
+        }
+
+        GitDiffTool tool = new(new WorkspaceGuard());
+
+        ToolExecutionResult result = tool.Execute(CreateContext(temp.Path));
+
+        Assert.True(result.Succeeded);
+        Assert.Contains(GitDiffTool.TruncationWarning, result.Summary, StringComparison.Ordinal);
+        int byteCount = Encoding.UTF8.GetByteCount(result.Summary);
+        int warningBytes = Encoding.UTF8.GetByteCount(Environment.NewLine + Environment.NewLine + GitDiffTool.TruncationWarning);
+        Assert.True(byteCount <= 64 * 1024 + warningBytes, $"Expected aggregate diff to be bounded, but it was {byteCount} bytes.");
+    }
+
+    [Fact]
+    public void Git_diff_returns_failure_when_untracked_no_index_exit_one_has_no_diff_output()
+    {
+        using TempDirectory temp = TempDirectory.Create();
+        FakeGitCommandRunner runner = new(args =>
+        {
+            if (args is ["rev-parse", "--verify", "HEAD"])
+            {
+                return SuccessfulGitResult(string.Empty);
+            }
+
+            if (args is ["config", "--bool", "core.ignorecase"])
+            {
+                return FailedGitResult(exitCode: 1, stderr: string.Empty);
+            }
+
+            if (args is ["ls-files", "--others", "--exclude-standard", "-z"])
+            {
+                return SuccessfulGitResult("missing.txt\0");
+            }
+
+            if (args.Contains("--no-index", StringComparer.Ordinal))
+            {
+                return new GitCommandResult(
+                    Succeeded: true,
+                    ExitCode: 1,
+                    Stdout: string.Empty,
+                    Stderr: "error: Could not access 'missing.txt'\n",
+                    StdoutTruncated: false,
+                    StderrTruncated: false,
+                    ErrorCode: null,
+                    Summary: "Git command completed with exit code 1.");
+            }
+
+            return SuccessfulGitResult(string.Empty);
+        });
+        GitDiffTool tool = new(new WorkspaceGuard(), runner);
+
+        ToolExecutionResult result = tool.Execute(CreateContext(temp.Path));
+
+        Assert.False(result.Succeeded);
+        Assert.Equal("git-diff-failed", result.ErrorCode);
+        Assert.Contains("Could not access", result.Summary, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void Git_tools_return_clear_failure_for_non_git_workspace()
     {
         using TempDirectory temp = TempDirectory.Create();
@@ -377,6 +534,20 @@ public sealed class GitToolsTests
         File.WriteAllText(Path.Combine(logsPath, "2026-07-09.log"), "command=diff\n");
     }
 
+    private static string WriteExternalDiffHelper(string root, string markerPath)
+    {
+        string helperPath = Path.Combine(root, ".git", "external-diff-helper.sh");
+        File.WriteAllText(
+            helperPath,
+            "#!/bin/sh\nprintf invoked > '" + NormalizeGitPath(markerPath) + "'\nexit 0\n");
+        return helperPath;
+    }
+
+    private static string NormalizeGitPath(string path)
+    {
+        return path.Replace('\\', '/');
+    }
+
     private static string TrackCliCommandLogs(string root)
     {
         string logsPath = Path.Combine(root, ".caicli", "logs");
@@ -445,6 +616,52 @@ public sealed class GitToolsTests
             "--no-verify",
             "-m",
             message);
+    }
+
+    private static GitCommandResult SuccessfulGitResult(string stdout)
+    {
+        return new GitCommandResult(
+            Succeeded: true,
+            ExitCode: 0,
+            Stdout: stdout,
+            Stderr: string.Empty,
+            StdoutTruncated: false,
+            StderrTruncated: false,
+            ErrorCode: null,
+            Summary: "Git command completed with exit code 0.");
+    }
+
+    private static GitCommandResult FailedGitResult(int exitCode, string stderr)
+    {
+        return new GitCommandResult(
+            Succeeded: false,
+            ExitCode: exitCode,
+            Stdout: string.Empty,
+            Stderr: stderr,
+            StdoutTruncated: false,
+            StderrTruncated: false,
+            ErrorCode: "git-command-failed",
+            Summary: "Git command failed with exit code " + exitCode + ".");
+    }
+
+    private sealed class FakeGitCommandRunner(Func<string[], GitCommandResult> handle) : IGitCommandRunner
+    {
+        public List<string[]> Commands { get; } = [];
+
+        public GitCommandResult Run(string workspaceRoot, string arguments)
+        {
+            return handle([arguments]);
+        }
+
+        public GitCommandResult RunArgumentList(
+            string workspaceRoot,
+            IEnumerable<string> arguments,
+            IReadOnlySet<int>? successfulExitCodes = null)
+        {
+            string[] args = arguments.ToArray();
+            Commands.Add(args);
+            return handle(args);
+        }
     }
 
     private sealed class TempDirectory : IDisposable

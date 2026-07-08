@@ -1,3 +1,4 @@
+using System.Text;
 using System.Text.Json;
 
 namespace CSharpAiCli.Core;
@@ -5,15 +6,23 @@ namespace CSharpAiCli.Core;
 public sealed class GitDiffTool : ITool
 {
     public const string TruncationWarning = "WARNING: git output was truncated; diff is incomplete.";
+    private const int MaxAggregateOutputBytes = 64 * 1024;
     private const string CliCommandLogPathspec = ":(exclude).caicli/logs/**";
     private static readonly IReadOnlySet<int> NoIndexDiffSuccessExitCodes = new HashSet<int> { 0, 1 };
     private readonly IWorkspaceGuard workspaceGuard;
-    private readonly GitCommandRunner gitCommandRunner = new();
+    private readonly IGitCommandRunner gitCommandRunner;
 
     public GitDiffTool(IWorkspaceGuard workspaceGuard)
+        : this(workspaceGuard, new GitCommandRunner())
+    {
+    }
+
+    internal GitDiffTool(IWorkspaceGuard workspaceGuard, IGitCommandRunner gitCommandRunner)
     {
         ArgumentNullException.ThrowIfNull(workspaceGuard);
+        ArgumentNullException.ThrowIfNull(gitCommandRunner);
         this.workspaceGuard = workspaceGuard;
+        this.gitCommandRunner = gitCommandRunner;
     }
 
     public ToolDefinition Definition { get; } = new(
@@ -59,7 +68,7 @@ public sealed class GitDiffTool : ITool
 
     private GitDiffReadResult ReadCurrentDiff(string workspaceRoot, bool stat)
     {
-        List<string> outputs = [];
+        DiffOutputBuilder outputs = new(MaxAggregateOutputBytes);
         bool truncated = false;
 
         GitCommandResult head = gitCommandRunner.RunArgumentList(
@@ -80,7 +89,7 @@ public sealed class GitDiffTool : ITool
         }
 
         truncated |= IsTruncated(stagedDiff);
-        AddOutput(outputs, stagedDiff.Stdout);
+        truncated |= !outputs.TryAdd(stagedDiff.Stdout);
 
         GitCommandResult unstagedDiff = gitCommandRunner.RunArgumentList(
             workspaceRoot,
@@ -91,7 +100,8 @@ public sealed class GitDiffTool : ITool
         }
 
         truncated |= IsTruncated(unstagedDiff);
-        AddOutput(outputs, unstagedDiff.Stdout);
+        truncated |= !outputs.TryAdd(unstagedDiff.Stdout);
+        StringComparison cliCommandLogPathComparison = GetCliCommandLogPathComparison(workspaceRoot);
 
         GitCommandResult untrackedFiles = gitCommandRunner.RunArgumentList(
             workspaceRoot,
@@ -104,33 +114,39 @@ public sealed class GitDiffTool : ITool
         truncated |= IsTruncated(untrackedFiles);
         foreach (string relativePath in ParseNullSeparatedPaths(untrackedFiles.Stdout, untrackedFiles.StdoutTruncated))
         {
-            if (IsCliCommandLogPath(relativePath))
+            if (!outputs.HasBudget)
+            {
+                truncated = true;
+                break;
+            }
+
+            if (IsCliCommandLogPath(relativePath, cliCommandLogPathComparison))
             {
                 continue;
             }
 
             string[] arguments = stat
-                ? ["diff", "--no-index", "--stat", "--", "/dev/null", relativePath]
-                : ["diff", "--no-index", "--", "/dev/null", relativePath];
+                ? ["diff", "--no-ext-diff", "--no-textconv", "--no-index", "--stat", "--", "/dev/null", relativePath]
+                : ["diff", "--no-ext-diff", "--no-textconv", "--no-index", "--", "/dev/null", relativePath];
             GitCommandResult untrackedDiff = gitCommandRunner.RunArgumentList(
                 workspaceRoot,
                 arguments,
                 NoIndexDiffSuccessExitCodes);
-            if (!untrackedDiff.Succeeded)
+            if (!IsSuccessfulNoIndexDiff(untrackedDiff))
             {
                 return GitDiffReadResult.Failed(ToGitFailure(untrackedDiff));
             }
 
             truncated |= IsTruncated(untrackedDiff);
-            AddOutput(outputs, untrackedDiff.Stdout);
+            truncated |= !outputs.TryAdd(untrackedDiff.Stdout);
         }
 
-        return GitDiffReadResult.Succeeded(string.Join(Environment.NewLine + Environment.NewLine, outputs), truncated);
+        return GitDiffReadResult.Succeeded(outputs.ToString(), truncated);
     }
 
     private static string[] CreateTrackedDiffArguments(bool stat, bool staged)
     {
-        List<string> arguments = ["diff"];
+        List<string> arguments = ["diff", "--no-ext-diff", "--no-textconv"];
         if (staged)
         {
             arguments.Add("--cached");
@@ -146,10 +162,38 @@ public sealed class GitDiffTool : ITool
         return [.. arguments];
     }
 
-    private static bool IsCliCommandLogPath(string relativePath)
+    private StringComparison GetCliCommandLogPathComparison(string workspaceRoot)
+    {
+        GitCommandResult ignoreCase = gitCommandRunner.RunArgumentList(
+            workspaceRoot,
+            ["config", "--bool", "core.ignorecase"]);
+        if (ignoreCase.Succeeded
+            && bool.TryParse(ignoreCase.Stdout.Trim(), out bool parsedIgnoreCase))
+        {
+            return parsedIgnoreCase
+                ? StringComparison.OrdinalIgnoreCase
+                : StringComparison.Ordinal;
+        }
+
+        return OperatingSystem.IsWindows() || OperatingSystem.IsMacOS()
+            ? StringComparison.OrdinalIgnoreCase
+            : StringComparison.Ordinal;
+    }
+
+    private static bool IsCliCommandLogPath(string relativePath, StringComparison comparison)
     {
         string normalizedPath = relativePath.Replace('\\', '/');
-        return normalizedPath.StartsWith(".caicli/logs/", StringComparison.OrdinalIgnoreCase);
+        return normalizedPath.StartsWith(".caicli/logs/", comparison);
+    }
+
+    private static bool IsSuccessfulNoIndexDiff(GitCommandResult result)
+    {
+        if (!result.Succeeded)
+        {
+            return false;
+        }
+
+        return result.ExitCode != 1 || !string.IsNullOrWhiteSpace(result.Stdout);
     }
 
     private static bool IsMissingHead(GitCommandResult result)
@@ -169,14 +213,6 @@ public sealed class GitDiffTool : ITool
         }
 
         return paths;
-    }
-
-    private static void AddOutput(List<string> outputs, string output)
-    {
-        if (!string.IsNullOrWhiteSpace(output))
-        {
-            outputs.Add(output.Trim());
-        }
     }
 
     private static bool IsTruncated(GitCommandResult result)
@@ -262,6 +298,75 @@ public sealed class GitDiffTool : ITool
         public static GitDiffReadResult Failed(ToolExecutionResult failure)
         {
             return new GitDiffReadResult(string.Empty, false, failure);
+        }
+    }
+
+    private sealed class DiffOutputBuilder(int maxBytes)
+    {
+        private readonly StringBuilder builder = new();
+        private int remainingBytes = maxBytes;
+
+        public bool HasBudget => remainingBytes > 0;
+
+        public bool TryAdd(string output)
+        {
+            if (string.IsNullOrWhiteSpace(output))
+            {
+                return true;
+            }
+
+            string trimmed = output.Trim();
+            if (builder.Length > 0 && !TryAppendWithinBudget(Environment.NewLine + Environment.NewLine))
+            {
+                return false;
+            }
+
+            return TryAppendWithinBudget(trimmed);
+        }
+
+        public override string ToString()
+        {
+            return builder.ToString();
+        }
+
+        private bool TryAppendWithinBudget(string text)
+        {
+            int byteCount = Encoding.UTF8.GetByteCount(text);
+            if (byteCount <= remainingBytes)
+            {
+                builder.Append(text);
+                remainingBytes -= byteCount;
+                return true;
+            }
+
+            builder.Append(TakeUtf8Prefix(text, remainingBytes));
+            remainingBytes = 0;
+            return false;
+        }
+
+        private static string TakeUtf8Prefix(string text, int maxBytes)
+        {
+            if (maxBytes <= 0)
+            {
+                return string.Empty;
+            }
+
+            int low = 0;
+            int high = text.Length;
+            while (low < high)
+            {
+                int mid = low + (high - low + 1) / 2;
+                if (Encoding.UTF8.GetByteCount(text.AsSpan(0, mid)) <= maxBytes)
+                {
+                    low = mid;
+                }
+                else
+                {
+                    high = mid - 1;
+                }
+            }
+
+            return text[..low];
         }
     }
 }

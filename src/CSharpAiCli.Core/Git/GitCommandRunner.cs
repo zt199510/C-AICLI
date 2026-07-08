@@ -3,7 +3,17 @@ using System.Text;
 
 namespace CSharpAiCli.Core;
 
-internal sealed class GitCommandRunner
+internal interface IGitCommandRunner
+{
+    GitCommandResult Run(string workspaceRoot, string arguments);
+
+    GitCommandResult RunArgumentList(
+        string workspaceRoot,
+        IEnumerable<string> arguments,
+        IReadOnlySet<int>? successfulExitCodes = null);
+}
+
+internal sealed class GitCommandRunner : IGitCommandRunner
 {
     private const int DefaultTimeoutMilliseconds = 5000;
     private const int DefaultMaxOutputBytes = 64 * 1024;
