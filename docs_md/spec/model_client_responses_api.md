@@ -270,13 +270,13 @@ $exitCode
 
 ## Week 7 session and transcript behavior
 
-- `caicli chat --session <name> "<prompt>"` resumes or creates a named transcript.
+- `caicli chat --session <name> "<prompt>"` creates or appends to a named transcript.
 - Session transcripts are stored under `<user profile>/.caicli/sessions/<safe-session-name>.transcript.json`.
 - Transcript JSON uses `schemaVersion: 1`.
 - Successful turns append one `user` message and one `assistant` message.
 - Failed turns append one `user` message and one safe error entry.
 - `toolCalls` is present as an empty array in Week 7 and reserved for Week 9 tool-call recording.
-- Week 7 does not send historical transcript messages back to the model; model requests still use the current prompt plus Week 8 workspace instructions when present.
+- Week 7 did not send historical transcript messages back to the model; Week 31 adds explicit `--resume` behavior described below.
 - Without `--session`, `chat` keeps the Week 6 streaming behavior and does not create a transcript.
 - Transcript files must not contain raw API keys.
 
@@ -297,3 +297,12 @@ $exitCode
 ```text
 Accepted after Week 8.
 ```
+
+## Week 31 session resume behavior
+
+- `caicli chat --resume <session> "<prompt>"` requires an existing named transcript.
+- `caicli exec --resume <session> "<task>"` also requires an existing named transcript before the agent request is created.
+- Missing transcripts fail with safe `session-not-found` output and do not create a new session.
+- Resume requests send normalized prior transcript context with the current prompt or task, so named sessions can now provide historical context when `--resume` is used.
+- The normalized context is structured to prevent transcript-controlled content from spoofing internal context section boundaries.
+- `--session` remains the create-or-append recording mode. Use `--resume` when historical context must be included in the model or agent request.

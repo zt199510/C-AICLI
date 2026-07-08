@@ -1,5 +1,6 @@
 using System.CommandLine;
 using System.CommandLine.Parsing;
+using System.Globalization;
 using System.Text.Json;
 using CSharpAiCli.Core;
 
@@ -7,6 +8,12 @@ namespace CSharpAiCli.Cli;
 
 public static class CliCommandFactory
 {
+    private const string InvalidConversationTranscriptSummary =
+        "Conversation transcript is missing or uses an unsupported schema version.";
+
+    private const string SessionStoreErrorSummary =
+        "Conversation session store operation failed.";
+
     public static RootCommand Create(TextWriter output)
     {
         return Create(
@@ -368,7 +375,11 @@ public static class CliCommandFactory
         };
         Option<string> execSessionOption = new("--session")
         {
-            Description = "Resume or create a named agentic exec transcript.",
+            Description = "Create or append to a named agentic exec transcript.",
+        };
+        Option<string> execResumeOption = new("--resume")
+        {
+            Description = "Resume an existing named agentic exec transcript.",
         };
         execOutputOption.DefaultValueFactory = _ => "text";
         execOutputOption.Validators.Add(result =>
@@ -392,6 +403,7 @@ public static class CliCommandFactory
         execCommand.Options.Add(execMaxToolCallsOption);
         execCommand.Options.Add(execTimeoutSecondsOption);
         execCommand.Options.Add(execSessionOption);
+        execCommand.Options.Add(execResumeOption);
         execCommand.SetAction(parseResult =>
         {
             string? workspacePath = parseResult.GetValue(workspaceOption);
@@ -404,38 +416,99 @@ public static class CliCommandFactory
             int? maxToolCalls = parseResult.GetValue(execMaxToolCallsOption);
             int? timeoutSeconds = parseResult.GetValue(execTimeoutSecondsOption);
             string? session = parseResult.GetValue(execSessionOption);
+            string? resume = parseResult.GetValue(execResumeOption);
+            bool sessionSupplied = IsOptionExplicit(parseResult, execSessionOption);
+            bool resumeSupplied = IsOptionExplicit(parseResult, execResumeOption);
             CliEnvironmentSnapshot snapshot = snapshotProvider(workspacePath);
             ApprovalMode? cliApprovalMode = GetApprovalOverride(approvalModeValue, parseResult.GetResult(execApprovalOption), approve);
             TryWriteCommandLog(commandLogger, "exec", snapshot);
 
+            if (sessionSupplied && resumeSupplied)
+            {
+                return WriteExecLocalValidationFailure(
+                    output,
+                    "session-option-conflict",
+                    "Use either --session or --resume, not both.",
+                    jsonRequested,
+                    outputMode);
+            }
+
             IApprovalPolicy approvalPolicy = ApprovalPolicyResolver.Resolve(snapshot.Configuration.ApprovalMode, cliApprovalMode);
             ToolRegistry registry = CliToolFactory.CreateRegistry(snapshot, approvalPolicy);
             ToolExecutor executor = new(registry);
+            string? effectiveSession = resumeSupplied ? resume : session;
+            ConversationSessionName? sessionName = null;
+            ConversationTranscript? transcript = null;
+            ConversationTranscript? transcriptContext = null;
+            IConversationStore? conversationStore = null;
+            if (sessionSupplied || resumeSupplied)
+            {
+                try
+                {
+                    sessionName = ConversationSessionName.Parse(effectiveSession);
+                }
+                catch (ArgumentException exception)
+                {
+                    return WriteExecLocalValidationFailure(
+                        output,
+                        "invalid-session-name",
+                        GetSafeSessionNameParseMessage(exception),
+                        jsonRequested,
+                        outputMode);
+                }
+
+                try
+                {
+                    conversationStore = conversationStoreFactory(snapshot);
+                    if (resumeSupplied)
+                    {
+                        if (!conversationStore.TryLoad(sessionName, out transcript) || transcript is null)
+                        {
+                            return WriteExecLocalValidationFailure(
+                                output,
+                                "session-not-found",
+                                "Session transcript was not found.",
+                                jsonRequested,
+                                outputMode);
+                        }
+
+                        transcriptContext = transcript;
+                    }
+                    else
+                    {
+                        transcript = conversationStore.LoadOrCreate(sessionName, utcNowProvider());
+                    }
+                }
+                catch (Exception exception) when (IsConversationStoreException(exception))
+                {
+                    return WriteExecConversationStoreFailure(output, exception, jsonRequested, outputMode);
+                }
+            }
+
             AgentRunRequest request = new(
                 task,
                 snapshot.Workspace,
                 snapshot.Instructions.Instructions,
-                session,
+                effectiveSession,
                 Limits: new AgentRunLimits(
                     MaxTurns: maxTurns,
                     MaxToolCalls: maxToolCalls,
                     ModelCallTimeout: timeoutSeconds is null ? null : TimeSpan.FromSeconds(timeoutSeconds.Value),
-                    OverallTimeout: timeoutSeconds is null ? null : TimeSpan.FromSeconds(timeoutSeconds.Value)));
-            ConversationSessionName? sessionName = null;
-            ConversationTranscript? transcript = null;
-            IConversationStore? conversationStore = null;
-            if (!string.IsNullOrWhiteSpace(session))
-            {
-                sessionName = ConversationSessionName.Parse(session);
-                conversationStore = conversationStoreFactory(snapshot);
-                transcript = conversationStore.LoadOrCreate(sessionName, utcNowProvider());
-            }
+                    OverallTimeout: timeoutSeconds is null ? null : TimeSpan.FromSeconds(timeoutSeconds.Value)),
+                TranscriptContext: transcriptContext);
 
             IAgentRunner runner = execAgentRunnerFactory(snapshot, registry, executor);
             AgentRunResult agentResult = runner.Run(request, transcript);
             if (sessionName is not null && transcript is not null && conversationStore is not null)
             {
-                conversationStore.Save(sessionName, transcript);
+                try
+                {
+                    conversationStore.Save(sessionName, transcript);
+                }
+                catch (Exception exception) when (IsConversationStoreException(exception))
+                {
+                    return WriteExecConversationStoreFailure(output, exception, jsonRequested, outputMode);
+                }
             }
 
             ExecResult execResult = AgentExecResultAdapter.FromAgentResult(agentResult);
@@ -485,21 +558,105 @@ public static class CliCommandFactory
         });
 
         Command sessionCommand = new("session", "Manage local conversation transcripts.");
-        Command sessionExportCommand = new("export", "Print one session transcript JSON.");
+        Command sessionListCommand = new("list", "List local session summaries.");
+        Command sessionShowCommand = new("show", "Show one local session summary.");
+        Command sessionExportCommand = new("export", "Print one session transcript.");
         Command sessionClearCommand = new("clear", "Delete one session transcript.");
+        Command sessionDeleteCommand = new("delete", "Delete one local session transcript.");
+        Command sessionRenameCommand = new("rename", "Rename one local session transcript.");
         Argument<string> sessionNameArgument = new("name")
         {
             Description = "The session name.",
         };
+        Option<string> sessionExportFormatOption = new("--format")
+        {
+            Description = "Select export format: json or markdown.",
+            DefaultValueFactory = _ => "json",
+        };
+        sessionExportFormatOption.Validators.Add(result =>
+        {
+            string format = result.GetValueOrDefault<string>() ?? "json";
+            if (!string.Equals(format, "json", StringComparison.OrdinalIgnoreCase) &&
+                !string.Equals(format, "markdown", StringComparison.OrdinalIgnoreCase))
+            {
+                result.AddError("Invalid value for --format. Allowed values are json and markdown.");
+            }
+        });
+        Argument<string> sessionRenameSourceArgument = new("old")
+        {
+            Description = "The current session name.",
+        };
+        Argument<string> sessionRenameDestinationArgument = new("new")
+        {
+            Description = "The new session name.",
+        };
+        sessionShowCommand.Arguments.Add(sessionNameArgument);
         sessionExportCommand.Arguments.Add(sessionNameArgument);
+        sessionExportCommand.Options.Add(sessionExportFormatOption);
         sessionClearCommand.Arguments.Add(sessionNameArgument);
-        sessionExportCommand.SetAction(parseResult =>
+        sessionDeleteCommand.Arguments.Add(sessionNameArgument);
+        sessionRenameCommand.Arguments.Add(sessionRenameSourceArgument);
+        sessionRenameCommand.Arguments.Add(sessionRenameDestinationArgument);
+        sessionListCommand.SetAction(parseResult =>
+        {
+            string? workspacePath = parseResult.GetValue(workspaceOption);
+            CliEnvironmentSnapshot snapshot = snapshotProvider(workspacePath);
+            TryWriteCommandLog(commandLogger, "session list", snapshot);
+            try
+            {
+                WriteSessionList(output, conversationStoreFactory(snapshot).ListSummaries());
+                return 0;
+            }
+            catch (Exception exception) when (IsConversationStoreException(exception))
+            {
+                return WriteSessionConversationStoreFailure(output, exception);
+            }
+        });
+        sessionShowCommand.SetAction(parseResult =>
         {
             string? workspacePath = parseResult.GetValue(workspaceOption);
             string name = parseResult.GetValue(sessionNameArgument) ?? string.Empty;
             CliEnvironmentSnapshot snapshot = snapshotProvider(workspacePath);
+            TryWriteCommandLog(commandLogger, "session show", snapshot);
+            if (!TryParseSessionName(output, name, out ConversationSessionName sessionName))
+            {
+                return 1;
+            }
+
+            try
+            {
+                return ShowSession(output, conversationStoreFactory(snapshot), sessionName);
+            }
+            catch (Exception exception) when (IsConversationStoreException(exception))
+            {
+                return WriteSessionConversationStoreFailure(output, exception);
+            }
+        });
+        sessionExportCommand.SetAction(parseResult =>
+        {
+            string? workspacePath = parseResult.GetValue(workspaceOption);
+            string name = parseResult.GetValue(sessionNameArgument) ?? string.Empty;
+            string format = parseResult.GetValue(sessionExportFormatOption) ?? "json";
+            CliEnvironmentSnapshot snapshot = snapshotProvider(workspacePath);
             TryWriteCommandLog(commandLogger, "session export", snapshot);
-            return ExportSession(output, snapshot, name);
+            if (!TryParseSessionName(output, name, out ConversationSessionName sessionName))
+            {
+                return 1;
+            }
+
+            try
+            {
+                if (string.Equals(format, "markdown", StringComparison.OrdinalIgnoreCase))
+                {
+                    return ExportSessionMarkdown(output, conversationStoreFactory(snapshot), sessionName);
+                }
+
+                return ExportSessionJson(output, snapshot, sessionName);
+            }
+            catch (Exception exception) when (IsConversationStoreException(exception))
+            {
+                return WriteSessionConversationStoreFailure(output, exception);
+            }
         });
         sessionClearCommand.SetAction(parseResult =>
         {
@@ -507,10 +664,68 @@ public static class CliCommandFactory
             string name = parseResult.GetValue(sessionNameArgument) ?? string.Empty;
             CliEnvironmentSnapshot snapshot = snapshotProvider(workspacePath);
             TryWriteCommandLog(commandLogger, "session clear", snapshot);
-            return ClearSession(output, snapshot, name);
+            if (!TryParseSessionName(output, name, out ConversationSessionName sessionName))
+            {
+                return 1;
+            }
+
+            try
+            {
+                return DeleteSession(output, conversationStoreFactory(snapshot), sessionName, "cleared", missingExitCode: 0, writeMissingErrorCode: false);
+            }
+            catch (Exception exception) when (IsConversationStoreException(exception))
+            {
+                return WriteSessionConversationStoreFailure(output, exception);
+            }
         });
+        sessionDeleteCommand.SetAction(parseResult =>
+        {
+            string? workspacePath = parseResult.GetValue(workspaceOption);
+            string name = parseResult.GetValue(sessionNameArgument) ?? string.Empty;
+            CliEnvironmentSnapshot snapshot = snapshotProvider(workspacePath);
+            TryWriteCommandLog(commandLogger, "session delete", snapshot);
+            if (!TryParseSessionName(output, name, out ConversationSessionName sessionName))
+            {
+                return 1;
+            }
+
+            try
+            {
+                return DeleteSession(output, conversationStoreFactory(snapshot), sessionName, "deleted", missingExitCode: 1, writeMissingErrorCode: true);
+            }
+            catch (Exception exception) when (IsConversationStoreException(exception))
+            {
+                return WriteSessionConversationStoreFailure(output, exception);
+            }
+        });
+        sessionRenameCommand.SetAction(parseResult =>
+        {
+            string? workspacePath = parseResult.GetValue(workspaceOption);
+            string source = parseResult.GetValue(sessionRenameSourceArgument) ?? string.Empty;
+            string destination = parseResult.GetValue(sessionRenameDestinationArgument) ?? string.Empty;
+            CliEnvironmentSnapshot snapshot = snapshotProvider(workspacePath);
+            TryWriteCommandLog(commandLogger, "session rename", snapshot);
+            if (!TryParseSessionName(output, source, out ConversationSessionName sourceSessionName) ||
+                !TryParseSessionName(output, destination, out ConversationSessionName destinationSessionName))
+            {
+                return 1;
+            }
+
+            try
+            {
+                return RenameSession(output, conversationStoreFactory(snapshot), sourceSessionName, destinationSessionName);
+            }
+            catch (Exception exception) when (IsConversationStoreException(exception))
+            {
+                return WriteSessionConversationStoreFailure(output, exception);
+            }
+        });
+        sessionCommand.Subcommands.Add(sessionListCommand);
+        sessionCommand.Subcommands.Add(sessionShowCommand);
         sessionCommand.Subcommands.Add(sessionExportCommand);
         sessionCommand.Subcommands.Add(sessionClearCommand);
+        sessionCommand.Subcommands.Add(sessionDeleteCommand);
+        sessionCommand.Subcommands.Add(sessionRenameCommand);
 
         Command chatCommand = new("chat", "Send one prompt to the configured model.");
         Argument<string> promptArgument = new("prompt")
@@ -519,39 +734,91 @@ public static class CliCommandFactory
         };
         Option<string> sessionOption = new("--session")
         {
-            Description = "Resume or create a named chat session.",
+            Description = "Create or append to a named chat transcript.",
+        };
+        Option<string> resumeOption = new("--resume")
+        {
+            Description = "Resume an existing named chat session.",
         };
         chatCommand.Arguments.Add(promptArgument);
         chatCommand.Options.Add(sessionOption);
+        chatCommand.Options.Add(resumeOption);
         chatCommand.SetAction(parseResult =>
         {
             string? workspacePath = parseResult.GetValue(workspaceOption);
             string prompt = parseResult.GetValue(promptArgument) ?? string.Empty;
             string? session = parseResult.GetValue(sessionOption);
+            string? resume = parseResult.GetValue(resumeOption);
+            bool sessionSupplied = IsOptionExplicit(parseResult, sessionOption);
+            bool resumeSupplied = IsOptionExplicit(parseResult, resumeOption);
             CliEnvironmentSnapshot snapshot = snapshotProvider(workspacePath);
             TryWriteCommandLog(commandLogger, "chat", snapshot);
 
-            IChatModelClient chatModelClient = chatModelClientFactory(snapshot);
-            IChatStreamingRenderer renderer = streamingRendererFactory(output);
-            ChatRequest request = new(prompt, session, snapshot.Instructions.Instructions);
+            if (sessionSupplied && resumeSupplied)
+            {
+                WriteSessionOptionConflict(output);
+                return 1;
+            }
 
+            string? effectiveSession = resumeSupplied ? resume : session;
             ConversationSessionName? sessionName = null;
             ConversationTranscript? transcript = null;
+            ConversationTranscript? transcriptContext = null;
             IConversationStore? conversationStore = null;
             DateTimeOffset nowUtc = default;
-            if (!string.IsNullOrWhiteSpace(session))
+            if (sessionSupplied || resumeSupplied)
             {
-                sessionName = ConversationSessionName.Parse(session);
-                conversationStore = conversationStoreFactory(snapshot);
-                nowUtc = utcNowProvider();
-                transcript = conversationStore.LoadOrCreate(sessionName, nowUtc);
+                try
+                {
+                    sessionName = ConversationSessionName.Parse(effectiveSession);
+                }
+                catch (ArgumentException exception)
+                {
+                    WriteSafeFailure(output, "invalid-session-name", GetSafeSessionNameParseMessage(exception));
+                    return 1;
+                }
+
+                try
+                {
+                    conversationStore = conversationStoreFactory(snapshot);
+                    nowUtc = utcNowProvider();
+                    if (resumeSupplied)
+                    {
+                        if (!conversationStore.TryLoad(sessionName, out transcript) || transcript is null)
+                        {
+                            WriteSessionNotFound(output);
+                            return 1;
+                        }
+
+                        transcriptContext = transcript;
+                    }
+                    else
+                    {
+                        transcript = conversationStore.LoadOrCreate(sessionName, nowUtc);
+                    }
+                }
+                catch (Exception exception) when (IsConversationStoreException(exception))
+                {
+                    return WriteChatConversationStoreFailure(output, exception);
+                }
             }
+
+            IChatModelClient chatModelClient = chatModelClientFactory(snapshot);
+            IChatStreamingRenderer renderer = streamingRendererFactory(output);
+            ChatRequest request = new(prompt, effectiveSession, snapshot.Instructions.Instructions, transcriptContext);
 
             ChatModelResult result = chatModelClient.SendStreaming(request, renderer);
             if (sessionName is not null && transcript is not null && conversationStore is not null)
             {
                 ConversationTranscriptRecorder.RecordTurn(transcript, prompt, result, nowUtc);
-                conversationStore.Save(sessionName, transcript);
+                try
+                {
+                    conversationStore.Save(sessionName, transcript);
+                }
+                catch (Exception exception) when (IsConversationStoreException(exception))
+                {
+                    return WriteChatConversationStoreFailure(output, exception);
+                }
             }
 
             return result.IsSuccess ? 0 : 1;
@@ -626,6 +893,11 @@ public static class CliCommandFactory
         }
 
         return approve ? ApprovalMode.Always : null;
+    }
+
+    private static bool IsOptionExplicit<T>(ParseResult parseResult, Option<T> option)
+    {
+        return parseResult.GetResult(option) is { Implicit: false };
     }
 
     private static void AddApprovalModeValidator(Option<string> option)
@@ -771,11 +1043,150 @@ public static class CliCommandFactory
         output.WriteLine(result.Summary);
     }
 
-    private static int ExportSession(TextWriter output, CliEnvironmentSnapshot snapshot, string name)
+    private static int WriteExecLocalValidationFailure(
+        TextWriter output,
+        string errorCode,
+        string summary,
+        bool jsonRequested,
+        string outputMode)
     {
-        ConversationSessionName sessionName = ConversationSessionName.Parse(name);
-        string path = ResolveSessionPath(snapshot, sessionName);
-        if (!File.Exists(path))
+        if (IsJsonOutputRequested(jsonRequested, outputMode))
+        {
+            ExecResult result = ExecResult.Failure(
+                ExitCode: 1,
+                Summary: summary,
+                ErrorCode: errorCode,
+                Events: []);
+            ExecJsonRenderer renderer = new(output);
+            WriteExecOutput(renderer, result);
+            return result.ExitCode;
+        }
+
+        WriteSafeFailure(output, errorCode, summary);
+        return 1;
+    }
+
+    private static int WriteExecConversationStoreFailure(
+        TextWriter output,
+        Exception exception,
+        bool jsonRequested,
+        string outputMode)
+    {
+        (string errorCode, string summary) = GetConversationStoreFailure(exception);
+        return WriteExecLocalValidationFailure(output, errorCode, summary, jsonRequested, outputMode);
+    }
+
+    private static int WriteChatConversationStoreFailure(TextWriter output, Exception exception)
+    {
+        (string errorCode, string summary) = GetConversationStoreFailure(exception);
+        WriteSafeFailure(output, errorCode, summary);
+        return 1;
+    }
+
+    private static int WriteSessionConversationStoreFailure(TextWriter output, Exception exception)
+    {
+        (string errorCode, string summary) = GetConversationStoreFailure(exception);
+        WriteSafeFailure(output, errorCode, summary);
+        return 1;
+    }
+
+    private static int WriteSessionNameParseFailure(TextWriter output, ArgumentException exception)
+    {
+        WriteSafeFailure(output, "invalid-session-name", GetSafeSessionNameParseMessage(exception));
+        return 1;
+    }
+
+    private static bool TryParseSessionName(TextWriter output, string name, out ConversationSessionName sessionName)
+    {
+        try
+        {
+            sessionName = ConversationSessionName.Parse(name);
+            return true;
+        }
+        catch (ArgumentException exception)
+        {
+            WriteSessionNameParseFailure(output, exception);
+            sessionName = null!;
+            return false;
+        }
+    }
+
+    private static (string ErrorCode, string Summary) GetConversationStoreFailure(Exception exception)
+    {
+        if (IsInvalidConversationTranscriptException(exception))
+        {
+            return ("session-transcript-invalid", InvalidConversationTranscriptSummary);
+        }
+
+        return ("session-store-error", SessionStoreErrorSummary);
+    }
+
+    private static bool IsInvalidConversationTranscriptException(Exception exception)
+    {
+        return exception is JsonException ||
+            exception is InvalidOperationException invalidOperationException &&
+            string.Equals(
+                invalidOperationException.Message,
+                InvalidConversationTranscriptSummary,
+                StringComparison.Ordinal);
+    }
+
+    private static bool IsConversationStoreException(Exception exception)
+    {
+        return exception is InvalidOperationException or IOException or UnauthorizedAccessException or JsonException or NotSupportedException;
+    }
+
+    private static string GetSafeSessionNameParseMessage(ArgumentException exception)
+    {
+        string message = exception.Message;
+        if (string.IsNullOrEmpty(exception.ParamName))
+        {
+            return message;
+        }
+
+        string parameterSuffix = $" (Parameter '{exception.ParamName}')";
+        return message.EndsWith(parameterSuffix, StringComparison.Ordinal)
+            ? message[..^parameterSuffix.Length]
+            : message;
+    }
+
+    private static void WriteSessionNotFound(TextWriter output)
+    {
+        WriteSafeFailure(output, "session-not-found", "Session transcript was not found.");
+    }
+
+    private static void WriteSessionOptionConflict(TextWriter output)
+    {
+        WriteSafeFailure(output, "session-option-conflict", "Use either --session or --resume, not both.");
+    }
+
+    private static void WriteSafeFailure(TextWriter output, string errorCode, string summary)
+    {
+        output.WriteLine("status: failed");
+        output.WriteLine($"errorCode: {errorCode}");
+        output.WriteLine("summary:");
+        output.WriteLine(summary);
+    }
+
+    private static void WriteSessionList(TextWriter output, IReadOnlyList<ConversationTranscriptSummary> summaries)
+    {
+        output.WriteLine("C# AI CLI sessions");
+        if (summaries.Count == 0)
+        {
+            output.WriteLine("status: empty");
+            return;
+        }
+
+        foreach (ConversationTranscriptSummary summary in summaries.OrderBy(summary => summary.Name, StringComparer.Ordinal))
+        {
+            output.WriteLine(
+                $"- {summary.Name} created={summary.CreatedAtUtc.ToString("O", CultureInfo.InvariantCulture)} updated={summary.UpdatedAtUtc.ToString("O", CultureInfo.InvariantCulture)} turns={summary.TurnCount} toolCalls={summary.ToolCallCount}");
+        }
+    }
+
+    private static int ShowSession(TextWriter output, IConversationStore conversationStore, ConversationSessionName sessionName)
+    {
+        if (!conversationStore.TryGetSummary(sessionName, out ConversationTranscriptSummary? summary) || summary is null)
         {
             output.WriteLine("status: failed");
             output.WriteLine("errorCode: session-not-found");
@@ -784,24 +1195,84 @@ public static class CliCommandFactory
             return 1;
         }
 
+        output.WriteLine("C# AI CLI session");
+        output.WriteLine($"name: {summary.Name}");
+        output.WriteLine($"createdAtUtc: {summary.CreatedAtUtc.ToString("O", CultureInfo.InvariantCulture)}");
+        output.WriteLine($"updatedAtUtc: {summary.UpdatedAtUtc.ToString("O", CultureInfo.InvariantCulture)}");
+        output.WriteLine($"turnCount: {summary.TurnCount}");
+        output.WriteLine($"toolCallCount: {summary.ToolCallCount}");
+        return 0;
+    }
+
+    private static int ExportSessionJson(TextWriter output, CliEnvironmentSnapshot snapshot, ConversationSessionName sessionName)
+    {
+        FileConversationStore conversationStore = FileConversationStore.Create(snapshot);
+        if (!conversationStore.TryLoad(sessionName, out ConversationTranscript? transcript) || transcript is null)
+        {
+            WriteSessionNotFound(output);
+            return 1;
+        }
+
+        string path = ResolveSessionPath(snapshot, sessionName);
         output.Write(File.ReadAllText(path));
         return 0;
     }
 
-    private static int ClearSession(TextWriter output, CliEnvironmentSnapshot snapshot, string name)
+    private static int ExportSessionMarkdown(TextWriter output, IConversationStore conversationStore, ConversationSessionName sessionName)
     {
-        ConversationSessionName sessionName = ConversationSessionName.Parse(name);
-        string path = ResolveSessionPath(snapshot, sessionName);
-        if (!File.Exists(path))
+        if (!conversationStore.TryLoad(sessionName, out ConversationTranscript? transcript) || transcript is null)
+        {
+            WriteSessionNotFound(output);
+            return 1;
+        }
+
+        output.WriteLine(ConversationTranscriptMarkdownFormatter.Format(transcript));
+        return 0;
+    }
+
+    private static int DeleteSession(
+        TextWriter output,
+        IConversationStore conversationStore,
+        ConversationSessionName sessionName,
+        string successStatus,
+        int missingExitCode,
+        bool writeMissingErrorCode)
+    {
+        if (!conversationStore.Delete(sessionName))
         {
             output.WriteLine("status: not-found");
+            if (writeMissingErrorCode)
+            {
+                output.WriteLine("errorCode: session-not-found");
+            }
+
+            return missingExitCode;
+        }
+
+        output.WriteLine($"status: {successStatus}");
+        output.WriteLine($"session: {sessionName.Value}");
+        return 0;
+    }
+
+    private static int RenameSession(
+        TextWriter output,
+        IConversationStore conversationStore,
+        ConversationSessionName sourceSessionName,
+        ConversationSessionName destinationSessionName)
+    {
+        if (conversationStore.Rename(sourceSessionName, destinationSessionName))
+        {
+            output.WriteLine("status: renamed");
+            output.WriteLine($"from: {sourceSessionName.Value}");
+            output.WriteLine($"to: {destinationSessionName.Value}");
             return 0;
         }
 
-        File.Delete(path);
-        output.WriteLine("status: cleared");
-        output.WriteLine($"session: {sessionName.Value}");
-        return 0;
+        output.WriteLine("status: failed");
+        output.WriteLine("errorCode: session-rename-failed");
+        output.WriteLine("summary:");
+        output.WriteLine("Session could not be renamed because the source is missing or the destination already exists.");
+        return 1;
     }
 
     private static string ResolveSessionPath(CliEnvironmentSnapshot snapshot, ConversationSessionName sessionName)

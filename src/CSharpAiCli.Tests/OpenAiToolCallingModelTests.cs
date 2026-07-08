@@ -63,6 +63,45 @@ public sealed class OpenAiToolCallingModelTests
     }
 
     [Fact]
+    public void Start_with_transcript_context_includes_prior_context_and_current_prompt()
+    {
+        ToolRegistry registry = new();
+        registry.Register(new StubTool("workspace.read_text", "Read a text file.", """{"type":"object"}"""));
+        FakeGateway gateway = new()
+        {
+            Responses =
+            [
+                new OpenAiResponseEnvelope(
+                    ResponseId: "resp_context",
+                    Model: "gpt-test",
+                    Text: "done")
+            ]
+        };
+        ConversationTranscript transcript = ConversationTranscript.Create(
+            "smoke",
+            DateTimeOffset.Parse("2024-01-01T00:00:00Z"));
+        transcript.AddUserMessage("previous exec task", DateTimeOffset.Parse("2024-01-01T00:00:01Z"));
+        transcript.AddAssistantMessage(new ChatResponse(
+            Provider: "openai",
+            Model: "gpt-test",
+            ResponseId: "resp_previous",
+            Text: "previous exec answer"), DateTimeOffset.Parse("2024-01-01T00:00:02Z"));
+        OpenAiToolCallingModel model = new(
+            model: "gpt-test",
+            instructions: null,
+            registry,
+            gateway);
+
+        model.Start(CreateRequest("current exec task", transcript));
+
+        OpenAiAgentRequest sentRequest = Assert.Single(gateway.AgentRequests);
+        Assert.NotEqual("current exec task", sentRequest.Prompt);
+        Assert.Contains("previous exec task", sentRequest.Prompt, StringComparison.Ordinal);
+        Assert.Contains("previous exec answer", sentRequest.Prompt, StringComparison.Ordinal);
+        Assert.Contains("current exec task", sentRequest.Prompt, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void Continue_sends_safe_tool_result_outputs_and_returns_parsed_final_turn()
     {
         ToolRegistry registry = new();
@@ -293,14 +332,14 @@ public sealed class OpenAiToolCallingModelTests
         Assert.Equal("call_retry", retryCall.CallId);
     }
 
-    private static AgentRunRequest CreateRequest(string prompt)
+    private static AgentRunRequest CreateRequest(string prompt, ConversationTranscript? transcriptContext = null)
     {
         WorkspaceContext workspace = new(
             RootPath: "workspace-root",
             ConfigPath: Path.Combine("workspace-root", ".caicli", "config.json"),
             Status: WorkspaceStatus.Ready);
 
-        return new AgentRunRequest(prompt, workspace);
+        return new AgentRunRequest(prompt, workspace, TranscriptContext: transcriptContext);
     }
 
     private sealed class FakeGateway : IOpenAiResponsesGateway

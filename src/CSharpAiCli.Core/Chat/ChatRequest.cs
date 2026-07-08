@@ -3,7 +3,8 @@ namespace CSharpAiCli.Core;
 public sealed record ChatRequest(
     string Prompt,
     string? SessionName = null,
-    string? Instructions = null)
+    string? Instructions = null,
+    ConversationTranscript? TranscriptContext = null)
 {
     public bool HasPrompt => !string.IsNullOrWhiteSpace(Prompt);
     public bool HasSession => !string.IsNullOrWhiteSpace(SessionName);

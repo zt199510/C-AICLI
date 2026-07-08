@@ -226,6 +226,41 @@ public sealed class OpenAiResponsesModelClientTests
     }
 
     [Fact]
+    public void Send_with_transcript_context_includes_prior_context_and_current_prompt()
+    {
+        FakeGateway gateway = new()
+        {
+            Response = new OpenAiResponseEnvelope(
+                ResponseId: "resp_context",
+                Model: "gpt-test",
+                Text: "hello from model")
+        };
+        ConversationTranscript transcript = ConversationTranscript.Create(
+            "smoke",
+            DateTimeOffset.Parse("2024-01-01T00:00:00Z"));
+        transcript.AddUserMessage("previous question", DateTimeOffset.Parse("2024-01-01T00:00:01Z"));
+        transcript.AddAssistantMessage(new ChatResponse(
+            Provider: "openai",
+            Model: "gpt-test",
+            ResponseId: "resp_previous",
+            Text: "previous answer"), DateTimeOffset.Parse("2024-01-01T00:00:02Z"));
+        OpenAiResponsesModelClient client = new(
+            CreateSnapshot(apiKey: "sk-test", apiKeySource: "OPENAI_API_KEY", model: "gpt-test"),
+            _ => gateway);
+
+        ChatModelResult result = client.Send(new ChatRequest(
+            Prompt: "current question",
+            SessionName: "smoke",
+            TranscriptContext: transcript));
+
+        Assert.True(result.IsSuccess);
+        Assert.NotEqual("current question", gateway.LastPrompt);
+        Assert.Contains("previous question", gateway.LastPrompt, StringComparison.Ordinal);
+        Assert.Contains("previous answer", gateway.LastPrompt, StringComparison.Ordinal);
+        Assert.Contains("current question", gateway.LastPrompt, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void Send_passes_instruction_text_to_gateway_without_merging_it_into_prompt()
     {
         FakeGateway gateway = new()

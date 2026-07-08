@@ -5,7 +5,8 @@ public sealed record AgentRunRequest(
     WorkspaceContext Workspace,
     string? Instructions = null,
     string? SessionName = null,
-    AgentRunLimits? Limits = null)
+    AgentRunLimits? Limits = null,
+    ConversationTranscript? TranscriptContext = null)
 {
     public AgentRunLimits EffectiveLimits => Limits ?? AgentRunLimits.Default;
 }

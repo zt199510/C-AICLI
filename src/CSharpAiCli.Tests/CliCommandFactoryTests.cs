@@ -1552,6 +1552,563 @@ public sealed class CliCommandFactoryTests
     }
 
     [Fact]
+    public void Exec_resume_requires_existing_transcript_passes_it_to_runner_and_saves()
+    {
+        using TempDirectory temp = TempDirectory.Create();
+        using StringWriter output = new();
+        FakeAgentRunner agentRunner = new(AgentRunResult.Success("agent completed task", [], []));
+        ConversationTranscript existing = ConversationTranscript.Create(
+            "smoke",
+            DateTimeOffset.Parse("2024-01-01T00:00:00Z"));
+        FakeConversationStore store = new()
+        {
+            Transcript = existing
+        };
+
+        int exitCode = CliCommandFactory
+            .Create(
+                output,
+                workspacePath => CreateSnapshot(
+                    workspacePath,
+                    apiKey: "sk-test-secret",
+                    apiKeySource: "OPENAI_API_KEY",
+                    model: "gpt-test"),
+                (_, _) => { },
+                _ => new FakeChatModelClient(ChatModelResult.Success(new ChatResponse("openai", "gpt-test", "resp", ""))),
+                writer => new TerminalChatStreamingRenderer(writer),
+                _ => store,
+                () => DateTimeOffset.Parse("2024-01-01T00:00:05Z"),
+                (_, _, _) => agentRunner)
+            .Parse(["exec", "--workspace", temp.Path, "--resume", "smoke", "summarize workspace"])
+            .Invoke();
+
+        Assert.Equal(0, exitCode);
+        Assert.Equal("smoke", store.TryLoadedSessionName?.Value);
+        Assert.Null(store.LoadedSessionName);
+        Assert.Equal("smoke", store.SavedSessionName?.Value);
+        Assert.Equal("smoke", agentRunner.LastRequest?.SessionName);
+        Assert.Same(existing, agentRunner.LastRequest?.TranscriptContext);
+        Assert.Same(existing, agentRunner.LastTranscript);
+        Assert.Same(existing, store.SavedTranscript);
+    }
+
+    [Fact]
+    public void Exec_resume_missing_returns_session_not_found_without_running_agent()
+    {
+        using TempDirectory temp = TempDirectory.Create();
+        using StringWriter output = new();
+        FakeAgentRunner agentRunner = new(AgentRunResult.Success("agent completed task", [], []));
+        FakeConversationStore store = new()
+        {
+            TryLoadResult = false
+        };
+
+        int exitCode = CliCommandFactory
+            .Create(
+                output,
+                workspacePath => CreateSnapshot(
+                    workspacePath,
+                    apiKey: "sk-test-secret",
+                    apiKeySource: "OPENAI_API_KEY",
+                    model: "gpt-test"),
+                (_, _) => { },
+                _ => new FakeChatModelClient(ChatModelResult.Success(new ChatResponse("openai", "gpt-test", "resp", ""))),
+                writer => new TerminalChatStreamingRenderer(writer),
+                _ => store,
+                () => DateTimeOffset.Parse("2024-01-01T00:00:05Z"),
+                (_, _, _) => agentRunner)
+            .Parse(["exec", "--workspace", temp.Path, "--resume", "missing", "summarize workspace"])
+            .Invoke();
+
+        string text = output.ToString();
+        Assert.Equal(1, exitCode);
+        Assert.Contains("status: failed", text);
+        Assert.Contains("errorCode: session-not-found", text);
+        Assert.Contains("summary:", text);
+        Assert.Contains("Session transcript was not found.", text);
+        Assert.Equal("missing", store.TryLoadedSessionName?.Value);
+        Assert.Null(store.ExistsSessionName);
+        Assert.Null(store.LoadedSessionName);
+        Assert.Null(store.SavedSessionName);
+        Assert.Null(agentRunner.LastRequest);
+    }
+
+    [Fact]
+    public void Exec_json_resume_missing_renders_json_failure_without_running_agent()
+    {
+        using TempDirectory temp = TempDirectory.Create();
+        using StringWriter output = new();
+        FakeAgentRunner agentRunner = new(AgentRunResult.Success("agent completed task", [], []));
+        FakeConversationStore store = new()
+        {
+            TryLoadResult = false
+        };
+
+        int exitCode = CliCommandFactory
+            .Create(
+                output,
+                workspacePath => CreateSnapshot(
+                    workspacePath,
+                    apiKey: "sk-test-secret",
+                    apiKeySource: "OPENAI_API_KEY",
+                    model: "gpt-test"),
+                (_, _) => { },
+                _ => new FakeChatModelClient(ChatModelResult.Success(new ChatResponse("openai", "gpt-test", "resp", ""))),
+                writer => new TerminalChatStreamingRenderer(writer),
+                _ => store,
+                () => DateTimeOffset.Parse("2024-01-01T00:00:05Z"),
+                (_, _, _) => agentRunner)
+            .Parse(["exec", "--json", "--workspace", temp.Path, "--resume", "missing", "summarize workspace"])
+            .Invoke();
+
+        string[] lines = output.ToString().TrimEnd().Split(Environment.NewLine);
+        JsonObject result = Assert.IsType<JsonObject>(JsonNode.Parse(Assert.Single(lines)));
+        Assert.Equal(1, exitCode);
+        Assert.Equal("exec.result", result["type"]?.GetValue<string>());
+        Assert.Equal("session-not-found", result["errorCode"]?.GetValue<string>());
+        Assert.Equal("Session transcript was not found.", result["summary"]?.GetValue<string>());
+        JsonObject payload = Assert.IsType<JsonObject>(result["payload"]);
+        Assert.Equal("failure", payload["status"]?.GetValue<string>());
+        Assert.Equal(1, payload["exitCode"]?.GetValue<int>());
+        Assert.Equal("missing", store.TryLoadedSessionName?.Value);
+        Assert.Null(agentRunner.LastRequest);
+    }
+
+    [Fact]
+    public void Exec_json_resume_invalid_session_name_renders_json_failure_without_running_agent_or_store()
+    {
+        using TempDirectory temp = TempDirectory.Create();
+        using StringWriter output = new();
+        bool storeFactoryInvoked = false;
+        bool runnerFactoryInvoked = false;
+
+        RootCommand command = CliCommandFactory
+            .Create(
+                output,
+                workspacePath => CreateSnapshot(
+                    workspacePath,
+                    apiKey: "sk-test-secret",
+                    apiKeySource: "OPENAI_API_KEY",
+                    model: "gpt-test"),
+                (_, _) => { },
+                _ => new FakeChatModelClient(ChatModelResult.Success(new ChatResponse("openai", "gpt-test", "resp", ""))),
+                writer => new TerminalChatStreamingRenderer(writer),
+                _ =>
+                {
+                    storeFactoryInvoked = true;
+                    return new FakeConversationStore();
+                },
+                () => DateTimeOffset.Parse("2024-01-01T00:00:05Z"),
+                (_, _, _) =>
+                {
+                    runnerFactoryInvoked = true;
+                    return new FakeAgentRunner(AgentRunResult.Success("agent completed task", [], []));
+                });
+        int exitCode = CliCommandFactory.Invoke(
+            command,
+            ["exec", "--json", "--workspace", temp.Path, "--resume", "../secret", "summarize workspace"],
+            output);
+
+        string[] lines = output.ToString().TrimEnd().Split(Environment.NewLine);
+        JsonObject result = Assert.IsType<JsonObject>(JsonNode.Parse(Assert.Single(lines)));
+        Assert.Equal(1, exitCode);
+        Assert.Equal("exec.result", result["type"]?.GetValue<string>());
+        Assert.Equal("invalid-session-name", result["errorCode"]?.GetValue<string>());
+        Assert.Equal("Session name contains invalid path characters.", result["summary"]?.GetValue<string>());
+        JsonObject payload = Assert.IsType<JsonObject>(result["payload"]);
+        Assert.Equal("failure", payload["status"]?.GetValue<string>());
+        Assert.Equal(1, payload["exitCode"]?.GetValue<int>());
+        Assert.False(storeFactoryInvoked);
+        Assert.False(runnerFactoryInvoked);
+    }
+
+    [Fact]
+    public void Exec_json_resume_empty_session_name_renders_json_failure_without_running_agent_or_store()
+    {
+        using TempDirectory temp = TempDirectory.Create();
+        using StringWriter output = new();
+        bool storeFactoryInvoked = false;
+        bool runnerFactoryInvoked = false;
+
+        RootCommand command = CliCommandFactory
+            .Create(
+                output,
+                workspacePath => CreateSnapshot(
+                    workspacePath,
+                    apiKey: "sk-test-secret",
+                    apiKeySource: "OPENAI_API_KEY",
+                    model: "gpt-test"),
+                (_, _) => { },
+                _ => new FakeChatModelClient(ChatModelResult.Success(new ChatResponse("openai", "gpt-test", "resp", ""))),
+                writer => new TerminalChatStreamingRenderer(writer),
+                _ =>
+                {
+                    storeFactoryInvoked = true;
+                    return new FakeConversationStore();
+                },
+                () => DateTimeOffset.Parse("2024-01-01T00:00:05Z"),
+                (_, _, _) =>
+                {
+                    runnerFactoryInvoked = true;
+                    return new FakeAgentRunner(AgentRunResult.Success("agent completed task", [], []));
+                });
+        int exitCode = CliCommandFactory.Invoke(
+            command,
+            ["exec", "--json", "--workspace", temp.Path, "--resume", "", "summarize workspace"],
+            output);
+
+        JsonObject result = AssertSingleExecJsonResult(output);
+        Assert.Equal(1, exitCode);
+        Assert.Equal("invalid-session-name", result["errorCode"]?.GetValue<string>());
+        Assert.Equal("Session name must not be empty.", result["summary"]?.GetValue<string>());
+        JsonObject payload = Assert.IsType<JsonObject>(result["payload"]);
+        Assert.Equal("failure", payload["status"]?.GetValue<string>());
+        Assert.Equal(1, payload["exitCode"]?.GetValue<int>());
+        Assert.False(storeFactoryInvoked);
+        Assert.False(runnerFactoryInvoked);
+    }
+
+    [Fact]
+    public void Exec_output_json_session_invalid_session_name_renders_json_failure_without_running_agent_or_store()
+    {
+        using TempDirectory temp = TempDirectory.Create();
+        using StringWriter output = new();
+        bool storeFactoryInvoked = false;
+        bool runnerFactoryInvoked = false;
+
+        RootCommand command = CliCommandFactory
+            .Create(
+                output,
+                workspacePath => CreateSnapshot(
+                    workspacePath,
+                    apiKey: "sk-test-secret",
+                    apiKeySource: "OPENAI_API_KEY",
+                    model: "gpt-test"),
+                (_, _) => { },
+                _ => new FakeChatModelClient(ChatModelResult.Success(new ChatResponse("openai", "gpt-test", "resp", ""))),
+                writer => new TerminalChatStreamingRenderer(writer),
+                _ =>
+                {
+                    storeFactoryInvoked = true;
+                    return new FakeConversationStore();
+                },
+                () => DateTimeOffset.Parse("2024-01-01T00:00:05Z"),
+                (_, _, _) =>
+                {
+                    runnerFactoryInvoked = true;
+                    return new FakeAgentRunner(AgentRunResult.Success("agent completed task", [], []));
+                });
+        int exitCode = CliCommandFactory.Invoke(
+            command,
+            ["exec", "--workspace", temp.Path, "--output", "json", "--session", "../secret", "summarize workspace"],
+            output);
+
+        string[] lines = output.ToString().TrimEnd().Split(Environment.NewLine);
+        JsonObject result = Assert.IsType<JsonObject>(JsonNode.Parse(Assert.Single(lines)));
+        Assert.Equal(1, exitCode);
+        Assert.Equal("exec.result", result["type"]?.GetValue<string>());
+        Assert.Equal("invalid-session-name", result["errorCode"]?.GetValue<string>());
+        Assert.Equal("Session name contains invalid path characters.", result["summary"]?.GetValue<string>());
+        JsonObject payload = Assert.IsType<JsonObject>(result["payload"]);
+        Assert.Equal("failure", payload["status"]?.GetValue<string>());
+        Assert.Equal(1, payload["exitCode"]?.GetValue<int>());
+        Assert.False(storeFactoryInvoked);
+        Assert.False(runnerFactoryInvoked);
+    }
+
+    [Fact]
+    public void Exec_output_json_session_whitespace_session_name_renders_json_failure_without_running_agent_or_store()
+    {
+        using TempDirectory temp = TempDirectory.Create();
+        using StringWriter output = new();
+        bool storeFactoryInvoked = false;
+        bool runnerFactoryInvoked = false;
+
+        RootCommand command = CliCommandFactory
+            .Create(
+                output,
+                workspacePath => CreateSnapshot(
+                    workspacePath,
+                    apiKey: "sk-test-secret",
+                    apiKeySource: "OPENAI_API_KEY",
+                    model: "gpt-test"),
+                (_, _) => { },
+                _ => new FakeChatModelClient(ChatModelResult.Success(new ChatResponse("openai", "gpt-test", "resp", ""))),
+                writer => new TerminalChatStreamingRenderer(writer),
+                _ =>
+                {
+                    storeFactoryInvoked = true;
+                    return new FakeConversationStore();
+                },
+                () => DateTimeOffset.Parse("2024-01-01T00:00:05Z"),
+                (_, _, _) =>
+                {
+                    runnerFactoryInvoked = true;
+                    return new FakeAgentRunner(AgentRunResult.Success("agent completed task", [], []));
+                });
+        int exitCode = CliCommandFactory.Invoke(
+            command,
+            ["exec", "--workspace", temp.Path, "--output", "json", "--session", " ", "summarize workspace"],
+            output);
+
+        JsonObject result = AssertSingleExecJsonResult(output);
+        Assert.Equal(1, exitCode);
+        Assert.Equal("invalid-session-name", result["errorCode"]?.GetValue<string>());
+        Assert.Equal("Session name must not be empty.", result["summary"]?.GetValue<string>());
+        JsonObject payload = Assert.IsType<JsonObject>(result["payload"]);
+        Assert.Equal("failure", payload["status"]?.GetValue<string>());
+        Assert.Equal(1, payload["exitCode"]?.GetValue<int>());
+        Assert.False(storeFactoryInvoked);
+        Assert.False(runnerFactoryInvoked);
+    }
+
+    [Fact]
+    public void Exec_session_and_resume_conflict_returns_failure_without_running_agent()
+    {
+        using TempDirectory temp = TempDirectory.Create();
+        using StringWriter output = new();
+        FakeAgentRunner agentRunner = new(AgentRunResult.Success("agent completed task", [], []));
+        FakeConversationStore store = new();
+
+        int exitCode = CliCommandFactory
+            .Create(
+                output,
+                workspacePath => CreateSnapshot(
+                    workspacePath,
+                    apiKey: "sk-test-secret",
+                    apiKeySource: "OPENAI_API_KEY",
+                    model: "gpt-test"),
+                (_, _) => { },
+                _ => new FakeChatModelClient(ChatModelResult.Success(new ChatResponse("openai", "gpt-test", "resp", ""))),
+                writer => new TerminalChatStreamingRenderer(writer),
+                _ => store,
+                () => DateTimeOffset.Parse("2024-01-01T00:00:05Z"),
+                (_, _, _) => agentRunner)
+            .Parse(["exec", "--workspace", temp.Path, "--session", "smoke", "--resume", "smoke", "summarize workspace"])
+            .Invoke();
+
+        Assert.Equal(1, exitCode);
+        Assert.Contains("session-option-conflict", output.ToString());
+        Assert.Null(store.ExistsSessionName);
+        Assert.Null(store.LoadedSessionName);
+        Assert.Null(agentRunner.LastRequest);
+    }
+
+    [Fact]
+    public void Exec_output_json_session_and_resume_conflict_renders_json_failure_without_running_agent()
+    {
+        using TempDirectory temp = TempDirectory.Create();
+        using StringWriter output = new();
+        FakeAgentRunner agentRunner = new(AgentRunResult.Success("agent completed task", [], []));
+        FakeConversationStore store = new();
+
+        int exitCode = CliCommandFactory
+            .Create(
+                output,
+                workspacePath => CreateSnapshot(
+                    workspacePath,
+                    apiKey: "sk-test-secret",
+                    apiKeySource: "OPENAI_API_KEY",
+                    model: "gpt-test"),
+                (_, _) => { },
+                _ => new FakeChatModelClient(ChatModelResult.Success(new ChatResponse("openai", "gpt-test", "resp", ""))),
+                writer => new TerminalChatStreamingRenderer(writer),
+                _ => store,
+                () => DateTimeOffset.Parse("2024-01-01T00:00:05Z"),
+                (_, _, _) => agentRunner)
+            .Parse(["exec", "--workspace", temp.Path, "--output", "json", "--session", "smoke", "--resume", "smoke", "summarize workspace"])
+            .Invoke();
+
+        string[] lines = output.ToString().TrimEnd().Split(Environment.NewLine);
+        JsonObject result = Assert.IsType<JsonObject>(JsonNode.Parse(Assert.Single(lines)));
+        Assert.Equal(1, exitCode);
+        Assert.Equal("exec.result", result["type"]?.GetValue<string>());
+        Assert.Equal("session-option-conflict", result["errorCode"]?.GetValue<string>());
+        Assert.Equal("Use either --session or --resume, not both.", result["summary"]?.GetValue<string>());
+        JsonObject payload = Assert.IsType<JsonObject>(result["payload"]);
+        Assert.Equal("failure", payload["status"]?.GetValue<string>());
+        Assert.Equal(1, payload["exitCode"]?.GetValue<int>());
+        Assert.Null(store.TryLoadedSessionName);
+        Assert.Null(agentRunner.LastRequest);
+    }
+
+    [Fact]
+    public void Exec_output_json_empty_session_and_resume_conflict_renders_json_failure_without_running_agent_or_store()
+    {
+        using TempDirectory temp = TempDirectory.Create();
+        using StringWriter output = new();
+        bool storeFactoryInvoked = false;
+        bool runnerFactoryInvoked = false;
+
+        RootCommand command = CliCommandFactory
+            .Create(
+                output,
+                workspacePath => CreateSnapshot(
+                    workspacePath,
+                    apiKey: "sk-test-secret",
+                    apiKeySource: "OPENAI_API_KEY",
+                    model: "gpt-test"),
+                (_, _) => { },
+                _ => new FakeChatModelClient(ChatModelResult.Success(new ChatResponse("openai", "gpt-test", "resp", ""))),
+                writer => new TerminalChatStreamingRenderer(writer),
+                _ =>
+                {
+                    storeFactoryInvoked = true;
+                    return new FakeConversationStore();
+                },
+                () => DateTimeOffset.Parse("2024-01-01T00:00:05Z"),
+                (_, _, _) =>
+                {
+                    runnerFactoryInvoked = true;
+                    return new FakeAgentRunner(AgentRunResult.Success("agent completed task", [], []));
+                });
+        int exitCode = CliCommandFactory.Invoke(
+            command,
+            ["exec", "--workspace", temp.Path, "--output", "json", "--session", "", "--resume", "smoke", "summarize workspace"],
+            output);
+
+        JsonObject result = AssertSingleExecJsonResult(output);
+        Assert.Equal(1, exitCode);
+        Assert.Equal("session-option-conflict", result["errorCode"]?.GetValue<string>());
+        Assert.Equal("Use either --session or --resume, not both.", result["summary"]?.GetValue<string>());
+        JsonObject payload = Assert.IsType<JsonObject>(result["payload"]);
+        Assert.Equal("failure", payload["status"]?.GetValue<string>());
+        Assert.Equal(1, payload["exitCode"]?.GetValue<int>());
+        Assert.False(storeFactoryInvoked);
+        Assert.False(runnerFactoryInvoked);
+    }
+
+    [Fact]
+    public void Exec_json_resume_malformed_file_transcript_renders_json_failure_without_running_agent()
+    {
+        using TempDirectory temp = TempDirectory.Create();
+        using StringWriter output = new();
+        bool runnerFactoryInvoked = false;
+        string userConfigPath = Path.Combine(temp.Path, ".caicli", "config.json");
+        string sessionDirectory = Path.Combine(temp.Path, ".caicli", "sessions");
+        Directory.CreateDirectory(sessionDirectory);
+        File.WriteAllText(Path.Combine(sessionDirectory, "smoke.transcript.json"), """{"schemaVersion":""");
+
+        RootCommand command = CliCommandFactory.Create(
+            output,
+            workspacePath => CreateSnapshot(
+                workspacePath,
+                apiKey: "sk-test-secret",
+                apiKeySource: "OPENAI_API_KEY",
+                model: "gpt-test",
+                userConfigPath: userConfigPath),
+            (_, _) => { },
+            _ => new FakeChatModelClient(ChatModelResult.Success(new ChatResponse("openai", "gpt-test", "resp", ""))),
+            writer => new TerminalChatStreamingRenderer(writer),
+            snapshot => FileConversationStore.Create(snapshot),
+            () => DateTimeOffset.Parse("2024-01-01T00:00:05Z"),
+            (_, _, _) =>
+            {
+                runnerFactoryInvoked = true;
+                return new FakeAgentRunner(AgentRunResult.Success("agent completed task", [], []));
+            });
+
+        int exitCode = CliCommandFactory.Invoke(
+            command,
+            ["exec", "--json", "--workspace", temp.Path, "--resume", "smoke", "summarize workspace"],
+            output);
+
+        JsonObject result = AssertSingleExecJsonResult(output);
+        Assert.Equal(1, exitCode);
+        Assert.Equal("session-transcript-invalid", result["errorCode"]?.GetValue<string>());
+        Assert.Equal("Conversation transcript is missing or uses an unsupported schema version.", result["summary"]?.GetValue<string>());
+        JsonObject payload = Assert.IsType<JsonObject>(result["payload"]);
+        Assert.Equal("failure", payload["status"]?.GetValue<string>());
+        Assert.Equal(1, payload["exitCode"]?.GetValue<int>());
+        Assert.False(runnerFactoryInvoked);
+    }
+
+    [Fact]
+    public void Exec_json_session_malformed_file_transcript_renders_json_failure_without_running_agent()
+    {
+        using TempDirectory temp = TempDirectory.Create();
+        using StringWriter output = new();
+        bool runnerFactoryInvoked = false;
+        string userConfigPath = Path.Combine(temp.Path, ".caicli", "config.json");
+        string sessionDirectory = Path.Combine(temp.Path, ".caicli", "sessions");
+        Directory.CreateDirectory(sessionDirectory);
+        File.WriteAllText(Path.Combine(sessionDirectory, "smoke.transcript.json"), """{"schemaVersion":""");
+
+        RootCommand command = CliCommandFactory.Create(
+            output,
+            workspacePath => CreateSnapshot(
+                workspacePath,
+                apiKey: "sk-test-secret",
+                apiKeySource: "OPENAI_API_KEY",
+                model: "gpt-test",
+                userConfigPath: userConfigPath),
+            (_, _) => { },
+            _ => new FakeChatModelClient(ChatModelResult.Success(new ChatResponse("openai", "gpt-test", "resp", ""))),
+            writer => new TerminalChatStreamingRenderer(writer),
+            snapshot => FileConversationStore.Create(snapshot),
+            () => DateTimeOffset.Parse("2024-01-01T00:00:05Z"),
+            (_, _, _) =>
+            {
+                runnerFactoryInvoked = true;
+                return new FakeAgentRunner(AgentRunResult.Success("agent completed task", [], []));
+            });
+
+        int exitCode = CliCommandFactory.Invoke(
+            command,
+            ["exec", "--json", "--workspace", temp.Path, "--session", "smoke", "summarize workspace"],
+            output);
+
+        JsonObject result = AssertSingleExecJsonResult(output);
+        Assert.Equal(1, exitCode);
+        Assert.Equal("session-transcript-invalid", result["errorCode"]?.GetValue<string>());
+        Assert.Equal("Conversation transcript is missing or uses an unsupported schema version.", result["summary"]?.GetValue<string>());
+        JsonObject payload = Assert.IsType<JsonObject>(result["payload"]);
+        Assert.Equal("failure", payload["status"]?.GetValue<string>());
+        Assert.Equal(1, payload["exitCode"]?.GetValue<int>());
+        Assert.False(runnerFactoryInvoked);
+    }
+
+    [Fact]
+    public void Exec_json_session_save_exception_renders_json_failure_without_leaking_exception_detail()
+    {
+        using TempDirectory temp = TempDirectory.Create();
+        using StringWriter output = new();
+        FakeAgentRunner agentRunner = new(AgentRunResult.Success("agent completed task", [], []));
+        FakeConversationStore store = new()
+        {
+            SaveException = new IOException("cannot write C:\\secret\\smoke.transcript.json")
+        };
+
+        int exitCode = CliCommandFactory
+            .Create(
+                output,
+                workspacePath => CreateSnapshot(
+                    workspacePath,
+                    apiKey: "sk-test-secret",
+                    apiKeySource: "OPENAI_API_KEY",
+                    model: "gpt-test"),
+                (_, _) => { },
+                _ => new FakeChatModelClient(ChatModelResult.Success(new ChatResponse("openai", "gpt-test", "resp", ""))),
+                writer => new TerminalChatStreamingRenderer(writer),
+                _ => store,
+                () => DateTimeOffset.Parse("2024-01-01T00:00:05Z"),
+                (_, _, _) => agentRunner)
+            .Parse(["exec", "--json", "--workspace", temp.Path, "--session", "smoke", "summarize workspace"])
+            .Invoke();
+
+        JsonObject result = AssertSingleExecJsonResult(output);
+        Assert.Equal(1, exitCode);
+        Assert.Equal("session-store-error", result["errorCode"]?.GetValue<string>());
+        Assert.Equal("Conversation session store operation failed.", result["summary"]?.GetValue<string>());
+        JsonObject payload = Assert.IsType<JsonObject>(result["payload"]);
+        Assert.Equal("failure", payload["status"]?.GetValue<string>());
+        Assert.Equal(1, payload["exitCode"]?.GetValue<int>());
+        Assert.Equal("smoke", store.SavedSessionName?.Value);
+        Assert.NotNull(agentRunner.LastRequest);
+        Assert.DoesNotContain("C:\\secret", output.ToString(), StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void Exec_session_persists_tool_call_recorded_by_runner_into_passed_transcript()
     {
         using TempDirectory temp = TempDirectory.Create();
@@ -1873,7 +2430,7 @@ public sealed class CliCommandFactoryTests
     }
 
     [Fact]
-    public void Session_export_and_clear_manage_transcript_file()
+    public void Session_export_defaults_to_json_transcript_file()
     {
         using TempDirectory temp = TempDirectory.Create();
         string userHome = Path.Combine(temp.Path, "user-home");
@@ -1907,6 +2464,409 @@ public sealed class CliCommandFactoryTests
 
         Assert.Equal(0, exportExitCode);
         Assert.Contains("\"sessionName\": \"smoke\"", exportOutput.ToString());
+    }
+
+    [Fact]
+    public void Session_export_format_json_prints_json_transcript_file()
+    {
+        using TempDirectory temp = TempDirectory.Create();
+        string userHome = Path.Combine(temp.Path, "user-home");
+        string workspace = Path.Combine(temp.Path, "workspace");
+        Directory.CreateDirectory(workspace);
+        string sessionDirectory = Path.Combine(userHome, ".caicli", "sessions");
+        Directory.CreateDirectory(sessionDirectory);
+        File.WriteAllText(Path.Combine(sessionDirectory, "smoke.transcript.json"), """
+        {
+          "schemaVersion": 1,
+          "sessionName": "smoke",
+          "createdAtUtc": "2024-01-01T00:00:00+00:00",
+          "updatedAtUtc": "2024-01-01T00:00:00+00:00",
+          "messages": [],
+          "toolCalls": [],
+          "errors": []
+        }
+        """);
+        using StringWriter exportOutput = new();
+        CliEnvironmentSnapshot snapshot = CreateSnapshot(
+            workspacePath: workspace,
+            apiKey: null,
+            apiKeySource: "missing",
+            model: "not configured",
+            userConfigPath: Path.Combine(userHome, ".caicli", "config.json"));
+
+        int exportExitCode = CliCommandFactory
+            .Create(exportOutput, _ => snapshot)
+            .Parse(["session", "export", "--format", "json", "smoke"])
+            .Invoke();
+
+        Assert.Equal(0, exportExitCode);
+        Assert.Contains("\"sessionName\": \"smoke\"", exportOutput.ToString());
+    }
+
+    [Fact]
+    public void Session_export_format_json_does_not_create_conversation_store()
+    {
+        using TempDirectory temp = TempDirectory.Create();
+        string userHome = Path.Combine(temp.Path, "user-home");
+        string workspace = Path.Combine(temp.Path, "workspace");
+        Directory.CreateDirectory(workspace);
+        string sessionDirectory = Path.Combine(userHome, ".caicli", "sessions");
+        Directory.CreateDirectory(sessionDirectory);
+        File.WriteAllText(Path.Combine(sessionDirectory, "smoke.transcript.json"), """
+        {
+          "schemaVersion": 1,
+          "sessionName": "smoke",
+          "createdAtUtc": "2024-01-01T00:00:00+00:00",
+          "updatedAtUtc": "2024-01-01T00:00:00+00:00",
+          "messages": [],
+          "toolCalls": [],
+          "errors": []
+        }
+        """);
+        using StringWriter exportOutput = new();
+        CliEnvironmentSnapshot snapshot = CreateSnapshot(
+            workspacePath: workspace,
+            apiKey: null,
+            apiKeySource: "missing",
+            model: "not configured",
+            userConfigPath: Path.Combine(userHome, ".caicli", "config.json"));
+        int storeFactoryCalls = 0;
+
+        int exportExitCode = CliCommandFactory
+            .Create(
+                exportOutput,
+                _ => snapshot,
+                (_, _) => { },
+                _ => new FakeChatModelClient(ChatModelResult.Success(new ChatResponse("openai", "gpt-test", "resp", ""))),
+                writer => new TerminalChatStreamingRenderer(writer),
+                _ =>
+                {
+                    storeFactoryCalls++;
+                    return new FakeConversationStore();
+                },
+                () => DateTimeOffset.Parse("2024-01-01T00:00:05Z"))
+            .Parse(["session", "export", "--format", "json", "smoke"])
+            .Invoke();
+
+        Assert.Equal(0, exportExitCode);
+        Assert.Equal(0, storeFactoryCalls);
+        Assert.Contains("\"sessionName\": \"smoke\"", exportOutput.ToString());
+    }
+
+    [Fact]
+    public void Session_export_format_markdown_with_file_store_prints_safe_readable_transcript_from_disk()
+    {
+        using TempDirectory temp = TempDirectory.Create();
+        string userHome = Path.Combine(temp.Path, "user-home");
+        string workspace = Path.Combine(temp.Path, "workspace");
+        Directory.CreateDirectory(workspace);
+        string sessionDirectory = Path.Combine(userHome, ".caicli", "sessions");
+        Directory.CreateDirectory(sessionDirectory);
+        File.WriteAllText(Path.Combine(sessionDirectory, "smoke.transcript.json"), """
+        {
+          "schemaVersion": 1,
+          "sessionName": "smoke",
+          "createdAtUtc": "2024-01-01T00:00:00+00:00",
+          "updatedAtUtc": "2024-01-01T00:00:04+00:00",
+          "messages": [
+            {
+              "role": "user",
+              "createdAtUtc": "2024-01-01T00:00:01+00:00",
+              "content": "hello from disk",
+              "provider": null,
+              "model": null,
+              "responseId": null
+            }
+          ],
+          "toolCalls": [
+            {
+              "createdAtUtc": "2024-01-01T00:00:02+00:00",
+              "callId": "call_test",
+              "toolName": "workspace.read_text",
+              "argumentsJson": "{\"apiKey\":\"sk-tool-secret\",\"path\":\"note.txt\"}",
+              "approvalStatus": "approved",
+              "completedAtUtc": "2024-01-01T00:00:03+00:00",
+              "succeeded": true,
+              "outputSummary": "read note from disk",
+              "failureReason": null,
+              "errorCode": null,
+              "retryable": false
+            }
+          ],
+          "errors": []
+        }
+        """);
+        using StringWriter exportOutput = new();
+        CliEnvironmentSnapshot snapshot = CreateSnapshot(
+            workspacePath: workspace,
+            apiKey: null,
+            apiKeySource: "missing",
+            model: "not configured",
+            userConfigPath: Path.Combine(userHome, ".caicli", "config.json"));
+
+        int exportExitCode = CliCommandFactory
+            .Create(exportOutput, _ => snapshot)
+            .Parse(["session", "export", "--format", "markdown", "smoke"])
+            .Invoke();
+
+        string text = exportOutput.ToString();
+        Assert.Equal(0, exportExitCode);
+        Assert.Contains("# Session: smoke", text);
+        Assert.Contains("hello from disk", text);
+        Assert.Contains("workspace.read_text succeeded", text);
+        Assert.Contains("read note from disk", text);
+        Assert.DoesNotContain("ArgumentsJson", text, StringComparison.Ordinal);
+        Assert.DoesNotContain("argumentsJson", text, StringComparison.Ordinal);
+        Assert.DoesNotContain("sk-tool-secret", text, StringComparison.Ordinal);
+        Assert.DoesNotContain("apiKey", text, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Session_export_format_json_with_malformed_file_transcript_returns_safe_failure()
+    {
+        using TempDirectory temp = TempDirectory.Create();
+        string userHome = Path.Combine(temp.Path, "user-home");
+        string workspace = Path.Combine(temp.Path, "workspace");
+        Directory.CreateDirectory(workspace);
+        string sessionDirectory = Path.Combine(userHome, ".caicli", "sessions");
+        Directory.CreateDirectory(sessionDirectory);
+        File.WriteAllText(Path.Combine(sessionDirectory, "smoke.transcript.json"), """{"schemaVersion":""");
+        using StringWriter exportOutput = new();
+        CliEnvironmentSnapshot snapshot = CreateSnapshot(
+            workspacePath: workspace,
+            apiKey: null,
+            apiKeySource: "missing",
+            model: "not configured",
+            userConfigPath: Path.Combine(userHome, ".caicli", "config.json"));
+
+        int exportExitCode = CliCommandFactory.Invoke(
+            CliCommandFactory.Create(exportOutput, _ => snapshot),
+            ["session", "export", "--format", "json", "smoke"],
+            exportOutput);
+
+        string text = exportOutput.ToString();
+        Assert.Equal(1, exportExitCode);
+        Assert.Contains("status: failed", text);
+        Assert.Contains("errorCode: session-transcript-invalid", text);
+        Assert.Contains("Conversation transcript is missing or uses an unsupported schema version.", text);
+        Assert.DoesNotContain("JsonReaderException", text, StringComparison.Ordinal);
+        Assert.DoesNotContain("System.Text.Json", text, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Session_export_format_markdown_with_malformed_file_transcript_returns_safe_failure()
+    {
+        using TempDirectory temp = TempDirectory.Create();
+        string userHome = Path.Combine(temp.Path, "user-home");
+        string workspace = Path.Combine(temp.Path, "workspace");
+        Directory.CreateDirectory(workspace);
+        string sessionDirectory = Path.Combine(userHome, ".caicli", "sessions");
+        Directory.CreateDirectory(sessionDirectory);
+        File.WriteAllText(Path.Combine(sessionDirectory, "smoke.transcript.json"), """{"schemaVersion":""");
+        using StringWriter exportOutput = new();
+        CliEnvironmentSnapshot snapshot = CreateSnapshot(
+            workspacePath: workspace,
+            apiKey: null,
+            apiKeySource: "missing",
+            model: "not configured",
+            userConfigPath: Path.Combine(userHome, ".caicli", "config.json"));
+
+        int exportExitCode = CliCommandFactory.Invoke(
+            CliCommandFactory.Create(exportOutput, _ => snapshot),
+            ["session", "export", "--format", "markdown", "smoke"],
+            exportOutput);
+
+        string text = exportOutput.ToString();
+        Assert.Equal(1, exportExitCode);
+        Assert.Contains("status: failed", text);
+        Assert.Contains("errorCode: session-transcript-invalid", text);
+        Assert.Contains("Conversation transcript is missing or uses an unsupported schema version.", text);
+        Assert.DoesNotContain("JsonReaderException", text, StringComparison.Ordinal);
+        Assert.DoesNotContain("System.Text.Json", text, StringComparison.Ordinal);
+    }
+
+    [Theory]
+    [InlineData("toolCalls")]
+    [InlineData("errors")]
+    public void Session_export_format_markdown_with_null_tool_call_or_error_returns_safe_failure(
+        string nullEntryCollectionName)
+    {
+        using TempDirectory temp = TempDirectory.Create();
+        string userHome = Path.Combine(temp.Path, "user-home");
+        string workspace = Path.Combine(temp.Path, "workspace");
+        Directory.CreateDirectory(workspace);
+        string sessionDirectory = Path.Combine(userHome, ".caicli", "sessions");
+        Directory.CreateDirectory(sessionDirectory);
+        string toolCallsJson = nullEntryCollectionName == "toolCalls" ? "[null]" : "[]";
+        string errorsJson = nullEntryCollectionName == "errors" ? "[null]" : "[]";
+        File.WriteAllText(Path.Combine(sessionDirectory, "smoke.transcript.json"), $$"""
+        {
+          "schemaVersion": 1,
+          "sessionName": "smoke",
+          "createdAtUtc": "2024-01-01T00:00:00+00:00",
+          "updatedAtUtc": "2024-01-01T00:00:00+00:00",
+          "messages": [],
+          "toolCalls": {{toolCallsJson}},
+          "errors": {{errorsJson}}
+        }
+        """);
+        using StringWriter exportOutput = new();
+        CliEnvironmentSnapshot snapshot = CreateSnapshot(
+            workspacePath: workspace,
+            apiKey: null,
+            apiKeySource: "missing",
+            model: "not configured",
+            userConfigPath: Path.Combine(userHome, ".caicli", "config.json"));
+
+        int exportExitCode = CliCommandFactory.Invoke(
+            CliCommandFactory.Create(exportOutput, _ => snapshot),
+            ["session", "export", "--format", "markdown", "smoke"],
+            exportOutput);
+
+        string text = exportOutput.ToString();
+        Assert.Equal(1, exportExitCode);
+        Assert.Contains("status: failed", text);
+        Assert.Contains("errorCode: session-transcript-invalid", text);
+        Assert.Contains("summary:", text);
+        Assert.Contains("Conversation transcript is missing or uses an unsupported schema version.", text);
+        Assert.DoesNotContain("NullReferenceException", text, StringComparison.Ordinal);
+        Assert.DoesNotContain("System.", text, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Session_export_format_markdown_prints_safe_readable_transcript()
+    {
+        using StringWriter output = new();
+        ConversationTranscript transcript = ConversationTranscript.Create(
+            "smoke",
+            DateTimeOffset.Parse("2024-01-01T00:00:00Z"));
+        transcript.AddUserMessage("hello assistant", DateTimeOffset.Parse("2024-01-01T00:00:01Z"));
+        transcript.AddAssistantMessage(new ChatResponse(
+            Provider: "openai",
+            Model: "gpt-test",
+            ResponseId: "resp_test",
+            Text: "hello user"), DateTimeOffset.Parse("2024-01-01T00:00:02Z"));
+        transcript.AddError(new ModelError(
+            Provider: "openai",
+            Operation: "responses.create",
+            StatusCode: null,
+            LocalErrorCode: "missing-openai-api-key",
+            SafeMessage: "safe message without secret",
+            Retryable: false), DateTimeOffset.Parse("2024-01-01T00:00:03Z"));
+        transcript.AddToolCall(ConversationToolCall.FromExecution(
+            "call_test",
+            "workspace.read_text",
+            """{"apiKey":"sk-tool-secret","path":"note.txt"}""",
+            ToolExecutionResult.Success("read safe summary"),
+            DateTimeOffset.Parse("2024-01-01T00:00:04Z")));
+        FakeConversationStore store = new()
+        {
+            Transcript = transcript
+        };
+
+        int exitCode = CliCommandFactory
+            .Create(
+                output,
+                workspacePath => CreateSnapshot(workspacePath),
+                (_, _) => { },
+                _ => new FakeChatModelClient(ChatModelResult.Success(new ChatResponse("openai", "gpt-test", "resp", ""))),
+                writer => new TerminalChatStreamingRenderer(writer),
+                _ => store,
+                () => DateTimeOffset.Parse("2024-01-01T00:00:05Z"))
+            .Parse(["session", "export", "--format", "markdown", "smoke"])
+            .Invoke();
+
+        string text = output.ToString();
+        Assert.Equal(0, exitCode);
+        Assert.Equal("smoke", store.TryLoadedSessionName?.Value);
+        Assert.Contains("# Session: smoke", text);
+        Assert.Contains("- Created: 2024-01-01T00:00:00.0000000+00:00", text);
+        Assert.Contains("- Updated: 2024-01-01T00:00:04.0000000+00:00", text);
+        Assert.Contains("- Turns: 1", text);
+        Assert.Contains("- Tool calls: 1", text);
+        Assert.Contains("### User - 2024-01-01T00:00:01.0000000+00:00", text);
+        Assert.Contains("hello assistant", text);
+        Assert.Contains("### Assistant - 2024-01-01T00:00:02.0000000+00:00", text);
+        Assert.Contains("hello user", text);
+        Assert.Contains("## Errors", text);
+        Assert.Contains("- 2024-01-01T00:00:03.0000000+00:00 missing-openai-api-key", text);
+        Assert.Contains("safe message without secret", text);
+        Assert.Contains("## Tool Calls", text);
+        Assert.Contains("- 2024-01-01T00:00:04.0000000+00:00 workspace.read_text succeeded", text);
+        Assert.Contains("read safe summary", text);
+        Assert.DoesNotContain("sk-", text, StringComparison.Ordinal);
+        Assert.DoesNotContain("apiKey", text, StringComparison.Ordinal);
+        Assert.DoesNotContain("ArgumentsJson", text, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Session_export_format_markdown_accepts_case_insensitive_value()
+    {
+        using StringWriter output = new();
+        ConversationTranscript transcript = ConversationTranscript.Create(
+            "smoke",
+            DateTimeOffset.Parse("2024-01-01T00:00:00Z"));
+        transcript.AddUserMessage("hello assistant", DateTimeOffset.Parse("2024-01-01T00:00:01Z"));
+        FakeConversationStore store = new()
+        {
+            Transcript = transcript
+        };
+
+        int exitCode = CliCommandFactory
+            .Create(
+                output,
+                workspacePath => CreateSnapshot(workspacePath),
+                (_, _) => { },
+                _ => new FakeChatModelClient(ChatModelResult.Success(new ChatResponse("openai", "gpt-test", "resp", ""))),
+                writer => new TerminalChatStreamingRenderer(writer),
+                _ => store,
+                () => DateTimeOffset.Parse("2024-01-01T00:00:05Z"))
+            .Parse(["session", "export", "--format", "Markdown", "smoke"])
+            .Invoke();
+
+        Assert.Equal(0, exitCode);
+        Assert.Equal("smoke", store.TryLoadedSessionName?.Value);
+        Assert.Contains("# Session: smoke", output.ToString());
+    }
+
+    [Fact]
+    public void Session_export_format_rejects_invalid_value()
+    {
+        using StringWriter output = new();
+        RootCommand command = CliCommandFactory.Create(output, workspacePath => CreateSnapshot(workspacePath));
+
+        int exitCode = CliCommandFactory.Invoke(command, ["session", "export", "--format", "xml", "smoke"], output);
+
+        Assert.Equal(2, exitCode);
+        Assert.Contains("Invalid value for --format. Allowed values are json and markdown.", output.ToString());
+    }
+
+    [Fact]
+    public void Session_clear_deletes_transcript_file()
+    {
+        using TempDirectory temp = TempDirectory.Create();
+        string userHome = Path.Combine(temp.Path, "user-home");
+        string workspace = Path.Combine(temp.Path, "workspace");
+        Directory.CreateDirectory(workspace);
+        string sessionDirectory = Path.Combine(userHome, ".caicli", "sessions");
+        Directory.CreateDirectory(sessionDirectory);
+        File.WriteAllText(Path.Combine(sessionDirectory, "smoke.transcript.json"), """
+        {
+          "schemaVersion": 1,
+          "sessionName": "smoke",
+          "createdAtUtc": "2024-01-01T00:00:00+00:00",
+          "updatedAtUtc": "2024-01-01T00:00:00+00:00",
+          "messages": [],
+          "toolCalls": [],
+          "errors": []
+        }
+        """);
+        CliEnvironmentSnapshot snapshot = CreateSnapshot(
+            workspacePath: workspace,
+            apiKey: null,
+            apiKeySource: "missing",
+            model: "not configured",
+            userConfigPath: Path.Combine(userHome, ".caicli", "config.json"));
 
         using StringWriter clearOutput = new();
         int clearExitCode = CliCommandFactory
@@ -1920,7 +2880,679 @@ public sealed class CliCommandFactoryTests
     }
 
     [Fact]
-    public void Invoke_non_exec_action_exception_uses_default_exception_handling()
+    public void Session_list_writes_session_summaries()
+    {
+        using StringWriter output = new();
+        FakeConversationStore store = new()
+        {
+            Summaries =
+            [
+                new ConversationTranscriptSummary(
+                    "beta",
+                    DateTimeOffset.Parse("2024-01-02T00:00:00Z"),
+                    DateTimeOffset.Parse("2024-01-02T00:03:00Z"),
+                    TurnCount: 4,
+                    ToolCallCount: 3),
+                new ConversationTranscriptSummary(
+                    "alpha",
+                    DateTimeOffset.Parse("2024-01-01T00:00:00Z"),
+                    DateTimeOffset.Parse("2024-01-01T00:01:00Z"),
+                    TurnCount: 2,
+                    ToolCallCount: 1)
+            ]
+        };
+
+        RootCommand command = CliCommandFactory.Create(
+            output,
+            CreateSnapshot,
+            (_, _) => { },
+            _ => new FakeChatModelClient(ChatModelResult.Success(new ChatResponse("openai", "gpt-test", "resp_test", "ok"))),
+            writer => new TerminalChatStreamingRenderer(writer),
+            _ => store,
+            () => DateTimeOffset.Parse("2024-01-03T00:00:00Z"));
+
+        int exitCode = CliCommandFactory.Invoke(command, ["session", "list"], output);
+
+        string text = output.ToString();
+        Assert.Equal(0, exitCode);
+        Assert.Equal(
+            [
+                "C# AI CLI sessions",
+                "- alpha created=2024-01-01T00:00:00.0000000+00:00 updated=2024-01-01T00:01:00.0000000+00:00 turns=2 toolCalls=1",
+                "- beta created=2024-01-02T00:00:00.0000000+00:00 updated=2024-01-02T00:03:00.0000000+00:00 turns=4 toolCalls=3"
+            ],
+            text.Split(Environment.NewLine, StringSplitOptions.RemoveEmptyEntries));
+    }
+
+    [Fact]
+    public void Session_list_with_malformed_file_transcript_returns_safe_failure()
+    {
+        using TempDirectory temp = TempDirectory.Create();
+        string userHome = Path.Combine(temp.Path, "user-home");
+        string workspace = Path.Combine(temp.Path, "workspace");
+        Directory.CreateDirectory(workspace);
+        string sessionDirectory = Path.Combine(userHome, ".caicli", "sessions");
+        Directory.CreateDirectory(sessionDirectory);
+        File.WriteAllText(Path.Combine(sessionDirectory, "smoke.transcript.json"), """{"schemaVersion":""");
+        using StringWriter output = new();
+        CliEnvironmentSnapshot snapshot = CreateSnapshot(
+            workspacePath: workspace,
+            apiKey: null,
+            apiKeySource: "missing",
+            model: "not configured",
+            userConfigPath: Path.Combine(userHome, ".caicli", "config.json"));
+
+        int exitCode = CliCommandFactory.Invoke(
+            CliCommandFactory.Create(output, _ => snapshot),
+            ["session", "list"],
+            output);
+
+        string text = output.ToString();
+        Assert.Equal(1, exitCode);
+        Assert.Contains("status: failed", text);
+        Assert.Contains("errorCode: session-transcript-invalid", text);
+        Assert.Contains("Conversation transcript is missing or uses an unsupported schema version.", text);
+        Assert.DoesNotContain("JsonReaderException", text, StringComparison.Ordinal);
+        Assert.DoesNotContain("System.Text.Json", text, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Session_list_writes_empty_status_for_empty_store()
+    {
+        using StringWriter output = new();
+        FakeConversationStore store = new();
+
+        RootCommand command = CliCommandFactory.Create(
+            output,
+            CreateSnapshot,
+            (_, _) => { },
+            _ => new FakeChatModelClient(ChatModelResult.Success(new ChatResponse("openai", "gpt-test", "resp_test", "ok"))),
+            writer => new TerminalChatStreamingRenderer(writer),
+            _ => store,
+            () => DateTimeOffset.Parse("2024-01-03T00:00:00Z"));
+
+        int exitCode = CliCommandFactory.Invoke(command, ["session", "list"], output);
+
+        string text = output.ToString();
+        Assert.Equal(0, exitCode);
+        Assert.Contains("C# AI CLI sessions", text);
+        Assert.Contains("status: empty", text);
+    }
+
+    [Fact]
+    public void Session_list_writes_command_log_through_delegate()
+    {
+        using StringWriter output = new();
+        List<string> loggedCommands = [];
+        FakeConversationStore store = new();
+
+        RootCommand command = CliCommandFactory.Create(
+            output,
+            CreateSnapshot,
+            (commandName, _) => loggedCommands.Add(commandName),
+            _ => new FakeChatModelClient(ChatModelResult.Success(new ChatResponse("openai", "gpt-test", "resp_test", "ok"))),
+            writer => new TerminalChatStreamingRenderer(writer),
+            _ => store,
+            () => DateTimeOffset.Parse("2024-01-03T00:00:00Z"));
+
+        int exitCode = CliCommandFactory.Invoke(command, ["session", "list"], output);
+
+        Assert.Equal(0, exitCode);
+        Assert.Equal(["session list"], loggedCommands);
+    }
+
+    [Fact]
+    public void Session_show_writes_session_summary()
+    {
+        using StringWriter output = new();
+        FakeConversationStore store = new()
+        {
+            Summaries =
+            [
+                new ConversationTranscriptSummary(
+                    "smoke",
+                    DateTimeOffset.Parse("2024-01-01T00:00:00Z"),
+                    DateTimeOffset.Parse("2024-01-01T00:05:00Z"),
+                    TurnCount: 2,
+                    ToolCallCount: 1)
+            ]
+        };
+
+        RootCommand command = CliCommandFactory.Create(
+            output,
+            CreateSnapshot,
+            (_, _) => { },
+            _ => new FakeChatModelClient(ChatModelResult.Success(new ChatResponse("openai", "gpt-test", "resp_test", "ok"))),
+            writer => new TerminalChatStreamingRenderer(writer),
+            _ => store,
+            () => DateTimeOffset.Parse("2024-01-03T00:00:00Z"));
+
+        int exitCode = CliCommandFactory.Invoke(command, ["session", "show", "smoke"], output);
+
+        string text = output.ToString();
+        Assert.Equal(0, exitCode);
+        Assert.Equal(
+            [
+                "C# AI CLI session",
+                "name: smoke",
+                "createdAtUtc: 2024-01-01T00:00:00.0000000+00:00",
+                "updatedAtUtc: 2024-01-01T00:05:00.0000000+00:00",
+                "turnCount: 2",
+                "toolCallCount: 1"
+            ],
+            text.Split(Environment.NewLine, StringSplitOptions.RemoveEmptyEntries));
+    }
+
+    [Fact]
+    public void Session_show_missing_session_returns_session_not_found()
+    {
+        using StringWriter output = new();
+        FakeConversationStore store = new();
+
+        RootCommand command = CliCommandFactory.Create(
+            output,
+            CreateSnapshot,
+            (_, _) => { },
+            _ => new FakeChatModelClient(ChatModelResult.Success(new ChatResponse("openai", "gpt-test", "resp_test", "ok"))),
+            writer => new TerminalChatStreamingRenderer(writer),
+            _ => store,
+            () => DateTimeOffset.Parse("2024-01-03T00:00:00Z"));
+
+        int exitCode = CliCommandFactory.Invoke(command, ["session", "show", "missing"], output);
+
+        string text = output.ToString();
+        Assert.Equal(1, exitCode);
+        Assert.Equal(
+            [
+                "status: failed",
+                "errorCode: session-not-found",
+                "summary:",
+                "Session transcript was not found."
+            ],
+            text.Split(Environment.NewLine, StringSplitOptions.RemoveEmptyEntries));
+    }
+
+    [Fact]
+    public void Session_show_writes_command_log_through_delegate()
+    {
+        using StringWriter output = new();
+        List<string> loggedCommands = [];
+        FakeConversationStore store = new()
+        {
+            Summaries =
+            [
+                new ConversationTranscriptSummary(
+                    "smoke",
+                    DateTimeOffset.Parse("2024-01-01T00:00:00Z"),
+                    DateTimeOffset.Parse("2024-01-01T00:05:00Z"),
+                    TurnCount: 2,
+                    ToolCallCount: 1)
+            ]
+        };
+
+        RootCommand command = CliCommandFactory.Create(
+            output,
+            CreateSnapshot,
+            (commandName, _) => loggedCommands.Add(commandName),
+            _ => new FakeChatModelClient(ChatModelResult.Success(new ChatResponse("openai", "gpt-test", "resp_test", "ok"))),
+            writer => new TerminalChatStreamingRenderer(writer),
+            _ => store,
+            () => DateTimeOffset.Parse("2024-01-03T00:00:00Z"));
+
+        int exitCode = CliCommandFactory.Invoke(command, ["session", "show", "smoke"], output);
+
+        Assert.Equal(0, exitCode);
+        Assert.Equal(["session show"], loggedCommands);
+    }
+
+    [Fact]
+    public void Session_commands_wrap_expected_store_failures_without_leaking_details()
+    {
+        static RootCommand CreateCommand(StringWriter output, FakeConversationStore store)
+        {
+            return CliCommandFactory.Create(
+                output,
+                CreateSnapshot,
+                (_, _) => { },
+                _ => new FakeChatModelClient(ChatModelResult.Success(new ChatResponse("openai", "gpt-test", "resp_test", "ok"))),
+                writer => new TerminalChatStreamingRenderer(writer),
+                _ => store,
+                () => DateTimeOffset.Parse("2024-01-03T00:00:00Z"));
+        }
+
+        foreach ((string[] args, FakeConversationStore store) in new[]
+        {
+            (new[] { "session", "list" }, new FakeConversationStore { ListSummariesException = new IOException("cannot read C:\\secret\\smoke.transcript.json") }),
+            (new[] { "session", "show", "smoke" }, new FakeConversationStore { TryGetSummaryException = new IOException("cannot read C:\\secret\\smoke.transcript.json") }),
+            (new[] { "session", "export", "--format", "markdown", "smoke" }, new FakeConversationStore { TryLoadException = new IOException("cannot read C:\\secret\\smoke.transcript.json") }),
+            (new[] { "session", "clear", "smoke" }, new FakeConversationStore { DeleteException = new IOException("cannot delete C:\\secret\\smoke.transcript.json") }),
+            (new[] { "session", "delete", "smoke" }, new FakeConversationStore { DeleteException = new IOException("cannot delete C:\\secret\\smoke.transcript.json") }),
+            (new[] { "session", "rename", "smoke", "archive" }, new FakeConversationStore { RenameException = new IOException("cannot move C:\\secret\\smoke.transcript.json") }),
+        })
+        {
+            using StringWriter output = new();
+            int exitCode = CliCommandFactory.Invoke(CreateCommand(output, store), args, output);
+
+            string text = output.ToString();
+            Assert.Equal(1, exitCode);
+            Assert.Contains("status: failed", text);
+            Assert.Contains("errorCode: session-store-error", text);
+            Assert.Contains("Conversation session store operation failed.", text);
+            Assert.DoesNotContain("C:\\secret", text, StringComparison.Ordinal);
+            Assert.DoesNotContain("System.", text, StringComparison.Ordinal);
+        }
+    }
+
+    [Fact]
+    public void Session_show_does_not_report_store_factory_argument_exception_as_invalid_session_name()
+    {
+        using StringWriter output = new();
+        RootCommand command = CliCommandFactory.Create(
+            output,
+            CreateSnapshot,
+            (_, _) => { },
+            _ => new FakeChatModelClient(ChatModelResult.Success(new ChatResponse("openai", "gpt-test", "resp_test", "ok"))),
+            writer => new TerminalChatStreamingRenderer(writer),
+            _ => throw new ArgumentException("factory failed"),
+            () => DateTimeOffset.Parse("2024-01-03T00:00:00Z"));
+
+        int exitCode = CliCommandFactory.Invoke(command, ["session", "show", "smoke"], output);
+
+        string text = output.ToString();
+        Assert.Equal(1, exitCode);
+        Assert.DoesNotContain("errorCode: invalid-session-name", text, StringComparison.Ordinal);
+        Assert.Contains("factory failed", text, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Session_rename_calls_store_and_writes_ordered_success_output()
+    {
+        using StringWriter output = new();
+        FakeConversationStore store = new()
+        {
+            RenameResult = true
+        };
+
+        RootCommand command = CliCommandFactory.Create(
+            output,
+            CreateSnapshot,
+            (_, _) => { },
+            _ => new FakeChatModelClient(ChatModelResult.Success(new ChatResponse("openai", "gpt-test", "resp_test", "ok"))),
+            writer => new TerminalChatStreamingRenderer(writer),
+            _ => store,
+            () => DateTimeOffset.Parse("2024-01-03T00:00:00Z"));
+
+        int exitCode = CliCommandFactory.Invoke(command, ["session", "rename", "smoke", "archive"], output);
+
+        string text = output.ToString();
+        Assert.Equal(0, exitCode);
+        Assert.Equal("smoke", store.RenamedSourceSessionName?.Value);
+        Assert.Equal("archive", store.RenamedDestinationSessionName?.Value);
+        Assert.Equal(
+            [
+                "status: renamed",
+                "from: smoke",
+                "to: archive"
+            ],
+            text.Split(Environment.NewLine, StringSplitOptions.RemoveEmptyEntries));
+    }
+
+    [Fact]
+    public void Session_rename_with_file_store_moves_transcript_file_and_updates_session_name()
+    {
+        using TempDirectory temp = TempDirectory.Create();
+        string userHome = Path.Combine(temp.Path, "user-home");
+        string workspace = Path.Combine(temp.Path, "workspace");
+        Directory.CreateDirectory(workspace);
+        string sessionDirectory = Path.Combine(userHome, ".caicli", "sessions");
+        Directory.CreateDirectory(sessionDirectory);
+        string sourcePath = Path.Combine(sessionDirectory, "smoke.transcript.json");
+        string destinationPath = Path.Combine(sessionDirectory, "archive.transcript.json");
+        File.WriteAllText(sourcePath, """
+        {
+          "schemaVersion": 1,
+          "sessionName": "smoke",
+          "createdAtUtc": "2024-01-01T00:00:00+00:00",
+          "updatedAtUtc": "2024-01-01T00:00:01+00:00",
+          "messages": [
+            {
+              "role": "user",
+              "createdAtUtc": "2024-01-01T00:00:01+00:00",
+              "content": "keep me",
+              "provider": null,
+              "model": null,
+              "responseId": null
+            }
+          ],
+          "toolCalls": [],
+          "errors": []
+        }
+        """);
+        using StringWriter output = new();
+        CliEnvironmentSnapshot snapshot = CreateSnapshot(
+            workspacePath: workspace,
+            apiKey: null,
+            apiKeySource: "missing",
+            model: "not configured",
+            userConfigPath: Path.Combine(userHome, ".caicli", "config.json"));
+
+        int exitCode = CliCommandFactory
+            .Create(output, _ => snapshot)
+            .Parse(["session", "rename", "smoke", "archive"])
+            .Invoke();
+
+        Assert.Equal(0, exitCode);
+        Assert.False(File.Exists(sourcePath));
+        Assert.True(File.Exists(destinationPath));
+        JsonObject json = ReadJsonObject(destinationPath);
+        Assert.Equal("archive", json["sessionName"]?.GetValue<string>());
+        Assert.Equal("keep me", json["messages"]?[0]?["content"]?.GetValue<string>());
+        Assert.Contains("status: renamed", output.ToString());
+    }
+
+    [Fact]
+    public void Session_rename_with_file_store_preserves_files_when_destination_exists()
+    {
+        using TempDirectory temp = TempDirectory.Create();
+        string userHome = Path.Combine(temp.Path, "user-home");
+        string workspace = Path.Combine(temp.Path, "workspace");
+        Directory.CreateDirectory(workspace);
+        string sessionDirectory = Path.Combine(userHome, ".caicli", "sessions");
+        Directory.CreateDirectory(sessionDirectory);
+        string sourcePath = Path.Combine(sessionDirectory, "smoke.transcript.json");
+        string destinationPath = Path.Combine(sessionDirectory, "archive.transcript.json");
+        File.WriteAllText(sourcePath, """
+        {
+          "schemaVersion": 1,
+          "sessionName": "smoke",
+          "createdAtUtc": "2024-01-01T00:00:00+00:00",
+          "updatedAtUtc": "2024-01-01T00:00:00+00:00",
+          "messages": [],
+          "toolCalls": [],
+          "errors": []
+        }
+        """);
+        File.WriteAllText(destinationPath, """
+        {
+          "schemaVersion": 1,
+          "sessionName": "archive",
+          "createdAtUtc": "2024-01-02T00:00:00+00:00",
+          "updatedAtUtc": "2024-01-02T00:00:00+00:00",
+          "messages": [],
+          "toolCalls": [],
+          "errors": []
+        }
+        """);
+        string originalSourceJson = File.ReadAllText(sourcePath);
+        string originalDestinationJson = File.ReadAllText(destinationPath);
+        using StringWriter output = new();
+        CliEnvironmentSnapshot snapshot = CreateSnapshot(
+            workspacePath: workspace,
+            apiKey: null,
+            apiKeySource: "missing",
+            model: "not configured",
+            userConfigPath: Path.Combine(userHome, ".caicli", "config.json"));
+
+        int exitCode = CliCommandFactory
+            .Create(output, _ => snapshot)
+            .Parse(["session", "rename", "smoke", "archive"])
+            .Invoke();
+
+        Assert.Equal(1, exitCode);
+        Assert.Equal(originalSourceJson, File.ReadAllText(sourcePath));
+        Assert.Equal(originalDestinationJson, File.ReadAllText(destinationPath));
+        Assert.Contains("status: failed", output.ToString());
+        Assert.Contains("errorCode: session-rename-failed", output.ToString());
+    }
+
+    [Fact]
+    public void Session_rename_failure_returns_generic_safe_failure_output()
+    {
+        using StringWriter output = new();
+        FakeConversationStore store = new()
+        {
+            RenameResult = false
+        };
+
+        RootCommand command = CliCommandFactory.Create(
+            output,
+            CreateSnapshot,
+            (_, _) => { },
+            _ => new FakeChatModelClient(ChatModelResult.Success(new ChatResponse("openai", "gpt-test", "resp_test", "ok"))),
+            writer => new TerminalChatStreamingRenderer(writer),
+            _ => store,
+            () => DateTimeOffset.Parse("2024-01-03T00:00:00Z"));
+
+        int exitCode = CliCommandFactory.Invoke(command, ["session", "rename", "missing", "archive"], output);
+
+        string text = output.ToString();
+        Assert.Equal(1, exitCode);
+        Assert.Equal("missing", store.RenamedSourceSessionName?.Value);
+        Assert.Equal("archive", store.RenamedDestinationSessionName?.Value);
+        Assert.Equal(
+            [
+                "status: failed",
+                "errorCode: session-rename-failed",
+                "summary:",
+                "Session could not be renamed because the source is missing or the destination already exists."
+            ],
+            text.Split(Environment.NewLine, StringSplitOptions.RemoveEmptyEntries));
+    }
+
+    [Fact]
+    public void Session_rename_writes_command_log_through_delegate()
+    {
+        using StringWriter output = new();
+        List<string> loggedCommands = [];
+        FakeConversationStore store = new()
+        {
+            RenameResult = true
+        };
+
+        RootCommand command = CliCommandFactory.Create(
+            output,
+            CreateSnapshot,
+            (commandName, _) => loggedCommands.Add(commandName),
+            _ => new FakeChatModelClient(ChatModelResult.Success(new ChatResponse("openai", "gpt-test", "resp_test", "ok"))),
+            writer => new TerminalChatStreamingRenderer(writer),
+            _ => store,
+            () => DateTimeOffset.Parse("2024-01-03T00:00:00Z"));
+
+        int exitCode = CliCommandFactory.Invoke(command, ["session", "rename", "smoke", "archive"], output);
+
+        Assert.Equal(0, exitCode);
+        Assert.Equal(["session rename"], loggedCommands);
+    }
+
+    [Fact]
+    public void Session_delete_calls_store_and_writes_ordered_success_output()
+    {
+        using StringWriter output = new();
+        FakeConversationStore store = new()
+        {
+            DeleteResult = true
+        };
+
+        RootCommand command = CliCommandFactory.Create(
+            output,
+            CreateSnapshot,
+            (_, _) => { },
+            _ => new FakeChatModelClient(ChatModelResult.Success(new ChatResponse("openai", "gpt-test", "resp_test", "ok"))),
+            writer => new TerminalChatStreamingRenderer(writer),
+            _ => store,
+            () => DateTimeOffset.Parse("2024-01-03T00:00:00Z"));
+
+        int exitCode = CliCommandFactory.Invoke(command, ["session", "delete", "smoke"], output);
+
+        string text = output.ToString();
+        Assert.Equal(0, exitCode);
+        Assert.Equal("smoke", store.DeletedSessionName?.Value);
+        Assert.Equal(
+            [
+                "status: deleted",
+                "session: smoke"
+            ],
+            text.Split(Environment.NewLine, StringSplitOptions.RemoveEmptyEntries));
+    }
+
+    [Fact]
+    public void Session_delete_with_file_store_removes_transcript_file()
+    {
+        using TempDirectory temp = TempDirectory.Create();
+        string userHome = Path.Combine(temp.Path, "user-home");
+        string workspace = Path.Combine(temp.Path, "workspace");
+        Directory.CreateDirectory(workspace);
+        string sessionDirectory = Path.Combine(userHome, ".caicli", "sessions");
+        Directory.CreateDirectory(sessionDirectory);
+        string sessionPath = Path.Combine(sessionDirectory, "smoke.transcript.json");
+        File.WriteAllText(sessionPath, """
+        {
+          "schemaVersion": 1,
+          "sessionName": "smoke",
+          "createdAtUtc": "2024-01-01T00:00:00+00:00",
+          "updatedAtUtc": "2024-01-01T00:00:00+00:00",
+          "messages": [],
+          "toolCalls": [],
+          "errors": []
+        }
+        """);
+        using StringWriter output = new();
+        CliEnvironmentSnapshot snapshot = CreateSnapshot(
+            workspacePath: workspace,
+            apiKey: null,
+            apiKeySource: "missing",
+            model: "not configured",
+            userConfigPath: Path.Combine(userHome, ".caicli", "config.json"));
+
+        int exitCode = CliCommandFactory
+            .Create(output, _ => snapshot)
+            .Parse(["session", "delete", "smoke"])
+            .Invoke();
+
+        Assert.Equal(0, exitCode);
+        Assert.False(File.Exists(sessionPath));
+        Assert.Contains("status: deleted", output.ToString());
+    }
+
+    [Fact]
+    public void Session_delete_missing_session_returns_session_not_found()
+    {
+        using StringWriter output = new();
+        FakeConversationStore store = new()
+        {
+            DeleteResult = false
+        };
+
+        RootCommand command = CliCommandFactory.Create(
+            output,
+            CreateSnapshot,
+            (_, _) => { },
+            _ => new FakeChatModelClient(ChatModelResult.Success(new ChatResponse("openai", "gpt-test", "resp_test", "ok"))),
+            writer => new TerminalChatStreamingRenderer(writer),
+            _ => store,
+            () => DateTimeOffset.Parse("2024-01-03T00:00:00Z"));
+
+        int exitCode = CliCommandFactory.Invoke(command, ["session", "delete", "missing"], output);
+
+        string text = output.ToString();
+        Assert.Equal(1, exitCode);
+        Assert.Equal("missing", store.DeletedSessionName?.Value);
+        Assert.Equal(
+            [
+                "status: not-found",
+                "errorCode: session-not-found"
+            ],
+            text.Split(Environment.NewLine, StringSplitOptions.RemoveEmptyEntries));
+    }
+
+    [Fact]
+    public void Session_clear_calls_store_delete_and_preserves_success_output()
+    {
+        using StringWriter output = new();
+        FakeConversationStore store = new()
+        {
+            DeleteResult = true
+        };
+
+        RootCommand command = CliCommandFactory.Create(
+            output,
+            CreateSnapshot,
+            (_, _) => { },
+            _ => new FakeChatModelClient(ChatModelResult.Success(new ChatResponse("openai", "gpt-test", "resp_test", "ok"))),
+            writer => new TerminalChatStreamingRenderer(writer),
+            _ => store,
+            () => DateTimeOffset.Parse("2024-01-03T00:00:00Z"));
+
+        int exitCode = CliCommandFactory.Invoke(command, ["session", "clear", "smoke"], output);
+
+        string text = output.ToString();
+        Assert.Equal(0, exitCode);
+        Assert.Equal("smoke", store.DeletedSessionName?.Value);
+        Assert.Equal(
+            [
+                "status: cleared",
+                "session: smoke"
+            ],
+            text.Split(Environment.NewLine, StringSplitOptions.RemoveEmptyEntries));
+    }
+
+    [Fact]
+    public void Session_clear_missing_session_preserves_not_found_exit_zero_output()
+    {
+        using StringWriter output = new();
+        FakeConversationStore store = new()
+        {
+            DeleteResult = false
+        };
+
+        RootCommand command = CliCommandFactory.Create(
+            output,
+            CreateSnapshot,
+            (_, _) => { },
+            _ => new FakeChatModelClient(ChatModelResult.Success(new ChatResponse("openai", "gpt-test", "resp_test", "ok"))),
+            writer => new TerminalChatStreamingRenderer(writer),
+            _ => store,
+            () => DateTimeOffset.Parse("2024-01-03T00:00:00Z"));
+
+        int exitCode = CliCommandFactory.Invoke(command, ["session", "clear", "missing"], output);
+
+        string text = output.ToString();
+        Assert.Equal(0, exitCode);
+        Assert.Equal("missing", store.DeletedSessionName?.Value);
+        Assert.Equal(
+            [
+                "status: not-found"
+            ],
+            text.Split(Environment.NewLine, StringSplitOptions.RemoveEmptyEntries));
+    }
+
+    [Fact]
+    public void Session_delete_writes_command_log_through_delegate()
+    {
+        using StringWriter output = new();
+        List<string> loggedCommands = [];
+        FakeConversationStore store = new()
+        {
+            DeleteResult = true
+        };
+
+        RootCommand command = CliCommandFactory.Create(
+            output,
+            CreateSnapshot,
+            (commandName, _) => loggedCommands.Add(commandName),
+            _ => new FakeChatModelClient(ChatModelResult.Success(new ChatResponse("openai", "gpt-test", "resp_test", "ok"))),
+            writer => new TerminalChatStreamingRenderer(writer),
+            _ => store,
+            () => DateTimeOffset.Parse("2024-01-03T00:00:00Z"));
+
+        int exitCode = CliCommandFactory.Invoke(command, ["session", "delete", "smoke"], output);
+
+        Assert.Equal(0, exitCode);
+        Assert.Equal(["session delete"], loggedCommands);
+    }
+
+    [Fact]
+    public void Session_export_invalid_session_name_returns_safe_failure()
     {
         using TempDirectory temp = TempDirectory.Create();
         using StringWriter output = new();
@@ -1934,8 +3566,59 @@ public sealed class CliCommandFactoryTests
 
         int exitCode = CliCommandFactory.Invoke(command, ["session", "export", "../secret"], output);
 
+        string text = output.ToString();
         Assert.Equal(1, exitCode);
-        Assert.Contains("Session name contains invalid path characters.", output.ToString());
+        Assert.Contains("status: failed", text);
+        Assert.Contains("errorCode: invalid-session-name", text);
+        Assert.Contains("Session name contains invalid path characters.", text);
+        Assert.DoesNotContain("Unhandled exception", text, StringComparison.Ordinal);
+        Assert.DoesNotContain("System.", text, StringComparison.Ordinal);
+        Assert.DoesNotContain(temp.Path, text, StringComparison.OrdinalIgnoreCase);
+    }
+
+    public static TheoryData<string[]> InvalidSessionNameCommandCases => new()
+    {
+        new[] { "session", "show", "../secret" },
+        new[] { "session", "export", "../secret" },
+        new[] { "session", "export", "--format", "markdown", "../secret" },
+        new[] { "session", "clear", "../secret" },
+        new[] { "session", "delete", "../secret" },
+        new[] { "session", "rename", "../secret", "archive" },
+        new[] { "session", "rename", "smoke", "../secret" },
+    };
+
+    [Theory]
+    [MemberData(nameof(InvalidSessionNameCommandCases))]
+    public void Session_commands_reject_invalid_session_names_without_creating_files(string[] args)
+    {
+        using TempDirectory temp = TempDirectory.Create();
+        using StringWriter output = new();
+        string userHome = Path.Combine(temp.Path, "user-home");
+        string workspace = Path.Combine(temp.Path, "workspace");
+        Directory.CreateDirectory(workspace);
+        string sessionDirectory = Path.Combine(userHome, ".caicli", "sessions");
+        CliEnvironmentSnapshot snapshot = CreateSnapshot(
+            workspacePath: workspace,
+            apiKey: null,
+            apiKeySource: "missing",
+            model: "not configured",
+            userConfigPath: Path.Combine(userHome, ".caicli", "config.json"));
+
+        RootCommand command = CliCommandFactory.Create(output, _ => snapshot);
+
+        int exitCode = CliCommandFactory.Invoke(command, args, output);
+
+        string text = output.ToString();
+        Assert.Equal(1, exitCode);
+        Assert.Contains("status: failed", text);
+        Assert.Contains("errorCode: invalid-session-name", text);
+        Assert.Contains("summary:", text);
+        Assert.Contains("Session name contains invalid path characters.", text);
+        Assert.DoesNotContain("Unhandled exception", text, StringComparison.Ordinal);
+        Assert.DoesNotContain("System.", text, StringComparison.Ordinal);
+        Assert.DoesNotContain(Directory.GetCurrentDirectory(), text, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain(temp.Path, text, StringComparison.OrdinalIgnoreCase);
+        Assert.False(Directory.Exists(sessionDirectory));
     }
 
     [Fact]
@@ -2263,6 +3946,303 @@ public sealed class CliCommandFactoryTests
     }
 
     [Fact]
+    public void Chat_resume_requires_existing_transcript_records_success_and_saves()
+    {
+        using StringWriter output = new();
+        FakeChatModelClient chatClient = new(ChatModelResult.Success(new ChatResponse(
+            Provider: "openai",
+            Model: "gpt-test",
+            ResponseId: "resp_test",
+            Text: "fake model output")));
+        ConversationTranscript existing = ConversationTranscript.Create(
+            "smoke",
+            DateTimeOffset.Parse("2024-01-01T00:00:00Z"));
+        FakeConversationStore store = new()
+        {
+            Transcript = existing
+        };
+
+        int exitCode = CliCommandFactory
+            .Create(
+                output,
+                workspacePath => CreateSnapshot(workspacePath, apiKey: "sk-test", apiKeySource: "OPENAI_API_KEY", model: "gpt-test"),
+                (_, _) => { },
+                _ => chatClient,
+                writer => new TerminalChatStreamingRenderer(writer),
+                _ => store,
+                () => DateTimeOffset.Parse("2024-01-01T00:00:05Z"))
+            .Parse(["chat", "--resume", "smoke", "hello model"])
+            .Invoke();
+
+        Assert.Equal(0, exitCode);
+        Assert.Equal("smoke", chatClient.LastRequest?.SessionName);
+        Assert.Same(existing, chatClient.LastRequest?.TranscriptContext);
+        Assert.Equal("smoke", store.TryLoadedSessionName?.Value);
+        Assert.Null(store.LoadedSessionName);
+        Assert.Equal("smoke", store.SavedSessionName?.Value);
+        Assert.Same(existing, store.SavedTranscript);
+        ConversationTranscript savedTranscript = Assert.IsType<ConversationTranscript>(store.SavedTranscript);
+        Assert.Equal(2, savedTranscript.Messages.Count);
+        Assert.Equal("hello model", savedTranscript.Messages[0].Content);
+        Assert.Equal("fake model output", savedTranscript.Messages[1].Content);
+    }
+
+    [Fact]
+    public void Chat_resume_missing_returns_session_not_found_without_calling_model()
+    {
+        using StringWriter output = new();
+        FakeChatModelClient chatClient = new(ChatModelResult.Success(new ChatResponse(
+            Provider: "openai",
+            Model: "gpt-test",
+            ResponseId: "resp_test",
+        Text: "fake model output")));
+        FakeConversationStore store = new()
+        {
+            TryLoadResult = false
+        };
+
+        int exitCode = CliCommandFactory
+            .Create(
+                output,
+                workspacePath => CreateSnapshot(workspacePath, apiKey: "sk-test", apiKeySource: "OPENAI_API_KEY", model: "gpt-test"),
+                (_, _) => { },
+                _ => chatClient,
+                writer => new TerminalChatStreamingRenderer(writer),
+                _ => store,
+                () => DateTimeOffset.Parse("2024-01-01T00:00:05Z"))
+            .Parse(["chat", "--resume", "missing", "hello model"])
+            .Invoke();
+
+        string text = output.ToString();
+        Assert.Equal(1, exitCode);
+        Assert.Contains("status: failed", text);
+        Assert.Contains("errorCode: session-not-found", text);
+        Assert.Contains("summary:", text);
+        Assert.Contains("Session transcript was not found.", text);
+        Assert.Equal("missing", store.TryLoadedSessionName?.Value);
+        Assert.Null(store.ExistsSessionName);
+        Assert.Null(store.LoadedSessionName);
+        Assert.Null(store.SavedSessionName);
+        Assert.Null(chatClient.LastRequest);
+    }
+
+    [Fact]
+    public void Chat_resume_malformed_file_transcript_returns_safe_failure_without_calling_model()
+    {
+        using TempDirectory temp = TempDirectory.Create();
+        using StringWriter output = new();
+        FakeChatModelClient chatClient = new(ChatModelResult.Success(new ChatResponse(
+            Provider: "openai",
+            Model: "gpt-test",
+            ResponseId: "resp_test",
+            Text: "fake model output")));
+        string userConfigPath = Path.Combine(temp.Path, ".caicli", "config.json");
+        string sessionDirectory = Path.Combine(temp.Path, ".caicli", "sessions");
+        Directory.CreateDirectory(sessionDirectory);
+        File.WriteAllText(Path.Combine(sessionDirectory, "smoke.transcript.json"), """{"schemaVersion":""");
+        RootCommand command = CliCommandFactory.Create(
+            output,
+            workspacePath => CreateSnapshot(
+                workspacePath,
+                apiKey: "sk-test",
+                apiKeySource: "OPENAI_API_KEY",
+                model: "gpt-test",
+                userConfigPath: userConfigPath),
+            (_, _) => { },
+            _ => chatClient,
+            writer => new TerminalChatStreamingRenderer(writer),
+            snapshot => FileConversationStore.Create(snapshot),
+            () => DateTimeOffset.Parse("2024-01-01T00:00:05Z"));
+
+        int exitCode = CliCommandFactory.Invoke(command, ["chat", "--resume", "smoke", "hello model"], output);
+
+        string text = output.ToString();
+        Assert.Equal(1, exitCode);
+        Assert.Contains("status: failed", text);
+        Assert.Contains("errorCode: session-transcript-invalid", text);
+        Assert.Contains("Conversation transcript is missing or uses an unsupported schema version.", text);
+        Assert.DoesNotContain("System.", text, StringComparison.Ordinal);
+        Assert.DoesNotContain("JsonReaderException", text, StringComparison.Ordinal);
+        Assert.Null(chatClient.LastRequest);
+    }
+
+    [Fact]
+    public void Chat_session_load_or_create_exception_returns_safe_failure_without_calling_model()
+    {
+        using StringWriter output = new();
+        FakeChatModelClient chatClient = new(ChatModelResult.Success(new ChatResponse(
+            Provider: "openai",
+            Model: "gpt-test",
+            ResponseId: "resp_test",
+            Text: "fake model output")));
+        FakeConversationStore store = new()
+        {
+            LoadOrCreateException = new IOException("cannot read C:\\secret\\smoke.transcript.json")
+        };
+        RootCommand command = CliCommandFactory.Create(
+            output,
+            workspacePath => CreateSnapshot(workspacePath, apiKey: "sk-test", apiKeySource: "OPENAI_API_KEY", model: "gpt-test"),
+            (_, _) => { },
+            _ => chatClient,
+            writer => new TerminalChatStreamingRenderer(writer),
+            _ => store,
+            () => DateTimeOffset.Parse("2024-01-01T00:00:05Z"));
+
+        int exitCode = CliCommandFactory.Invoke(command, ["chat", "--session", "smoke", "hello model"], output);
+
+        string text = output.ToString();
+        Assert.Equal(1, exitCode);
+        Assert.Contains("status: failed", text);
+        Assert.Contains("errorCode: session-store-error", text);
+        Assert.Contains("Conversation session store operation failed.", text);
+        Assert.DoesNotContain("C:\\secret", text, StringComparison.Ordinal);
+        Assert.Equal("smoke", store.LoadedSessionName?.Value);
+        Assert.Null(store.SavedSessionName);
+        Assert.Null(chatClient.LastRequest);
+    }
+
+    [Fact]
+    public void Chat_resume_empty_session_name_rejects_without_calling_model_or_store()
+    {
+        using StringWriter output = new();
+        FakeChatModelClient chatClient = new(ChatModelResult.Success(new ChatResponse(
+            Provider: "openai",
+            Model: "gpt-test",
+            ResponseId: "resp_test",
+            Text: "fake model output")));
+        FakeConversationStore store = new();
+        bool storeFactoryInvoked = false;
+        RootCommand command = CliCommandFactory
+            .Create(
+                output,
+                workspacePath => CreateSnapshot(workspacePath, apiKey: "sk-test", apiKeySource: "OPENAI_API_KEY", model: "gpt-test"),
+                (_, _) => { },
+                _ => chatClient,
+                writer => new TerminalChatStreamingRenderer(writer),
+                _ =>
+                {
+                    storeFactoryInvoked = true;
+                    return store;
+                },
+                () => DateTimeOffset.Parse("2024-01-01T00:00:05Z"));
+
+        int exitCode = CliCommandFactory.Invoke(command, ["chat", "--resume", "", "hello model"], output);
+
+        Assert.Equal(1, exitCode);
+        Assert.Contains("Session name must not be empty.", output.ToString());
+        Assert.False(storeFactoryInvoked);
+        Assert.Null(store.ExistsSessionName);
+        Assert.Null(store.TryLoadedSessionName);
+        Assert.Null(store.LoadedSessionName);
+        Assert.Null(store.SavedSessionName);
+        Assert.Null(chatClient.LastRequest);
+    }
+
+    [Fact]
+    public void Chat_session_whitespace_session_name_rejects_without_calling_model_or_store()
+    {
+        using StringWriter output = new();
+        FakeChatModelClient chatClient = new(ChatModelResult.Success(new ChatResponse(
+            Provider: "openai",
+            Model: "gpt-test",
+            ResponseId: "resp_test",
+            Text: "fake model output")));
+        FakeConversationStore store = new();
+        bool storeFactoryInvoked = false;
+        RootCommand command = CliCommandFactory
+            .Create(
+                output,
+                workspacePath => CreateSnapshot(workspacePath, apiKey: "sk-test", apiKeySource: "OPENAI_API_KEY", model: "gpt-test"),
+                (_, _) => { },
+                _ => chatClient,
+                writer => new TerminalChatStreamingRenderer(writer),
+                _ =>
+                {
+                    storeFactoryInvoked = true;
+                    return store;
+                },
+                () => DateTimeOffset.Parse("2024-01-01T00:00:05Z"));
+
+        int exitCode = CliCommandFactory.Invoke(command, ["chat", "--session", " ", "hello model"], output);
+
+        Assert.Equal(1, exitCode);
+        Assert.Contains("Session name must not be empty.", output.ToString());
+        Assert.False(storeFactoryInvoked);
+        Assert.Null(store.ExistsSessionName);
+        Assert.Null(store.TryLoadedSessionName);
+        Assert.Null(store.LoadedSessionName);
+        Assert.Null(store.SavedSessionName);
+        Assert.Null(chatClient.LastRequest);
+    }
+
+    [Fact]
+    public void Chat_empty_session_and_resume_conflict_returns_failure_without_calling_model_or_store()
+    {
+        using StringWriter output = new();
+        FakeChatModelClient chatClient = new(ChatModelResult.Success(new ChatResponse(
+            Provider: "openai",
+            Model: "gpt-test",
+            ResponseId: "resp_test",
+            Text: "fake model output")));
+        FakeConversationStore store = new();
+        bool storeFactoryInvoked = false;
+        RootCommand command = CliCommandFactory
+            .Create(
+                output,
+                workspacePath => CreateSnapshot(workspacePath, apiKey: "sk-test", apiKeySource: "OPENAI_API_KEY", model: "gpt-test"),
+                (_, _) => { },
+                _ => chatClient,
+                writer => new TerminalChatStreamingRenderer(writer),
+                _ =>
+                {
+                    storeFactoryInvoked = true;
+                    return store;
+                },
+                () => DateTimeOffset.Parse("2024-01-01T00:00:05Z"));
+
+        int exitCode = CliCommandFactory.Invoke(command, ["chat", "--session", "", "--resume", "smoke", "hello model"], output);
+
+        Assert.Equal(1, exitCode);
+        Assert.Contains("session-option-conflict", output.ToString());
+        Assert.False(storeFactoryInvoked);
+        Assert.Null(store.ExistsSessionName);
+        Assert.Null(store.TryLoadedSessionName);
+        Assert.Null(store.LoadedSessionName);
+        Assert.Null(store.SavedSessionName);
+        Assert.Null(chatClient.LastRequest);
+    }
+
+    [Fact]
+    public void Chat_session_and_resume_conflict_returns_failure_without_calling_model()
+    {
+        using StringWriter output = new();
+        FakeChatModelClient chatClient = new(ChatModelResult.Success(new ChatResponse(
+            Provider: "openai",
+            Model: "gpt-test",
+            ResponseId: "resp_test",
+            Text: "fake model output")));
+        FakeConversationStore store = new();
+
+        int exitCode = CliCommandFactory
+            .Create(
+                output,
+                workspacePath => CreateSnapshot(workspacePath, apiKey: "sk-test", apiKeySource: "OPENAI_API_KEY", model: "gpt-test"),
+                (_, _) => { },
+                _ => chatClient,
+                writer => new TerminalChatStreamingRenderer(writer),
+                _ => store,
+                () => DateTimeOffset.Parse("2024-01-01T00:00:05Z"))
+            .Parse(["chat", "--session", "smoke", "--resume", "smoke", "hello model"])
+            .Invoke();
+
+        Assert.Equal(1, exitCode);
+        Assert.Contains("session-option-conflict", output.ToString());
+        Assert.Null(store.ExistsSessionName);
+        Assert.Null(store.LoadedSessionName);
+        Assert.Null(chatClient.LastRequest);
+    }
+
+    [Fact]
     public void Chat_session_appends_to_existing_transcript()
     {
         using StringWriter output = new();
@@ -2334,6 +4314,40 @@ public sealed class CliCommandFactoryTests
         Assert.NotNull(store.SavedTranscript);
         Assert.Equal("hello model", Assert.Single(store.SavedTranscript.Messages).Content);
         Assert.Equal("missing-openai-api-key", Assert.Single(store.SavedTranscript.Errors).LocalErrorCode);
+    }
+
+    [Fact]
+    public void Chat_session_save_exception_returns_safe_failure_without_leaking_exception_detail()
+    {
+        using StringWriter output = new();
+        FakeChatModelClient chatClient = new(ChatModelResult.Success(new ChatResponse(
+            Provider: "openai",
+            Model: "gpt-test",
+            ResponseId: "resp_test",
+            Text: "fake model output")));
+        FakeConversationStore store = new()
+        {
+            SaveException = new IOException("cannot write C:\\secret\\smoke.transcript.json")
+        };
+        RootCommand command = CliCommandFactory.Create(
+            output,
+            workspacePath => CreateSnapshot(workspacePath, apiKey: "sk-test", apiKeySource: "OPENAI_API_KEY", model: "gpt-test"),
+            (_, _) => { },
+            _ => chatClient,
+            writer => new TerminalChatStreamingRenderer(writer),
+            _ => store,
+            () => DateTimeOffset.Parse("2024-01-01T00:00:05Z"));
+
+        int exitCode = CliCommandFactory.Invoke(command, ["chat", "--session", "smoke", "hello model"], output);
+
+        string text = output.ToString();
+        Assert.Equal(1, exitCode);
+        Assert.Contains("status: failed", text);
+        Assert.Contains("errorCode: session-store-error", text);
+        Assert.Contains("Conversation session store operation failed.", text);
+        Assert.DoesNotContain("C:\\secret", text, StringComparison.Ordinal);
+        Assert.Equal("smoke", chatClient.LastRequest?.SessionName);
+        Assert.Equal("smoke", store.SavedSessionName?.Value);
     }
 
     [Fact]
@@ -2415,6 +4429,14 @@ public sealed class CliCommandFactoryTests
     {
         JsonNode? node = JsonNode.Parse(File.ReadAllText(path));
         return Assert.IsType<JsonObject>(node);
+    }
+
+    private static JsonObject AssertSingleExecJsonResult(StringWriter output)
+    {
+        string[] lines = output.ToString().TrimEnd().Split(Environment.NewLine);
+        JsonObject result = Assert.IsType<JsonObject>(JsonNode.Parse(Assert.Single(lines)));
+        Assert.Equal("exec.result", result["type"]?.GetValue<string>());
+        return result;
     }
 
     private static int InvokeToolsCallPatch(TempDirectory temp, StringWriter output, string[] approvalArgs)
@@ -2631,16 +4653,56 @@ public sealed class CliCommandFactoryTests
 
     private sealed class FakeConversationStore : IConversationStore
     {
+        public ConversationSessionName? ExistsSessionName { get; private set; }
+        public ConversationSessionName? TryLoadedSessionName { get; private set; }
         public ConversationSessionName? LoadedSessionName { get; private set; }
         public ConversationSessionName? SavedSessionName { get; private set; }
         public ConversationTranscript? SavedTranscript { get; private set; }
+        public ConversationSessionName? RenamedSourceSessionName { get; private set; }
+        public ConversationSessionName? RenamedDestinationSessionName { get; private set; }
+        public ConversationSessionName? DeletedSessionName { get; private set; }
+        public bool ExistsResult { get; init; } = true;
+        public bool TryLoadResult { get; init; } = true;
+        public bool RenameResult { get; init; }
+        public bool DeleteResult { get; init; }
+        public Exception? LoadOrCreateException { get; init; }
+        public Exception? SaveException { get; init; }
+        public Exception? TryLoadException { get; init; }
+        public Exception? ListSummariesException { get; init; }
+        public Exception? TryGetSummaryException { get; init; }
+        public Exception? RenameException { get; init; }
+        public Exception? DeleteException { get; init; }
         public ConversationTranscript Transcript { get; init; } = ConversationTranscript.Create(
             "smoke",
             DateTimeOffset.Parse("2024-01-01T00:00:00Z"));
+        public IReadOnlyList<ConversationTranscriptSummary> Summaries { get; init; } = [];
+
+        public bool Exists(ConversationSessionName sessionName)
+        {
+            ExistsSessionName = sessionName;
+            return ExistsResult;
+        }
+
+        public bool TryLoad(ConversationSessionName sessionName, out ConversationTranscript? transcript)
+        {
+            TryLoadedSessionName = sessionName;
+            if (TryLoadException is not null)
+            {
+                throw TryLoadException;
+            }
+
+            transcript = TryLoadResult ? Transcript : null;
+            return TryLoadResult;
+        }
 
         public ConversationTranscript LoadOrCreate(ConversationSessionName sessionName, DateTimeOffset nowUtc)
         {
             LoadedSessionName = sessionName;
+            if (LoadOrCreateException is not null)
+            {
+                throw LoadOrCreateException;
+            }
+
             return Transcript;
         }
 
@@ -2648,7 +4710,57 @@ public sealed class CliCommandFactoryTests
         {
             SavedSessionName = sessionName;
             SavedTranscript = transcript;
+            if (SaveException is not null)
+            {
+                throw SaveException;
+            }
+
             return Path.Combine("user-home", ".caicli", "sessions", $"{sessionName.FileSafeName}.transcript.json");
+        }
+
+        public IReadOnlyList<ConversationTranscriptSummary> ListSummaries()
+        {
+            if (ListSummariesException is not null)
+            {
+                throw ListSummariesException;
+            }
+
+            return Summaries;
+        }
+
+        public bool TryGetSummary(ConversationSessionName sessionName, out ConversationTranscriptSummary? summary)
+        {
+            if (TryGetSummaryException is not null)
+            {
+                throw TryGetSummaryException;
+            }
+
+            summary = Summaries.FirstOrDefault(candidate =>
+                string.Equals(candidate.Name, sessionName.Value, StringComparison.Ordinal));
+            return summary is not null;
+        }
+
+        public bool Rename(ConversationSessionName sourceSessionName, ConversationSessionName destinationSessionName)
+        {
+            RenamedSourceSessionName = sourceSessionName;
+            RenamedDestinationSessionName = destinationSessionName;
+            if (RenameException is not null)
+            {
+                throw RenameException;
+            }
+
+            return RenameResult;
+        }
+
+        public bool Delete(ConversationSessionName sessionName)
+        {
+            DeletedSessionName = sessionName;
+            if (DeleteException is not null)
+            {
+                throw DeleteException;
+            }
+
+            return DeleteResult;
         }
     }
 }

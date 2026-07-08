@@ -31,10 +31,15 @@ public sealed class OpenAiToolCallingModel : IToolCallingModel
         ArgumentNullException.ThrowIfNull(request);
 
         previousResponseId = null;
+        string prompt = request.TranscriptContext is null
+            ? request.Prompt
+            : ConversationTranscriptContextFormatter.FormatWithCurrentPrompt(
+                request.TranscriptContext,
+                request.Prompt);
 
         OpenAiAgentRequest agentRequest = new(
             Model: model,
-            Prompt: request.Prompt,
+            Prompt: prompt,
             PreviousResponseId: null,
             Instructions: request.Instructions ?? instructions,
             Tools: OpenAiToolDefinitionMapper.FromRegistry(registry),
