@@ -15,6 +15,14 @@ File and command tools resolve paths before use and require paths to stay inside
 - Binary and oversized text reads.
 - Shell cwd outside the workspace.
 
+## Project Instruction Files
+
+Project instruction files are loaded only from inside the selected workspace. `chat` and agentic `exec` can use `--cwd <path>` to choose the instruction target path; `--workspace` remains the workspace root and tool boundary. Unsafe or outside targets produce warnings and do not load outside paths or contents.
+
+For each directory from the workspace root to the target directory, the loader selects `AGENTS.md` when present; otherwise it selects legacy `AICLI.md`. It does not fall back to same-directory `AICLI.md` when `AGENTS.md` exists but is empty, invalid, or oversized. Loaded instruction text is merged root-to-leaf and sent with model requests for `chat` and agentic `exec`.
+
+`doctor`, `config get`, and `config list` report instruction source paths, source order, and warnings, but they do not print instruction contents. Instruction contents may still be visible to the configured model provider because they are part of the model request.
+
 ## Approval Modes And Tool Risk
 
 The CLI uses an approval mode plus per-tool risk metadata to decide whether a tool call may run. Config JSON supports `approvalMode` values:
