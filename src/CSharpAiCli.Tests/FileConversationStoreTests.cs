@@ -81,6 +81,38 @@ public sealed class FileConversationStoreTests
     }
 
     [Fact]
+    public void Save_writes_transcript_without_leaving_temporary_files()
+    {
+        using TempDirectory temp = TempDirectory.Create();
+        string sessionDirectory = Path.Combine(temp.Path, ".caicli", "sessions");
+        Directory.CreateDirectory(sessionDirectory);
+        using ManualResetEventSlim temporaryFileCreated = new();
+        List<string> temporaryFilesCreated = [];
+        using FileSystemWatcher watcher = WatchTemporaryFiles(
+            sessionDirectory,
+            temporaryFileCreated,
+            temporaryFilesCreated);
+        FileConversationStore store = new(sessionDirectory);
+        ConversationSessionName sessionName = ConversationSessionName.Parse("smoke");
+        ConversationTranscript transcript = ConversationTranscript.Create(
+            sessionName.Value,
+            DateTimeOffset.Parse("2024-01-01T00:00:00Z"));
+        transcript.AddUserMessage("Reply with OK.", DateTimeOffset.Parse("2024-01-01T00:00:01Z"));
+
+        string path = store.Save(sessionName, transcript);
+
+        AssertTemporaryFileWasCreated(temporaryFileCreated, temporaryFilesCreated);
+        Assert.Equal(Path.Combine(sessionDirectory, "smoke.transcript.json"), path);
+        string json = File.ReadAllText(path);
+        using JsonDocument document = JsonDocument.Parse(json);
+        JsonElement root = document.RootElement;
+        Assert.Equal(1, root.GetProperty("schemaVersion").GetInt32());
+        Assert.Equal("smoke", root.GetProperty("sessionName").GetString());
+        Assert.Equal("Reply with OK.", root.GetProperty("messages")[0].GetProperty("content").GetString());
+        AssertNoTemporaryFiles(sessionDirectory);
+    }
+
+    [Fact]
     public void Load_or_create_restores_existing_transcript()
     {
         using TempDirectory temp = TempDirectory.Create();
@@ -641,6 +673,37 @@ public sealed class FileConversationStoreTests
     }
 
     [Fact]
+    public void Rename_moves_transcript_without_leaving_temporary_files()
+    {
+        using TempDirectory temp = TempDirectory.Create();
+        string sessionDirectory = Path.Combine(temp.Path, ".caicli", "sessions");
+        FileConversationStore store = new(sessionDirectory);
+        ConversationSessionName source = ConversationSessionName.Parse("draft");
+        ConversationSessionName destination = ConversationSessionName.Parse("final");
+        ConversationTranscript transcript = ConversationTranscript.Create(
+            source.Value,
+            DateTimeOffset.Parse("2024-01-01T00:00:00Z"));
+        transcript.AddUserMessage("keep me", DateTimeOffset.Parse("2024-01-01T00:00:01Z"));
+        store.Save(source, transcript);
+        using ManualResetEventSlim temporaryFileCreated = new();
+        List<string> temporaryFilesCreated = [];
+        using FileSystemWatcher watcher = WatchTemporaryFiles(
+            sessionDirectory,
+            temporaryFileCreated,
+            temporaryFilesCreated);
+
+        Assert.True(store.Rename(source, destination));
+
+        AssertTemporaryFileWasCreated(temporaryFileCreated, temporaryFilesCreated);
+        Assert.False(store.Exists(source));
+        Assert.True(store.Exists(destination));
+        ConversationTranscript renamed = store.LoadOrCreate(destination, DateTimeOffset.Parse("2024-01-01T00:01:00Z"));
+        Assert.Equal(destination.Value, renamed.SessionName);
+        Assert.Equal("keep me", Assert.Single(renamed.Messages).Content);
+        AssertNoTemporaryFiles(sessionDirectory);
+    }
+
+    [Fact]
     public void Rename_reports_false_when_source_is_missing_or_destination_exists()
     {
         using TempDirectory temp = TempDirectory.Create();
@@ -747,6 +810,46 @@ public sealed class FileConversationStoreTests
 
         Assert.NotNull(constructor);
         return (ConversationSessionName)constructor.Invoke([value, fileSafeName]);
+    }
+
+    private static FileSystemWatcher WatchTemporaryFiles(
+        string sessionDirectory,
+        ManualResetEventSlim temporaryFileCreated,
+        List<string> temporaryFilesCreated)
+    {
+        FileSystemWatcher watcher = new(sessionDirectory, "*.tmp")
+        {
+            IncludeSubdirectories = false,
+        };
+        watcher.Created += (_, args) =>
+        {
+            lock (temporaryFilesCreated)
+            {
+                temporaryFilesCreated.Add(args.FullPath);
+            }
+
+            temporaryFileCreated.Set();
+        };
+        watcher.EnableRaisingEvents = true;
+        return watcher;
+    }
+
+    private static void AssertTemporaryFileWasCreated(
+        ManualResetEventSlim temporaryFileCreated,
+        List<string> temporaryFilesCreated)
+    {
+        Assert.True(
+            temporaryFileCreated.Wait(TimeSpan.FromSeconds(5)),
+            "Expected FileConversationStore to write through a temporary .tmp file.");
+        lock (temporaryFilesCreated)
+        {
+            Assert.NotEmpty(temporaryFilesCreated);
+        }
+    }
+
+    private static void AssertNoTemporaryFiles(string sessionDirectory)
+    {
+        Assert.Empty(Directory.EnumerateFiles(sessionDirectory, "*.tmp", SearchOption.TopDirectoryOnly));
     }
 
     private sealed class TempDirectory : IDisposable

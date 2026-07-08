@@ -133,7 +133,7 @@ public sealed class FileConversationStore : IConversationStore
         };
 
         string json = JsonSerializer.Serialize(destinationTranscript, JsonOptions);
-        File.WriteAllText(destinationPath, json);
+        WriteJsonAtomically(destinationPath, json);
         File.Delete(sourcePath);
         return true;
     }
@@ -147,7 +147,7 @@ public sealed class FileConversationStore : IConversationStore
         Directory.CreateDirectory(sessionDirectory);
         string path = GetPath(sessionName);
         string json = JsonSerializer.Serialize(transcript, JsonOptions);
-        File.WriteAllText(path, json);
+        WriteJsonAtomically(path, json);
         return path;
     }
 
@@ -250,6 +250,46 @@ public sealed class FileConversationStore : IConversationStore
         {
             throw new InvalidOperationException(InvalidTranscriptMessage);
         }
+    }
+
+    private static void WriteJsonAtomically(string path, string json)
+    {
+        string? directory = Path.GetDirectoryName(path);
+        string fileName = Path.GetFileName(path);
+        string temporaryPath = string.IsNullOrWhiteSpace(directory)
+            ? $"{fileName}.{Guid.NewGuid():N}.tmp"
+            : Path.Combine(directory, $"{fileName}.{Guid.NewGuid():N}.tmp");
+
+        try
+        {
+            File.WriteAllText(temporaryPath, json);
+            File.Move(temporaryPath, path, overwrite: true);
+        }
+        finally
+        {
+            TryDeleteTemporaryFile(temporaryPath);
+        }
+    }
+
+    private static void TryDeleteTemporaryFile(string path)
+    {
+        try
+        {
+            if (File.Exists(path))
+            {
+                File.Delete(path);
+            }
+        }
+        catch (Exception exception) when (IsConversationStoreIoException(exception))
+        {
+        }
+    }
+
+    private static bool IsConversationStoreIoException(Exception exception)
+    {
+        return exception is IOException
+            or UnauthorizedAccessException
+            or NotSupportedException;
     }
 
     private string GetPath(ConversationSessionName sessionName)
