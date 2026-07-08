@@ -275,7 +275,7 @@ public sealed class GitToolsTests
                 return SuccessfulGitResult("160000 abcdef1234567890abcdef1234567890abcdef12 0\tdeps/sub\0");
             }
 
-            if (args is ["diff-files", "--summary", "--", "deps/sub"])
+            if (args is ["diff-files", "--summary", "--no-ext-diff", "--no-textconv", "--", "deps/sub"])
             {
                 return SuccessfulGitResult("Submodule deps/sub contains modified content\n");
             }
@@ -353,7 +353,7 @@ public sealed class GitToolsTests
                 return SuccessfulGitResult(string.Empty);
             }
 
-            if (args is ["diff-files", "--summary", "--", "script.sh"])
+            if (args is ["diff-files", "--summary", "--no-ext-diff", "--no-textconv", "--", "script.sh"])
             {
                 return SuccessfulGitResult(" mode change 100644 => 100755 script.sh\n");
             }
@@ -434,7 +434,7 @@ public sealed class GitToolsTests
                     Summary: "Git command completed with exit code 1.");
             }
 
-            if (args is ["diff-files", "--summary", "--", "same.txt"])
+            if (args is ["diff-files", "--summary", "--no-ext-diff", "--no-textconv", "--", "same.txt"])
             {
                 return SuccessfulGitResult(string.Empty);
             }
@@ -526,6 +526,71 @@ public sealed class GitToolsTests
     }
 
     [Fact]
+    public void Git_diff_warns_for_untracked_file_under_reparse_directory_without_copying_target_content()
+    {
+        using TempDirectory temp = TempDirectory.Create();
+        string linkDirPath = Path.Combine(temp.Path, "linkdir");
+        string exposedPath = Path.Combine(linkDirPath, "outside.txt");
+        Directory.CreateDirectory(linkDirPath);
+        File.WriteAllText(exposedPath, "outside secret\n");
+        FakeGitCommandRunner runner = new(args =>
+        {
+            if (args is ["rev-parse", "--verify", "HEAD"])
+            {
+                return SuccessfulGitResult(string.Empty);
+            }
+
+            if (args.FirstOrDefault() == "diff-index")
+            {
+                return SuccessfulGitResult(string.Empty);
+            }
+
+            if (args is ["diff-files", "--raw", "--no-ext-diff", "--no-textconv", "-z", "--", ":(exclude).caicli/logs/**"])
+            {
+                return SuccessfulGitResult(string.Empty);
+            }
+
+            if (args is ["config", "--bool", "core.ignorecase"])
+            {
+                return FailedGitResult(exitCode: 1, stderr: string.Empty);
+            }
+
+            if (args is ["ls-files", "--others", "--exclude-standard", "-z"])
+            {
+                return SuccessfulGitResult("linkdir/outside.txt\0");
+            }
+
+            if (args.Contains("--no-index", StringComparer.Ordinal))
+            {
+                return new GitCommandResult(
+                    Succeeded: true,
+                    ExitCode: 1,
+                    Stdout: "diff --git a/linkdir/outside.txt b/linkdir/outside.txt\n+outside secret\n",
+                    Stderr: string.Empty,
+                    StdoutTruncated: false,
+                    StderrTruncated: false,
+                    ErrorCode: null,
+                    Summary: "Git command completed with exit code 1.");
+            }
+
+            return SuccessfulGitResult(string.Empty);
+        });
+        GitDiffTool tool = new(
+            new WorkspaceGuard(),
+            runner,
+            path => string.Equals(Path.GetFullPath(path), linkDirPath, StringComparison.Ordinal));
+
+        ToolExecutionResult result = tool.Execute(CreateContext(temp.Path));
+
+        Assert.True(result.Succeeded);
+        Assert.Contains("linkdir/outside.txt", result.Summary, StringComparison.Ordinal);
+        Assert.Contains("WARNING", result.Summary, StringComparison.Ordinal);
+        Assert.Contains("symlink/reparse", result.Summary, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("outside secret", result.Summary, StringComparison.Ordinal);
+        Assert.DoesNotContain(runner.Commands, command => command.Contains("--no-index", StringComparer.Ordinal));
+    }
+
+    [Fact]
     public void Git_diff_warns_for_tracked_file_replaced_by_symlink_without_copying_target_content()
     {
         using TempDirectory temp = TempDirectory.Create();
@@ -553,7 +618,7 @@ public sealed class GitToolsTests
                 return SuccessfulGitResult("100644 abcdef1234567890abcdef1234567890abcdef12 0\ttracked.txt\0");
             }
 
-            if (args is ["diff-files", "--summary", "--", "tracked.txt"])
+            if (args is ["diff-files", "--summary", "--no-ext-diff", "--no-textconv", "--", "tracked.txt"])
             {
                 return SuccessfulGitResult(" mode change 100644 => 120000 tracked.txt\n");
             }
@@ -603,6 +668,92 @@ public sealed class GitToolsTests
         Assert.Contains("symlink/reparse", result.Summary, StringComparison.OrdinalIgnoreCase);
         Assert.DoesNotContain("outside secret", result.Summary, StringComparison.Ordinal);
         Assert.DoesNotContain(runner.Commands, command => command is ["show", ":0:tracked.txt"]);
+        Assert.DoesNotContain(runner.Commands, command => command.Contains("--no-index", StringComparer.Ordinal));
+    }
+
+    [Fact]
+    public void Git_diff_warns_for_tracked_file_under_reparse_directory_without_copying_target_content()
+    {
+        using TempDirectory temp = TempDirectory.Create();
+        string linkDirPath = Path.Combine(temp.Path, "linkdir");
+        string trackedPath = Path.Combine(linkDirPath, "tracked.txt");
+        Directory.CreateDirectory(linkDirPath);
+        File.WriteAllText(trackedPath, "outside secret\n");
+        FakeGitCommandRunner runner = new((args, stdoutPath) =>
+        {
+            if (args is ["rev-parse", "--verify", "HEAD"])
+            {
+                return SuccessfulGitResult(string.Empty);
+            }
+
+            if (args.FirstOrDefault() == "diff-index")
+            {
+                return SuccessfulGitResult(string.Empty);
+            }
+
+            if (args is ["diff-files", "--raw", "--no-ext-diff", "--no-textconv", "-z", "--", ":(exclude).caicli/logs/**"])
+            {
+                return SuccessfulGitResult(":100644 100644 abcdef1234567890abcdef1234567890abcdef12 0000000000000000000000000000000000000000 M\0linkdir/tracked.txt\0");
+            }
+
+            if (args is ["ls-files", "-s", "-z", "--", "linkdir/tracked.txt"])
+            {
+                return SuccessfulGitResult("100644 abcdef1234567890abcdef1234567890abcdef12 0\tlinkdir/tracked.txt\0");
+            }
+
+            if (args is ["diff-files", "--summary", "--no-ext-diff", "--no-textconv", "--", "linkdir/tracked.txt"])
+            {
+                return SuccessfulGitResult(string.Empty);
+            }
+
+            if (args is ["show", ":0:linkdir/tracked.txt"])
+            {
+                Directory.CreateDirectory(Path.GetDirectoryName(stdoutPath!)!);
+                File.WriteAllText(stdoutPath!, "original\n");
+                return SuccessfulGitResult(string.Empty);
+            }
+
+            if (args is ["config", "--bool", "core.ignorecase"])
+            {
+                return FailedGitResult(exitCode: 1, stderr: string.Empty);
+            }
+
+            if (args is ["ls-files", "--others", "--exclude-standard", "-z"])
+            {
+                return SuccessfulGitResult(string.Empty);
+            }
+
+            if (args.Contains("--no-index", StringComparer.Ordinal))
+            {
+                return new GitCommandResult(
+                    Succeeded: true,
+                    ExitCode: 1,
+                    Stdout: "diff --git a/linkdir/tracked.txt b/linkdir/tracked.txt\n+outside secret\n",
+                    Stderr: string.Empty,
+                    StdoutTruncated: false,
+                    StderrTruncated: false,
+                    ErrorCode: null,
+                    Summary: "Git command completed with exit code 1.");
+            }
+
+            return SuccessfulGitResult(string.Empty);
+        });
+        GitDiffTool tool = new(
+            new WorkspaceGuard(),
+            runner,
+            path => string.Equals(Path.GetFullPath(path), linkDirPath, StringComparison.Ordinal));
+
+        ToolExecutionResult result = tool.Execute(CreateContext(temp.Path));
+
+        Assert.True(result.Succeeded);
+        Assert.Contains("linkdir/tracked.txt", result.Summary, StringComparison.Ordinal);
+        Assert.Contains("WARNING", result.Summary, StringComparison.Ordinal);
+        Assert.Contains("symlink/reparse", result.Summary, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains(
+            runner.Commands,
+            command => command is ["diff-files", "--summary", "--no-ext-diff", "--no-textconv", "--", "linkdir/tracked.txt"]);
+        Assert.DoesNotContain("outside secret", result.Summary, StringComparison.Ordinal);
+        Assert.DoesNotContain(runner.Commands, command => command is ["show", ":0:linkdir/tracked.txt"]);
         Assert.DoesNotContain(runner.Commands, command => command.Contains("--no-index", StringComparer.Ordinal));
     }
 

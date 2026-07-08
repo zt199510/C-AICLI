@@ -264,7 +264,7 @@ public sealed class GitDiffTool : ITool
         string worktreeFullPath = Path.GetFullPath(
             relativePath.Replace('/', Path.DirectorySeparatorChar),
             workspaceRoot);
-        if (isSymlinkOrReparsePoint(worktreeFullPath))
+        if (HasSymlinkOrReparsePointInPath(workspaceRoot, relativePath))
         {
             return CreateSymlinkOrReparsePointDiffResult(summaryDiff, relativePath);
         }
@@ -340,7 +340,7 @@ public sealed class GitDiffTool : ITool
     {
         return gitCommandRunner.RunArgumentList(
             workspaceRoot,
-            ["diff-files", "--summary", "--", relativePath]);
+            ["diff-files", "--summary", "--no-ext-diff", "--no-textconv", "--", relativePath]);
     }
 
     private static GitCommandResult CreateMetadataOnlyUnstagedDiffResult(
@@ -387,7 +387,7 @@ public sealed class GitDiffTool : ITool
         string worktreeFullPath = Path.GetFullPath(
             relativePath.Replace('/', Path.DirectorySeparatorChar),
             workspaceRoot);
-        if (isSymlinkOrReparsePoint(worktreeFullPath))
+        if (HasSymlinkOrReparsePointInPath(workspaceRoot, relativePath))
         {
             return CreateSymlinkOrReparsePointDiffResult(summaryDiff: null, relativePath);
         }
@@ -447,6 +447,21 @@ public sealed class GitDiffTool : ITool
         {
             return false;
         }
+    }
+
+    private bool HasSymlinkOrReparsePointInPath(string workspaceRoot, string relativePath)
+    {
+        string currentPath = Path.GetFullPath(workspaceRoot);
+        foreach (string segment in NormalizeGitPath(relativePath).Split('/', StringSplitOptions.RemoveEmptyEntries))
+        {
+            currentPath = Path.Combine(currentPath, segment);
+            if (isSymlinkOrReparsePoint(currentPath))
+            {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     private static GitCommandResult CreateSymlinkOrReparsePointDiffResult(
