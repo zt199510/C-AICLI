@@ -52,6 +52,8 @@ public sealed class RestrictedShellRunner : IShellRunner
             if (!process.WaitForExit(timeoutMilliseconds))
             {
                 TryKill(process);
+                TryWaitForExit(process);
+                TryWaitForOutput(stdoutTask, stderrTask);
                 string timedOutStdout = TryReadCompleted(stdoutTask);
                 string timedOutStderr = TryReadCompleted(stderrTask);
                 TruncatedText stdout = Truncate(timedOutStdout, maxStdoutBytes);
@@ -126,6 +128,28 @@ public sealed class RestrictedShellRunner : IShellRunner
         try
         {
             process.Kill(entireProcessTree: true);
+        }
+        catch
+        {
+        }
+    }
+
+    private static void TryWaitForExit(Process process)
+    {
+        try
+        {
+            process.WaitForExit(milliseconds: 5_000);
+        }
+        catch
+        {
+        }
+    }
+
+    private static void TryWaitForOutput(Task<string> stdoutTask, Task<string> stderrTask)
+    {
+        try
+        {
+            Task.WaitAll([stdoutTask, stderrTask], millisecondsTimeout: 5_000);
         }
         catch
         {
