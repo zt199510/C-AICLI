@@ -3808,6 +3808,117 @@ public sealed class CliCommandFactoryTests
     }
 
     [Fact]
+    public void Chat_resume_empty_session_name_rejects_without_calling_model_or_store()
+    {
+        using StringWriter output = new();
+        FakeChatModelClient chatClient = new(ChatModelResult.Success(new ChatResponse(
+            Provider: "openai",
+            Model: "gpt-test",
+            ResponseId: "resp_test",
+            Text: "fake model output")));
+        FakeConversationStore store = new();
+        bool storeFactoryInvoked = false;
+        RootCommand command = CliCommandFactory
+            .Create(
+                output,
+                workspacePath => CreateSnapshot(workspacePath, apiKey: "sk-test", apiKeySource: "OPENAI_API_KEY", model: "gpt-test"),
+                (_, _) => { },
+                _ => chatClient,
+                writer => new TerminalChatStreamingRenderer(writer),
+                _ =>
+                {
+                    storeFactoryInvoked = true;
+                    return store;
+                },
+                () => DateTimeOffset.Parse("2024-01-01T00:00:05Z"));
+
+        int exitCode = CliCommandFactory.Invoke(command, ["chat", "--resume", "", "hello model"], output);
+
+        Assert.Equal(1, exitCode);
+        Assert.Contains("Session name must not be empty.", output.ToString());
+        Assert.False(storeFactoryInvoked);
+        Assert.Null(store.ExistsSessionName);
+        Assert.Null(store.TryLoadedSessionName);
+        Assert.Null(store.LoadedSessionName);
+        Assert.Null(store.SavedSessionName);
+        Assert.Null(chatClient.LastRequest);
+    }
+
+    [Fact]
+    public void Chat_session_whitespace_session_name_rejects_without_calling_model_or_store()
+    {
+        using StringWriter output = new();
+        FakeChatModelClient chatClient = new(ChatModelResult.Success(new ChatResponse(
+            Provider: "openai",
+            Model: "gpt-test",
+            ResponseId: "resp_test",
+            Text: "fake model output")));
+        FakeConversationStore store = new();
+        bool storeFactoryInvoked = false;
+        RootCommand command = CliCommandFactory
+            .Create(
+                output,
+                workspacePath => CreateSnapshot(workspacePath, apiKey: "sk-test", apiKeySource: "OPENAI_API_KEY", model: "gpt-test"),
+                (_, _) => { },
+                _ => chatClient,
+                writer => new TerminalChatStreamingRenderer(writer),
+                _ =>
+                {
+                    storeFactoryInvoked = true;
+                    return store;
+                },
+                () => DateTimeOffset.Parse("2024-01-01T00:00:05Z"));
+
+        int exitCode = CliCommandFactory.Invoke(command, ["chat", "--session", " ", "hello model"], output);
+
+        Assert.Equal(1, exitCode);
+        Assert.Contains("Session name must not be empty.", output.ToString());
+        Assert.False(storeFactoryInvoked);
+        Assert.Null(store.ExistsSessionName);
+        Assert.Null(store.TryLoadedSessionName);
+        Assert.Null(store.LoadedSessionName);
+        Assert.Null(store.SavedSessionName);
+        Assert.Null(chatClient.LastRequest);
+    }
+
+    [Fact]
+    public void Chat_empty_session_and_resume_conflict_returns_failure_without_calling_model_or_store()
+    {
+        using StringWriter output = new();
+        FakeChatModelClient chatClient = new(ChatModelResult.Success(new ChatResponse(
+            Provider: "openai",
+            Model: "gpt-test",
+            ResponseId: "resp_test",
+            Text: "fake model output")));
+        FakeConversationStore store = new();
+        bool storeFactoryInvoked = false;
+        RootCommand command = CliCommandFactory
+            .Create(
+                output,
+                workspacePath => CreateSnapshot(workspacePath, apiKey: "sk-test", apiKeySource: "OPENAI_API_KEY", model: "gpt-test"),
+                (_, _) => { },
+                _ => chatClient,
+                writer => new TerminalChatStreamingRenderer(writer),
+                _ =>
+                {
+                    storeFactoryInvoked = true;
+                    return store;
+                },
+                () => DateTimeOffset.Parse("2024-01-01T00:00:05Z"));
+
+        int exitCode = CliCommandFactory.Invoke(command, ["chat", "--session", "", "--resume", "smoke", "hello model"], output);
+
+        Assert.Equal(1, exitCode);
+        Assert.Contains("session-option-conflict", output.ToString());
+        Assert.False(storeFactoryInvoked);
+        Assert.Null(store.ExistsSessionName);
+        Assert.Null(store.TryLoadedSessionName);
+        Assert.Null(store.LoadedSessionName);
+        Assert.Null(store.SavedSessionName);
+        Assert.Null(chatClient.LastRequest);
+    }
+
+    [Fact]
     public void Chat_session_and_resume_conflict_returns_failure_without_calling_model()
     {
         using StringWriter output = new();

@@ -681,27 +681,29 @@ public static class CliCommandFactory
             string prompt = parseResult.GetValue(promptArgument) ?? string.Empty;
             string? session = parseResult.GetValue(sessionOption);
             string? resume = parseResult.GetValue(resumeOption);
+            bool sessionSupplied = IsOptionExplicit(parseResult, sessionOption);
+            bool resumeSupplied = IsOptionExplicit(parseResult, resumeOption);
             CliEnvironmentSnapshot snapshot = snapshotProvider(workspacePath);
             TryWriteCommandLog(commandLogger, "chat", snapshot);
 
-            if (!string.IsNullOrWhiteSpace(session) && !string.IsNullOrWhiteSpace(resume))
+            if (sessionSupplied && resumeSupplied)
             {
                 WriteSessionOptionConflict(output);
                 return 1;
             }
 
-            string? effectiveSession = !string.IsNullOrWhiteSpace(resume) ? resume : session;
+            string? effectiveSession = resumeSupplied ? resume : session;
             ConversationSessionName? sessionName = null;
             ConversationTranscript? transcript = null;
             ConversationTranscript? transcriptContext = null;
             IConversationStore? conversationStore = null;
             DateTimeOffset nowUtc = default;
-            if (!string.IsNullOrWhiteSpace(effectiveSession))
+            if (sessionSupplied || resumeSupplied)
             {
                 sessionName = ConversationSessionName.Parse(effectiveSession);
                 conversationStore = conversationStoreFactory(snapshot);
                 nowUtc = utcNowProvider();
-                if (!string.IsNullOrWhiteSpace(resume))
+                if (resumeSupplied)
                 {
                     if (!conversationStore.TryLoad(sessionName, out transcript) || transcript is null)
                     {
