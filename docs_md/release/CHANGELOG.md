@@ -1,5 +1,16 @@
 # Changelog
 
+## Unreleased
+
+Added:
+- `session list`, `session show <name>`, `session rename <old> <new>`, and `session delete <name>` for local transcript management.
+- `chat --resume <session>` and `exec --resume <session>` require an existing transcript and pass normalized prior transcript context to the model or agent request.
+- `session export --format json|markdown <name>` supports raw JSON transcript export and readable markdown export.
+
+Changed:
+- `session clear <name>` remains supported for compatibility, but `session delete <name>` is the recommended delete command.
+- Markdown session export omits raw tool arguments, fences transcript-controlled bodies, escapes metadata, and redacts common secret values.
+
 ## 0.1.0 - 2026-06-07
 
 First local MVP release candidate for C# AI CLI.

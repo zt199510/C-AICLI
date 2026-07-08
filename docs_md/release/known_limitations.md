@@ -13,6 +13,7 @@
 - `run` remains the deterministic direct-tool compatibility and smoke entry.
 - The offline/fake model agent loop and OpenAI response parsing/writeback contracts are implemented and tested.
 - The default direct OpenAI SDK gateway path for agent tool-call continuation is not yet enabled; real direct SDK tool loops return `agent-backend-unavailable` until SDK tool calls and tool results are translated.
+- `chat --resume` and `exec --resume` provide prior transcript context only for existing local sessions. The context is normalized before use to reduce transcript section-spoofing risk.
 - The Microsoft Agent Framework project is an adapter boundary and experimental stub; the real framework runtime backend is Deferred.
 
 ## MCP And Project Packs

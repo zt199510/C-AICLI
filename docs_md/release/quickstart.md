@@ -64,9 +64,11 @@ After setting `OPENAI_MODEL` but leaving the key unset, it returns non-zero and 
 
 ```powershell
 artifacts\release\caicli-0.1.0-win-x64\caicli.exe chat --session smoke "Remember this short note."
+artifacts\release\caicli-0.1.0-win-x64\caicli.exe chat --resume smoke "What note did I ask you to remember?"
 ```
 
-The transcript is saved under `%USERPROFILE%\.caicli\sessions`.
+`--session` creates or appends a transcript under `%USERPROFILE%\.caicli\sessions`.
+`--resume` requires an existing transcript and sends normalized prior transcript context with the new prompt. Missing sessions fail safely with `localErrorCode: session-not-found`.
 
 ## 6. Inspect Optional Features
 
@@ -101,7 +103,10 @@ Use `--session` to record the transcript, including agent tool calls and summari
 
 ```powershell
 artifacts\release\caicli-0.1.0-win-x64\caicli.exe exec --workspace . --session smoke-exec "inspect README.md"
+artifacts\release\caicli-0.1.0-win-x64\caicli.exe exec --workspace . --resume smoke-exec "continue from the prior inspection"
 ```
+
+`exec --resume <session>` follows the same existing-transcript requirement as `chat --resume` and passes prior transcript context into the agent request before the current task.
 
 `exec` supports `--approval <mode>` to select the approval policy used when an agent loop reaches write or shell tool calls. This option is part of the `exec` contract, but with the default direct SDK backend, real tool-call continuation is still unavailable for shell/write tasks and may return `agent-backend-unavailable`. Use the `tools call --approval always workspace.run_shell` example below for an actionable shell smoke trial.
 
@@ -140,9 +145,15 @@ artifacts\release\caicli-0.1.0-win-x64\caicli.exe tools call --workspace . --app
 
 The legacy `--approve` option remains supported for compatibility. Dangerous shell commands are denied with `errorCode` `approval-denied` and `approvalStatus` `dangerous-shell-denied`, even under `--approval always` or legacy `--approve`.
 
-## 10. Export Or Clear A Session
+## 10. Manage Sessions
 
 ```powershell
+artifacts\release\caicli-0.1.0-win-x64\caicli.exe session list
+artifacts\release\caicli-0.1.0-win-x64\caicli.exe session show smoke
+artifacts\release\caicli-0.1.0-win-x64\caicli.exe session rename smoke smoke-archive
 artifacts\release\caicli-0.1.0-win-x64\caicli.exe session export smoke
-artifacts\release\caicli-0.1.0-win-x64\caicli.exe session clear smoke
+artifacts\release\caicli-0.1.0-win-x64\caicli.exe session export --format markdown smoke-archive
+artifacts\release\caicli-0.1.0-win-x64\caicli.exe session delete smoke-archive
 ```
+
+`session list` prints local transcript summaries. `session show <name>` prints one summary or `session-not-found`. `session rename` updates the transcript file and metadata; missing source or destination conflict returns `session-rename-failed`. `session export` defaults to JSON raw transcript output, while `--format markdown` prints a readable redacted transcript. `session clear <name>` remains available for compatibility, but new docs and scripts should prefer `session delete <name>`.
