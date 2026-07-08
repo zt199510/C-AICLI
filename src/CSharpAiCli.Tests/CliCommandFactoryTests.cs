@@ -23,6 +23,30 @@ public sealed class CliCommandFactoryTests
     }
 
     [Fact]
+    public void Status_command_writes_status_report_for_non_git_workspace()
+    {
+        using TempDirectory temp = TempDirectory.Create();
+        using StringWriter output = new();
+
+        int exitCode = CliCommandFactory
+            .Create(output, workspacePath => CreateSnapshot(workspacePath))
+            .Parse(["status", "--workspace", temp.Path])
+            .Invoke();
+
+        string text = output.ToString();
+        Assert.Equal(0, exitCode);
+        Assert.Contains("C# AI CLI status", text);
+        Assert.Contains($"workspace: {temp.Path}", text);
+        Assert.Contains("workspaceStatus: ready", text);
+        Assert.Contains("gitStatus: not a git repository", text);
+        Assert.Contains("configurationStatus: incomplete", text);
+        Assert.Contains("model: not configured (default)", text);
+        Assert.Contains("baseUrl: https://api.openai.com/v1 (default)", text);
+        Assert.Contains("apiKey: missing (missing)", text);
+        Assert.Contains("approvalMode: on-request (default)", text);
+    }
+
+    [Fact]
     public void Config_get_command_writes_config_report()
     {
         using StringWriter output = new();
@@ -3783,6 +3807,24 @@ public sealed class CliCommandFactoryTests
 
         Assert.Equal(0, exitCode);
         Assert.Equal(["doctor"], loggedCommands);
+    }
+
+    [Fact]
+    public void Status_command_writes_command_log_through_delegate()
+    {
+        using StringWriter output = new();
+        List<string> loggedCommands = [];
+
+        int exitCode = CliCommandFactory
+            .Create(
+                output,
+                CreateSnapshot,
+                (commandName, _) => loggedCommands.Add(commandName))
+            .Parse(["status"])
+            .Invoke();
+
+        Assert.Equal(0, exitCode);
+        Assert.Equal(["status"], loggedCommands);
     }
 
     [Fact]

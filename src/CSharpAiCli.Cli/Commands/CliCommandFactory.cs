@@ -191,6 +191,21 @@ public static class CliCommandFactory
             return 0;
         });
 
+        Command statusCommand = new("status", "Summarize workspace, git, configuration, and approval status.");
+        statusCommand.SetAction(parseResult =>
+        {
+            string? workspacePath = parseResult.GetValue(workspaceOption);
+            CliEnvironmentSnapshot snapshot = workspaceSnapshotProvider(workspacePath);
+            TryWriteCommandLog(commandLogger, "status", snapshot);
+            GitStatusTool gitStatusTool = new(new WorkspaceGuard());
+            ToolExecutionResult gitStatus = gitStatusTool.Execute(new ToolExecutionContext(
+                "cli_status",
+                snapshot.Workspace,
+                "{}"));
+            output.WriteLine(StatusReport.Create(snapshot, gitStatus).ToDisplayText());
+            return 0;
+        });
+
         Command configCommand = new("config", "Inspect CLI configuration.");
         Command configGetCommand = new("get", "Print the effective configuration summary.");
         configGetCommand.SetAction(parseResult =>
@@ -884,6 +899,7 @@ public static class CliCommandFactory
 
         rootCommand.Subcommands.Add(versionCommand);
         rootCommand.Subcommands.Add(doctorCommand);
+        rootCommand.Subcommands.Add(statusCommand);
         rootCommand.Subcommands.Add(configCommand);
         rootCommand.Subcommands.Add(mcpCommand);
         rootCommand.Subcommands.Add(workflowCommand);
