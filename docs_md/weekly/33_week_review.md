@@ -25,13 +25,16 @@
 - 结果：文件不存在；因此未执行 runtime release smoke。
 
 运行时说明：
-- `review` 是只读审查入口，但会把当前 git diff 发给 configured model provider；真实使用需要有效模型配置、凭据与网络/配额。
-- `models` 是 local-only 配置查看入口，不触发外部 model-list API。
+- `review` 是只读审查入口，不写 logs/transcripts/patches/files，也不运行 shell/patch tools；但会把当前 git diff 发给 configured model provider，真实使用需要有效模型配置、凭据与网络/配额。
+- `review` 支持默认 text 输出、`--json` 与 `--output json`。
+- `models` 是 local-only 配置查看入口，不需要 API key，也不调用 model-list API。
 - smoke script 当前只覆盖无需模型凭据的离线路径：`status`、`models`、`diff`、`diff --stat`。
 - `diff` 依赖 git workspace state；`status` 可在非 git workspace 下报告状态。
+- Direct SDK agent tool continuation 仍 deferred。
 
 风险：
 - packaged release executable 缺失，release artifact 级 runtime smoke 仍待产物存在后执行。
+- 本机缺少 `global.json` pins 的 SDK `9.0.308`，仅有 SDK `10.0.301`；repo-root dotnet commands 会被阻断，除非安装 pinned SDK，或从 repo/worktree 外使用 absolute paths 运行。
 - `review` 真实效果依赖模型供应商响应质量与凭据配置，并会暴露当前 diff 给该供应商。
 - Direct SDK agent tool continuation 仍 deferred。
 
@@ -39,3 +42,4 @@
 - 进入第 34 周工具系统增强与错误码统一计划。
 - release artifact 可用后补跑 packaged `caicli.exe` runtime smoke。
 - 在具备模型凭据的环境中补充 `review` 的手动或凭据化 smoke 验收。
+- 补充 rendered docs/link review。
