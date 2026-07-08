@@ -618,13 +618,14 @@ public static class CliCommandFactory
             string name = parseResult.GetValue(sessionNameArgument) ?? string.Empty;
             CliEnvironmentSnapshot snapshot = snapshotProvider(workspacePath);
             TryWriteCommandLog(commandLogger, "session show", snapshot);
+            if (!TryParseSessionName(output, name, out ConversationSessionName sessionName))
+            {
+                return 1;
+            }
+
             try
             {
-                return ShowSession(output, conversationStoreFactory(snapshot), name);
-            }
-            catch (ArgumentException exception)
-            {
-                return WriteSessionNameParseFailure(output, exception);
+                return ShowSession(output, conversationStoreFactory(snapshot), sessionName);
             }
             catch (Exception exception) when (IsConversationStoreException(exception))
             {
@@ -638,18 +639,19 @@ public static class CliCommandFactory
             string format = parseResult.GetValue(sessionExportFormatOption) ?? "json";
             CliEnvironmentSnapshot snapshot = snapshotProvider(workspacePath);
             TryWriteCommandLog(commandLogger, "session export", snapshot);
+            if (!TryParseSessionName(output, name, out ConversationSessionName sessionName))
+            {
+                return 1;
+            }
+
             try
             {
                 if (string.Equals(format, "markdown", StringComparison.OrdinalIgnoreCase))
                 {
-                    return ExportSessionMarkdown(output, conversationStoreFactory(snapshot), name);
+                    return ExportSessionMarkdown(output, conversationStoreFactory(snapshot), sessionName);
                 }
 
-                return ExportSessionJson(output, snapshot, name);
-            }
-            catch (ArgumentException exception)
-            {
-                return WriteSessionNameParseFailure(output, exception);
+                return ExportSessionJson(output, snapshot, sessionName);
             }
             catch (Exception exception) when (IsConversationStoreException(exception))
             {
@@ -662,13 +664,14 @@ public static class CliCommandFactory
             string name = parseResult.GetValue(sessionNameArgument) ?? string.Empty;
             CliEnvironmentSnapshot snapshot = snapshotProvider(workspacePath);
             TryWriteCommandLog(commandLogger, "session clear", snapshot);
+            if (!TryParseSessionName(output, name, out ConversationSessionName sessionName))
+            {
+                return 1;
+            }
+
             try
             {
-                return DeleteSession(output, conversationStoreFactory(snapshot), name, "cleared", missingExitCode: 0, writeMissingErrorCode: false);
-            }
-            catch (ArgumentException exception)
-            {
-                return WriteSessionNameParseFailure(output, exception);
+                return DeleteSession(output, conversationStoreFactory(snapshot), sessionName, "cleared", missingExitCode: 0, writeMissingErrorCode: false);
             }
             catch (Exception exception) when (IsConversationStoreException(exception))
             {
@@ -681,13 +684,14 @@ public static class CliCommandFactory
             string name = parseResult.GetValue(sessionNameArgument) ?? string.Empty;
             CliEnvironmentSnapshot snapshot = snapshotProvider(workspacePath);
             TryWriteCommandLog(commandLogger, "session delete", snapshot);
+            if (!TryParseSessionName(output, name, out ConversationSessionName sessionName))
+            {
+                return 1;
+            }
+
             try
             {
-                return DeleteSession(output, conversationStoreFactory(snapshot), name, "deleted", missingExitCode: 1, writeMissingErrorCode: true);
-            }
-            catch (ArgumentException exception)
-            {
-                return WriteSessionNameParseFailure(output, exception);
+                return DeleteSession(output, conversationStoreFactory(snapshot), sessionName, "deleted", missingExitCode: 1, writeMissingErrorCode: true);
             }
             catch (Exception exception) when (IsConversationStoreException(exception))
             {
@@ -701,13 +705,15 @@ public static class CliCommandFactory
             string destination = parseResult.GetValue(sessionRenameDestinationArgument) ?? string.Empty;
             CliEnvironmentSnapshot snapshot = snapshotProvider(workspacePath);
             TryWriteCommandLog(commandLogger, "session rename", snapshot);
+            if (!TryParseSessionName(output, source, out ConversationSessionName sourceSessionName) ||
+                !TryParseSessionName(output, destination, out ConversationSessionName destinationSessionName))
+            {
+                return 1;
+            }
+
             try
             {
-                return RenameSession(output, conversationStoreFactory(snapshot), source, destination);
-            }
-            catch (ArgumentException exception)
-            {
-                return WriteSessionNameParseFailure(output, exception);
+                return RenameSession(output, conversationStoreFactory(snapshot), sourceSessionName, destinationSessionName);
             }
             catch (Exception exception) when (IsConversationStoreException(exception))
             {
@@ -1090,6 +1096,21 @@ public static class CliCommandFactory
         return 1;
     }
 
+    private static bool TryParseSessionName(TextWriter output, string name, out ConversationSessionName sessionName)
+    {
+        try
+        {
+            sessionName = ConversationSessionName.Parse(name);
+            return true;
+        }
+        catch (ArgumentException exception)
+        {
+            WriteSessionNameParseFailure(output, exception);
+            sessionName = null!;
+            return false;
+        }
+    }
+
     private static (string ErrorCode, string Summary) GetConversationStoreFailure(Exception exception)
     {
         if (IsInvalidConversationTranscriptException(exception))
@@ -1163,9 +1184,8 @@ public static class CliCommandFactory
         }
     }
 
-    private static int ShowSession(TextWriter output, IConversationStore conversationStore, string name)
+    private static int ShowSession(TextWriter output, IConversationStore conversationStore, ConversationSessionName sessionName)
     {
-        ConversationSessionName sessionName = ConversationSessionName.Parse(name);
         if (!conversationStore.TryGetSummary(sessionName, out ConversationTranscriptSummary? summary) || summary is null)
         {
             output.WriteLine("status: failed");
@@ -1184,9 +1204,8 @@ public static class CliCommandFactory
         return 0;
     }
 
-    private static int ExportSessionJson(TextWriter output, CliEnvironmentSnapshot snapshot, string name)
+    private static int ExportSessionJson(TextWriter output, CliEnvironmentSnapshot snapshot, ConversationSessionName sessionName)
     {
-        ConversationSessionName sessionName = ConversationSessionName.Parse(name);
         FileConversationStore conversationStore = FileConversationStore.Create(snapshot);
         if (!conversationStore.TryLoad(sessionName, out ConversationTranscript? transcript) || transcript is null)
         {
@@ -1199,9 +1218,8 @@ public static class CliCommandFactory
         return 0;
     }
 
-    private static int ExportSessionMarkdown(TextWriter output, IConversationStore conversationStore, string name)
+    private static int ExportSessionMarkdown(TextWriter output, IConversationStore conversationStore, ConversationSessionName sessionName)
     {
-        ConversationSessionName sessionName = ConversationSessionName.Parse(name);
         if (!conversationStore.TryLoad(sessionName, out ConversationTranscript? transcript) || transcript is null)
         {
             WriteSessionNotFound(output);
@@ -1215,12 +1233,11 @@ public static class CliCommandFactory
     private static int DeleteSession(
         TextWriter output,
         IConversationStore conversationStore,
-        string name,
+        ConversationSessionName sessionName,
         string successStatus,
         int missingExitCode,
         bool writeMissingErrorCode)
     {
-        ConversationSessionName sessionName = ConversationSessionName.Parse(name);
         if (!conversationStore.Delete(sessionName))
         {
             output.WriteLine("status: not-found");
@@ -1237,10 +1254,12 @@ public static class CliCommandFactory
         return 0;
     }
 
-    private static int RenameSession(TextWriter output, IConversationStore conversationStore, string source, string destination)
+    private static int RenameSession(
+        TextWriter output,
+        IConversationStore conversationStore,
+        ConversationSessionName sourceSessionName,
+        ConversationSessionName destinationSessionName)
     {
-        ConversationSessionName sourceSessionName = ConversationSessionName.Parse(source);
-        ConversationSessionName destinationSessionName = ConversationSessionName.Parse(destination);
         if (conversationStore.Rename(sourceSessionName, destinationSessionName))
         {
             output.WriteLine("status: renamed");

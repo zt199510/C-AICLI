@@ -27,7 +27,7 @@ Result: passed, 0 warnings, 0 errors.
 & 'D:\AI\C-AICLI\.worktrees\.dotnet-sdk-9.0.308\dotnet.exe' test src\CSharpAiCli.sln --no-restore
 ```
 
-Result: passed, 575 passed, 0 failed, 0 skipped.
+Result: passed, 576 passed, 0 failed, 0 skipped.
 
 Additional documentation check:
 

@@ -3144,6 +3144,27 @@ public sealed class CliCommandFactoryTests
     }
 
     [Fact]
+    public void Session_show_does_not_report_store_factory_argument_exception_as_invalid_session_name()
+    {
+        using StringWriter output = new();
+        RootCommand command = CliCommandFactory.Create(
+            output,
+            CreateSnapshot,
+            (_, _) => { },
+            _ => new FakeChatModelClient(ChatModelResult.Success(new ChatResponse("openai", "gpt-test", "resp_test", "ok"))),
+            writer => new TerminalChatStreamingRenderer(writer),
+            _ => throw new ArgumentException("factory failed"),
+            () => DateTimeOffset.Parse("2024-01-03T00:00:00Z"));
+
+        int exitCode = CliCommandFactory.Invoke(command, ["session", "show", "smoke"], output);
+
+        string text = output.ToString();
+        Assert.Equal(1, exitCode);
+        Assert.DoesNotContain("errorCode: invalid-session-name", text, StringComparison.Ordinal);
+        Assert.Contains("factory failed", text, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void Session_rename_calls_store_and_writes_ordered_success_output()
     {
         using StringWriter output = new();
