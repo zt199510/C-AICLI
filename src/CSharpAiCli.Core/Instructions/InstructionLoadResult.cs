@@ -1,15 +1,33 @@
 namespace CSharpAiCli.Core;
 
-public sealed record InstructionLoadResult(
-    string? Instructions,
-    string? SourcePath,
-    IReadOnlyList<string> Warnings)
+public sealed record InstructionLoadResult
 {
-    private readonly IReadOnlyList<InstructionSource>? sources;
+    private static readonly IReadOnlyList<InstructionSource> EmptySources =
+        Array.AsReadOnly(Array.Empty<InstructionSource>());
+
+    private IReadOnlyList<InstructionSource> sources = EmptySources;
+
+    public InstructionLoadResult(
+        string? Instructions,
+        string? SourcePath,
+        IReadOnlyList<string> Warnings)
+    {
+        this.Instructions = Instructions;
+        this.Warnings = Warnings ?? [];
+        sources = CreateCompatibleSources(SourcePath);
+    }
+
+    public string? Instructions { get; init; }
+
+    public string? SourcePath => Sources.Count == 0
+        ? null
+        : Sources[0].SourcePath;
+
+    public IReadOnlyList<string> Warnings { get; init; }
 
     public IReadOnlyList<InstructionSource> Sources
     {
-        get => sources ?? CreateCompatibleSources(SourcePath);
+        get => sources;
         init => sources = NormalizeSources(value, SourcePath);
     }
 
@@ -78,13 +96,13 @@ public sealed record InstructionLoadResult(
             normalizedSources[index] = new InstructionSource(source.SourcePath, index);
         }
 
-        return normalizedSources;
+        return Array.AsReadOnly(normalizedSources);
     }
 
     private static IReadOnlyList<InstructionSource> CreateCompatibleSources(string? sourcePath)
     {
         return string.IsNullOrWhiteSpace(sourcePath)
-            ? []
-            : [new InstructionSource(sourcePath, 0)];
+            ? EmptySources
+            : Array.AsReadOnly([new InstructionSource(sourcePath, 0)]);
     }
 }

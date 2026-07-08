@@ -28,6 +28,7 @@ public sealed class InstructionLoadResultTests
         InstructionSource source = Assert.Single(result.Sources);
         Assert.Equal("workspace/AGENTS.md", source.SourcePath);
         Assert.Equal(0, source.Order);
+        Assert.Equal("workspace/AGENTS.md", result.SourcePath);
     }
 
     [Fact]
@@ -44,6 +45,29 @@ public sealed class InstructionLoadResultTests
         InstructionSource source = Assert.Single(result.Sources);
         Assert.Equal("workspace/AGENTS.md", source.SourcePath);
         Assert.Equal(0, source.Order);
+        Assert.Equal("workspace/AGENTS.md", result.SourcePath);
+    }
+
+    [Fact]
+    public void SourcePath_follows_first_source_when_sources_are_initialized()
+    {
+        InstructionLoadResult result = new(
+            Instructions: "Use project instructions.",
+            SourcePath: "workspace/legacy/AGENTS.md",
+            Warnings: [])
+        {
+            Sources =
+            [
+                new("workspace/AGENTS.md", 7),
+                new("workspace/src/AGENTS.md", 3)
+            ]
+        };
+
+        Assert.Equal("workspace/AGENTS.md", result.SourcePath);
+        Assert.Equal("workspace/AGENTS.md", result.Sources[0].SourcePath);
+        Assert.Equal(0, result.Sources[0].Order);
+        Assert.Equal("workspace/src/AGENTS.md", result.Sources[1].SourcePath);
+        Assert.Equal(1, result.Sources[1].Order);
     }
 
     [Fact]
@@ -67,6 +91,37 @@ public sealed class InstructionLoadResultTests
         InstructionSource source = Assert.Single(result.Sources);
         Assert.Equal("workspace/AGENTS.md", source.SourcePath);
         Assert.Equal(0, source.Order);
+    }
+
+    [Fact]
+    public void Sources_cannot_be_mutated_by_downcasting_returned_collection()
+    {
+        InstructionLoadResult result = InstructionLoadResult.Loaded(
+            "Use project instructions.",
+            [
+                new("workspace/AGENTS.md", 0),
+                new("workspace/src/AGENTS.md", 1)
+            ]);
+
+        if (result.Sources is InstructionSource[] array)
+        {
+            array[0] = new InstructionSource("workspace/changed/AGENTS.md", 0);
+        }
+
+        if (result.Sources is IList<InstructionSource> list)
+        {
+            try
+            {
+                list[0] = new InstructionSource("workspace/changed-again/AGENTS.md", 0);
+            }
+            catch (NotSupportedException)
+            {
+            }
+        }
+
+        Assert.Equal("workspace/AGENTS.md", result.SourcePath);
+        Assert.Equal("workspace/AGENTS.md", result.Sources[0].SourcePath);
+        Assert.Equal(0, result.Sources[0].Order);
     }
 
     [Fact]
