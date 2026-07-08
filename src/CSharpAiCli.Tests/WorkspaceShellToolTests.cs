@@ -223,23 +223,7 @@ public sealed class WorkspaceShellToolTests
         {
             if (Directory.Exists(Path))
             {
-                DeleteDirectoryWithRetry(Path);
-            }
-        }
-
-        private static void DeleteDirectoryWithRetry(string path)
-        {
-            for (int attempt = 1; ; attempt++)
-            {
-                try
-                {
-                    Directory.Delete(path, recursive: true);
-                    return;
-                }
-                catch (Exception exception) when (attempt < 20 && exception is IOException or UnauthorizedAccessException)
-                {
-                    Thread.Sleep(50);
-                }
+                Directory.Delete(Path, recursive: true);
             }
         }
     }
