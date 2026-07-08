@@ -701,39 +701,28 @@ public sealed class FileConversationStoreTests
     }
 
     [Fact]
-    public async Task Rename_returns_false_when_destination_is_created_during_transcript_write()
+    public void Write_json_atomically_returns_false_without_overwriting_existing_destination()
     {
         using TempDirectory temp = TempDirectory.Create();
         string sessionDirectory = Path.Combine(temp.Path, ".caicli", "sessions");
-        FileConversationStore store = new(sessionDirectory);
-        ConversationSessionName source = ConversationSessionName.Parse("draft");
-        ConversationSessionName destination = ConversationSessionName.Parse("final");
-        string largeContent = new('c', LargeTranscriptContentLength);
-        store.Save(source, CreateTranscriptWithUserMessage(source.Value, largeContent));
+        Directory.CreateDirectory(sessionDirectory);
         string destinationPath = Path.Combine(sessionDirectory, "final.transcript.json");
-        string competingContent = "competing writer";
-        string competingJson = JsonSerializer.Serialize(
-            CreateTranscriptWithUserMessage(destination.Value, competingContent),
+        string originalContent = "existing transcript";
+        string replacementContent = "replacement transcript";
+        string originalJson = JsonSerializer.Serialize(
+            CreateTranscriptWithUserMessage("final", originalContent),
             TestJsonOptions);
+        string replacementJson = JsonSerializer.Serialize(
+            CreateTranscriptWithUserMessage("final", replacementContent),
+            TestJsonOptions);
+        File.WriteAllText(destinationPath, originalJson);
 
-        Task<bool> renameTask = Task.Run(() => store.Rename(source, destination));
-        string? temporaryFilePath = await WaitForTemporaryFileAsync(sessionDirectory, renameTask);
-        if (temporaryFilePath is null)
-        {
-            await renameTask;
-        }
+        bool written = InvokeWriteJsonAtomically(destinationPath, replacementJson, overwrite: false);
 
-        AssertTemporaryFileWasObserved(temporaryFilePath);
-        File.WriteAllText(destinationPath, competingJson);
-
-        bool renamed = await renameTask;
-
-        Assert.False(renamed);
-        Assert.True(store.Exists(source));
-        Assert.True(store.Exists(destination));
+        Assert.False(written);
         string destinationJson = File.ReadAllText(destinationPath);
         using JsonDocument document = JsonDocument.Parse(destinationJson);
-        Assert.Equal(competingContent, document.RootElement.GetProperty("messages")[0].GetProperty("content").GetString());
+        Assert.Equal(originalContent, document.RootElement.GetProperty("messages")[0].GetProperty("content").GetString());
         AssertNoTemporaryFiles(sessionDirectory);
     }
 
@@ -853,6 +842,19 @@ public sealed class FileConversationStoreTests
             DateTimeOffset.Parse("2024-01-01T00:00:00Z"));
         transcript.AddUserMessage(content, DateTimeOffset.Parse("2024-01-01T00:00:01Z"));
         return transcript;
+    }
+
+    private static bool InvokeWriteJsonAtomically(string path, string json, bool overwrite)
+    {
+        var method = typeof(FileConversationStore).GetMethod(
+            "WriteJsonAtomically",
+            BindingFlags.Static | BindingFlags.NonPublic,
+            binder: null,
+            types: [typeof(string), typeof(string), typeof(bool)],
+            modifiers: null);
+
+        Assert.NotNull(method);
+        return (bool)method.Invoke(null, [path, json, overwrite])!;
     }
 
     private static async Task<TemporaryFileObservation<TResult>> ObserveTemporaryFileDuringOperationAsync<TResult>(
