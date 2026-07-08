@@ -622,6 +622,10 @@ public static class CliCommandFactory
             {
                 return ShowSession(output, conversationStoreFactory(snapshot), name);
             }
+            catch (ArgumentException exception)
+            {
+                return WriteSessionNameParseFailure(output, exception);
+            }
             catch (Exception exception) when (IsConversationStoreException(exception))
             {
                 return WriteSessionConversationStoreFailure(output, exception);
@@ -643,6 +647,10 @@ public static class CliCommandFactory
 
                 return ExportSessionJson(output, snapshot, name);
             }
+            catch (ArgumentException exception)
+            {
+                return WriteSessionNameParseFailure(output, exception);
+            }
             catch (Exception exception) when (IsConversationStoreException(exception))
             {
                 return WriteSessionConversationStoreFailure(output, exception);
@@ -657,6 +665,10 @@ public static class CliCommandFactory
             try
             {
                 return DeleteSession(output, conversationStoreFactory(snapshot), name, "cleared", missingExitCode: 0, writeMissingErrorCode: false);
+            }
+            catch (ArgumentException exception)
+            {
+                return WriteSessionNameParseFailure(output, exception);
             }
             catch (Exception exception) when (IsConversationStoreException(exception))
             {
@@ -673,6 +685,10 @@ public static class CliCommandFactory
             {
                 return DeleteSession(output, conversationStoreFactory(snapshot), name, "deleted", missingExitCode: 1, writeMissingErrorCode: true);
             }
+            catch (ArgumentException exception)
+            {
+                return WriteSessionNameParseFailure(output, exception);
+            }
             catch (Exception exception) when (IsConversationStoreException(exception))
             {
                 return WriteSessionConversationStoreFailure(output, exception);
@@ -688,6 +704,10 @@ public static class CliCommandFactory
             try
             {
                 return RenameSession(output, conversationStoreFactory(snapshot), source, destination);
+            }
+            catch (ArgumentException exception)
+            {
+                return WriteSessionNameParseFailure(output, exception);
             }
             catch (Exception exception) when (IsConversationStoreException(exception))
             {
@@ -1061,6 +1081,12 @@ public static class CliCommandFactory
     {
         (string errorCode, string summary) = GetConversationStoreFailure(exception);
         WriteSafeFailure(output, errorCode, summary);
+        return 1;
+    }
+
+    private static int WriteSessionNameParseFailure(TextWriter output, ArgumentException exception)
+    {
+        WriteSafeFailure(output, "invalid-session-name", GetSafeSessionNameParseMessage(exception));
         return 1;
     }
 

@@ -3531,7 +3531,7 @@ public sealed class CliCommandFactoryTests
     }
 
     [Fact]
-    public void Invoke_non_exec_action_exception_uses_default_exception_handling()
+    public void Session_export_invalid_session_name_returns_safe_failure()
     {
         using TempDirectory temp = TempDirectory.Create();
         using StringWriter output = new();
@@ -3545,17 +3545,25 @@ public sealed class CliCommandFactoryTests
 
         int exitCode = CliCommandFactory.Invoke(command, ["session", "export", "../secret"], output);
 
+        string text = output.ToString();
         Assert.Equal(1, exitCode);
-        Assert.Contains("Session name contains invalid path characters.", output.ToString());
+        Assert.Contains("status: failed", text);
+        Assert.Contains("errorCode: invalid-session-name", text);
+        Assert.Contains("Session name contains invalid path characters.", text);
+        Assert.DoesNotContain("Unhandled exception", text, StringComparison.Ordinal);
+        Assert.DoesNotContain("System.", text, StringComparison.Ordinal);
+        Assert.DoesNotContain(temp.Path, text, StringComparison.OrdinalIgnoreCase);
     }
 
     public static TheoryData<string[]> InvalidSessionNameCommandCases => new()
     {
         new[] { "session", "show", "../secret" },
+        new[] { "session", "export", "../secret" },
+        new[] { "session", "export", "--format", "markdown", "../secret" },
+        new[] { "session", "clear", "../secret" },
         new[] { "session", "delete", "../secret" },
         new[] { "session", "rename", "../secret", "archive" },
         new[] { "session", "rename", "smoke", "../secret" },
-        new[] { "session", "export", "--format", "markdown", "../secret" },
     };
 
     [Theory]
@@ -3579,8 +3587,16 @@ public sealed class CliCommandFactoryTests
 
         int exitCode = CliCommandFactory.Invoke(command, args, output);
 
-        Assert.NotEqual(0, exitCode);
-        Assert.Contains("Session name contains invalid path characters.", output.ToString());
+        string text = output.ToString();
+        Assert.Equal(1, exitCode);
+        Assert.Contains("status: failed", text);
+        Assert.Contains("errorCode: invalid-session-name", text);
+        Assert.Contains("summary:", text);
+        Assert.Contains("Session name contains invalid path characters.", text);
+        Assert.DoesNotContain("Unhandled exception", text, StringComparison.Ordinal);
+        Assert.DoesNotContain("System.", text, StringComparison.Ordinal);
+        Assert.DoesNotContain(Directory.GetCurrentDirectory(), text, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain(temp.Path, text, StringComparison.OrdinalIgnoreCase);
         Assert.False(Directory.Exists(sessionDirectory));
     }
 
