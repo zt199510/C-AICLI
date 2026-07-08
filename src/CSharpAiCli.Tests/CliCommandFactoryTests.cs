@@ -4779,33 +4779,40 @@ public sealed class CliCommandFactoryTests
     private static string InitializeGitRepository(string root)
     {
         RunGit(root, "init");
-        RunGit(root, "config user.email test@example.invalid");
-        RunGit(root, "config user.name Test User");
+        RunGit(root, "config", "user.email", "test@example.invalid");
+        RunGit(root, "config", "user.name", "Test User");
         string filePath = Path.Combine(root, "tracked.txt");
         File.WriteAllText(filePath, "original\n");
-        RunGit(root, "add tracked.txt");
-        RunGit(root, "commit -m initial");
+        RunGit(root, "add", "tracked.txt");
+        RunGit(root, "-c", "commit.gpgSign=false", "commit", "--no-gpg-sign", "--no-verify", "-m", "initial");
         return filePath;
     }
 
-    private static void RunGit(string workingDirectory, string arguments)
+    private static void RunGit(string workingDirectory, params string[] arguments)
     {
+        ProcessStartInfo startInfo = new("git")
+        {
+            WorkingDirectory = workingDirectory,
+            RedirectStandardOutput = true,
+            RedirectStandardError = true,
+            UseShellExecute = false,
+            CreateNoWindow = true,
+        };
+        foreach (string argument in arguments)
+        {
+            startInfo.ArgumentList.Add(argument);
+        }
+
         using Process process = new()
         {
-            StartInfo = new ProcessStartInfo("git", arguments)
-            {
-                WorkingDirectory = workingDirectory,
-                RedirectStandardOutput = true,
-                RedirectStandardError = true,
-                UseShellExecute = false,
-                CreateNoWindow = true,
-            }
+            StartInfo = startInfo
         };
 
         process.Start();
-        Assert.True(process.WaitForExit(10_000), "git command timed out: " + arguments);
+        string commandText = string.Join(" ", arguments);
+        Assert.True(process.WaitForExit(10_000), "git command timed out: " + commandText);
         string stderr = process.StandardError.ReadToEnd();
-        Assert.True(process.ExitCode == 0, $"git {arguments} failed: {stderr}");
+        Assert.True(process.ExitCode == 0, $"git {commandText} failed: {stderr}");
     }
 
     private sealed class TempDirectory : IDisposable
