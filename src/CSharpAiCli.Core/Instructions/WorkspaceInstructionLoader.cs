@@ -2,7 +2,9 @@ namespace CSharpAiCli.Core;
 
 public sealed class WorkspaceInstructionLoader : IInstructionLoader
 {
+    public const string PrimaryInstructionFileName = "AGENTS.md";
     public const string DefaultInstructionFileName = "AICLI.md";
+    public const string LegacyInstructionFileName = DefaultInstructionFileName;
     public const long DefaultMaxInstructionBytes = 64 * 1024;
 
     private readonly long maxInstructionBytes;
@@ -26,8 +28,8 @@ public sealed class WorkspaceInstructionLoader : IInstructionLoader
             return InstructionLoadResult.Empty();
         }
 
-        string instructionPath = Path.Combine(workspace.RootPath, DefaultInstructionFileName);
-        if (!File.Exists(instructionPath))
+        string? instructionPath = FindInstructionPath(workspace.RootPath);
+        if (instructionPath is null)
         {
             return InstructionLoadResult.Empty();
         }
@@ -48,5 +50,19 @@ public sealed class WorkspaceInstructionLoader : IInstructionLoader
         }
 
         return InstructionLoadResult.Loaded(instructions, instructionPath);
+    }
+
+    private static string? FindInstructionPath(string rootPath)
+    {
+        string primaryInstructionPath = Path.Combine(rootPath, PrimaryInstructionFileName);
+        if (File.Exists(primaryInstructionPath))
+        {
+            return primaryInstructionPath;
+        }
+
+        string legacyInstructionPath = Path.Combine(rootPath, LegacyInstructionFileName);
+        return File.Exists(legacyInstructionPath)
+            ? legacyInstructionPath
+            : null;
     }
 }

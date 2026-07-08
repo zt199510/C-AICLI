@@ -53,6 +53,58 @@ public sealed class WorkspaceInstructionLoaderTests
     }
 
     [Fact]
+    public void Load_reads_and_trims_agents_instruction_file()
+    {
+        string root = CreateTempDirectory();
+
+        try
+        {
+            string instructionPath = Path.Combine(root, "AGENTS.md");
+            File.WriteAllText(instructionPath, $"{Environment.NewLine}Use project conventions.{Environment.NewLine}");
+            WorkspaceContext workspace = WorkspaceContext.Detect(root, root);
+            WorkspaceInstructionLoader loader = new();
+
+            InstructionLoadResult result = loader.Load(workspace);
+
+            Assert.True(result.HasInstructions);
+            Assert.Equal("Use project conventions.", result.Instructions);
+            Assert.Equal(instructionPath, result.SourcePath);
+            Assert.Empty(result.Warnings);
+        }
+        finally
+        {
+            Directory.Delete(root, recursive: true);
+        }
+    }
+
+    [Fact]
+    public void Load_prefers_agents_instruction_file_over_aicli_instruction_file()
+    {
+        string root = CreateTempDirectory();
+
+        try
+        {
+            string agentsPath = Path.Combine(root, "AGENTS.md");
+            string aicliPath = Path.Combine(root, "AICLI.md");
+            File.WriteAllText(agentsPath, "Follow AGENTS.");
+            File.WriteAllText(aicliPath, "Follow AICLI.");
+            WorkspaceContext workspace = WorkspaceContext.Detect(root, root);
+            WorkspaceInstructionLoader loader = new();
+
+            InstructionLoadResult result = loader.Load(workspace);
+
+            Assert.True(result.HasInstructions);
+            Assert.Equal("Follow AGENTS.", result.Instructions);
+            Assert.Equal(agentsPath, result.SourcePath);
+            Assert.Empty(result.Warnings);
+        }
+        finally
+        {
+            Directory.Delete(root, recursive: true);
+        }
+    }
+
+    [Fact]
     public void Load_ignores_empty_instruction_file()
     {
         string root = CreateTempDirectory();
