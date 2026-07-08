@@ -79,6 +79,18 @@ public sealed class GitToolsTests
         Assert.Equal("git-not-repository", diff.ErrorCode);
     }
 
+    [Fact]
+    public void Git_temp_repo_commit_ignores_configured_prepare_commit_msg_hook()
+    {
+        using TempDirectory temp = TempDirectory.Create();
+        string hooksPath = Path.Combine(temp.Path, "failing-hooks");
+        WriteFailingHook(hooksPath, "prepare-commit-msg");
+
+        string filePath = InitializeGitRepository(temp.Path, hooksPath);
+
+        Assert.True(File.Exists(filePath));
+    }
+
     private static ToolExecutionContext CreateContext(string workspaceRoot, string argumentsJson = "{}")
     {
         return new ToolExecutionContext(
@@ -87,16 +99,41 @@ public sealed class GitToolsTests
             argumentsJson);
     }
 
-    private static string InitializeGitRepository(string root)
+    private static string InitializeGitRepository(string root, string? configuredHooksPath = null)
     {
         RunGit(root, "init");
         RunGit(root, "config", "user.email", "test@example.invalid");
         RunGit(root, "config", "user.name", "Test User");
+        if (!string.IsNullOrWhiteSpace(configuredHooksPath))
+        {
+            RunGit(root, "config", "core.hooksPath", configuredHooksPath);
+        }
+
         string filePath = Path.Combine(root, "tracked.txt");
         File.WriteAllText(filePath, "original\n");
         RunGit(root, "add", "tracked.txt");
-        RunGit(root, "-c", "commit.gpgSign=false", "commit", "--no-gpg-sign", "--no-verify", "-m", "initial");
+        string emptyHooksPath = Path.Combine(root, ".caicli-empty-hooks");
+        Directory.CreateDirectory(emptyHooksPath);
+        RunGit(
+            root,
+            "-c",
+            "commit.gpgSign=false",
+            "-c",
+            "core.hooksPath=" + emptyHooksPath,
+            "commit",
+            "--no-gpg-sign",
+            "--no-verify",
+            "-m",
+            "initial");
         return filePath;
+    }
+
+    private static void WriteFailingHook(string hooksPath, string hookName)
+    {
+        Directory.CreateDirectory(hooksPath);
+        File.WriteAllText(
+            Path.Combine(hooksPath, hookName),
+            "#!/bin/sh\necho configured hook failed >&2\nexit 1\n");
     }
 
     private static void RunGit(string workingDirectory, params string[] arguments)
