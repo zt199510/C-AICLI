@@ -48,6 +48,22 @@ public sealed class GitToolsTests
     }
 
     [Fact]
+    public void Git_diff_stat_reports_modified_file_in_temporary_repo()
+    {
+        using TempDirectory temp = TempDirectory.Create();
+        string filePath = InitializeGitRepository(temp.Path);
+        File.AppendAllText(filePath, "changed\n");
+        GitDiffTool tool = new(new WorkspaceGuard());
+
+        ToolExecutionResult result = tool.Execute(CreateContext(temp.Path, """{"stat":true}"""));
+
+        Assert.True(result.Succeeded);
+        Assert.Contains("tracked.txt", result.Summary, StringComparison.Ordinal);
+        Assert.Contains("1 file changed", result.Summary, StringComparison.Ordinal);
+        Assert.DoesNotContain("diff --git", result.Summary, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void Git_tools_return_clear_failure_for_non_git_workspace()
     {
         using TempDirectory temp = TempDirectory.Create();
@@ -63,12 +79,12 @@ public sealed class GitToolsTests
         Assert.Equal("git-not-repository", diff.ErrorCode);
     }
 
-    private static ToolExecutionContext CreateContext(string workspaceRoot)
+    private static ToolExecutionContext CreateContext(string workspaceRoot, string argumentsJson = "{}")
     {
         return new ToolExecutionContext(
             "call_git",
             WorkspaceContext.Detect(workspaceRoot, workspaceRoot),
-            "{}");
+            argumentsJson);
     }
 
     private static string InitializeGitRepository(string root)

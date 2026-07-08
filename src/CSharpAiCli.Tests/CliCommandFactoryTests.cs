@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using System.CommandLine;
 using System.Text.Json.Nodes;
 using CSharpAiCli.Cli;
@@ -44,6 +45,50 @@ public sealed class CliCommandFactoryTests
         Assert.Contains("baseUrl: https://api.openai.com/v1 (default)", text);
         Assert.Contains("apiKey: missing (missing)", text);
         Assert.Contains("approvalMode: on-request (default)", text);
+    }
+
+    [Fact]
+    public void Diff_command_writes_current_diff_for_git_workspace()
+    {
+        using TempDirectory temp = TempDirectory.Create();
+        string filePath = InitializeGitRepository(temp.Path);
+        File.AppendAllText(filePath, "changed\n");
+        using StringWriter output = new();
+        List<string> loggedCommands = [];
+
+        int exitCode = CliCommandFactory
+            .Create(
+                output,
+                workspacePath => CreateSnapshot(workspacePath),
+                (commandName, _) => loggedCommands.Add(commandName))
+            .Parse(["diff", "--workspace", temp.Path])
+            .Invoke();
+
+        string text = output.ToString();
+        Assert.Equal(0, exitCode);
+        Assert.Equal(["diff"], loggedCommands);
+        Assert.Contains("diff --git", text, StringComparison.Ordinal);
+        Assert.Contains("+changed", text, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Diff_command_stat_writes_git_diff_stat()
+    {
+        using TempDirectory temp = TempDirectory.Create();
+        string filePath = InitializeGitRepository(temp.Path);
+        File.AppendAllText(filePath, "changed\n");
+        using StringWriter output = new();
+
+        int exitCode = CliCommandFactory
+            .Create(output, workspacePath => CreateSnapshot(workspacePath))
+            .Parse(["diff", "--stat", "--workspace", temp.Path])
+            .Invoke();
+
+        string text = output.ToString();
+        Assert.Equal(0, exitCode);
+        Assert.Contains("tracked.txt", text, StringComparison.Ordinal);
+        Assert.Contains("1 file changed", text, StringComparison.Ordinal);
+        Assert.DoesNotContain("diff --git", text, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -4731,6 +4776,38 @@ public sealed class CliCommandFactoryTests
             .Invoke();
     }
 
+    private static string InitializeGitRepository(string root)
+    {
+        RunGit(root, "init");
+        RunGit(root, "config user.email test@example.invalid");
+        RunGit(root, "config user.name Test User");
+        string filePath = Path.Combine(root, "tracked.txt");
+        File.WriteAllText(filePath, "original\n");
+        RunGit(root, "add tracked.txt");
+        RunGit(root, "commit -m initial");
+        return filePath;
+    }
+
+    private static void RunGit(string workingDirectory, string arguments)
+    {
+        using Process process = new()
+        {
+            StartInfo = new ProcessStartInfo("git", arguments)
+            {
+                WorkingDirectory = workingDirectory,
+                RedirectStandardOutput = true,
+                RedirectStandardError = true,
+                UseShellExecute = false,
+                CreateNoWindow = true,
+            }
+        };
+
+        process.Start();
+        Assert.True(process.WaitForExit(10_000), "git command timed out: " + arguments);
+        string stderr = process.StandardError.ReadToEnd();
+        Assert.True(process.ExitCode == 0, $"git {arguments} failed: {stderr}");
+    }
+
     private sealed class TempDirectory : IDisposable
     {
         private TempDirectory(string path)
@@ -4751,7 +4828,21 @@ public sealed class CliCommandFactoryTests
         {
             if (Directory.Exists(Path))
             {
+                ClearReadOnlyAttributes(Path);
                 Directory.Delete(Path, recursive: true);
+            }
+        }
+
+        private static void ClearReadOnlyAttributes(string path)
+        {
+            foreach (string filePath in Directory.EnumerateFiles(path, "*", SearchOption.AllDirectories))
+            {
+                File.SetAttributes(filePath, FileAttributes.Normal);
+            }
+
+            foreach (string directoryPath in Directory.EnumerateDirectories(path, "*", SearchOption.AllDirectories))
+            {
+                File.SetAttributes(directoryPath, FileAttributes.Normal);
             }
         }
     }

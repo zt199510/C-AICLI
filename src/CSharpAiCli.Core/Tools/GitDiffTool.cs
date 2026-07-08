@@ -1,3 +1,5 @@
+using System.Text.Json;
+
 namespace CSharpAiCli.Core;
 
 public sealed class GitDiffTool : ITool
@@ -14,7 +16,7 @@ public sealed class GitDiffTool : ITool
     public ToolDefinition Definition { get; } = new(
         "git.diff",
         "Show git diff for the current workspace.",
-        """{"type":"object"}""",
+        """{"type":"object","properties":{"stat":{"type":"boolean"}}}""",
         ToolRiskLevel.Read);
 
     public ToolExecutionResult Execute(
@@ -24,13 +26,19 @@ public sealed class GitDiffTool : ITool
         ArgumentNullException.ThrowIfNull(context);
         cancellationToken.ThrowIfCancellationRequested();
 
+        if (!TryReadArguments(context.ArgumentsJson, out bool stat, out ToolExecutionResult? failure))
+        {
+            return failure;
+        }
+
         WorkspaceGuardResult guardResult = workspaceGuard.ResolvePath(context.Workspace, ".");
         if (!guardResult.IsAllowed || guardResult.FullPath is null)
         {
             return guardResult.ToFailure();
         }
 
-        GitCommandResult result = gitCommandRunner.Run(guardResult.FullPath, "diff --");
+        string gitArguments = stat ? "diff --stat --" : "diff --";
+        GitCommandResult result = gitCommandRunner.Run(guardResult.FullPath, gitArguments);
         if (!result.Succeeded)
         {
             return ToolExecutionResult.Failure(
@@ -42,6 +50,50 @@ public sealed class GitDiffTool : ITool
             ? "no diff"
             : result.Stdout.Trim();
         return ToolExecutionResult.Success(output);
+    }
+
+    private static bool TryReadArguments(
+        string? argumentsJson,
+        out bool stat,
+        out ToolExecutionResult failure)
+    {
+        stat = false;
+        failure = null!;
+
+        try
+        {
+            using JsonDocument document = JsonDocument.Parse(string.IsNullOrWhiteSpace(argumentsJson) ? "{}" : argumentsJson);
+            JsonElement root = document.RootElement;
+            if (root.ValueKind != JsonValueKind.Object)
+            {
+                failure = ToolExecutionResult.Failure(
+                    "invalid-tool-arguments",
+                    "Tool arguments must be a JSON object.");
+                return false;
+            }
+
+            if (root.TryGetProperty("stat", out JsonElement statElement))
+            {
+                if (statElement.ValueKind is not JsonValueKind.True and not JsonValueKind.False)
+                {
+                    failure = ToolExecutionResult.Failure(
+                        "invalid-tool-arguments",
+                        "stat must be a boolean.");
+                    return false;
+                }
+
+                stat = statElement.GetBoolean();
+            }
+
+            return true;
+        }
+        catch (JsonException)
+        {
+            failure = ToolExecutionResult.Failure(
+                "invalid-tool-arguments",
+                "Tool arguments must be valid JSON.");
+            return false;
+        }
     }
 
     private static string NormalizeGitError(GitCommandResult result)
