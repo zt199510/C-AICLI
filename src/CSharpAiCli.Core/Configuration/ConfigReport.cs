@@ -34,6 +34,8 @@ public sealed record ConfigReport(IReadOnlyList<string> Lines)
             $"loadedConfigPaths: {loadedConfigPaths}"
         ];
 
+        AddInstructionSources(lines, snapshot.Instructions.Sources);
+
         foreach (string warning in configuration.Warnings)
         {
             lines.Add($"configWarning: {warning}");
@@ -80,5 +82,19 @@ public sealed record ConfigReport(IReadOnlyList<string> Lines)
         return disabledTools.Count == 0
             ? "none"
             : string.Join(", ", disabledTools.Order(StringComparer.Ordinal));
+    }
+
+    private static void AddInstructionSources(List<string> lines, IReadOnlyList<InstructionSource> sources)
+    {
+        if (sources.Count == 0)
+        {
+            lines.Add("instructionSources: none");
+            return;
+        }
+
+        foreach (InstructionSource source in sources)
+        {
+            lines.Add($"instructionSource: {source.Order}: {source.SourcePath}");
+        }
     }
 }

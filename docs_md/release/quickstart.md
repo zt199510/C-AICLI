@@ -70,7 +70,29 @@ artifacts\release\caicli-0.1.0-win-x64\caicli.exe chat --resume smoke "What note
 `--session` creates or appends a transcript under `%USERPROFILE%\.caicli\sessions`.
 `--resume` requires an existing transcript and sends normalized prior transcript context with the new prompt. Missing sessions fail safely with `errorCode: session-not-found`.
 
-## 6. Inspect Optional Features
+## 6. Use Project Instructions
+
+Project instruction files are optional. In each directory, `AGENTS.md` is preferred when present; legacy `AICLI.md` is used only when `AGENTS.md` is absent. `chat` and agentic `exec` load instruction files from the workspace root to the selected target path, merge them root-to-leaf, and send the merged instructions with the model request.
+
+Create a root instruction file:
+
+```powershell
+Set-Content -Path AGENTS.md -Value "Prefer concise answers for this workspace."
+artifacts\release\caicli-0.1.0-win-x64\caicli.exe chat --workspace . "Say hello in this project's style."
+```
+
+Use `--cwd <path>` to choose the instruction target path while `--workspace` remains the workspace root and tool boundary:
+
+```powershell
+New-Item -ItemType Directory -Force src\app | Out-Null
+Set-Content -Path src\app\AGENTS.md -Value "For src/app, mention app-specific constraints."
+artifacts\release\caicli-0.1.0-win-x64\caicli.exe chat --workspace . --cwd src\app "Draft a short implementation note."
+artifacts\release\caicli-0.1.0-win-x64\caicli.exe exec --workspace . --cwd src\app "Draft a short implementation note without changing files."
+```
+
+If both `AGENTS.md` and `AICLI.md` exist in the same directory, only `AGENTS.md` is considered for that directory. There is no same-directory fallback to `AICLI.md` when `AGENTS.md` exists but is empty, invalid, or oversized. `doctor`, `config get`, and `config list` report instruction source paths and order without printing instruction contents.
+
+## 7. Inspect Optional Features
 
 ```powershell
 artifacts\release\caicli-0.1.0-win-x64\caicli.exe mcp list
@@ -80,7 +102,7 @@ artifacts\release\caicli-0.1.0-win-x64\caicli.exe workflow list
 
 MCP and Gerber/TIFF workflow execution are enhanced capabilities and are not part of the direct backend MVP.
 
-## 7. Run An Agentic Exec Task
+## 8. Run An Agentic Exec Task
 
 `exec` is the agentic v1 surface and contract. It is routed through `IAgentRunner`, emits model/tool/final/error events in the newline-delimited `--json` stream, supports loop limits and session transcripts, and returns exit code `0` on success, `1` on task failure, and `2` on argument error.
 
@@ -114,7 +136,7 @@ Without an approving mode, approval-gated write and shell actions are denied. In
 
 Text output and `exec --json` events/results include `approvalStatus` for approval-gated tool activity.
 
-## 8. Run A Local Smoke Task
+## 9. Run A Local Smoke Task
 
 ```powershell
 artifacts\release\caicli-0.1.0-win-x64\caicli.exe run --workspace . --approve "create smoke note"
@@ -123,7 +145,7 @@ artifacts\release\caicli-0.1.0-win-x64\caicli.exe run --workspace . --approve "c
 This deterministic smoke task creates or updates `caicli-smoke.txt` in the workspace. Under the default `on-request` approval mode, the write is denied without `--approve`.
 `run` remains the deterministic direct-tool compatibility path for release smoke checks. It does not support `--approval`; configured `approvalMode` applies when `--approve` is not supplied, and the existing `--approve` option remains for compatibility.
 
-## 9. Inspect And Call Tools
+## 10. Inspect And Call Tools
 
 ```powershell
 artifacts\release\caicli-0.1.0-win-x64\caicli.exe tools list --workspace .
@@ -145,7 +167,7 @@ artifacts\release\caicli-0.1.0-win-x64\caicli.exe tools call --workspace . --app
 
 The legacy `--approve` option remains supported for compatibility. Dangerous shell commands are denied with `errorCode` `approval-denied` and `approvalStatus` `dangerous-shell-denied`, even under `--approval always` or legacy `--approve`.
 
-## 10. Manage Sessions
+## 11. Manage Sessions
 
 ```powershell
 artifacts\release\caicli-0.1.0-win-x64\caicli.exe session list

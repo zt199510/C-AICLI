@@ -142,10 +142,116 @@ public sealed class CliEnvironmentSnapshotTests
             Assert.True(snapshot.Instructions.HasInstructions);
             Assert.Equal("Prefer short answers.", snapshot.Instructions.Instructions);
             Assert.Equal(Path.Combine(workspaceRoot, "AICLI.md"), snapshot.Instructions.SourcePath);
+            InstructionSource source = Assert.Single(snapshot.Instructions.Sources);
+            Assert.Equal(Path.Combine(workspaceRoot, "AICLI.md"), source.SourcePath);
+            Assert.Equal(0, source.Order);
+            Assert.Empty(snapshot.Instructions.Warnings);
         }
         finally
         {
             Directory.Delete(root, recursive: true);
+        }
+    }
+
+    [Fact]
+    public void Create_loads_hierarchical_instructions_for_instruction_target_path()
+    {
+        string root = CreateTempDirectory();
+
+        try
+        {
+            string userProfile = Path.Combine(root, "home");
+            string workspaceRoot = Path.Combine(root, "workspace");
+            string sourceDirectory = Path.Combine(workspaceRoot, "src");
+            Directory.CreateDirectory(userProfile);
+            Directory.CreateDirectory(sourceDirectory);
+
+            string rootInstructionPath = Path.Combine(workspaceRoot, "AICLI.md");
+            string sourceInstructionPath = Path.Combine(sourceDirectory, "AGENTS.md");
+            string targetPath = Path.Combine(sourceDirectory, "Program.cs");
+            File.WriteAllText(rootInstructionPath, "Root instructions.");
+            File.WriteAllText(sourceInstructionPath, "Source instructions.");
+            File.WriteAllText(targetPath, "Console.WriteLine();");
+
+            CliEnvironmentSnapshot snapshot = CliEnvironmentSnapshot.Create(
+                workspacePath: workspaceRoot,
+                currentDirectory: root,
+                userProfile: userProfile,
+                dotnetSdkVersion: "9.0.308",
+                dotnetRuntime: ".NET 9.0.0",
+                openAiApiKey: "",
+                hasGlobalJson: false,
+                instructionTargetPath: targetPath);
+
+            Assert.True(snapshot.Instructions.HasInstructions);
+            Assert.Equal(
+                string.Join(
+                    $"{Environment.NewLine}{Environment.NewLine}",
+                    "Root instructions.",
+                    "Source instructions."),
+                snapshot.Instructions.Instructions);
+            Assert.Equal(rootInstructionPath, snapshot.Instructions.SourcePath);
+            Assert.Collection(
+                snapshot.Instructions.Sources,
+                source =>
+                {
+                    Assert.Equal(rootInstructionPath, source.SourcePath);
+                    Assert.Equal(0, source.Order);
+                },
+                source =>
+                {
+                    Assert.Equal(sourceInstructionPath, source.SourcePath);
+                    Assert.Equal(1, source.Order);
+                });
+            Assert.Empty(snapshot.Instructions.Warnings);
+        }
+        finally
+        {
+            Directory.Delete(root, recursive: true);
+        }
+    }
+
+    [Fact]
+    public void Create_with_instruction_target_path_outside_workspace_carries_empty_safe_instruction_result()
+    {
+        string root = CreateTempDirectory();
+        string outsideRoot = CreateTempDirectory();
+
+        try
+        {
+            string userProfile = Path.Combine(root, "home");
+            string workspaceRoot = Path.Combine(root, "workspace");
+            Directory.CreateDirectory(userProfile);
+            Directory.CreateDirectory(workspaceRoot);
+
+            string outsideInstructionPath = Path.Combine(outsideRoot, "AGENTS.md");
+            File.WriteAllText(Path.Combine(workspaceRoot, "AICLI.md"), "Workspace instructions.");
+            File.WriteAllText(outsideInstructionPath, "outside-secret");
+
+            CliEnvironmentSnapshot snapshot = CliEnvironmentSnapshot.Create(
+                workspacePath: workspaceRoot,
+                currentDirectory: root,
+                userProfile: userProfile,
+                dotnetSdkVersion: "9.0.308",
+                dotnetRuntime: ".NET 9.0.0",
+                openAiApiKey: "",
+                hasGlobalJson: false,
+                instructionTargetPath: outsideRoot);
+
+            Assert.False(snapshot.Instructions.HasInstructions);
+            Assert.Null(snapshot.Instructions.Instructions);
+            Assert.Null(snapshot.Instructions.SourcePath);
+            Assert.Empty(snapshot.Instructions.Sources);
+            string warning = Assert.Single(snapshot.Instructions.Warnings);
+            Assert.Contains("outside the workspace", warning);
+            Assert.Contains(outsideRoot, warning);
+            Assert.DoesNotContain("outside-secret", warning, StringComparison.Ordinal);
+            Assert.DoesNotContain(outsideInstructionPath, warning, StringComparison.Ordinal);
+        }
+        finally
+        {
+            Directory.Delete(root, recursive: true);
+            Directory.Delete(outsideRoot, recursive: true);
         }
     }
 
