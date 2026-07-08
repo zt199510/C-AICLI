@@ -105,6 +105,140 @@ public sealed class WorkspaceInstructionLoaderTests
     }
 
     [Fact]
+    public void Load_for_target_directory_combines_instruction_files_from_root_to_leaf()
+    {
+        string root = CreateTempDirectory();
+
+        try
+        {
+            string sourceDirectory = Path.Combine(root, "src");
+            string featureDirectory = Path.Combine(sourceDirectory, "feature");
+            Directory.CreateDirectory(featureDirectory);
+
+            File.WriteAllText(Path.Combine(root, "AGENTS.md"), "Root instructions.");
+            File.WriteAllText(Path.Combine(sourceDirectory, "AICLI.md"), "Source instructions.");
+            File.WriteAllText(Path.Combine(featureDirectory, "AGENTS.md"), "Feature instructions.");
+            File.WriteAllText(Path.Combine(featureDirectory, "AICLI.md"), "Legacy feature instructions.");
+
+            WorkspaceContext workspace = WorkspaceContext.Detect(root, root);
+            WorkspaceInstructionLoader loader = new();
+
+            InstructionLoadResult result = loader.Load(workspace, featureDirectory);
+
+            Assert.True(result.HasInstructions);
+            Assert.Equal(
+                string.Join(
+                    $"{Environment.NewLine}{Environment.NewLine}",
+                    "Root instructions.",
+                    "Source instructions.",
+                    "Feature instructions."),
+                result.Instructions);
+            Assert.Empty(result.Warnings);
+        }
+        finally
+        {
+            Directory.Delete(root, recursive: true);
+        }
+    }
+
+    [Fact]
+    public void Load_for_existing_target_file_combines_through_containing_directory()
+    {
+        string root = CreateTempDirectory();
+
+        try
+        {
+            string sourceDirectory = Path.Combine(root, "src");
+            Directory.CreateDirectory(sourceDirectory);
+            string targetFile = Path.Combine(sourceDirectory, "Program.cs");
+
+            File.WriteAllText(Path.Combine(root, "AGENTS.md"), "Root instructions.");
+            File.WriteAllText(Path.Combine(sourceDirectory, "AGENTS.md"), "Source instructions.");
+            File.WriteAllText(targetFile, "Console.WriteLine();");
+
+            WorkspaceContext workspace = WorkspaceContext.Detect(root, root);
+            WorkspaceInstructionLoader loader = new();
+
+            InstructionLoadResult result = loader.Load(workspace, targetFile);
+
+            Assert.True(result.HasInstructions);
+            Assert.Equal(
+                string.Join(
+                    $"{Environment.NewLine}{Environment.NewLine}",
+                    "Root instructions.",
+                    "Source instructions."),
+                result.Instructions);
+            Assert.Empty(result.Warnings);
+        }
+        finally
+        {
+            Directory.Delete(root, recursive: true);
+        }
+    }
+
+    [Fact]
+    public void Load_for_outside_target_path_returns_empty_and_records_warning()
+    {
+        string root = CreateTempDirectory();
+        string outsideRoot = CreateTempDirectory();
+
+        try
+        {
+            string outsideInstructionPath = Path.Combine(outsideRoot, "AGENTS.md");
+            File.WriteAllText(Path.Combine(root, "AGENTS.md"), "Workspace instructions.");
+            File.WriteAllText(outsideInstructionPath, "outside-secret");
+
+            WorkspaceContext workspace = WorkspaceContext.Detect(root, root);
+            WorkspaceInstructionLoader loader = new();
+
+            InstructionLoadResult result = loader.Load(workspace, outsideRoot);
+
+            Assert.False(result.HasInstructions);
+            Assert.Null(result.Instructions);
+            Assert.Null(result.SourcePath);
+            string warning = Assert.Single(result.Warnings);
+            Assert.Contains("outside the workspace", warning);
+            Assert.Contains(outsideRoot, warning);
+            Assert.DoesNotContain("outside-secret", warning, StringComparison.Ordinal);
+            Assert.DoesNotContain(outsideInstructionPath, warning, StringComparison.Ordinal);
+        }
+        finally
+        {
+            Directory.Delete(root, recursive: true);
+            Directory.Delete(outsideRoot, recursive: true);
+        }
+    }
+
+    [Fact]
+    public void Load_without_target_path_keeps_root_only_behavior()
+    {
+        string root = CreateTempDirectory();
+
+        try
+        {
+            string childDirectory = Path.Combine(root, "child");
+            Directory.CreateDirectory(childDirectory);
+            string rootInstructionPath = Path.Combine(root, "AGENTS.md");
+            File.WriteAllText(rootInstructionPath, "Root only.");
+            File.WriteAllText(Path.Combine(childDirectory, "AGENTS.md"), "Child instructions.");
+
+            WorkspaceContext workspace = WorkspaceContext.Detect(root, root);
+            WorkspaceInstructionLoader loader = new();
+
+            InstructionLoadResult result = loader.Load(workspace);
+
+            Assert.True(result.HasInstructions);
+            Assert.Equal("Root only.", result.Instructions);
+            Assert.Equal(rootInstructionPath, result.SourcePath);
+            Assert.Empty(result.Warnings);
+        }
+        finally
+        {
+            Directory.Delete(root, recursive: true);
+        }
+    }
+
+    [Fact]
     public void Load_ignores_empty_instruction_file()
     {
         string root = CreateTempDirectory();
