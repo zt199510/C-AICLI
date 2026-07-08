@@ -1,6 +1,6 @@
 # C# AI CLI Week 27-38 CLI 增强排期
 
-更新时间：2026-06-09
+更新时间：2026-07-07
 
 ## 目标
 
@@ -11,6 +11,8 @@
 - 0.1.0 MVP 已通过第 26 周验收。
 - 第 27 周配置/base URL 增强已验收，`config get/list/set/unset`、base URL source reporting 和 secret redaction 已进入 release docs。
 - 第 28 周 `caicli exec`/NDJSON 事件流已验收，`exec` 与旧 `run` 兼容路径已进入 capability status。
+- 第 29 周 agent run loop v1 已稳固，fake/offline model 可驱动工具调用、结果回写和 transcript 事件。
+- 第 30 周审批与权限 profile 已验收，`approvalMode`、tool risk metadata、统一 approval resolver、`--approval`/`--approve` 兼容和 approvalStatus 事件已进入 release docs。
 - 已具备 `version`、`doctor`、`config get/list/set/unset`、`chat`、`chat --session`、`session export/clear`、`exec`、`run`、`tools list/call`、workspace read/search、patch、shell、git status/diff 和 Windows release package。
 - 已知 Deferred 能力包括真实 Microsoft Agent Framework backend、真实 MCP 协议执行、Gerber/TIFF 真实工作流和 dotnet tool package。
 - 本排期优先完善 direct CLI，不做 TUI。
@@ -32,7 +34,7 @@
 | 27 | `27_week_config_base_url.plan.md` | 已验收 | 支持 `OPENAI_BASE_URL`、user config `baseUrl`、`config set/list/unset` 和配置诊断增强。 | `chat` 可使用自定义 base URL；`doctor/config` 显示来源且不泄露 key。 |
 | 28 | `28_week_exec_json_events.plan.md` | 已验收 | 新增 `caicli exec` 和 `--json` NDJSON 事件流。 | exec 可用于脚本/CI；旧 `run` smoke 路径保持兼容。 |
 | 29 | `29_week_agent_run_loop_v1.plan.md` | 已稳固 | `exec` 进入 agentic v1：模型事件、工具调用、结果回写、最终回答。 | fake model 可驱动工具调用；loop limits 和 `exec --session` transcript 生效。 |
-| 30 | `30_week_approval_permission_profiles.plan.md` | 计划中 | 新增审批模式和工具风险等级。 | 默认不静默写文件/跑 shell；审批结果进入 text/JSON event。 |
+| 30 | `30_week_approval_permission_profiles.plan.md` | 已验收 | 新增 `approvalMode`、工具风险等级和统一 approval policy resolver。 | 默认不静默写文件/跑 shell；危险 shell 明确拒绝；patch/shell/MCP approvalStatus 进入 text/JSON event。 |
 | 31 | `31_week_session_resume_management.plan.md` | 计划中 | 增强 session 管理和 `chat/exec --resume`。 | session 可 list/show/rename/delete/export markdown。 |
 | 32 | `32_week_project_instructions_agents_md.plan.md` | 计划中 | 支持 `AGENTS.md` 和层级项目指令。 | chat/exec 使用 workspace 指令，doctor 显示来源。 |
 | 33 | `33_week_diff_review_status_models.plan.md` | 计划中 | 新增 `status`、`diff`、`review`、`models`。 | review 默认只读；models 不需要 API key。 |
@@ -56,7 +58,7 @@
 - 已验收：可配置 OpenAI 官方或兼容服务 base URL。
 - 已验收：可用 `caicli exec` 进行非交互任务执行，并支持 text/NDJSON 输出。
 - fake/offline agent loop v1 与 `exec` 事件/限制/会话契约已固化；direct OpenAI SDK 真实工具调用 continuation 仍 Deferred。
-- 审批和权限 profile 可配置、可诊断。
+- 已验收：审批和权限 profile 可配置、可诊断；读/写/shell/dangerous-shell 风险层级和 approvalStatus 事件稳定可见。
 - session 可恢复、可管理、可导出。
 - `AGENTS.md` 项目指令兼容。
 - `status/diff/review/models` 开发命令可用。
