@@ -33,7 +33,7 @@
 | `chat` reports missing model/key safely | Passed | Week 25 smoke. |
 | `run` completes a small workspace task | Passed | Week 25 smoke creates `caicli-smoke.txt`. |
 | Logs are inspectable | Passed | `doctor` and `config get` report log directory; command logger tests pass. |
-| Sessions can be exported or cleared | Passed | Week 25 smoke covers `session export` and `session clear`. |
+| Sessions can be listed, shown, renamed, deleted, and exported | Passed | Week 31 coverage/review covers `session list/show/rename/delete/export`; `session clear` remains supported for compatibility. |
 | Users can disable tools | Passed | `disabledTools` config and Week 25 smoke. |
 | Approval refusal is safe | Passed | Week 25 smoke covers patch denial. |
 | Workspace path boundary refusal is safe | Passed | Week 25 smoke and workspace guard tests. |
