@@ -7,6 +7,7 @@ public sealed class GitDiffTool : ITool
 {
     public const string TruncationWarning = "WARNING: git output was truncated; diff is incomplete.";
     private const int MaxAggregateOutputBytes = 64 * 1024;
+    private const string EmptyTreeHash = "4b825dc642cb6eb9a060e54bf8d69288fbee4904";
     private const string CliCommandLogPathspec = ":(exclude).caicli/logs/**";
     private static readonly IReadOnlySet<int> NoIndexDiffSuccessExitCodes = new HashSet<int> { 0, 1 };
     private readonly IWorkspaceGuard workspaceGuard;
@@ -70,6 +71,7 @@ public sealed class GitDiffTool : ITool
     {
         DiffOutputBuilder outputs = new(MaxAggregateOutputBytes);
         bool truncated = false;
+        using TemporaryDiffDirectory temporaryDiffDirectory = TemporaryDiffDirectory.Create();
 
         GitCommandResult head = gitCommandRunner.RunArgumentList(
             workspaceRoot,
@@ -80,9 +82,10 @@ public sealed class GitDiffTool : ITool
         }
 
         truncated |= IsTruncated(head);
+        bool hasHead = head.Succeeded;
         GitCommandResult stagedDiff = gitCommandRunner.RunArgumentList(
             workspaceRoot,
-            CreateTrackedDiffArguments(stat, staged: true));
+            CreateStagedDiffArguments(stat, hasHead));
         if (!stagedDiff.Succeeded)
         {
             return GitDiffReadResult.Failed(ToGitFailure(stagedDiff));
@@ -91,16 +94,37 @@ public sealed class GitDiffTool : ITool
         truncated |= IsTruncated(stagedDiff);
         truncated |= !outputs.TryAdd(stagedDiff.Stdout);
 
-        GitCommandResult unstagedDiff = gitCommandRunner.RunArgumentList(
+        GitCommandResult trackedFiles = gitCommandRunner.RunArgumentList(
             workspaceRoot,
-            CreateTrackedDiffArguments(stat, staged: false));
-        if (!unstagedDiff.Succeeded)
+            ["ls-files", "-z", "--", CliCommandLogPathspec]);
+        if (!trackedFiles.Succeeded)
         {
-            return GitDiffReadResult.Failed(ToGitFailure(unstagedDiff));
+            return GitDiffReadResult.Failed(ToGitFailure(trackedFiles));
         }
 
-        truncated |= IsTruncated(unstagedDiff);
-        truncated |= !outputs.TryAdd(unstagedDiff.Stdout);
+        truncated |= IsTruncated(trackedFiles);
+        foreach (string relativePath in ParseNullSeparatedPaths(trackedFiles.Stdout, trackedFiles.StdoutTruncated))
+        {
+            if (!outputs.HasBudget)
+            {
+                truncated = true;
+                break;
+            }
+
+            GitCommandResult unstagedDiff = CreateUnstagedTrackedDiff(
+                workspaceRoot,
+                temporaryDiffDirectory.Path,
+                relativePath,
+                stat);
+            if (!IsSuccessfulNoIndexDiff(unstagedDiff))
+            {
+                return GitDiffReadResult.Failed(ToGitFailure(unstagedDiff));
+            }
+
+            truncated |= IsTruncated(unstagedDiff);
+            truncated |= !outputs.TryAdd(unstagedDiff.Stdout);
+        }
+
         StringComparison cliCommandLogPathComparison = GetCliCommandLogPathComparison(workspaceRoot);
 
         GitCommandResult untrackedFiles = gitCommandRunner.RunArgumentList(
@@ -125,13 +149,11 @@ public sealed class GitDiffTool : ITool
                 continue;
             }
 
-            string[] arguments = stat
-                ? ["diff", "--no-ext-diff", "--no-textconv", "--no-index", "--stat", "--", "/dev/null", relativePath]
-                : ["diff", "--no-ext-diff", "--no-textconv", "--no-index", "--", "/dev/null", relativePath];
-            GitCommandResult untrackedDiff = gitCommandRunner.RunArgumentList(
+            GitCommandResult untrackedDiff = CreateUntrackedDiff(
                 workspaceRoot,
-                arguments,
-                NoIndexDiffSuccessExitCodes);
+                temporaryDiffDirectory.Path,
+                relativePath,
+                stat);
             if (!IsSuccessfulNoIndexDiff(untrackedDiff))
             {
                 return GitDiffReadResult.Failed(ToGitFailure(untrackedDiff));
@@ -144,22 +166,159 @@ public sealed class GitDiffTool : ITool
         return GitDiffReadResult.Succeeded(outputs.ToString(), truncated);
     }
 
-    private static string[] CreateTrackedDiffArguments(bool stat, bool staged)
+    private static string[] CreateStagedDiffArguments(bool stat, bool hasHead)
     {
-        List<string> arguments = ["diff", "--no-ext-diff", "--no-textconv"];
-        if (staged)
+        List<string> arguments = ["diff-index", "--cached", "--no-ext-diff", "--no-textconv"];
+        if (stat)
         {
-            arguments.Add("--cached");
+            arguments.Add("--stat");
+        }
+        else
+        {
+            arguments.Add("-p");
         }
 
+        arguments.Add(hasHead ? "HEAD" : EmptyTreeHash);
+        arguments.Add("--");
+        arguments.Add(CliCommandLogPathspec);
+        return [.. arguments];
+    }
+
+    private GitCommandResult CreateUnstagedTrackedDiff(
+        string workspaceRoot,
+        string temporaryRoot,
+        string relativePath,
+        bool stat)
+    {
+        string oldRelativePath = GetTemporaryRelativePath("old", relativePath);
+        string oldFullPath = GetTemporaryFullPath(temporaryRoot, oldRelativePath);
+        GitCommandResult indexBlob = gitCommandRunner.RunArgumentListToFile(
+            workspaceRoot,
+            ["show", ":0:" + relativePath],
+            oldFullPath);
+        if (!indexBlob.Succeeded)
+        {
+            return indexBlob;
+        }
+
+        string worktreeFullPath = Path.GetFullPath(
+            relativePath.Replace('/', Path.DirectorySeparatorChar),
+            workspaceRoot);
+        string[] arguments;
+        bool hasNewPath = File.Exists(worktreeFullPath);
+        if (hasNewPath)
+        {
+            string newRelativePath = GetTemporaryRelativePath("new", relativePath);
+            string newFullPath = GetTemporaryFullPath(temporaryRoot, newRelativePath);
+            if (!TryCopyToTemporaryFile(worktreeFullPath, newFullPath, out GitCommandResult? failure))
+            {
+                return failure!;
+            }
+
+            arguments = CreateNoIndexDiffArguments(stat, oldRelativePath, newRelativePath);
+        }
+        else
+        {
+            arguments = CreateNoIndexDiffArguments(stat, oldRelativePath, "/dev/null");
+        }
+
+        GitCommandResult diff = gitCommandRunner.RunArgumentList(
+            temporaryRoot,
+            arguments,
+            NoIndexDiffSuccessExitCodes);
+        return NormalizeNoIndexDiffPaths(diff, relativePath);
+    }
+
+    private GitCommandResult CreateUntrackedDiff(
+        string workspaceRoot,
+        string temporaryRoot,
+        string relativePath,
+        bool stat)
+    {
+        string worktreeFullPath = Path.GetFullPath(
+            relativePath.Replace('/', Path.DirectorySeparatorChar),
+            workspaceRoot);
+        if (!File.Exists(worktreeFullPath))
+        {
+            return GitDiffFailure($"Untracked file could not be read: {relativePath}");
+        }
+
+        string newRelativePath = GetTemporaryRelativePath("new", relativePath);
+        string newFullPath = GetTemporaryFullPath(temporaryRoot, newRelativePath);
+        if (!TryCopyToTemporaryFile(worktreeFullPath, newFullPath, out GitCommandResult? failure))
+        {
+            return failure!;
+        }
+
+        GitCommandResult diff = gitCommandRunner.RunArgumentList(
+            temporaryRoot,
+            CreateNoIndexDiffArguments(stat, "/dev/null", newRelativePath),
+            NoIndexDiffSuccessExitCodes);
+        return NormalizeNoIndexDiffPaths(diff, relativePath);
+    }
+
+    private static bool TryCopyToTemporaryFile(
+        string sourcePath,
+        string destinationPath,
+        out GitCommandResult? failure)
+    {
+        try
+        {
+            Directory.CreateDirectory(Path.GetDirectoryName(destinationPath)!);
+            File.Copy(sourcePath, destinationPath, overwrite: true);
+            File.SetAttributes(destinationPath, FileAttributes.Normal);
+            failure = null;
+            return true;
+        }
+        catch (Exception exception) when (exception is IOException
+            or UnauthorizedAccessException
+            or NotSupportedException
+            or PathTooLongException)
+        {
+            failure = GitDiffFailure("File could not be copied for diff generation.");
+            return false;
+        }
+    }
+
+    private static string[] CreateNoIndexDiffArguments(bool stat, string oldPath, string newPath)
+    {
+        List<string> arguments = ["diff", "--no-ext-diff", "--no-textconv", "--no-index"];
         if (stat)
         {
             arguments.Add("--stat");
         }
 
         arguments.Add("--");
-        arguments.Add(CliCommandLogPathspec);
+        arguments.Add(oldPath);
+        arguments.Add(newPath);
         return [.. arguments];
+    }
+
+    private static GitCommandResult NormalizeNoIndexDiffPaths(GitCommandResult result, string relativePath)
+    {
+        string normalizedPath = NormalizeGitPath(relativePath);
+        string stdout = result.Stdout
+            .Replace("a/old/" + normalizedPath, "a/" + normalizedPath, StringComparison.Ordinal)
+            .Replace("b/old/" + normalizedPath, "b/" + normalizedPath, StringComparison.Ordinal)
+            .Replace("a/new/" + normalizedPath, "a/" + normalizedPath, StringComparison.Ordinal)
+            .Replace("b/new/" + normalizedPath, "b/" + normalizedPath, StringComparison.Ordinal)
+            .Replace("{old => new}/" + normalizedPath, normalizedPath, StringComparison.Ordinal)
+            .Replace("/dev/null => new/" + normalizedPath, "/dev/null => " + normalizedPath, StringComparison.Ordinal)
+            .Replace("old/" + normalizedPath + " => /dev/null", normalizedPath + " => /dev/null", StringComparison.Ordinal);
+
+        return result with { Stdout = stdout };
+    }
+
+    private static string GetTemporaryRelativePath(string rootName, string relativePath)
+    {
+        return rootName + "/" + NormalizeGitPath(relativePath);
+    }
+
+    private static string GetTemporaryFullPath(string temporaryRoot, string temporaryRelativePath)
+    {
+        return Path.Combine(
+            temporaryRoot,
+            temporaryRelativePath.Replace('/', Path.DirectorySeparatorChar));
     }
 
     private StringComparison GetCliCommandLogPathComparison(string workspaceRoot)
@@ -194,6 +353,11 @@ public sealed class GitDiffTool : ITool
         }
 
         return result.ExitCode != 1 || !string.IsNullOrWhiteSpace(result.Stdout);
+    }
+
+    private static string NormalizeGitPath(string path)
+    {
+        return path.Replace('\\', '/');
     }
 
     private static bool IsMissingHead(GitCommandResult result)
@@ -232,6 +396,19 @@ public sealed class GitDiffTool : ITool
         return ToolExecutionResult.Failure(
             NormalizeGitError(result),
             string.IsNullOrWhiteSpace(result.Stderr) ? result.Summary : result.Stderr.Trim());
+    }
+
+    private static GitCommandResult GitDiffFailure(string summary)
+    {
+        return new GitCommandResult(
+            Succeeded: false,
+            ExitCode: null,
+            Stdout: string.Empty,
+            Stderr: summary,
+            StdoutTruncated: false,
+            StderrTruncated: false,
+            ErrorCode: "git-diff-failed",
+            Summary: summary);
     }
 
     private static bool TryReadArguments(
@@ -367,6 +544,54 @@ public sealed class GitDiffTool : ITool
             }
 
             return text[..low];
+        }
+    }
+
+    private sealed class TemporaryDiffDirectory : IDisposable
+    {
+        private TemporaryDiffDirectory(string path)
+        {
+            Path = path;
+        }
+
+        public string Path { get; }
+
+        public static TemporaryDiffDirectory Create()
+        {
+            string path = System.IO.Path.Combine(
+                System.IO.Path.GetTempPath(),
+                "caicli-diff-" + Guid.NewGuid().ToString("N"));
+            Directory.CreateDirectory(path);
+            return new TemporaryDiffDirectory(path);
+        }
+
+        public void Dispose()
+        {
+            if (Directory.Exists(Path))
+            {
+                try
+                {
+                    ClearReadOnlyAttributes(Path);
+                    Directory.Delete(Path, recursive: true);
+                }
+                catch (Exception exception) when (exception is IOException
+                    or UnauthorizedAccessException)
+                {
+                }
+            }
+        }
+
+        private static void ClearReadOnlyAttributes(string path)
+        {
+            foreach (string filePath in Directory.EnumerateFiles(path, "*", SearchOption.AllDirectories))
+            {
+                File.SetAttributes(filePath, FileAttributes.Normal);
+            }
+
+            foreach (string directoryPath in Directory.EnumerateDirectories(path, "*", SearchOption.AllDirectories))
+            {
+                File.SetAttributes(directoryPath, FileAttributes.Normal);
+            }
         }
     }
 }

@@ -67,9 +67,62 @@ public sealed class GitToolsTests
     }
 
     [Fact]
+    public void Git_diff_does_not_rewrite_index_when_clean_tracked_file_timestamp_changes()
+    {
+        using TempDirectory temp = TempDirectory.Create();
+        string filePath = InitializeGitRepository(temp.Path);
+        string indexPath = Path.Combine(temp.Path, ".git", "index");
+        DateTime indexBefore = File.GetLastWriteTimeUtc(indexPath);
+        Thread.Sleep(1200);
+        File.SetLastWriteTimeUtc(filePath, DateTime.UtcNow.AddMinutes(5));
+        GitDiffTool tool = new(new WorkspaceGuard());
+
+        ToolExecutionResult result = tool.Execute(CreateContext(temp.Path));
+
+        DateTime indexAfter = File.GetLastWriteTimeUtc(indexPath);
+        Assert.True(result.Succeeded);
+        Assert.Equal("no diff", result.Summary);
+        Assert.Equal(indexBefore, indexAfter);
+    }
+
+    [Fact]
+    public void Git_diff_does_not_run_clean_filter_for_unstaged_tracked_file()
+    {
+        using TempDirectory temp = TempDirectory.Create();
+        (string filePath, string markerPath) = InitializeGitRepositoryWithCleanFilter(temp.Path, "tracked.txt");
+        File.Delete(markerPath);
+        File.AppendAllText(filePath, "changed\n");
+        GitDiffTool tool = new(new WorkspaceGuard());
+
+        ToolExecutionResult result = tool.Execute(CreateContext(temp.Path));
+
+        Assert.True(result.Succeeded);
+        Assert.Contains("+changed", result.Summary, StringComparison.Ordinal);
+        Assert.False(File.Exists(markerPath), "Clean filter should not run during read-only diff collection.");
+    }
+
+    [Fact]
+    public void Git_diff_does_not_run_clean_filter_for_untracked_file()
+    {
+        using TempDirectory temp = TempDirectory.Create();
+        (_, string markerPath) = InitializeGitRepositoryWithCleanFilter(temp.Path, "*.txt");
+        File.Delete(markerPath);
+        File.WriteAllText(Path.Combine(temp.Path, "new.txt"), "fresh\n");
+        GitDiffTool tool = new(new WorkspaceGuard());
+
+        ToolExecutionResult result = tool.Execute(CreateContext(temp.Path));
+
+        Assert.True(result.Succeeded);
+        Assert.Contains("new.txt", result.Summary, StringComparison.Ordinal);
+        Assert.Contains("+fresh", result.Summary, StringComparison.Ordinal);
+        Assert.False(File.Exists(markerPath), "Clean filter should not run while rendering untracked file diffs.");
+    }
+
+    [Fact]
     public void Git_diff_disables_external_helpers_for_all_diff_commands()
     {
         using TempDirectory temp = TempDirectory.Create();
+        File.WriteAllText(Path.Combine(temp.Path, "untracked.txt"), "fresh\n");
         FakeGitCommandRunner runner = new(args =>
         {
             if (args is ["rev-parse", "--verify", "HEAD"])
@@ -108,9 +161,9 @@ public sealed class GitToolsTests
 
         Assert.True(result.Succeeded);
         IReadOnlyList<string[]> diffCommands = runner.Commands
-            .Where(command => command.FirstOrDefault() == "diff")
+            .Where(command => command.FirstOrDefault() is "diff" or "diff-index")
             .ToList();
-        Assert.Equal(3, diffCommands.Count);
+        Assert.Equal(2, diffCommands.Count);
         Assert.All(diffCommands, command =>
         {
             Assert.Contains("--no-ext-diff", command);
@@ -406,6 +459,7 @@ public sealed class GitToolsTests
     public void Git_diff_returns_failure_when_untracked_no_index_exit_one_has_no_diff_output()
     {
         using TempDirectory temp = TempDirectory.Create();
+        File.WriteAllText(Path.Combine(temp.Path, "missing.txt"), "fresh\n");
         FakeGitCommandRunner runner = new(args =>
         {
             if (args is ["rev-parse", "--verify", "HEAD"])
@@ -517,6 +571,32 @@ public sealed class GitToolsTests
             "-m",
             "initial");
         return filePath;
+    }
+
+    private static (string FilePath, string MarkerPath) InitializeGitRepositoryWithCleanFilter(
+        string root,
+        string attributesPattern)
+    {
+        RunGit(root, "init");
+        RunGit(root, "config", "user.email", "test@example.invalid");
+        RunGit(root, "config", "user.name", "Test User");
+
+        string markerPath = Path.Combine(root, ".git", "clean-filter.marker");
+        string helperPath = Path.Combine(root, ".git", "clean-filter.sh");
+        File.WriteAllText(
+            helperPath,
+            "#!/bin/sh\ncat\nprintf invoked > '" + NormalizeGitPath(markerPath) + "'\n");
+        RunGit(root, "config", "filter.caicli_sideeffect.clean", "sh '" + NormalizeGitPath(helperPath) + "'");
+        RunGit(root, "config", "filter.caicli_sideeffect.smudge", "cat");
+
+        File.WriteAllText(
+            Path.Combine(root, ".gitattributes"),
+            attributesPattern + " filter=caicli_sideeffect\n");
+        string filePath = Path.Combine(root, "tracked.txt");
+        File.WriteAllText(filePath, "original\n");
+        RunGit(root, "add", ".gitattributes", "tracked.txt");
+        CommitAll(root, "initial");
+        return (filePath, markerPath);
     }
 
     private static void WriteFailingHook(string hooksPath, string hookName)
@@ -656,6 +736,17 @@ public sealed class GitToolsTests
         public GitCommandResult RunArgumentList(
             string workspaceRoot,
             IEnumerable<string> arguments,
+            IReadOnlySet<int>? successfulExitCodes = null)
+        {
+            string[] args = arguments.ToArray();
+            Commands.Add(args);
+            return handle(args);
+        }
+
+        public GitCommandResult RunArgumentListToFile(
+            string workspaceRoot,
+            IEnumerable<string> arguments,
+            string stdoutPath,
             IReadOnlySet<int>? successfulExitCodes = null)
         {
             string[] args = arguments.ToArray();

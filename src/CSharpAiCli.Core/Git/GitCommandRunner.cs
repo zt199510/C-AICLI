@@ -11,6 +11,12 @@ internal interface IGitCommandRunner
         string workspaceRoot,
         IEnumerable<string> arguments,
         IReadOnlySet<int>? successfulExitCodes = null);
+
+    GitCommandResult RunArgumentListToFile(
+        string workspaceRoot,
+        IEnumerable<string> arguments,
+        string stdoutPath,
+        IReadOnlySet<int>? successfulExitCodes = null);
 }
 
 internal sealed class GitCommandRunner : IGitCommandRunner
@@ -77,6 +83,41 @@ internal sealed class GitCommandRunner : IGitCommandRunner
         }
     }
 
+    public GitCommandResult RunArgumentListToFile(
+        string workspaceRoot,
+        IEnumerable<string> arguments,
+        string stdoutPath,
+        IReadOnlySet<int>? successfulExitCodes = null)
+    {
+        ArgumentNullException.ThrowIfNull(arguments);
+
+        try
+        {
+            ProcessStartInfo startInfo = new("git")
+            {
+                WorkingDirectory = workspaceRoot,
+                RedirectStandardOutput = true,
+                RedirectStandardError = true,
+                UseShellExecute = false,
+                CreateNoWindow = true,
+            };
+
+            foreach (string argument in arguments)
+            {
+                startInfo.ArgumentList.Add(argument);
+            }
+
+            return RunProcessToFile(startInfo, stdoutPath, successfulExitCodes ?? DefaultSuccessfulExitCodes);
+        }
+        catch (Exception exception) when (exception is InvalidOperationException
+            or IOException
+            or UnauthorizedAccessException
+            or System.ComponentModel.Win32Exception)
+        {
+            return GitUnavailable();
+        }
+    }
+
     private static GitCommandResult RunProcess(
         ProcessStartInfo startInfo,
         IReadOnlySet<int> successfulExitCodes)
@@ -116,6 +157,53 @@ internal sealed class GitCommandRunner : IGitCommandRunner
             Stdout: stdout.Text,
             Stderr: stderr.Text,
             StdoutTruncated: stdout.Truncated,
+            StderrTruncated: stderr.Truncated,
+            ErrorCode: succeeded ? null : "git-command-failed",
+            Summary: succeeded
+                ? $"Git command completed with exit code {process.ExitCode}."
+                : $"Git command failed with exit code {process.ExitCode}.");
+    }
+
+    private static GitCommandResult RunProcessToFile(
+        ProcessStartInfo startInfo,
+        string stdoutPath,
+        IReadOnlySet<int> successfulExitCodes)
+    {
+        Directory.CreateDirectory(Path.GetDirectoryName(stdoutPath)!);
+        using Process process = new()
+        {
+            StartInfo = startInfo
+        };
+
+        using FileStream stdoutFile = File.Create(stdoutPath);
+        process.Start();
+        Task stdoutTask = process.StandardOutput.BaseStream.CopyToAsync(stdoutFile);
+        Task<string> stderrTask = process.StandardError.ReadToEndAsync();
+        if (!process.WaitForExit(DefaultTimeoutMilliseconds))
+        {
+            TryKill(process);
+            string timedOutStderr = stderrTask.IsCompletedSuccessfully ? stderrTask.Result : string.Empty;
+            TruncatedText timedOutTruncatedStderr = Truncate(timedOutStderr, DefaultMaxOutputBytes);
+            return new GitCommandResult(
+                Succeeded: false,
+                ExitCode: null,
+                Stdout: string.Empty,
+                Stderr: timedOutTruncatedStderr.Text,
+                StdoutTruncated: false,
+                StderrTruncated: timedOutTruncatedStderr.Truncated,
+                ErrorCode: "git-timeout",
+                Summary: "Git command timed out.");
+        }
+
+        stdoutTask.GetAwaiter().GetResult();
+        TruncatedText stderr = Truncate(stderrTask.GetAwaiter().GetResult(), DefaultMaxOutputBytes);
+        bool succeeded = successfulExitCodes.Contains(process.ExitCode);
+        return new GitCommandResult(
+            Succeeded: succeeded,
+            ExitCode: process.ExitCode,
+            Stdout: string.Empty,
+            Stderr: stderr.Text,
+            StdoutTruncated: false,
             StderrTruncated: stderr.Truncated,
             ErrorCode: succeeded ? null : "git-command-failed",
             Summary: succeeded
