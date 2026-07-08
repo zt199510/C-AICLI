@@ -134,6 +134,41 @@ public sealed class GitToolsTests
     }
 
     [Fact]
+    public void Git_diff_ignores_tracked_cli_command_log_changes()
+    {
+        using TempDirectory temp = TempDirectory.Create();
+        InitializeGitRepository(temp.Path);
+        string logPath = TrackCliCommandLogs(temp.Path);
+        File.AppendAllText(logPath, "command=diff\n");
+        GitDiffTool tool = new(new WorkspaceGuard());
+
+        ToolExecutionResult result = tool.Execute(CreateContext(temp.Path));
+
+        Assert.True(result.Succeeded);
+        Assert.Equal("no diff", result.Summary);
+    }
+
+    [Fact]
+    public void Git_diff_ignores_tracked_cli_logs_without_hiding_tracked_caicli_files()
+    {
+        using TempDirectory temp = TempDirectory.Create();
+        InitializeGitRepository(temp.Path);
+        string logPath = TrackCliCommandLogs(temp.Path);
+        string configPath = TrackCaicliConfig(temp.Path);
+        File.AppendAllText(logPath, "command=diff\n");
+        File.WriteAllText(configPath, "{\"model\":\"gpt-test\"}\n");
+        GitDiffTool tool = new(new WorkspaceGuard());
+
+        ToolExecutionResult result = tool.Execute(CreateContext(temp.Path));
+
+        Assert.True(result.Succeeded);
+        Assert.Contains(".caicli/config.json", result.Summary, StringComparison.Ordinal);
+        Assert.Contains("gpt-test", result.Summary, StringComparison.Ordinal);
+        Assert.DoesNotContain(".caicli/logs", result.Summary, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("no diff", result.Summary, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void Git_diff_reports_staged_and_untracked_files_in_no_head_repo()
     {
         using TempDirectory temp = TempDirectory.Create();
@@ -342,6 +377,32 @@ public sealed class GitToolsTests
         File.WriteAllText(Path.Combine(logsPath, "2026-07-09.log"), "command=diff\n");
     }
 
+    private static string TrackCliCommandLogs(string root)
+    {
+        string logsPath = Path.Combine(root, ".caicli", "logs");
+        Directory.CreateDirectory(logsPath);
+        DateTime utcToday = DateTime.UtcNow.Date;
+        string currentLogPath = Path.Combine(logsPath, utcToday.ToString("yyyy-MM-dd") + ".log");
+        foreach (DateTime date in new[] { utcToday.AddDays(-1), utcToday, utcToday.AddDays(1) })
+        {
+            File.WriteAllText(Path.Combine(logsPath, date.ToString("yyyy-MM-dd") + ".log"), "initial\n");
+        }
+
+        RunGit(root, "add", ".caicli/logs");
+        CommitAll(root, "track cli logs");
+        return currentLogPath;
+    }
+
+    private static string TrackCaicliConfig(string root)
+    {
+        string configPath = Path.Combine(root, ".caicli", "config.json");
+        Directory.CreateDirectory(Path.GetDirectoryName(configPath)!);
+        File.WriteAllText(configPath, "{}\n");
+        RunGit(root, "add", ".caicli/config.json");
+        CommitAll(root, "track caicli config");
+        return configPath;
+    }
+
     private static void RunGit(string workingDirectory, params string[] arguments)
     {
         ProcessStartInfo startInfo = new("git")
@@ -367,6 +428,23 @@ public sealed class GitToolsTests
         Assert.True(process.WaitForExit(10_000), "git command timed out: " + commandText);
         string stderr = process.StandardError.ReadToEnd();
         Assert.True(process.ExitCode == 0, $"git {commandText} failed: {stderr}");
+    }
+
+    private static void CommitAll(string workingDirectory, string message)
+    {
+        string emptyHooksPath = Path.Combine(workingDirectory, ".caicli-empty-hooks");
+        Directory.CreateDirectory(emptyHooksPath);
+        RunGit(
+            workingDirectory,
+            "-c",
+            "commit.gpgSign=false",
+            "-c",
+            "core.hooksPath=" + emptyHooksPath,
+            "commit",
+            "--no-gpg-sign",
+            "--no-verify",
+            "-m",
+            message);
     }
 
     private sealed class TempDirectory : IDisposable

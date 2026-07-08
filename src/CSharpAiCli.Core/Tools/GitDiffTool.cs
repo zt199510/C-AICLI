@@ -5,6 +5,7 @@ namespace CSharpAiCli.Core;
 public sealed class GitDiffTool : ITool
 {
     public const string TruncationWarning = "WARNING: git output was truncated; diff is incomplete.";
+    private const string CliCommandLogPathspec = ":(exclude).caicli/logs/**";
     private static readonly IReadOnlySet<int> NoIndexDiffSuccessExitCodes = new HashSet<int> { 0, 1 };
     private readonly IWorkspaceGuard workspaceGuard;
     private readonly GitCommandRunner gitCommandRunner = new();
@@ -70,9 +71,9 @@ public sealed class GitDiffTool : ITool
         }
 
         truncated |= IsTruncated(head);
-        GitCommandResult stagedDiff = gitCommandRunner.Run(
+        GitCommandResult stagedDiff = gitCommandRunner.RunArgumentList(
             workspaceRoot,
-            stat ? "diff --cached --stat --" : "diff --cached --");
+            CreateTrackedDiffArguments(stat, staged: true));
         if (!stagedDiff.Succeeded)
         {
             return GitDiffReadResult.Failed(ToGitFailure(stagedDiff));
@@ -81,9 +82,9 @@ public sealed class GitDiffTool : ITool
         truncated |= IsTruncated(stagedDiff);
         AddOutput(outputs, stagedDiff.Stdout);
 
-        GitCommandResult unstagedDiff = gitCommandRunner.Run(
+        GitCommandResult unstagedDiff = gitCommandRunner.RunArgumentList(
             workspaceRoot,
-            stat ? "diff --stat --" : "diff --");
+            CreateTrackedDiffArguments(stat, staged: false));
         if (!unstagedDiff.Succeeded)
         {
             return GitDiffReadResult.Failed(ToGitFailure(unstagedDiff));
@@ -125,6 +126,24 @@ public sealed class GitDiffTool : ITool
         }
 
         return GitDiffReadResult.Succeeded(string.Join(Environment.NewLine + Environment.NewLine, outputs), truncated);
+    }
+
+    private static string[] CreateTrackedDiffArguments(bool stat, bool staged)
+    {
+        List<string> arguments = ["diff"];
+        if (staged)
+        {
+            arguments.Add("--cached");
+        }
+
+        if (stat)
+        {
+            arguments.Add("--stat");
+        }
+
+        arguments.Add("--");
+        arguments.Add(CliCommandLogPathspec);
+        return [.. arguments];
     }
 
     private static bool IsCliCommandLogPath(string relativePath)

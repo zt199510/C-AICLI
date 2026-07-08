@@ -131,6 +131,42 @@ public sealed class CliCommandFactoryTests
     }
 
     [Fact]
+    public void Diff_command_with_default_logger_writes_no_diff_when_cli_log_is_tracked()
+    {
+        using TempDirectory temp = TempDirectory.Create();
+        InitializeGitRepository(temp.Path);
+        TrackCliCommandLogs(temp.Path);
+        using StringWriter output = new();
+
+        int exitCode = CliCommandFactory
+            .Create(output)
+            .Parse(["diff", "--workspace", temp.Path])
+            .Invoke();
+
+        string text = output.ToString().TrimEnd();
+        Assert.Equal(0, exitCode);
+        Assert.Equal("no diff", text);
+    }
+
+    [Fact]
+    public void Diff_command_stat_with_default_logger_writes_no_diff_when_cli_log_is_tracked()
+    {
+        using TempDirectory temp = TempDirectory.Create();
+        InitializeGitRepository(temp.Path);
+        TrackCliCommandLogs(temp.Path);
+        using StringWriter output = new();
+
+        int exitCode = CliCommandFactory
+            .Create(output)
+            .Parse(["diff", "--stat", "--workspace", temp.Path])
+            .Invoke();
+
+        string text = output.ToString().TrimEnd();
+        Assert.Equal(0, exitCode);
+        Assert.Equal("no diff", text);
+    }
+
+    [Fact]
     public void Diff_command_writes_staged_and_untracked_changes_for_git_workspace()
     {
         using TempDirectory temp = TempDirectory.Create();
@@ -454,6 +490,35 @@ public sealed class CliCommandFactoryTests
         using TempDirectory temp = TempDirectory.Create();
         InitializeGitRepository(temp.Path);
         WriteCliCommandLog(temp.Path);
+        using StringWriter output = new();
+        FakeChatModelClient chatClient = new(ChatModelResult.Success(new ChatResponse(
+            Provider: "openai",
+            Model: "gpt-test",
+            ResponseId: "resp_test",
+            Text: "review report")));
+
+        int exitCode = CliCommandFactory.Invoke(
+            CliCommandFactory.Create(
+                output,
+                workspacePath => CreateSnapshot(workspacePath, apiKey: "sk-test", apiKeySource: "OPENAI_API_KEY", model: "gpt-test"),
+                (_, _) => throw new InvalidOperationException("review must not write command logs"),
+                _ => chatClient),
+            ["review", "--workspace", temp.Path],
+            output);
+
+        Assert.Equal(0, exitCode);
+        Assert.NotNull(chatClient.LastNonStreamingPrompt);
+        Assert.Contains("no diff", chatClient.LastNonStreamingPrompt, StringComparison.Ordinal);
+        Assert.DoesNotContain(".caicli/logs", chatClient.LastNonStreamingPrompt, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void Review_command_sends_no_diff_when_only_tracked_cli_log_changes_exist()
+    {
+        using TempDirectory temp = TempDirectory.Create();
+        InitializeGitRepository(temp.Path);
+        string logPath = TrackCliCommandLogs(temp.Path);
+        File.AppendAllText(logPath, "command=diff\n");
         using StringWriter output = new();
         FakeChatModelClient chatClient = new(ChatModelResult.Success(new ChatResponse(
             Provider: "openai",
@@ -5609,6 +5674,22 @@ public sealed class CliCommandFactoryTests
         File.WriteAllText(Path.Combine(logsPath, "2026-07-09.log"), "command=diff\n");
     }
 
+    private static string TrackCliCommandLogs(string root)
+    {
+        string logsPath = Path.Combine(root, ".caicli", "logs");
+        Directory.CreateDirectory(logsPath);
+        DateTime utcToday = DateTime.UtcNow.Date;
+        string currentLogPath = Path.Combine(logsPath, utcToday.ToString("yyyy-MM-dd") + ".log");
+        foreach (DateTime date in new[] { utcToday.AddDays(-1), utcToday, utcToday.AddDays(1) })
+        {
+            File.WriteAllText(Path.Combine(logsPath, date.ToString("yyyy-MM-dd") + ".log"), "initial\n");
+        }
+
+        RunGit(root, "add", ".caicli/logs");
+        CommitAll(root, "track cli logs");
+        return currentLogPath;
+    }
+
     private static void RunGit(string workingDirectory, params string[] arguments)
     {
         ProcessStartInfo startInfo = new("git")
@@ -5634,6 +5715,23 @@ public sealed class CliCommandFactoryTests
         Assert.True(process.WaitForExit(10_000), "git command timed out: " + commandText);
         string stderr = process.StandardError.ReadToEnd();
         Assert.True(process.ExitCode == 0, $"git {commandText} failed: {stderr}");
+    }
+
+    private static void CommitAll(string workingDirectory, string message)
+    {
+        string emptyHooksPath = Path.Combine(workingDirectory, ".caicli-empty-hooks");
+        Directory.CreateDirectory(emptyHooksPath);
+        RunGit(
+            workingDirectory,
+            "-c",
+            "commit.gpgSign=false",
+            "-c",
+            "core.hooksPath=" + emptyHooksPath,
+            "commit",
+            "--no-gpg-sign",
+            "--no-verify",
+            "-m",
+            message);
     }
 
     private sealed class TempDirectory : IDisposable
