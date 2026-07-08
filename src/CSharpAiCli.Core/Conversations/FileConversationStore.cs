@@ -133,7 +133,11 @@ public sealed class FileConversationStore : IConversationStore
         };
 
         string json = JsonSerializer.Serialize(destinationTranscript, JsonOptions);
-        WriteJsonAtomically(destinationPath, json);
+        if (!WriteJsonAtomically(destinationPath, json, overwrite: false))
+        {
+            return false;
+        }
+
         File.Delete(sourcePath);
         return true;
     }
@@ -147,7 +151,7 @@ public sealed class FileConversationStore : IConversationStore
         Directory.CreateDirectory(sessionDirectory);
         string path = GetPath(sessionName);
         string json = JsonSerializer.Serialize(transcript, JsonOptions);
-        WriteJsonAtomically(path, json);
+        WriteJsonAtomically(path, json, overwrite: true);
         return path;
     }
 
@@ -252,7 +256,7 @@ public sealed class FileConversationStore : IConversationStore
         }
     }
 
-    private static void WriteJsonAtomically(string path, string json)
+    private static bool WriteJsonAtomically(string path, string json, bool overwrite)
     {
         string? directory = Path.GetDirectoryName(path);
         string fileName = Path.GetFileName(path);
@@ -263,7 +267,15 @@ public sealed class FileConversationStore : IConversationStore
         try
         {
             File.WriteAllText(temporaryPath, json);
-            File.Move(temporaryPath, path, overwrite: true);
+            try
+            {
+                File.Move(temporaryPath, path, overwrite);
+                return true;
+            }
+            catch (IOException) when (!overwrite && File.Exists(path))
+            {
+                return false;
+            }
         }
         finally
         {

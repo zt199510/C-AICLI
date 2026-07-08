@@ -6,6 +6,13 @@ namespace CSharpAiCli.Tests;
 
 public sealed class FileConversationStoreTests
 {
+    private const int LargeTranscriptContentLength = 16 * 1024 * 1024;
+
+    private static readonly JsonSerializerOptions TestJsonOptions = new(JsonSerializerDefaults.Web)
+    {
+        WriteIndented = true,
+    };
+
     [Fact]
     public void Load_or_create_returns_new_transcript_when_file_is_missing()
     {
@@ -81,34 +88,29 @@ public sealed class FileConversationStoreTests
     }
 
     [Fact]
-    public void Save_writes_transcript_without_leaving_temporary_files()
+    public async Task Save_writes_transcript_through_temporary_file()
     {
         using TempDirectory temp = TempDirectory.Create();
         string sessionDirectory = Path.Combine(temp.Path, ".caicli", "sessions");
         Directory.CreateDirectory(sessionDirectory);
-        using ManualResetEventSlim temporaryFileCreated = new();
-        List<string> temporaryFilesCreated = [];
-        using FileSystemWatcher watcher = WatchTemporaryFiles(
-            sessionDirectory,
-            temporaryFileCreated,
-            temporaryFilesCreated);
         FileConversationStore store = new(sessionDirectory);
         ConversationSessionName sessionName = ConversationSessionName.Parse("smoke");
-        ConversationTranscript transcript = ConversationTranscript.Create(
-            sessionName.Value,
-            DateTimeOffset.Parse("2024-01-01T00:00:00Z"));
-        transcript.AddUserMessage("Reply with OK.", DateTimeOffset.Parse("2024-01-01T00:00:01Z"));
+        string largeContent = new('s', LargeTranscriptContentLength);
+        ConversationTranscript transcript = CreateTranscriptWithUserMessage(sessionName.Value, largeContent);
 
-        string path = store.Save(sessionName, transcript);
+        TemporaryFileObservation<string> observation = await ObserveTemporaryFileDuringOperationAsync(
+            sessionDirectory,
+            () => store.Save(sessionName, transcript));
 
-        AssertTemporaryFileWasCreated(temporaryFileCreated, temporaryFilesCreated);
+        AssertTemporaryFileWasObserved(observation.TemporaryFilePath);
+        string path = observation.Result;
         Assert.Equal(Path.Combine(sessionDirectory, "smoke.transcript.json"), path);
         string json = File.ReadAllText(path);
         using JsonDocument document = JsonDocument.Parse(json);
         JsonElement root = document.RootElement;
         Assert.Equal(1, root.GetProperty("schemaVersion").GetInt32());
         Assert.Equal("smoke", root.GetProperty("sessionName").GetString());
-        Assert.Equal("Reply with OK.", root.GetProperty("messages")[0].GetProperty("content").GetString());
+        Assert.Equal(largeContent, root.GetProperty("messages")[0].GetProperty("content").GetString());
         AssertNoTemporaryFiles(sessionDirectory);
     }
 
@@ -673,33 +675,65 @@ public sealed class FileConversationStoreTests
     }
 
     [Fact]
-    public void Rename_moves_transcript_without_leaving_temporary_files()
+    public async Task Rename_writes_destination_transcript_through_temporary_file()
     {
         using TempDirectory temp = TempDirectory.Create();
         string sessionDirectory = Path.Combine(temp.Path, ".caicli", "sessions");
         FileConversationStore store = new(sessionDirectory);
         ConversationSessionName source = ConversationSessionName.Parse("draft");
         ConversationSessionName destination = ConversationSessionName.Parse("final");
-        ConversationTranscript transcript = ConversationTranscript.Create(
-            source.Value,
-            DateTimeOffset.Parse("2024-01-01T00:00:00Z"));
-        transcript.AddUserMessage("keep me", DateTimeOffset.Parse("2024-01-01T00:00:01Z"));
+        string largeContent = new('r', LargeTranscriptContentLength);
+        ConversationTranscript transcript = CreateTranscriptWithUserMessage(source.Value, largeContent);
         store.Save(source, transcript);
-        using ManualResetEventSlim temporaryFileCreated = new();
-        List<string> temporaryFilesCreated = [];
-        using FileSystemWatcher watcher = WatchTemporaryFiles(
+
+        TemporaryFileObservation<bool> observation = await ObserveTemporaryFileDuringOperationAsync(
             sessionDirectory,
-            temporaryFileCreated,
-            temporaryFilesCreated);
+            () => store.Rename(source, destination));
 
-        Assert.True(store.Rename(source, destination));
-
-        AssertTemporaryFileWasCreated(temporaryFileCreated, temporaryFilesCreated);
+        AssertTemporaryFileWasObserved(observation.TemporaryFilePath);
+        Assert.True(observation.Result);
         Assert.False(store.Exists(source));
         Assert.True(store.Exists(destination));
         ConversationTranscript renamed = store.LoadOrCreate(destination, DateTimeOffset.Parse("2024-01-01T00:01:00Z"));
         Assert.Equal(destination.Value, renamed.SessionName);
-        Assert.Equal("keep me", Assert.Single(renamed.Messages).Content);
+        Assert.Equal(largeContent, Assert.Single(renamed.Messages).Content);
+        AssertNoTemporaryFiles(sessionDirectory);
+    }
+
+    [Fact]
+    public async Task Rename_returns_false_when_destination_is_created_during_transcript_write()
+    {
+        using TempDirectory temp = TempDirectory.Create();
+        string sessionDirectory = Path.Combine(temp.Path, ".caicli", "sessions");
+        FileConversationStore store = new(sessionDirectory);
+        ConversationSessionName source = ConversationSessionName.Parse("draft");
+        ConversationSessionName destination = ConversationSessionName.Parse("final");
+        string largeContent = new('c', LargeTranscriptContentLength);
+        store.Save(source, CreateTranscriptWithUserMessage(source.Value, largeContent));
+        string destinationPath = Path.Combine(sessionDirectory, "final.transcript.json");
+        string competingContent = "competing writer";
+        string competingJson = JsonSerializer.Serialize(
+            CreateTranscriptWithUserMessage(destination.Value, competingContent),
+            TestJsonOptions);
+
+        Task<bool> renameTask = Task.Run(() => store.Rename(source, destination));
+        string? temporaryFilePath = await WaitForTemporaryFileAsync(sessionDirectory, renameTask);
+        if (temporaryFilePath is null)
+        {
+            await renameTask;
+        }
+
+        AssertTemporaryFileWasObserved(temporaryFilePath);
+        File.WriteAllText(destinationPath, competingJson);
+
+        bool renamed = await renameTask;
+
+        Assert.False(renamed);
+        Assert.True(store.Exists(source));
+        Assert.True(store.Exists(destination));
+        string destinationJson = File.ReadAllText(destinationPath);
+        using JsonDocument document = JsonDocument.Parse(destinationJson);
+        Assert.Equal(competingContent, document.RootElement.GetProperty("messages")[0].GetProperty("content").GetString());
         AssertNoTemporaryFiles(sessionDirectory);
     }
 
@@ -812,45 +846,57 @@ public sealed class FileConversationStoreTests
         return (ConversationSessionName)constructor.Invoke([value, fileSafeName]);
     }
 
-    private static FileSystemWatcher WatchTemporaryFiles(
-        string sessionDirectory,
-        ManualResetEventSlim temporaryFileCreated,
-        List<string> temporaryFilesCreated)
+    private static ConversationTranscript CreateTranscriptWithUserMessage(string sessionName, string content)
     {
-        FileSystemWatcher watcher = new(sessionDirectory, "*.tmp")
-        {
-            IncludeSubdirectories = false,
-        };
-        watcher.Created += (_, args) =>
-        {
-            lock (temporaryFilesCreated)
-            {
-                temporaryFilesCreated.Add(args.FullPath);
-            }
-
-            temporaryFileCreated.Set();
-        };
-        watcher.EnableRaisingEvents = true;
-        return watcher;
+        ConversationTranscript transcript = ConversationTranscript.Create(
+            sessionName,
+            DateTimeOffset.Parse("2024-01-01T00:00:00Z"));
+        transcript.AddUserMessage(content, DateTimeOffset.Parse("2024-01-01T00:00:01Z"));
+        return transcript;
     }
 
-    private static void AssertTemporaryFileWasCreated(
-        ManualResetEventSlim temporaryFileCreated,
-        List<string> temporaryFilesCreated)
+    private static async Task<TemporaryFileObservation<TResult>> ObserveTemporaryFileDuringOperationAsync<TResult>(
+        string sessionDirectory,
+        Func<TResult> operation)
+    {
+        Task<TResult> operationTask = Task.Run(operation);
+        string? temporaryFilePath = await WaitForTemporaryFileAsync(sessionDirectory, operationTask);
+        TResult result = await operationTask;
+        return new TemporaryFileObservation<TResult>(result, temporaryFilePath);
+    }
+
+    private static async Task<string?> WaitForTemporaryFileAsync(string sessionDirectory, Task operationTask)
+    {
+        DateTimeOffset deadline = DateTimeOffset.UtcNow.AddSeconds(10);
+        while (!operationTask.IsCompleted && DateTimeOffset.UtcNow < deadline)
+        {
+            string? temporaryFilePath = Directory
+                .EnumerateFiles(sessionDirectory, "*.tmp", SearchOption.TopDirectoryOnly)
+                .FirstOrDefault();
+            if (temporaryFilePath is not null)
+            {
+                return temporaryFilePath;
+            }
+
+            await Task.Delay(1);
+        }
+
+        return null;
+    }
+
+    private static void AssertTemporaryFileWasObserved(string? temporaryFilePath)
     {
         Assert.True(
-            temporaryFileCreated.Wait(TimeSpan.FromSeconds(5)),
+            temporaryFilePath is not null,
             "Expected FileConversationStore to write through a temporary .tmp file.");
-        lock (temporaryFilesCreated)
-        {
-            Assert.NotEmpty(temporaryFilesCreated);
-        }
     }
 
     private static void AssertNoTemporaryFiles(string sessionDirectory)
     {
         Assert.Empty(Directory.EnumerateFiles(sessionDirectory, "*.tmp", SearchOption.TopDirectoryOnly));
     }
+
+    private sealed record TemporaryFileObservation<TResult>(TResult Result, string? TemporaryFilePath);
 
     private sealed class TempDirectory : IDisposable
     {
