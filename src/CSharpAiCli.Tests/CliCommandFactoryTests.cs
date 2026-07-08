@@ -3808,6 +3808,81 @@ public sealed class CliCommandFactoryTests
     }
 
     [Fact]
+    public void Chat_resume_malformed_file_transcript_returns_safe_failure_without_calling_model()
+    {
+        using TempDirectory temp = TempDirectory.Create();
+        using StringWriter output = new();
+        FakeChatModelClient chatClient = new(ChatModelResult.Success(new ChatResponse(
+            Provider: "openai",
+            Model: "gpt-test",
+            ResponseId: "resp_test",
+            Text: "fake model output")));
+        string userConfigPath = Path.Combine(temp.Path, ".caicli", "config.json");
+        string sessionDirectory = Path.Combine(temp.Path, ".caicli", "sessions");
+        Directory.CreateDirectory(sessionDirectory);
+        File.WriteAllText(Path.Combine(sessionDirectory, "smoke.transcript.json"), """{"schemaVersion":""");
+        RootCommand command = CliCommandFactory.Create(
+            output,
+            workspacePath => CreateSnapshot(
+                workspacePath,
+                apiKey: "sk-test",
+                apiKeySource: "OPENAI_API_KEY",
+                model: "gpt-test",
+                userConfigPath: userConfigPath),
+            (_, _) => { },
+            _ => chatClient,
+            writer => new TerminalChatStreamingRenderer(writer),
+            snapshot => FileConversationStore.Create(snapshot),
+            () => DateTimeOffset.Parse("2024-01-01T00:00:05Z"));
+
+        int exitCode = CliCommandFactory.Invoke(command, ["chat", "--resume", "smoke", "hello model"], output);
+
+        string text = output.ToString();
+        Assert.Equal(1, exitCode);
+        Assert.Contains("status: failed", text);
+        Assert.Contains("errorCode: session-transcript-invalid", text);
+        Assert.Contains("Conversation transcript is missing or uses an unsupported schema version.", text);
+        Assert.DoesNotContain("System.", text, StringComparison.Ordinal);
+        Assert.DoesNotContain("JsonReaderException", text, StringComparison.Ordinal);
+        Assert.Null(chatClient.LastRequest);
+    }
+
+    [Fact]
+    public void Chat_session_load_or_create_exception_returns_safe_failure_without_calling_model()
+    {
+        using StringWriter output = new();
+        FakeChatModelClient chatClient = new(ChatModelResult.Success(new ChatResponse(
+            Provider: "openai",
+            Model: "gpt-test",
+            ResponseId: "resp_test",
+            Text: "fake model output")));
+        FakeConversationStore store = new()
+        {
+            LoadOrCreateException = new IOException("cannot read C:\\secret\\smoke.transcript.json")
+        };
+        RootCommand command = CliCommandFactory.Create(
+            output,
+            workspacePath => CreateSnapshot(workspacePath, apiKey: "sk-test", apiKeySource: "OPENAI_API_KEY", model: "gpt-test"),
+            (_, _) => { },
+            _ => chatClient,
+            writer => new TerminalChatStreamingRenderer(writer),
+            _ => store,
+            () => DateTimeOffset.Parse("2024-01-01T00:00:05Z"));
+
+        int exitCode = CliCommandFactory.Invoke(command, ["chat", "--session", "smoke", "hello model"], output);
+
+        string text = output.ToString();
+        Assert.Equal(1, exitCode);
+        Assert.Contains("status: failed", text);
+        Assert.Contains("errorCode: session-store-error", text);
+        Assert.Contains("Conversation session store operation failed.", text);
+        Assert.DoesNotContain("C:\\secret", text, StringComparison.Ordinal);
+        Assert.Equal("smoke", store.LoadedSessionName?.Value);
+        Assert.Null(store.SavedSessionName);
+        Assert.Null(chatClient.LastRequest);
+    }
+
+    [Fact]
     public void Chat_resume_empty_session_name_rejects_without_calling_model_or_store()
     {
         using StringWriter output = new();
@@ -4020,6 +4095,40 @@ public sealed class CliCommandFactoryTests
         Assert.NotNull(store.SavedTranscript);
         Assert.Equal("hello model", Assert.Single(store.SavedTranscript.Messages).Content);
         Assert.Equal("missing-openai-api-key", Assert.Single(store.SavedTranscript.Errors).LocalErrorCode);
+    }
+
+    [Fact]
+    public void Chat_session_save_exception_returns_safe_failure_without_leaking_exception_detail()
+    {
+        using StringWriter output = new();
+        FakeChatModelClient chatClient = new(ChatModelResult.Success(new ChatResponse(
+            Provider: "openai",
+            Model: "gpt-test",
+            ResponseId: "resp_test",
+            Text: "fake model output")));
+        FakeConversationStore store = new()
+        {
+            SaveException = new IOException("cannot write C:\\secret\\smoke.transcript.json")
+        };
+        RootCommand command = CliCommandFactory.Create(
+            output,
+            workspacePath => CreateSnapshot(workspacePath, apiKey: "sk-test", apiKeySource: "OPENAI_API_KEY", model: "gpt-test"),
+            (_, _) => { },
+            _ => chatClient,
+            writer => new TerminalChatStreamingRenderer(writer),
+            _ => store,
+            () => DateTimeOffset.Parse("2024-01-01T00:00:05Z"));
+
+        int exitCode = CliCommandFactory.Invoke(command, ["chat", "--session", "smoke", "hello model"], output);
+
+        string text = output.ToString();
+        Assert.Equal(1, exitCode);
+        Assert.Contains("status: failed", text);
+        Assert.Contains("errorCode: session-store-error", text);
+        Assert.Contains("Conversation session store operation failed.", text);
+        Assert.DoesNotContain("C:\\secret", text, StringComparison.Ordinal);
+        Assert.Equal("smoke", chatClient.LastRequest?.SessionName);
+        Assert.Equal("smoke", store.SavedSessionName?.Value);
     }
 
     [Fact]
@@ -4337,6 +4446,7 @@ public sealed class CliCommandFactoryTests
         public bool TryLoadResult { get; init; } = true;
         public bool RenameResult { get; init; }
         public bool DeleteResult { get; init; }
+        public Exception? LoadOrCreateException { get; init; }
         public Exception? SaveException { get; init; }
         public ConversationTranscript Transcript { get; init; } = ConversationTranscript.Create(
             "smoke",
@@ -4359,6 +4469,11 @@ public sealed class CliCommandFactoryTests
         public ConversationTranscript LoadOrCreate(ConversationSessionName sessionName, DateTimeOffset nowUtc)
         {
             LoadedSessionName = sessionName;
+            if (LoadOrCreateException is not null)
+            {
+                throw LoadOrCreateException;
+            }
+
             return Transcript;
         }
 

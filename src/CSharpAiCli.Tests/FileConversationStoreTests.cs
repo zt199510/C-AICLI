@@ -347,6 +347,62 @@ public sealed class FileConversationStoreTests
     }
 
     [Theory]
+    [InlineData("smoke\nstatus: succeeded")]
+    [InlineData("smoke\tstatus")]
+    public void Load_or_create_rejects_transcript_with_unsupported_session_name_whitespace(string malformedSessionName)
+    {
+        using TempDirectory temp = TempDirectory.Create();
+        string sessionDirectory = Path.Combine(temp.Path, ".caicli", "sessions");
+        Directory.CreateDirectory(sessionDirectory);
+        File.WriteAllText(
+            Path.Combine(sessionDirectory, "smoke.transcript.json"),
+            $$"""
+            {
+              "schemaVersion": 1,
+              "sessionName": {{JsonSerializer.Serialize(malformedSessionName)}},
+              "createdAtUtc": "2024-01-01T00:00:00+00:00",
+              "updatedAtUtc": "2024-01-01T00:00:00+00:00",
+              "messages": [],
+              "toolCalls": [],
+              "errors": []
+            }
+            """);
+        FileConversationStore store = new(sessionDirectory);
+
+        InvalidOperationException exception = Assert.Throws<InvalidOperationException>(() => store.LoadOrCreate(
+            ConversationSessionName.Parse("smoke"),
+            DateTimeOffset.Parse("2024-01-01T00:01:00Z")));
+        Assert.Equal("Conversation transcript is missing or uses an unsupported schema version.", exception.Message);
+    }
+
+    [Theory]
+    [InlineData("smoke\nstatus: succeeded")]
+    [InlineData("smoke\tstatus")]
+    public void List_summaries_rejects_transcript_with_unsupported_session_name_whitespace(string malformedSessionName)
+    {
+        using TempDirectory temp = TempDirectory.Create();
+        string sessionDirectory = Path.Combine(temp.Path, ".caicli", "sessions");
+        Directory.CreateDirectory(sessionDirectory);
+        File.WriteAllText(
+            Path.Combine(sessionDirectory, "smoke.transcript.json"),
+            $$"""
+            {
+              "schemaVersion": 1,
+              "sessionName": {{JsonSerializer.Serialize(malformedSessionName)}},
+              "createdAtUtc": "2024-01-01T00:00:00+00:00",
+              "updatedAtUtc": "2024-01-01T00:00:00+00:00",
+              "messages": [],
+              "toolCalls": [],
+              "errors": []
+            }
+            """);
+        FileConversationStore store = new(sessionDirectory);
+
+        InvalidOperationException exception = Assert.Throws<InvalidOperationException>(() => store.ListSummaries());
+        Assert.Equal("Conversation transcript is missing or uses an unsupported schema version.", exception.Message);
+    }
+
+    [Theory]
     [InlineData("messages")]
     [InlineData("toolCalls")]
     [InlineData("errors")]

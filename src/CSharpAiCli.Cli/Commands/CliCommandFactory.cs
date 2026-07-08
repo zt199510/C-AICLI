@@ -375,7 +375,7 @@ public static class CliCommandFactory
         };
         Option<string> execSessionOption = new("--session")
         {
-            Description = "Resume or create a named agentic exec transcript.",
+            Description = "Create or append to a named agentic exec transcript.",
         };
         Option<string> execResumeOption = new("--resume")
         {
@@ -666,7 +666,7 @@ public static class CliCommandFactory
         };
         Option<string> sessionOption = new("--session")
         {
-            Description = "Resume or create a named chat session.",
+            Description = "Create or append to a named chat transcript.",
         };
         Option<string> resumeOption = new("--resume")
         {
@@ -700,22 +700,38 @@ public static class CliCommandFactory
             DateTimeOffset nowUtc = default;
             if (sessionSupplied || resumeSupplied)
             {
-                sessionName = ConversationSessionName.Parse(effectiveSession);
-                conversationStore = conversationStoreFactory(snapshot);
-                nowUtc = utcNowProvider();
-                if (resumeSupplied)
+                try
                 {
-                    if (!conversationStore.TryLoad(sessionName, out transcript) || transcript is null)
-                    {
-                        WriteSessionNotFound(output);
-                        return 1;
-                    }
-
-                    transcriptContext = transcript;
+                    sessionName = ConversationSessionName.Parse(effectiveSession);
                 }
-                else
+                catch (ArgumentException exception)
                 {
-                    transcript = conversationStore.LoadOrCreate(sessionName, nowUtc);
+                    WriteSafeFailure(output, "invalid-session-name", GetSafeSessionNameParseMessage(exception));
+                    return 1;
+                }
+
+                try
+                {
+                    conversationStore = conversationStoreFactory(snapshot);
+                    nowUtc = utcNowProvider();
+                    if (resumeSupplied)
+                    {
+                        if (!conversationStore.TryLoad(sessionName, out transcript) || transcript is null)
+                        {
+                            WriteSessionNotFound(output);
+                            return 1;
+                        }
+
+                        transcriptContext = transcript;
+                    }
+                    else
+                    {
+                        transcript = conversationStore.LoadOrCreate(sessionName, nowUtc);
+                    }
+                }
+                catch (Exception exception) when (IsConversationStoreException(exception))
+                {
+                    return WriteChatConversationStoreFailure(output, exception);
                 }
             }
 
@@ -727,7 +743,14 @@ public static class CliCommandFactory
             if (sessionName is not null && transcript is not null && conversationStore is not null)
             {
                 ConversationTranscriptRecorder.RecordTurn(transcript, prompt, result, nowUtc);
-                conversationStore.Save(sessionName, transcript);
+                try
+                {
+                    conversationStore.Save(sessionName, transcript);
+                }
+                catch (Exception exception) when (IsConversationStoreException(exception))
+                {
+                    return WriteChatConversationStoreFailure(output, exception);
+                }
             }
 
             return result.IsSuccess ? 0 : 1;
@@ -983,6 +1006,13 @@ public static class CliCommandFactory
     {
         (string errorCode, string summary) = GetConversationStoreFailure(exception);
         return WriteExecLocalValidationFailure(output, errorCode, summary, jsonRequested, outputMode);
+    }
+
+    private static int WriteChatConversationStoreFailure(TextWriter output, Exception exception)
+    {
+        (string errorCode, string summary) = GetConversationStoreFailure(exception);
+        WriteSafeFailure(output, errorCode, summary);
+        return 1;
     }
 
     private static (string ErrorCode, string Summary) GetConversationStoreFailure(Exception exception)

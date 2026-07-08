@@ -207,6 +207,15 @@ public sealed class FileConversationStore : IConversationStore
         {
             throw new InvalidOperationException(InvalidTranscriptMessage);
         }
+
+        try
+        {
+            _ = ConversationSessionName.Parse(transcript.SessionName);
+        }
+        catch (ArgumentException exception)
+        {
+            throw new InvalidOperationException(InvalidTranscriptMessage, exception);
+        }
     }
 
     private string GetPath(ConversationSessionName sessionName)

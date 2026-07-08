@@ -24,7 +24,12 @@ public sealed record ConversationSessionName
             throw new ArgumentException("Session name must not be empty.", nameof(value));
         }
 
-        string trimmedValue = value.Trim();
+        string trimmedValue = value.Trim(' ');
+        if (trimmedValue.Any(IsUnsupportedWhitespace))
+        {
+            throw new ArgumentException("Session name contains unsupported characters.", nameof(value));
+        }
+
         if (trimmedValue.Contains("..", StringComparison.Ordinal) ||
             trimmedValue.Contains(Path.DirectorySeparatorChar, StringComparison.Ordinal) ||
             trimmedValue.Contains(Path.AltDirectorySeparatorChar, StringComparison.Ordinal) ||
@@ -69,7 +74,7 @@ public sealed record ConversationSessionName
                 builder.Append(character);
                 pendingDash = false;
             }
-            else if (char.IsWhiteSpace(character))
+            else if (character == ' ')
             {
                 pendingDash = true;
             }
@@ -86,6 +91,9 @@ public sealed record ConversationSessionName
 
     private static bool IsSupportedCharacter(char character) =>
         char.IsLetterOrDigit(character) ||
-        char.IsWhiteSpace(character) ||
+        character == ' ' ||
         character is '_' or '-';
+
+    private static bool IsUnsupportedWhitespace(char character) =>
+        character != ' ' && char.IsWhiteSpace(character);
 }

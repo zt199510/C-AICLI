@@ -68,6 +68,16 @@ public sealed class ConversationSessionNameTests
     }
 
     [Theory]
+    [InlineData("smoke\nstatus: succeeded")]
+    [InlineData("smoke\tstatus")]
+    public void Parse_rejects_newline_and_tab_whitespace(string input)
+    {
+        ArgumentException exception = Assert.Throws<ArgumentException>(() => ConversationSessionName.Parse(input));
+
+        Assert.StartsWith("Session name contains unsupported characters.", exception.Message, StringComparison.Ordinal);
+    }
+
+    [Theory]
     [InlineData("")]
     [InlineData("   ")]
     [InlineData("../secret")]
