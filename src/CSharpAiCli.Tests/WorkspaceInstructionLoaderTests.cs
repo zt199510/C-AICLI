@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using CSharpAiCli.Core;
 
 namespace CSharpAiCli.Tests;
@@ -210,6 +211,83 @@ public sealed class WorkspaceInstructionLoaderTests
     }
 
     [Fact]
+    public void Load_for_target_directory_link_outside_workspace_returns_empty_and_records_warning_when_available()
+    {
+        string root = CreateTempDirectory();
+        string outsideRoot = CreateTempDirectory();
+        string linkPath = Path.Combine(root, "linked");
+
+        try
+        {
+            string outsideInstructionPath = Path.Combine(outsideRoot, "AGENTS.md");
+            File.WriteAllText(Path.Combine(root, "AGENTS.md"), "Workspace instructions.");
+            File.WriteAllText(outsideInstructionPath, "outside-secret");
+            if (!TryCreateDirectoryLink(linkPath, outsideRoot))
+            {
+                return;
+            }
+
+            WorkspaceContext workspace = WorkspaceContext.Detect(root, root);
+            WorkspaceInstructionLoader loader = new();
+
+            InstructionLoadResult result = loader.Load(workspace, linkPath);
+
+            Assert.False(result.HasInstructions);
+            Assert.Null(result.Instructions);
+            Assert.Null(result.SourcePath);
+            string warning = Assert.Single(result.Warnings);
+            Assert.Contains("outside the workspace", warning);
+            Assert.DoesNotContain("outside-secret", warning, StringComparison.Ordinal);
+            Assert.DoesNotContain(outsideInstructionPath, warning, StringComparison.Ordinal);
+        }
+        finally
+        {
+            DeleteDirectoryLinkIfExists(linkPath);
+            Directory.Delete(root, recursive: true);
+            Directory.Delete(outsideRoot, recursive: true);
+        }
+    }
+
+    [Fact]
+    public void Load_skips_instruction_file_link_outside_workspace_when_available()
+    {
+        string root = CreateTempDirectory();
+        string outsideRoot = CreateTempDirectory();
+
+        try
+        {
+            string sourceDirectory = Path.Combine(root, "src");
+            Directory.CreateDirectory(sourceDirectory);
+            string outsideInstructionPath = Path.Combine(outsideRoot, "AGENTS.md");
+            string linkedInstructionPath = Path.Combine(sourceDirectory, "AGENTS.md");
+            File.WriteAllText(Path.Combine(root, "AGENTS.md"), "Root instructions.");
+            File.WriteAllText(Path.Combine(sourceDirectory, "AICLI.md"), "Fallback instructions.");
+            File.WriteAllText(outsideInstructionPath, "outside-secret");
+            if (!TryCreateFileLink(linkedInstructionPath, outsideInstructionPath))
+            {
+                return;
+            }
+
+            WorkspaceContext workspace = WorkspaceContext.Detect(root, root);
+            WorkspaceInstructionLoader loader = new();
+
+            InstructionLoadResult result = loader.Load(workspace, sourceDirectory);
+
+            Assert.True(result.HasInstructions);
+            Assert.Equal("Root instructions.", result.Instructions);
+            string warning = Assert.Single(result.Warnings);
+            Assert.Contains("outside the workspace", warning);
+            Assert.DoesNotContain("outside-secret", warning, StringComparison.Ordinal);
+            Assert.DoesNotContain(outsideInstructionPath, warning, StringComparison.Ordinal);
+        }
+        finally
+        {
+            Directory.Delete(root, recursive: true);
+            Directory.Delete(outsideRoot, recursive: true);
+        }
+    }
+
+    [Fact]
     public void Load_without_target_path_keeps_root_only_behavior()
     {
         string root = CreateTempDirectory();
@@ -313,5 +391,89 @@ public sealed class WorkspaceInstructionLoaderTests
         string path = Path.Combine(Path.GetTempPath(), "caicli-tests", Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(path);
         return path;
+    }
+
+    private static bool TryCreateDirectoryLink(string linkPath, string targetPath)
+    {
+        try
+        {
+            new DirectoryInfo(linkPath).CreateAsSymbolicLink(targetPath);
+            return true;
+        }
+        catch (Exception exception) when (exception is IOException
+            or UnauthorizedAccessException
+            or PlatformNotSupportedException
+            or NotSupportedException)
+        {
+            return OperatingSystem.IsWindows() && TryCreateWindowsLink(linkPath, targetPath, isDirectory: true);
+        }
+    }
+
+    private static bool TryCreateFileLink(string linkPath, string targetPath)
+    {
+        try
+        {
+            new FileInfo(linkPath).CreateAsSymbolicLink(targetPath);
+            return true;
+        }
+        catch (Exception exception) when (exception is IOException
+            or UnauthorizedAccessException
+            or PlatformNotSupportedException
+            or NotSupportedException)
+        {
+            return OperatingSystem.IsWindows() && TryCreateWindowsLink(linkPath, targetPath, isDirectory: false);
+        }
+    }
+
+    private static bool TryCreateWindowsLink(string linkPath, string targetPath, bool isDirectory)
+    {
+        using Process process = new()
+        {
+            StartInfo = new ProcessStartInfo("cmd.exe")
+            {
+                RedirectStandardError = true,
+                RedirectStandardOutput = true,
+                UseShellExecute = false
+            }
+        };
+
+        process.StartInfo.ArgumentList.Add("/c");
+        process.StartInfo.ArgumentList.Add("mklink");
+        if (isDirectory)
+        {
+            process.StartInfo.ArgumentList.Add("/J");
+        }
+
+        process.StartInfo.ArgumentList.Add(linkPath);
+        process.StartInfo.ArgumentList.Add(targetPath);
+
+        try
+        {
+            process.Start();
+            process.WaitForExit();
+            return process.ExitCode == 0;
+        }
+        catch (Exception exception) when (exception is IOException
+            or UnauthorizedAccessException
+            or PlatformNotSupportedException)
+        {
+            return false;
+        }
+    }
+
+    private static void DeleteDirectoryLinkIfExists(string linkPath)
+    {
+        if (!Directory.Exists(linkPath))
+        {
+            return;
+        }
+
+        try
+        {
+            Directory.Delete(linkPath);
+        }
+        catch (IOException)
+        {
+        }
     }
 }
