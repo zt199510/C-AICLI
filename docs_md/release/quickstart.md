@@ -111,7 +111,7 @@ artifacts\release\caicli-0.1.0-win-x64\caicli.exe review --json --workspace .
 artifacts\release\caicli-0.1.0-win-x64\caicli.exe review --output json --workspace .
 ```
 
-`review` is read-only. It does not execute patch or shell tools and does not write files, logs, transcripts, or patches. It does send the current git diff to the configured model, so real use needs configured model credentials.
+`review` is read-only for the workspace. It does not execute patch or shell tools and does not write workspace files, logs, transcripts, or patches. Diff collection may create transient temp files/directories outside the workspace and clean them up. It does send the current git diff to the configured model, so real use needs configured model credentials.
 
 ## 8. Inspect Optional Features
 
