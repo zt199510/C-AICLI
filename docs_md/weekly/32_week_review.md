@@ -14,7 +14,7 @@
 
 验证：
 - 命令：`D:\AI\.dotnet\dotnet.exe test src\CSharpAiCli.sln --no-restore`
-- 结果：通过。`CSharpAiCli.Tests.dll (net9.0)`：失败 0，通过 608，跳过 0，总计 608。
+- 结果：通过。`CSharpAiCli.Tests.dll (net9.0)`：失败 0，通过 610，跳过 0，总计 610。
 - 命令：`rg -n "AGENTS|AICLI|--cwd|instruction" docs_md\release`
 - 结果：通过。匹配覆盖 `docs_md\release\quickstart.md`、`docs_md\release\security_model.md`、`docs_md\release\capability_status.md`、`docs_md\release\CHANGELOG.md` 等 release docs。
 
