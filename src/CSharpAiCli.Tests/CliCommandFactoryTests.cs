@@ -92,6 +92,22 @@ public sealed class CliCommandFactoryTests
     }
 
     [Fact]
+    public void Diff_command_writes_no_diff_for_clean_git_workspace()
+    {
+        using TempDirectory temp = TempDirectory.Create();
+        InitializeGitRepository(temp.Path);
+        using StringWriter output = new();
+
+        int exitCode = CliCommandFactory
+            .Create(output, workspacePath => CreateSnapshot(workspacePath))
+            .Parse(["diff", "--workspace", temp.Path])
+            .Invoke();
+
+        Assert.Equal(0, exitCode);
+        Assert.Equal("no diff", output.ToString().TrimEnd());
+    }
+
+    [Fact]
     public void Models_command_writes_current_configuration_and_examples_without_api_key_or_model_client()
     {
         using TempDirectory temp = TempDirectory.Create();
@@ -184,6 +200,37 @@ public sealed class CliCommandFactoryTests
         Assert.Contains("diff --git", chatClient.LastNonStreamingPrompt, StringComparison.Ordinal);
         Assert.Contains("+changed", chatClient.LastNonStreamingPrompt, StringComparison.Ordinal);
         Assert.Equal("Use the project review style.", chatClient.LastRequest?.Instructions);
+        Assert.Contains("review report", text, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Review_command_sends_no_diff_to_non_streaming_model_for_clean_git_workspace()
+    {
+        using TempDirectory temp = TempDirectory.Create();
+        InitializeGitRepository(temp.Path);
+        using StringWriter output = new();
+        FakeChatModelClient chatClient = new(ChatModelResult.Success(new ChatResponse(
+            Provider: "openai",
+            Model: "gpt-test",
+            ResponseId: "resp_test",
+            Text: "review report")));
+
+        int exitCode = CliCommandFactory.Invoke(
+            CliCommandFactory.Create(
+                output,
+                workspacePath => CreateSnapshot(workspacePath, apiKey: "sk-test", apiKeySource: "OPENAI_API_KEY", model: "gpt-test"),
+                (_, _) => throw new InvalidOperationException("review must not write command logs"),
+                _ => chatClient),
+            ["review", "--workspace", temp.Path],
+            output);
+
+        string text = output.ToString();
+        Assert.Equal(0, exitCode);
+        Assert.Null(chatClient.LastStreamingPrompt);
+        Assert.NotNull(chatClient.LastNonStreamingPrompt);
+        Assert.Contains("Current git diff:", chatClient.LastNonStreamingPrompt, StringComparison.Ordinal);
+        Assert.Contains("no diff", chatClient.LastNonStreamingPrompt, StringComparison.Ordinal);
+        Assert.DoesNotContain("diff --git", chatClient.LastNonStreamingPrompt, StringComparison.Ordinal);
         Assert.Contains("review report", text, StringComparison.Ordinal);
     }
 

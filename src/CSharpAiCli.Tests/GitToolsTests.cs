@@ -48,6 +48,19 @@ public sealed class GitToolsTests
     }
 
     [Fact]
+    public void Git_diff_reports_no_diff_for_clean_temporary_repo()
+    {
+        using TempDirectory temp = TempDirectory.Create();
+        InitializeGitRepository(temp.Path);
+        GitDiffTool tool = new(new WorkspaceGuard());
+
+        ToolExecutionResult result = tool.Execute(CreateContext(temp.Path));
+
+        Assert.True(result.Succeeded);
+        Assert.Equal("no diff", result.Summary);
+    }
+
+    [Fact]
     public void Git_diff_stat_reports_modified_file_in_temporary_repo()
     {
         using TempDirectory temp = TempDirectory.Create();
