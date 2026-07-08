@@ -119,6 +119,23 @@ public sealed class GitToolsTests
     }
 
     [Fact]
+    public void Git_diff_preserves_hunk_lines_that_look_like_temp_diff_paths()
+    {
+        using TempDirectory temp = TempDirectory.Create();
+        string filePath = InitializeGitRepository(temp.Path);
+        File.WriteAllText(filePath, "a/old/tracked.txt\nb/new/tracked.txt\n");
+        GitDiffTool tool = new(new WorkspaceGuard());
+
+        ToolExecutionResult result = tool.Execute(CreateContext(temp.Path));
+
+        Assert.True(result.Succeeded);
+        Assert.Contains("+a/old/tracked.txt", result.Summary, StringComparison.Ordinal);
+        Assert.Contains("+b/new/tracked.txt", result.Summary, StringComparison.Ordinal);
+        Assert.DoesNotContain("+a/tracked.txt", result.Summary, StringComparison.Ordinal);
+        Assert.DoesNotContain("+b/tracked.txt", result.Summary, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void Git_diff_disables_external_helpers_for_all_diff_commands()
     {
         using TempDirectory temp = TempDirectory.Create();
@@ -223,6 +240,130 @@ public sealed class GitToolsTests
         Assert.Contains(runner.Commands, command => command is ["diff-files", "--name-only", "-z", "--", ":(exclude).caicli/logs/**"]);
         Assert.DoesNotContain(runner.Commands, command => command.FirstOrDefault() == "show");
         Assert.DoesNotContain(runner.Commands, command => command.Contains("--no-index", StringComparer.Ordinal));
+    }
+
+    [Fact]
+    public void Git_diff_reports_unstaged_gitlink_candidate_without_failing()
+    {
+        using TempDirectory temp = TempDirectory.Create();
+        FakeGitCommandRunner runner = new((args, _) =>
+        {
+            if (args is ["rev-parse", "--verify", "HEAD"])
+            {
+                return SuccessfulGitResult(string.Empty);
+            }
+
+            if (args.FirstOrDefault() == "diff-index")
+            {
+                return SuccessfulGitResult(string.Empty);
+            }
+
+            if (args is ["diff-files", "--name-only", "-z", "--", ":(exclude).caicli/logs/**"])
+            {
+                return SuccessfulGitResult("deps/sub\0");
+            }
+
+            if (args is ["ls-files", "-s", "-z", "--", "deps/sub"])
+            {
+                return SuccessfulGitResult("160000 abcdef1234567890abcdef1234567890abcdef12 0\tdeps/sub\0");
+            }
+
+            if (args is ["diff-files", "--summary", "--", "deps/sub"])
+            {
+                return SuccessfulGitResult("Submodule deps/sub contains modified content\n");
+            }
+
+            if (args is ["show", ":0:deps/sub"])
+            {
+                return FailedGitResult(exitCode: 128, stderr: "fatal: path 'deps/sub' is a gitlink\n");
+            }
+
+            if (args is ["config", "--bool", "core.ignorecase"])
+            {
+                return FailedGitResult(exitCode: 1, stderr: string.Empty);
+            }
+
+            if (args is ["ls-files", "--others", "--exclude-standard", "-z"])
+            {
+                return SuccessfulGitResult(string.Empty);
+            }
+
+            return SuccessfulGitResult(string.Empty);
+        });
+        GitDiffTool tool = new(new WorkspaceGuard(), runner);
+
+        ToolExecutionResult result = tool.Execute(CreateContext(temp.Path));
+
+        Assert.True(result.Succeeded);
+        Assert.Contains("deps/sub", result.Summary, StringComparison.Ordinal);
+        Assert.Contains("Submodule", result.Summary, StringComparison.Ordinal);
+        Assert.DoesNotContain(runner.Commands, command => command is ["show", ":0:deps/sub"]);
+    }
+
+    [Fact]
+    public void Git_diff_reports_unstaged_mode_only_candidate()
+    {
+        using TempDirectory temp = TempDirectory.Create();
+        File.WriteAllText(Path.Combine(temp.Path, "script.sh"), "echo hi\n");
+        FakeGitCommandRunner runner = new((args, stdoutPath) =>
+        {
+            if (args is ["rev-parse", "--verify", "HEAD"])
+            {
+                return SuccessfulGitResult(string.Empty);
+            }
+
+            if (args.FirstOrDefault() == "diff-index")
+            {
+                return SuccessfulGitResult(string.Empty);
+            }
+
+            if (args is ["diff-files", "--name-only", "-z", "--", ":(exclude).caicli/logs/**"])
+            {
+                return SuccessfulGitResult("script.sh\0");
+            }
+
+            if (args is ["ls-files", "-s", "-z", "--", "script.sh"])
+            {
+                return SuccessfulGitResult("100644 abcdef1234567890abcdef1234567890abcdef12 0\tscript.sh\0");
+            }
+
+            if (args is ["show", ":0:script.sh"])
+            {
+                Directory.CreateDirectory(Path.GetDirectoryName(stdoutPath!)!);
+                File.WriteAllText(stdoutPath!, "echo hi\n");
+                return SuccessfulGitResult(string.Empty);
+            }
+
+            if (args.Contains("--no-index", StringComparer.Ordinal))
+            {
+                return SuccessfulGitResult(string.Empty);
+            }
+
+            if (args is ["diff-files", "--summary", "--", "script.sh"])
+            {
+                return SuccessfulGitResult(" mode change 100644 => 100755 script.sh\n");
+            }
+
+            if (args is ["config", "--bool", "core.ignorecase"])
+            {
+                return FailedGitResult(exitCode: 1, stderr: string.Empty);
+            }
+
+            if (args is ["ls-files", "--others", "--exclude-standard", "-z"])
+            {
+                return SuccessfulGitResult(string.Empty);
+            }
+
+            return SuccessfulGitResult(string.Empty);
+        });
+        GitDiffTool tool = new(new WorkspaceGuard(), runner);
+
+        ToolExecutionResult result = tool.Execute(CreateContext(temp.Path));
+
+        Assert.True(result.Succeeded);
+        Assert.Contains("mode change", result.Summary, StringComparison.Ordinal);
+        Assert.Contains("script.sh", result.Summary, StringComparison.Ordinal);
+        Assert.DoesNotContain("no diff", result.Summary, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -778,13 +919,25 @@ public sealed class GitToolsTests
             Summary: "Git command failed with exit code " + exitCode + ".");
     }
 
-    private sealed class FakeGitCommandRunner(Func<string[], GitCommandResult> handle) : IGitCommandRunner
+    private sealed class FakeGitCommandRunner : IGitCommandRunner
     {
+        private readonly Func<string[], string?, GitCommandResult> handle;
+
+        public FakeGitCommandRunner(Func<string[], GitCommandResult> handle)
+            : this((args, _) => handle(args))
+        {
+        }
+
+        public FakeGitCommandRunner(Func<string[], string?, GitCommandResult> handle)
+        {
+            this.handle = handle;
+        }
+
         public List<string[]> Commands { get; } = [];
 
         public GitCommandResult Run(string workspaceRoot, string arguments)
         {
-            return handle([arguments]);
+            return handle([arguments], null);
         }
 
         public GitCommandResult RunArgumentList(
@@ -794,7 +947,7 @@ public sealed class GitToolsTests
         {
             string[] args = arguments.ToArray();
             Commands.Add(args);
-            return handle(args);
+            return handle(args, null);
         }
 
         public GitCommandResult RunArgumentListToFile(
@@ -805,7 +958,7 @@ public sealed class GitToolsTests
         {
             string[] args = arguments.ToArray();
             Commands.Add(args);
-            return handle(args);
+            return handle(args, stdoutPath);
         }
     }
 

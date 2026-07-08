@@ -190,6 +190,18 @@ public sealed class GitDiffTool : ITool
         string relativePath,
         bool stat)
     {
+        GitIndexEntryReadResult indexEntry = ReadIndexEntry(workspaceRoot, relativePath);
+        if (indexEntry.Failure is not null)
+        {
+            return indexEntry.Failure;
+        }
+
+        GitCommandResult summaryDiff = ReadUnstagedSummaryDiff(workspaceRoot, relativePath);
+        if (indexEntry.Entry is null || !indexEntry.Entry.IsRegularFile)
+        {
+            return CreateMetadataOnlyUnstagedDiffResult(summaryDiff, relativePath, indexEntry.Entry?.Mode);
+        }
+
         string oldRelativePath = GetTemporaryRelativePath("old", relativePath);
         string oldFullPath = GetTemporaryFullPath(temporaryRoot, oldRelativePath);
         GitCommandResult indexBlob = gitCommandRunner.RunArgumentListToFile(
@@ -226,7 +238,80 @@ public sealed class GitDiffTool : ITool
             temporaryRoot,
             arguments,
             NoIndexDiffSuccessExitCodes);
-        return NormalizeNoIndexDiffPaths(diff, relativePath);
+        GitCommandResult normalizedDiff = NormalizeNoIndexDiffPaths(diff, relativePath);
+        if (!IsSuccessfulNoIndexDiff(normalizedDiff))
+        {
+            return normalizedDiff;
+        }
+
+        return CombineSummaryAndContentDiff(summaryDiff, normalizedDiff);
+    }
+
+    private GitIndexEntryReadResult ReadIndexEntry(string workspaceRoot, string relativePath)
+    {
+        GitCommandResult result = gitCommandRunner.RunArgumentList(
+            workspaceRoot,
+            ["ls-files", "-s", "-z", "--", relativePath]);
+        if (!result.Succeeded)
+        {
+            return GitIndexEntryReadResult.Failed(result);
+        }
+
+        string? entryText = result.Stdout.Split('\0', StringSplitOptions.RemoveEmptyEntries).FirstOrDefault();
+        if (string.IsNullOrWhiteSpace(entryText))
+        {
+            return GitIndexEntryReadResult.Succeeded(null);
+        }
+
+        int modeEnd = entryText.IndexOf(' ', StringComparison.Ordinal);
+        if (modeEnd <= 0)
+        {
+            return GitIndexEntryReadResult.Succeeded(null);
+        }
+
+        return GitIndexEntryReadResult.Succeeded(new GitIndexEntry(entryText[..modeEnd]));
+    }
+
+    private GitCommandResult ReadUnstagedSummaryDiff(string workspaceRoot, string relativePath)
+    {
+        return gitCommandRunner.RunArgumentList(
+            workspaceRoot,
+            ["diff-files", "--summary", "--", relativePath]);
+    }
+
+    private static GitCommandResult CreateMetadataOnlyUnstagedDiffResult(
+        GitCommandResult summaryDiff,
+        string relativePath,
+        string? mode)
+    {
+        if (summaryDiff.Succeeded && !string.IsNullOrWhiteSpace(summaryDiff.Stdout))
+        {
+            return summaryDiff;
+        }
+
+        string modeText = string.IsNullOrWhiteSpace(mode) ? "unknown mode" : "mode " + mode;
+        return GitCommandResultSuccess(
+            $"WARNING: unstaged tracked non-regular diff omitted for {relativePath} ({modeText}).");
+    }
+
+    private static GitCommandResult CombineSummaryAndContentDiff(
+        GitCommandResult summaryDiff,
+        GitCommandResult contentDiff)
+    {
+        if (!summaryDiff.Succeeded || string.IsNullOrWhiteSpace(summaryDiff.Stdout))
+        {
+            return contentDiff;
+        }
+
+        string output = string.IsNullOrWhiteSpace(contentDiff.Stdout)
+            ? summaryDiff.Stdout.Trim()
+            : summaryDiff.Stdout.Trim() + Environment.NewLine + Environment.NewLine + contentDiff.Stdout.Trim();
+        return contentDiff with
+        {
+            Stdout = output,
+            StdoutTruncated = summaryDiff.StdoutTruncated || contentDiff.StdoutTruncated,
+            StderrTruncated = summaryDiff.StderrTruncated || contentDiff.StderrTruncated
+        };
     }
 
     private GitCommandResult CreateUntrackedDiff(
@@ -297,7 +382,54 @@ public sealed class GitDiffTool : ITool
     private static GitCommandResult NormalizeNoIndexDiffPaths(GitCommandResult result, string relativePath)
     {
         string normalizedPath = NormalizeGitPath(relativePath);
-        string stdout = result.Stdout
+        bool inHunk = false;
+        string stdout = string.Join(
+            "\n",
+            result.Stdout.Split('\n').Select(line =>
+            {
+                if (line.StartsWith("diff --git ", StringComparison.Ordinal))
+                {
+                    inHunk = false;
+                    return NormalizeNoIndexMetadataLine(line, normalizedPath);
+                }
+
+                if (line.StartsWith("@@", StringComparison.Ordinal))
+                {
+                    inHunk = true;
+                    return line;
+                }
+
+                return inHunk ? line : NormalizeNoIndexMetadataLine(line, normalizedPath);
+            }));
+
+        return result with { Stdout = stdout };
+    }
+
+    private static string NormalizeNoIndexMetadataLine(string line, string normalizedPath)
+    {
+        if (line.StartsWith("--- ", StringComparison.Ordinal)
+            || line.StartsWith("+++ ", StringComparison.Ordinal)
+            || line.StartsWith("Binary files ", StringComparison.Ordinal))
+        {
+            return ReplaceNoIndexPathPrefixes(line, normalizedPath);
+        }
+
+        int statSeparatorIndex = line.IndexOf('|', StringComparison.Ordinal);
+        if (statSeparatorIndex > 0)
+        {
+            string pathPart = line[..statSeparatorIndex];
+            string rest = line[statSeparatorIndex..];
+            return ReplaceNoIndexPathPrefixes(pathPart, normalizedPath) + rest;
+        }
+
+        return line.StartsWith("diff --git ", StringComparison.Ordinal)
+            ? ReplaceNoIndexPathPrefixes(line, normalizedPath)
+            : line;
+    }
+
+    private static string ReplaceNoIndexPathPrefixes(string text, string normalizedPath)
+    {
+        return text
             .Replace("a/old/" + normalizedPath, "a/" + normalizedPath, StringComparison.Ordinal)
             .Replace("b/old/" + normalizedPath, "b/" + normalizedPath, StringComparison.Ordinal)
             .Replace("a/new/" + normalizedPath, "a/" + normalizedPath, StringComparison.Ordinal)
@@ -305,8 +437,6 @@ public sealed class GitDiffTool : ITool
             .Replace("{old => new}/" + normalizedPath, normalizedPath, StringComparison.Ordinal)
             .Replace("/dev/null => new/" + normalizedPath, "/dev/null => " + normalizedPath, StringComparison.Ordinal)
             .Replace("old/" + normalizedPath + " => /dev/null", normalizedPath + " => /dev/null", StringComparison.Ordinal);
-
-        return result with { Stdout = stdout };
     }
 
     private static string GetTemporaryRelativePath(string rootName, string relativePath)
@@ -411,6 +541,19 @@ public sealed class GitDiffTool : ITool
             Summary: summary);
     }
 
+    private static GitCommandResult GitCommandResultSuccess(string stdout)
+    {
+        return new GitCommandResult(
+            Succeeded: true,
+            ExitCode: 0,
+            Stdout: stdout,
+            Stderr: string.Empty,
+            StdoutTruncated: false,
+            StderrTruncated: false,
+            ErrorCode: null,
+            Summary: "Git command completed with exit code 0.");
+    }
+
     private static bool TryReadArguments(
         string? argumentsJson,
         out bool stat,
@@ -475,6 +618,26 @@ public sealed class GitDiffTool : ITool
         public static GitDiffReadResult Failed(ToolExecutionResult failure)
         {
             return new GitDiffReadResult(string.Empty, false, failure);
+        }
+    }
+
+    private sealed record GitIndexEntry(string Mode)
+    {
+        public bool IsRegularFile => Mode is "100644" or "100755";
+    }
+
+    private sealed record GitIndexEntryReadResult(
+        GitIndexEntry? Entry,
+        GitCommandResult? Failure)
+    {
+        public static GitIndexEntryReadResult Succeeded(GitIndexEntry? entry)
+        {
+            return new GitIndexEntryReadResult(entry, null);
+        }
+
+        public static GitIndexEntryReadResult Failed(GitCommandResult failure)
+        {
+            return new GitIndexEntryReadResult(null, failure);
         }
     }
 
