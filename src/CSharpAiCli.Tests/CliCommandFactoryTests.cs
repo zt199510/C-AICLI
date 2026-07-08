@@ -72,6 +72,65 @@ public sealed class CliCommandFactoryTests
     }
 
     [Fact]
+    public void Diff_command_with_default_logger_writes_no_diff_for_clean_git_workspace()
+    {
+        using TempDirectory temp = TempDirectory.Create();
+        InitializeGitRepository(temp.Path);
+        using StringWriter output = new();
+
+        int exitCode = CliCommandFactory
+            .Create(output)
+            .Parse(["diff", "--workspace", temp.Path])
+            .Invoke();
+
+        string text = output.ToString().TrimEnd();
+        Assert.Equal(0, exitCode);
+        Assert.Equal("no diff", text);
+        Assert.True(Directory.Exists(Path.Combine(temp.Path, ".caicli", "logs")));
+    }
+
+    [Fact]
+    public void Diff_command_with_default_logger_stays_no_diff_when_rerun()
+    {
+        using TempDirectory temp = TempDirectory.Create();
+        InitializeGitRepository(temp.Path);
+        using StringWriter firstOutput = new();
+        using StringWriter secondOutput = new();
+
+        int firstExitCode = CliCommandFactory
+            .Create(firstOutput)
+            .Parse(["diff", "--workspace", temp.Path])
+            .Invoke();
+        int secondExitCode = CliCommandFactory
+            .Create(secondOutput)
+            .Parse(["diff", "--workspace", temp.Path])
+            .Invoke();
+
+        Assert.Equal(0, firstExitCode);
+        Assert.Equal("no diff", firstOutput.ToString().TrimEnd());
+        Assert.Equal(0, secondExitCode);
+        Assert.Equal("no diff", secondOutput.ToString().TrimEnd());
+    }
+
+    [Fact]
+    public void Diff_command_stat_with_default_logger_writes_no_diff_for_clean_git_workspace()
+    {
+        using TempDirectory temp = TempDirectory.Create();
+        InitializeGitRepository(temp.Path);
+        using StringWriter output = new();
+
+        int exitCode = CliCommandFactory
+            .Create(output)
+            .Parse(["diff", "--stat", "--workspace", temp.Path])
+            .Invoke();
+
+        string text = output.ToString().TrimEnd();
+        Assert.Equal(0, exitCode);
+        Assert.Equal("no diff", text);
+        Assert.True(Directory.Exists(Path.Combine(temp.Path, ".caicli", "logs")));
+    }
+
+    [Fact]
     public void Diff_command_writes_staged_and_untracked_changes_for_git_workspace()
     {
         using TempDirectory temp = TempDirectory.Create();
@@ -387,6 +446,34 @@ public sealed class CliCommandFactoryTests
         Assert.Contains("new file.txt", chatClient.LastNonStreamingPrompt, StringComparison.Ordinal);
         Assert.Contains("+fresh", chatClient.LastNonStreamingPrompt, StringComparison.Ordinal);
         Assert.DoesNotContain("no diff", chatClient.LastNonStreamingPrompt, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Review_command_sends_no_diff_when_only_untracked_cli_logs_exist()
+    {
+        using TempDirectory temp = TempDirectory.Create();
+        InitializeGitRepository(temp.Path);
+        WriteCliCommandLog(temp.Path);
+        using StringWriter output = new();
+        FakeChatModelClient chatClient = new(ChatModelResult.Success(new ChatResponse(
+            Provider: "openai",
+            Model: "gpt-test",
+            ResponseId: "resp_test",
+            Text: "review report")));
+
+        int exitCode = CliCommandFactory.Invoke(
+            CliCommandFactory.Create(
+                output,
+                workspacePath => CreateSnapshot(workspacePath, apiKey: "sk-test", apiKeySource: "OPENAI_API_KEY", model: "gpt-test"),
+                (_, _) => throw new InvalidOperationException("review must not write command logs"),
+                _ => chatClient),
+            ["review", "--workspace", temp.Path],
+            output);
+
+        Assert.Equal(0, exitCode);
+        Assert.NotNull(chatClient.LastNonStreamingPrompt);
+        Assert.Contains("no diff", chatClient.LastNonStreamingPrompt, StringComparison.Ordinal);
+        Assert.DoesNotContain(".caicli/logs", chatClient.LastNonStreamingPrompt, StringComparison.OrdinalIgnoreCase);
     }
 
     [Fact]
@@ -5513,6 +5600,13 @@ public sealed class CliCommandFactoryTests
         File.WriteAllText(
             Path.Combine(hooksPath, hookName),
             "#!/bin/sh\necho configured hook failed >&2\nexit 1\n");
+    }
+
+    private static void WriteCliCommandLog(string root)
+    {
+        string logsPath = Path.Combine(root, ".caicli", "logs");
+        Directory.CreateDirectory(logsPath);
+        File.WriteAllText(Path.Combine(logsPath, "2026-07-09.log"), "command=diff\n");
     }
 
     private static void RunGit(string workingDirectory, params string[] arguments)

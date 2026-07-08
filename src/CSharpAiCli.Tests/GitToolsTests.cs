@@ -101,6 +101,39 @@ public sealed class GitToolsTests
     }
 
     [Fact]
+    public void Git_diff_ignores_untracked_cli_command_logs()
+    {
+        using TempDirectory temp = TempDirectory.Create();
+        InitializeGitRepository(temp.Path);
+        WriteCliCommandLog(temp.Path);
+        GitDiffTool tool = new(new WorkspaceGuard());
+
+        ToolExecutionResult result = tool.Execute(CreateContext(temp.Path));
+
+        Assert.True(result.Succeeded);
+        Assert.Equal("no diff", result.Summary);
+    }
+
+    [Fact]
+    public void Git_diff_ignores_cli_logs_without_hiding_other_caicli_files()
+    {
+        using TempDirectory temp = TempDirectory.Create();
+        InitializeGitRepository(temp.Path);
+        WriteCliCommandLog(temp.Path);
+        string configPath = Path.Combine(temp.Path, ".caicli", "config.json");
+        File.WriteAllText(configPath, "{}\n");
+        GitDiffTool tool = new(new WorkspaceGuard());
+
+        ToolExecutionResult result = tool.Execute(CreateContext(temp.Path));
+
+        Assert.True(result.Succeeded);
+        Assert.Contains(".caicli/config.json", result.Summary, StringComparison.Ordinal);
+        Assert.Contains("+{}", result.Summary, StringComparison.Ordinal);
+        Assert.DoesNotContain(".caicli/logs", result.Summary, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("no diff", result.Summary, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void Git_diff_reports_staged_and_untracked_files_in_no_head_repo()
     {
         using TempDirectory temp = TempDirectory.Create();
@@ -300,6 +333,13 @@ public sealed class GitToolsTests
         File.WriteAllText(
             Path.Combine(hooksPath, hookName),
             "#!/bin/sh\necho configured hook failed >&2\nexit 1\n");
+    }
+
+    private static void WriteCliCommandLog(string root)
+    {
+        string logsPath = Path.Combine(root, ".caicli", "logs");
+        Directory.CreateDirectory(logsPath);
+        File.WriteAllText(Path.Combine(logsPath, "2026-07-09.log"), "command=diff\n");
     }
 
     private static void RunGit(string workingDirectory, params string[] arguments)

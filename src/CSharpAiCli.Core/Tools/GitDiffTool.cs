@@ -103,6 +103,11 @@ public sealed class GitDiffTool : ITool
         truncated |= IsTruncated(untrackedFiles);
         foreach (string relativePath in ParseNullSeparatedPaths(untrackedFiles.Stdout, untrackedFiles.StdoutTruncated))
         {
+            if (IsCliCommandLogPath(relativePath))
+            {
+                continue;
+            }
+
             string[] arguments = stat
                 ? ["diff", "--no-index", "--stat", "--", "/dev/null", relativePath]
                 : ["diff", "--no-index", "--", "/dev/null", relativePath];
@@ -120,6 +125,12 @@ public sealed class GitDiffTool : ITool
         }
 
         return GitDiffReadResult.Succeeded(string.Join(Environment.NewLine + Environment.NewLine, outputs), truncated);
+    }
+
+    private static bool IsCliCommandLogPath(string relativePath)
+    {
+        string normalizedPath = relativePath.Replace('\\', '/');
+        return normalizedPath.StartsWith(".caicli/logs/", StringComparison.OrdinalIgnoreCase);
     }
 
     private static bool IsMissingHead(GitCommandResult result)
