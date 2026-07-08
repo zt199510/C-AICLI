@@ -206,6 +206,16 @@ public static class CliCommandFactory
             return 0;
         });
 
+        Command modelsCommand = new("models", "Show current model configuration and static model examples.");
+        modelsCommand.SetAction(parseResult =>
+        {
+            string? workspacePath = parseResult.GetValue(workspaceOption);
+            CliEnvironmentSnapshot snapshot = workspaceSnapshotProvider(workspacePath);
+            TryWriteCommandLog(commandLogger, "models", snapshot);
+            output.WriteLine(ModelsReport.Create(snapshot).ToDisplayText());
+            return 0;
+        });
+
         Command diffCommand = new("diff", "Show current git diff for the workspace.");
         Option<bool> diffStatOption = new("--stat")
         {
@@ -983,6 +993,7 @@ public static class CliCommandFactory
         rootCommand.Subcommands.Add(versionCommand);
         rootCommand.Subcommands.Add(doctorCommand);
         rootCommand.Subcommands.Add(statusCommand);
+        rootCommand.Subcommands.Add(modelsCommand);
         rootCommand.Subcommands.Add(diffCommand);
         rootCommand.Subcommands.Add(reviewCommand);
         rootCommand.Subcommands.Add(configCommand);

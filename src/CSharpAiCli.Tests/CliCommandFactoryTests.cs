@@ -92,6 +92,48 @@ public sealed class CliCommandFactoryTests
     }
 
     [Fact]
+    public void Models_command_writes_current_configuration_and_examples_without_api_key_or_model_client()
+    {
+        using TempDirectory temp = TempDirectory.Create();
+        using StringWriter output = new();
+        List<string> loggedCommands = [];
+        string? receivedWorkspace = null;
+
+        int exitCode = CliCommandFactory.Invoke(
+            CliCommandFactory.Create(
+                output,
+                workspacePath =>
+                {
+                    receivedWorkspace = workspacePath;
+                    return CreateSnapshot(
+                        workspacePath,
+                        apiKey: null,
+                        apiKeySource: "missing",
+                        model: "gpt-cli",
+                        baseUrl: "https://gateway.example.test/v1",
+                        baseUrlSource: "workspace config");
+                },
+                (commandName, _) => loggedCommands.Add(commandName),
+                _ => throw new InvalidOperationException("models must not create a chat model client")),
+            ["models", "--workspace", temp.Path],
+            output);
+
+        string text = output.ToString();
+        Assert.Equal(0, exitCode);
+        Assert.Equal(temp.Path, receivedWorkspace);
+        Assert.Equal(["models"], loggedCommands);
+        Assert.Contains("C# AI CLI models", text, StringComparison.Ordinal);
+        Assert.Contains("currentModel: gpt-cli", text, StringComparison.Ordinal);
+        Assert.Contains("currentModelSource: workspace config", text, StringComparison.Ordinal);
+        Assert.Contains("baseUrl: https://gateway.example.test/v1", text, StringComparison.Ordinal);
+        Assert.Contains("baseUrlSource: workspace config", text, StringComparison.Ordinal);
+        Assert.Contains("apiKey: missing", text, StringComparison.Ordinal);
+        Assert.Contains("modelListApi: not called", text, StringComparison.Ordinal);
+        Assert.Contains("recommendedModels:", text, StringComparison.Ordinal);
+        Assert.Contains("caicli config set model gpt-4.1-mini", text, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void Review_command_sends_current_diff_to_non_streaming_model_without_logging()
     {
         using TempDirectory temp = TempDirectory.Create();
