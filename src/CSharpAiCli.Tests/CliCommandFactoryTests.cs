@@ -92,13 +92,13 @@ public sealed class CliCommandFactoryTests
     }
 
     [Fact]
-    public void Review_command_sends_current_diff_to_non_streaming_model_and_logs_command()
+    public void Review_command_sends_current_diff_to_non_streaming_model_without_logging()
     {
         using TempDirectory temp = TempDirectory.Create();
         string filePath = InitializeGitRepository(temp.Path);
         File.AppendAllText(filePath, "changed\n");
         using StringWriter output = new();
-        List<string> loggedCommands = [];
+        bool loggerInvoked = false;
         string? receivedWorkspace = null;
         FakeChatModelClient chatClient = new(ChatModelResult.Success(new ChatResponse(
             Provider: "openai",
@@ -123,7 +123,11 @@ public sealed class CliCommandFactoryTests
                     receivedWorkspace = workspacePath;
                     return snapshot;
                 },
-                (commandName, _) => loggedCommands.Add(commandName),
+                (_, _) =>
+                {
+                    loggerInvoked = true;
+                    throw new InvalidOperationException("review must not write command logs");
+                },
                 _ => chatClient),
             ["review", "--workspace", temp.Path],
             output);
@@ -131,7 +135,7 @@ public sealed class CliCommandFactoryTests
         string text = output.ToString();
         Assert.Equal(0, exitCode);
         Assert.Equal(temp.Path, receivedWorkspace);
-        Assert.Equal(["review"], loggedCommands);
+        Assert.False(loggerInvoked);
         Assert.Null(chatClient.LastStreamingPrompt);
         Assert.NotNull(chatClient.LastNonStreamingPrompt);
         Assert.Contains("code review", chatClient.LastNonStreamingPrompt, StringComparison.OrdinalIgnoreCase);

@@ -242,7 +242,6 @@ public static class CliCommandFactory
         {
             string? workspacePath = parseResult.GetValue(workspaceOption);
             CliEnvironmentSnapshot snapshot = workspaceSnapshotProvider(workspacePath);
-            TryWriteCommandLog(commandLogger, "review", snapshot);
 
             GitDiffTool gitDiffTool = new(new WorkspaceGuard());
             ToolExecutionResult gitDiff = gitDiffTool.Execute(new ToolExecutionContext(
