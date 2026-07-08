@@ -5,7 +5,13 @@ public sealed record InstructionLoadResult(
     string? SourcePath,
     IReadOnlyList<string> Warnings)
 {
-    public IReadOnlyList<InstructionSource> Sources { get; init; } = [];
+    private readonly IReadOnlyList<InstructionSource>? sources;
+
+    public IReadOnlyList<InstructionSource> Sources
+    {
+        get => sources ?? CreateCompatibleSources(SourcePath);
+        init => sources = NormalizeSources(value, SourcePath);
+    }
 
     public bool HasInstructions => !string.IsNullOrWhiteSpace(Instructions);
 
@@ -38,17 +44,47 @@ public sealed record InstructionLoadResult(
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(instructions);
         ArgumentNullException.ThrowIfNull(sources);
-        if (sources.Count == 0)
+        IReadOnlyList<InstructionSource> normalizedSources = NormalizeSources(sources, sourcePath: null);
+        if (normalizedSources.Count == 0)
         {
             throw new ArgumentException("At least one instruction source is required.", nameof(sources));
         }
 
         return new InstructionLoadResult(
             Instructions: instructions,
-            SourcePath: sources[0].SourcePath,
+            SourcePath: normalizedSources[0].SourcePath,
             Warnings: warnings ?? [])
         {
-            Sources = sources.ToArray()
+            Sources = normalizedSources
         };
+    }
+
+    private static IReadOnlyList<InstructionSource> NormalizeSources(
+        IReadOnlyList<InstructionSource> sources,
+        string? sourcePath)
+    {
+        ArgumentNullException.ThrowIfNull(sources);
+
+        if (sources.Count == 0)
+        {
+            return CreateCompatibleSources(sourcePath);
+        }
+
+        InstructionSource[] normalizedSources = new InstructionSource[sources.Count];
+        for (int index = 0; index < sources.Count; index++)
+        {
+            InstructionSource source = sources[index]
+                ?? throw new ArgumentException("Instruction sources cannot contain null values.", nameof(sources));
+            normalizedSources[index] = new InstructionSource(source.SourcePath, index);
+        }
+
+        return normalizedSources;
+    }
+
+    private static IReadOnlyList<InstructionSource> CreateCompatibleSources(string? sourcePath)
+    {
+        return string.IsNullOrWhiteSpace(sourcePath)
+            ? []
+            : [new InstructionSource(sourcePath, 0)];
     }
 }
