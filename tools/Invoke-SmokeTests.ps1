@@ -41,6 +41,22 @@ function Invoke-CaiCli {
     }
 }
 
+function Invoke-Git {
+    param(
+        [Parameter(Mandatory = $true)]
+        [string[]]$Arguments,
+        [Parameter(Mandatory = $true)]
+        [string]$Name
+    )
+
+    $output = & git @Arguments 2>&1 | Out-String
+    if ($LASTEXITCODE -ne 0) {
+        throw "$Name expected git exit code 0 but got $LASTEXITCODE. Output:`n$output"
+    }
+
+    return $output
+}
+
 function Assert-ExitCode {
     param(
         [Parameter(Mandatory = $true)]
@@ -106,6 +122,32 @@ try {
     $doctor = Invoke-CaiCli -Arguments @("doctor", "--workspace", $workspace)
     Assert-ExitCode $doctor 0 "doctor"
     Assert-Contains $doctor.Output "api key: missing" "doctor"
+
+    $status = Invoke-CaiCli -Arguments @("status", "--workspace", $workspace)
+    Assert-ExitCode $status 0 "status"
+    Assert-Contains $status.Output "gitStatus: not a git repository" "status"
+
+    $models = Invoke-CaiCli -Arguments @("models", "--workspace", $workspace)
+    Assert-ExitCode $models 0 "models"
+    Assert-Contains $models.Output "modelListApi: not called" "models"
+    Assert-Contains $models.Output "apiKey: missing" "models"
+
+    $emptyHooks = Join-Path $TempRoot "empty-hooks"
+    New-Item -ItemType Directory -Path $emptyHooks -Force | Out-Null
+    Invoke-Git -Name "git init" -Arguments @("-C", $workspace, "-c", "commit.gpgSign=false", "-c", "core.hooksPath=$emptyHooks", "init") | Out-Null
+    Invoke-Git -Name "git config user email" -Arguments @("-C", $workspace, "config", "user.email", "smoke@example.test") | Out-Null
+    Invoke-Git -Name "git config user name" -Arguments @("-C", $workspace, "config", "user.name", "CSharp AI CLI Smoke") | Out-Null
+    Invoke-Git -Name "git add" -Arguments @("-C", $workspace, "-c", "commit.gpgSign=false", "-c", "core.hooksPath=$emptyHooks", "add", "note.txt") | Out-Null
+    Invoke-Git -Name "git commit" -Arguments @("-C", $workspace, "-c", "commit.gpgSign=false", "-c", "core.hooksPath=$emptyHooks", "commit", "--no-gpg-sign", "--no-verify", "-m", "Initial smoke commit") | Out-Null
+    Add-Content -LiteralPath (Join-Path $workspace "note.txt") -Value "changed" -Encoding UTF8
+
+    $diff = Invoke-CaiCli -Arguments @("diff", "--workspace", $workspace)
+    Assert-ExitCode $diff 0 "diff"
+    Assert-Contains $diff.Output "diff --git" "diff"
+
+    $diffStat = Invoke-CaiCli -Arguments @("diff", "--stat", "--workspace", $workspace)
+    Assert-ExitCode $diffStat 0 "diff stat"
+    Assert-Contains $diffStat.Output "1 file changed" "diff stat"
 
     $missingModel = Invoke-CaiCli -Arguments @("chat", "--workspace", $workspace, "hello")
     Assert-ExitCode $missingModel 1 "chat missing model"

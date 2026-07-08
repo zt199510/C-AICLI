@@ -131,6 +131,8 @@ caicli config unset baseUrl
 
 ```powershell
 caicli doctor
+caicli status
+caicli models
 caicli config get
 caicli config list
 caicli mcp list
@@ -139,4 +141,6 @@ caicli workflow list
 caicli workflow validate cpp
 ```
 
-`config get`, `config list`, `doctor`, and command logs report whether an API key is present and where it came from, but do not print the key value. `doctor` also reports model/source, base URL/source, backend/source, approval mode/source, and backend status.
+`config get`, `config list`, `doctor`, `status`, and command logs report whether an API key is present and where it came from, but do not print the key value. `doctor` also reports model/source, base URL/source, backend/source, approval mode/source, and backend status.
+
+`models` reads local configuration only. It reports the current model, base URL, sources, API key presence, and static configuration examples; it does not call a model list API and does not require an API key.

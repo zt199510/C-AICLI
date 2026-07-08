@@ -6,6 +6,8 @@
 |---|---|---|
 | `caicli version` | Accepted | Reports version, target framework, and release runtime. |
 | `caicli doctor` | Accepted | Diagnoses runtime, workspace, model/source, base URL/source, key presence/source, logs, and backend source/status. |
+| `caicli status` | Accepted | Reports workspace, git, and effective configuration state without requiring model credentials. |
+| `caicli models` | Accepted | Prints local current model/base URL/source and static examples only; does not call a model list API or require an API key. |
 | `caicli config get/list/set/unset` | Accepted | Reports effective config and writes user scalar config without printing secret values. |
 | Project instruction loading | Accepted | Loads root-to-leaf `AGENTS.md`/legacy `AICLI.md` sources for `chat` and agentic `exec`; `AGENTS.md` wins per directory, and reports show source order without contents. |
 | `caicli chat` | Accepted | Uses direct OpenAI Responses path with streaming renderer, configured OpenAI-compatible base URL, and `--cwd` instruction target selection. |
@@ -13,6 +15,8 @@
 | `chat --resume` | Accepted | Requires an existing transcript and sends normalized prior transcript context with the current prompt. |
 | `session list/show/rename/delete/export/clear` | Accepted | Lists local transcript summaries, shows one summary, renames or deletes one transcript by validated session name, exports JSON or markdown, and keeps `clear` as a compatibility alias for delete. |
 | `caicli exec` | Solidified | Agentic v1 surface routed through `IAgentRunner`; emits model/tool/final/error events and supports `--cwd` instruction target selection, `--output text|json`, loop limits, approval-gated tool actions, session transcript, and `--resume` context. Real direct SDK tool-call continuation is deferred. |
+| `caicli diff` / `diff --stat` | Accepted | Prints the current git diff or stat summary for the selected workspace. |
+| `caicli review` | Accepted | Sends the current git diff to the configured model for read-only review; supports text, `--json`, and `--output json`, and does not write logs, transcripts, files, patches, or run shell/patch tools. |
 | `caicli run` | Solidified | Deterministic direct-tool release smoke tasks: create smoke note, read file, run approved shell command. |
 | `tools list/call` | Solidified | Lists enabled tools and invokes one tool with JSON or `--arguments-file`. |
 | Workspace read/search tools | Accepted | Enforced by workspace guard. |
