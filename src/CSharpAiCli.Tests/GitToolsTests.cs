@@ -48,6 +48,40 @@ public sealed class GitToolsTests
     }
 
     [Fact]
+    public void Git_diff_reports_staged_tracked_file_in_temporary_repo()
+    {
+        using TempDirectory temp = TempDirectory.Create();
+        string filePath = InitializeGitRepository(temp.Path);
+        File.AppendAllText(filePath, "staged change\n");
+        RunGit(temp.Path, "add", "tracked.txt");
+        GitDiffTool tool = new(new WorkspaceGuard());
+
+        ToolExecutionResult result = tool.Execute(CreateContext(temp.Path));
+
+        Assert.True(result.Succeeded);
+        Assert.Contains("diff --git", result.Summary, StringComparison.Ordinal);
+        Assert.Contains("+staged change", result.Summary, StringComparison.Ordinal);
+        Assert.DoesNotContain("no diff", result.Summary, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Git_diff_reports_untracked_file_in_temporary_repo()
+    {
+        using TempDirectory temp = TempDirectory.Create();
+        InitializeGitRepository(temp.Path);
+        File.WriteAllText(Path.Combine(temp.Path, "new file.txt"), "fresh\n");
+        GitDiffTool tool = new(new WorkspaceGuard());
+
+        ToolExecutionResult result = tool.Execute(CreateContext(temp.Path));
+
+        Assert.True(result.Succeeded);
+        Assert.Contains("diff --git", result.Summary, StringComparison.Ordinal);
+        Assert.Contains("new file.txt", result.Summary, StringComparison.Ordinal);
+        Assert.Contains("+fresh", result.Summary, StringComparison.Ordinal);
+        Assert.DoesNotContain("no diff", result.Summary, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void Git_diff_reports_no_diff_for_clean_temporary_repo()
     {
         using TempDirectory temp = TempDirectory.Create();
@@ -74,6 +108,39 @@ public sealed class GitToolsTests
         Assert.Contains("tracked.txt", result.Summary, StringComparison.Ordinal);
         Assert.Contains("1 file changed", result.Summary, StringComparison.Ordinal);
         Assert.DoesNotContain("diff --git", result.Summary, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Git_diff_stat_reports_staged_and_untracked_files_in_temporary_repo()
+    {
+        using TempDirectory temp = TempDirectory.Create();
+        string filePath = InitializeGitRepository(temp.Path);
+        File.AppendAllText(filePath, "staged change\n");
+        RunGit(temp.Path, "add", "tracked.txt");
+        File.WriteAllText(Path.Combine(temp.Path, "new file.txt"), "fresh\n");
+        GitDiffTool tool = new(new WorkspaceGuard());
+
+        ToolExecutionResult result = tool.Execute(CreateContext(temp.Path, """{"stat":true}"""));
+
+        Assert.True(result.Succeeded);
+        Assert.Contains("tracked.txt", result.Summary, StringComparison.Ordinal);
+        Assert.Contains("new file.txt", result.Summary, StringComparison.Ordinal);
+        Assert.DoesNotContain("diff --git", result.Summary, StringComparison.Ordinal);
+        Assert.DoesNotContain("no diff", result.Summary, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Git_diff_warns_when_output_is_truncated()
+    {
+        using TempDirectory temp = TempDirectory.Create();
+        string filePath = InitializeGitRepository(temp.Path);
+        File.AppendAllText(filePath, new string('x', 70 * 1024) + "\n");
+        GitDiffTool tool = new(new WorkspaceGuard());
+
+        ToolExecutionResult result = tool.Execute(CreateContext(temp.Path));
+
+        Assert.True(result.Succeeded);
+        Assert.Contains("WARNING: git output was truncated; diff is incomplete.", result.Summary, StringComparison.Ordinal);
     }
 
     [Fact]

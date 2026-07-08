@@ -72,6 +72,29 @@ public sealed class CliCommandFactoryTests
     }
 
     [Fact]
+    public void Diff_command_writes_staged_and_untracked_changes_for_git_workspace()
+    {
+        using TempDirectory temp = TempDirectory.Create();
+        string filePath = InitializeGitRepository(temp.Path);
+        File.AppendAllText(filePath, "staged change\n");
+        RunGit(temp.Path, "add", "tracked.txt");
+        File.WriteAllText(Path.Combine(temp.Path, "new file.txt"), "fresh\n");
+        using StringWriter output = new();
+
+        int exitCode = CliCommandFactory
+            .Create(output, workspacePath => CreateSnapshot(workspacePath))
+            .Parse(["diff", "--workspace", temp.Path])
+            .Invoke();
+
+        string text = output.ToString();
+        Assert.Equal(0, exitCode);
+        Assert.Contains("+staged change", text, StringComparison.Ordinal);
+        Assert.Contains("new file.txt", text, StringComparison.Ordinal);
+        Assert.Contains("+fresh", text, StringComparison.Ordinal);
+        Assert.DoesNotContain("no diff", text, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void Diff_command_stat_writes_git_diff_stat()
     {
         using TempDirectory temp = TempDirectory.Create();
@@ -200,6 +223,95 @@ public sealed class CliCommandFactoryTests
         Assert.Contains("diff --git", chatClient.LastNonStreamingPrompt, StringComparison.Ordinal);
         Assert.Contains("+changed", chatClient.LastNonStreamingPrompt, StringComparison.Ordinal);
         Assert.Equal("Use the project review style.", chatClient.LastRequest?.Instructions);
+        Assert.Contains("review report", text, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Review_command_sends_staged_diff_to_non_streaming_model()
+    {
+        using TempDirectory temp = TempDirectory.Create();
+        string filePath = InitializeGitRepository(temp.Path);
+        File.AppendAllText(filePath, "staged change\n");
+        RunGit(temp.Path, "add", "tracked.txt");
+        using StringWriter output = new();
+        FakeChatModelClient chatClient = new(ChatModelResult.Success(new ChatResponse(
+            Provider: "openai",
+            Model: "gpt-test",
+            ResponseId: "resp_test",
+            Text: "review report")));
+
+        int exitCode = CliCommandFactory.Invoke(
+            CliCommandFactory.Create(
+                output,
+                workspacePath => CreateSnapshot(workspacePath, apiKey: "sk-test", apiKeySource: "OPENAI_API_KEY", model: "gpt-test"),
+                (_, _) => throw new InvalidOperationException("review must not write command logs"),
+                _ => chatClient),
+            ["review", "--workspace", temp.Path],
+            output);
+
+        Assert.Equal(0, exitCode);
+        Assert.NotNull(chatClient.LastNonStreamingPrompt);
+        Assert.Contains("diff --git", chatClient.LastNonStreamingPrompt, StringComparison.Ordinal);
+        Assert.Contains("+staged change", chatClient.LastNonStreamingPrompt, StringComparison.Ordinal);
+        Assert.DoesNotContain("no diff", chatClient.LastNonStreamingPrompt, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Review_command_sends_untracked_diff_to_non_streaming_model()
+    {
+        using TempDirectory temp = TempDirectory.Create();
+        InitializeGitRepository(temp.Path);
+        File.WriteAllText(Path.Combine(temp.Path, "new file.txt"), "fresh\n");
+        using StringWriter output = new();
+        FakeChatModelClient chatClient = new(ChatModelResult.Success(new ChatResponse(
+            Provider: "openai",
+            Model: "gpt-test",
+            ResponseId: "resp_test",
+            Text: "review report")));
+
+        int exitCode = CliCommandFactory.Invoke(
+            CliCommandFactory.Create(
+                output,
+                workspacePath => CreateSnapshot(workspacePath, apiKey: "sk-test", apiKeySource: "OPENAI_API_KEY", model: "gpt-test"),
+                (_, _) => throw new InvalidOperationException("review must not write command logs"),
+                _ => chatClient),
+            ["review", "--workspace", temp.Path],
+            output);
+
+        Assert.Equal(0, exitCode);
+        Assert.NotNull(chatClient.LastNonStreamingPrompt);
+        Assert.Contains("diff --git", chatClient.LastNonStreamingPrompt, StringComparison.Ordinal);
+        Assert.Contains("new file.txt", chatClient.LastNonStreamingPrompt, StringComparison.Ordinal);
+        Assert.Contains("+fresh", chatClient.LastNonStreamingPrompt, StringComparison.Ordinal);
+        Assert.DoesNotContain("no diff", chatClient.LastNonStreamingPrompt, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Review_command_output_warns_when_diff_is_truncated()
+    {
+        using TempDirectory temp = TempDirectory.Create();
+        string filePath = InitializeGitRepository(temp.Path);
+        File.AppendAllText(filePath, new string('x', 70 * 1024) + "\n");
+        using StringWriter output = new();
+        FakeChatModelClient chatClient = new(ChatModelResult.Success(new ChatResponse(
+            Provider: "openai",
+            Model: "gpt-test",
+            ResponseId: "resp_test",
+            Text: "review report")));
+
+        int exitCode = CliCommandFactory.Invoke(
+            CliCommandFactory.Create(
+                output,
+                workspacePath => CreateSnapshot(workspacePath, apiKey: "sk-test", apiKeySource: "OPENAI_API_KEY", model: "gpt-test"),
+                (_, _) => throw new InvalidOperationException("review must not write command logs"),
+                _ => chatClient),
+            ["review", "--workspace", temp.Path],
+            output);
+
+        string text = output.ToString();
+        Assert.Equal(0, exitCode);
+        Assert.Contains("WARNING: git output was truncated; diff is incomplete.", chatClient.LastNonStreamingPrompt, StringComparison.Ordinal);
+        Assert.Contains("WARNING: git output was truncated; diff is incomplete.", text, StringComparison.Ordinal);
         Assert.Contains("review report", text, StringComparison.Ordinal);
     }
 

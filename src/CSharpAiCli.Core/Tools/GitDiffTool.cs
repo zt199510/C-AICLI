@@ -4,6 +4,8 @@ namespace CSharpAiCli.Core;
 
 public sealed class GitDiffTool : ITool
 {
+    public const string TruncationWarning = "WARNING: git output was truncated; diff is incomplete.";
+    private static readonly IReadOnlySet<int> NoIndexDiffSuccessExitCodes = new HashSet<int> { 0, 1 };
     private readonly IWorkspaceGuard workspaceGuard;
     private readonly GitCommandRunner gitCommandRunner = new();
 
@@ -37,19 +39,107 @@ public sealed class GitDiffTool : ITool
             return guardResult.ToFailure();
         }
 
-        string gitArguments = stat ? "diff --stat --" : "diff --";
-        GitCommandResult result = gitCommandRunner.Run(guardResult.FullPath, gitArguments);
-        if (!result.Succeeded)
+        GitDiffReadResult diffResult = ReadCurrentDiff(guardResult.FullPath, stat);
+        if (diffResult.Failure is not null)
         {
-            return ToolExecutionResult.Failure(
-                NormalizeGitError(result),
-                string.IsNullOrWhiteSpace(result.Stderr) ? result.Summary : result.Stderr.Trim());
+            return diffResult.Failure;
         }
 
-        string output = string.IsNullOrWhiteSpace(result.Stdout)
+        string output = string.IsNullOrWhiteSpace(diffResult.Output)
             ? "no diff"
-            : result.Stdout.Trim();
+            : diffResult.Output.Trim();
+        if (diffResult.Truncated)
+        {
+            output = AppendTruncationWarning(output);
+        }
+
         return ToolExecutionResult.Success(output);
+    }
+
+    private GitDiffReadResult ReadCurrentDiff(string workspaceRoot, bool stat)
+    {
+        List<string> outputs = [];
+        bool truncated = false;
+
+        GitCommandResult trackedDiff = gitCommandRunner.Run(
+            workspaceRoot,
+            stat ? "diff --stat HEAD --" : "diff HEAD --");
+        if (!trackedDiff.Succeeded)
+        {
+            return GitDiffReadResult.Failed(ToGitFailure(trackedDiff));
+        }
+
+        truncated |= IsTruncated(trackedDiff);
+        AddOutput(outputs, trackedDiff.Stdout);
+
+        GitCommandResult untrackedFiles = gitCommandRunner.RunArgumentList(
+            workspaceRoot,
+            ["ls-files", "--others", "--exclude-standard", "-z"]);
+        if (!untrackedFiles.Succeeded)
+        {
+            return GitDiffReadResult.Failed(ToGitFailure(untrackedFiles));
+        }
+
+        truncated |= IsTruncated(untrackedFiles);
+        foreach (string relativePath in ParseNullSeparatedPaths(untrackedFiles.Stdout, untrackedFiles.StdoutTruncated))
+        {
+            string[] arguments = stat
+                ? ["diff", "--no-index", "--stat", "--", "/dev/null", relativePath]
+                : ["diff", "--no-index", "--", "/dev/null", relativePath];
+            GitCommandResult untrackedDiff = gitCommandRunner.RunArgumentList(
+                workspaceRoot,
+                arguments,
+                NoIndexDiffSuccessExitCodes);
+            if (!untrackedDiff.Succeeded)
+            {
+                return GitDiffReadResult.Failed(ToGitFailure(untrackedDiff));
+            }
+
+            truncated |= IsTruncated(untrackedDiff);
+            AddOutput(outputs, untrackedDiff.Stdout);
+        }
+
+        return GitDiffReadResult.Succeeded(string.Join(Environment.NewLine + Environment.NewLine, outputs), truncated);
+    }
+
+    private static IReadOnlyList<string> ParseNullSeparatedPaths(string text, bool truncated)
+    {
+        List<string> paths = text
+            .Split('\0', StringSplitOptions.RemoveEmptyEntries)
+            .ToList();
+        if (truncated && text.Length > 0 && text[^1] != '\0' && paths.Count > 0)
+        {
+            paths.RemoveAt(paths.Count - 1);
+        }
+
+        return paths;
+    }
+
+    private static void AddOutput(List<string> outputs, string output)
+    {
+        if (!string.IsNullOrWhiteSpace(output))
+        {
+            outputs.Add(output.Trim());
+        }
+    }
+
+    private static bool IsTruncated(GitCommandResult result)
+    {
+        return result.StdoutTruncated || result.StderrTruncated;
+    }
+
+    private static string AppendTruncationWarning(string output)
+    {
+        return string.IsNullOrWhiteSpace(output)
+            ? TruncationWarning
+            : output.TrimEnd() + Environment.NewLine + Environment.NewLine + TruncationWarning;
+    }
+
+    private static ToolExecutionResult ToGitFailure(GitCommandResult result)
+    {
+        return ToolExecutionResult.Failure(
+            NormalizeGitError(result),
+            string.IsNullOrWhiteSpace(result.Stderr) ? result.Summary : result.Stderr.Trim());
     }
 
     private static bool TryReadArguments(
@@ -101,5 +191,21 @@ public sealed class GitDiffTool : ITool
         return result.Stderr.Contains("not a git repository", StringComparison.OrdinalIgnoreCase)
             ? "git-not-repository"
             : result.ErrorCode ?? "git-diff-failed";
+    }
+
+    private sealed record GitDiffReadResult(
+        string Output,
+        bool Truncated,
+        ToolExecutionResult? Failure)
+    {
+        public static GitDiffReadResult Succeeded(string output, bool truncated)
+        {
+            return new GitDiffReadResult(output, truncated, null);
+        }
+
+        public static GitDiffReadResult Failed(ToolExecutionResult failure)
+        {
+            return new GitDiffReadResult(string.Empty, false, failure);
+        }
     }
 }

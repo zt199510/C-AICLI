@@ -291,7 +291,10 @@ public static class CliCommandFactory
             ChatModelResult result = chatModelClientFactory(snapshot).Send(request);
             if (result.Response is not null)
             {
-                WriteReviewReport(output, ReviewReport.Completed(result.Response), jsonRequested, outputMode);
+                ChatResponse response = gitDiff.Summary.Contains(GitDiffTool.TruncationWarning, StringComparison.Ordinal)
+                    ? PrependReviewWarning(result.Response, GitDiffTool.TruncationWarning)
+                    : result.Response;
+                WriteReviewReport(output, ReviewReport.Completed(response), jsonRequested, outputMode);
                 return 0;
             }
 
@@ -1196,6 +1199,14 @@ public static class CliCommandFactory
         output.WriteLine(IsJsonOutputRequested(jsonRequested, outputMode)
             ? report.ToJson()
             : report.ToDisplayText());
+    }
+
+    private static ChatResponse PrependReviewWarning(ChatResponse response, string warning)
+    {
+        string text = string.IsNullOrWhiteSpace(response.Text)
+            ? warning
+            : warning + Environment.NewLine + Environment.NewLine + response.Text.TrimStart('\r', '\n');
+        return response with { Text = text };
     }
 
     private static void WriteConfigEditResult(TextWriter output, ConfigFileEditResult result)
