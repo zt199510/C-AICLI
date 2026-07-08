@@ -8,6 +8,12 @@ namespace CSharpAiCli.Cli;
 
 public static class CliCommandFactory
 {
+    private const string InvalidConversationTranscriptSummary =
+        "Conversation transcript is missing or uses an unsupported schema version.";
+
+    private const string SessionStoreErrorSummary =
+        "Conversation session store operation failed.";
+
     public static RootCommand Create(TextWriter output)
     {
         return Create(
@@ -411,11 +417,13 @@ public static class CliCommandFactory
             int? timeoutSeconds = parseResult.GetValue(execTimeoutSecondsOption);
             string? session = parseResult.GetValue(execSessionOption);
             string? resume = parseResult.GetValue(execResumeOption);
+            bool sessionSupplied = IsOptionExplicit(parseResult, execSessionOption);
+            bool resumeSupplied = IsOptionExplicit(parseResult, execResumeOption);
             CliEnvironmentSnapshot snapshot = snapshotProvider(workspacePath);
             ApprovalMode? cliApprovalMode = GetApprovalOverride(approvalModeValue, parseResult.GetResult(execApprovalOption), approve);
             TryWriteCommandLog(commandLogger, "exec", snapshot);
 
-            if (!string.IsNullOrWhiteSpace(session) && !string.IsNullOrWhiteSpace(resume))
+            if (sessionSupplied && resumeSupplied)
             {
                 return WriteExecLocalValidationFailure(
                     output,
@@ -428,12 +436,12 @@ public static class CliCommandFactory
             IApprovalPolicy approvalPolicy = ApprovalPolicyResolver.Resolve(snapshot.Configuration.ApprovalMode, cliApprovalMode);
             ToolRegistry registry = CliToolFactory.CreateRegistry(snapshot, approvalPolicy);
             ToolExecutor executor = new(registry);
-            string? effectiveSession = !string.IsNullOrWhiteSpace(resume) ? resume : session;
+            string? effectiveSession = resumeSupplied ? resume : session;
             ConversationSessionName? sessionName = null;
             ConversationTranscript? transcript = null;
             ConversationTranscript? transcriptContext = null;
             IConversationStore? conversationStore = null;
-            if (!string.IsNullOrWhiteSpace(effectiveSession))
+            if (sessionSupplied || resumeSupplied)
             {
                 try
                 {
@@ -449,24 +457,31 @@ public static class CliCommandFactory
                         outputMode);
                 }
 
-                conversationStore = conversationStoreFactory(snapshot);
-                if (!string.IsNullOrWhiteSpace(resume))
+                try
                 {
-                    if (!conversationStore.TryLoad(sessionName, out transcript) || transcript is null)
+                    conversationStore = conversationStoreFactory(snapshot);
+                    if (resumeSupplied)
                     {
-                        return WriteExecLocalValidationFailure(
-                            output,
-                            "session-not-found",
-                            "Session transcript was not found.",
-                            jsonRequested,
-                            outputMode);
-                    }
+                        if (!conversationStore.TryLoad(sessionName, out transcript) || transcript is null)
+                        {
+                            return WriteExecLocalValidationFailure(
+                                output,
+                                "session-not-found",
+                                "Session transcript was not found.",
+                                jsonRequested,
+                                outputMode);
+                        }
 
-                    transcriptContext = transcript;
+                        transcriptContext = transcript;
+                    }
+                    else
+                    {
+                        transcript = conversationStore.LoadOrCreate(sessionName, utcNowProvider());
+                    }
                 }
-                else
+                catch (Exception exception) when (IsConversationStoreException(exception))
                 {
-                    transcript = conversationStore.LoadOrCreate(sessionName, utcNowProvider());
+                    return WriteExecConversationStoreFailure(output, exception, jsonRequested, outputMode);
                 }
             }
 
@@ -486,7 +501,14 @@ public static class CliCommandFactory
             AgentRunResult agentResult = runner.Run(request, transcript);
             if (sessionName is not null && transcript is not null && conversationStore is not null)
             {
-                conversationStore.Save(sessionName, transcript);
+                try
+                {
+                    conversationStore.Save(sessionName, transcript);
+                }
+                catch (Exception exception) when (IsConversationStoreException(exception))
+                {
+                    return WriteExecConversationStoreFailure(output, exception, jsonRequested, outputMode);
+                }
             }
 
             ExecResult execResult = AgentExecResultAdapter.FromAgentResult(agentResult);
@@ -780,6 +802,11 @@ public static class CliCommandFactory
         return approve ? ApprovalMode.Always : null;
     }
 
+    private static bool IsOptionExplicit<T>(ParseResult parseResult, Option<T> option)
+    {
+        return parseResult.GetResult(option) is { Implicit: false };
+    }
+
     private static void AddApprovalModeValidator(Option<string> option)
     {
         option.Validators.Add(result =>
@@ -944,6 +971,41 @@ public static class CliCommandFactory
 
         WriteSafeFailure(output, errorCode, summary);
         return 1;
+    }
+
+    private static int WriteExecConversationStoreFailure(
+        TextWriter output,
+        Exception exception,
+        bool jsonRequested,
+        string outputMode)
+    {
+        (string errorCode, string summary) = GetConversationStoreFailure(exception);
+        return WriteExecLocalValidationFailure(output, errorCode, summary, jsonRequested, outputMode);
+    }
+
+    private static (string ErrorCode, string Summary) GetConversationStoreFailure(Exception exception)
+    {
+        if (IsInvalidConversationTranscriptException(exception))
+        {
+            return ("session-transcript-invalid", InvalidConversationTranscriptSummary);
+        }
+
+        return ("session-store-error", SessionStoreErrorSummary);
+    }
+
+    private static bool IsInvalidConversationTranscriptException(Exception exception)
+    {
+        return exception is JsonException ||
+            exception is InvalidOperationException invalidOperationException &&
+            string.Equals(
+                invalidOperationException.Message,
+                InvalidConversationTranscriptSummary,
+                StringComparison.Ordinal);
+    }
+
+    private static bool IsConversationStoreException(Exception exception)
+    {
+        return exception is InvalidOperationException or IOException or UnauthorizedAccessException or JsonException or NotSupportedException;
     }
 
     private static string GetSafeSessionNameParseMessage(ArgumentException exception)

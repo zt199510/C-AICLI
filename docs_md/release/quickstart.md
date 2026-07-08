@@ -68,7 +68,7 @@ artifacts\release\caicli-0.1.0-win-x64\caicli.exe chat --resume smoke "What note
 ```
 
 `--session` creates or appends a transcript under `%USERPROFILE%\.caicli\sessions`.
-`--resume` requires an existing transcript and sends normalized prior transcript context with the new prompt. Missing sessions fail safely with `localErrorCode: session-not-found`.
+`--resume` requires an existing transcript and sends normalized prior transcript context with the new prompt. Missing sessions fail safely with `errorCode: session-not-found`.
 
 ## 6. Inspect Optional Features
 

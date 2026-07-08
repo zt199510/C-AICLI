@@ -37,13 +37,14 @@ public static class ConversationTranscriptMarkdownFormatter
     {
         ArgumentNullException.ThrowIfNull(transcript);
 
+        ConversationTranscriptSummary transcriptSummary = ConversationTranscriptSummary.FromTranscript(transcript);
         StringBuilder builder = new();
         builder.AppendLine($"# Session: {NormalizeMarkdownMetadata(transcript.SessionName)}");
         builder.AppendLine();
         builder.AppendLine($"- Created: {transcript.CreatedAtUtc.ToString("O", CultureInfo.InvariantCulture)}");
         builder.AppendLine($"- Updated: {transcript.UpdatedAtUtc.ToString("O", CultureInfo.InvariantCulture)}");
-        builder.AppendLine($"- Turns: {transcript.Messages.Count}");
-        builder.AppendLine($"- Tool calls: {transcript.ToolCalls.Count}");
+        builder.AppendLine($"- Turns: {transcriptSummary.TurnCount}");
+        builder.AppendLine($"- Tool calls: {transcriptSummary.ToolCallCount}");
         builder.AppendLine();
         builder.AppendLine("## Messages");
 

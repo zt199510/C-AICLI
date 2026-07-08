@@ -6,6 +6,23 @@ namespace CSharpAiCli.Tests;
 public sealed class ConversationTranscriptMarkdownFormatterTests
 {
     [Fact]
+    public void Format_uses_summary_turn_count_in_metadata()
+    {
+        ConversationTranscript transcript = ConversationTranscript.Create(
+            "smoke",
+            DateTimeOffset.Parse("2024-01-01T00:00:00Z"));
+        transcript.AddUserMessage("hello", DateTimeOffset.Parse("2024-01-01T00:00:01Z"));
+        transcript.AddAssistantMessage(
+            new ChatResponse("openai", "gpt-test", "hello back", "resp_test"),
+            DateTimeOffset.Parse("2024-01-01T00:00:02Z"));
+
+        string markdown = ConversationTranscriptMarkdownFormatter.Format(transcript);
+
+        Assert.Contains("- Turns: 1", markdown, StringComparison.Ordinal);
+        Assert.DoesNotContain("- Turns: 2", markdown, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void Format_escapes_hostile_session_name_metadata_outside_fences()
     {
         ConversationTranscript transcript = ConversationTranscript.Create(
