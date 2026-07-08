@@ -4,8 +4,11 @@ public sealed record InstructionLoadResult
 {
     private static readonly IReadOnlyList<InstructionSource> EmptySources =
         Array.AsReadOnly(Array.Empty<InstructionSource>());
+    private static readonly IReadOnlyList<string> EmptyWarnings =
+        Array.AsReadOnly(Array.Empty<string>());
 
     private IReadOnlyList<InstructionSource> sources = EmptySources;
+    private IReadOnlyList<string> warnings = EmptyWarnings;
 
     public InstructionLoadResult(
         string? Instructions,
@@ -13,7 +16,7 @@ public sealed record InstructionLoadResult
         IReadOnlyList<string> Warnings)
     {
         this.Instructions = Instructions;
-        this.Warnings = Warnings ?? [];
+        this.Warnings = Warnings;
         sources = CreateCompatibleSources(SourcePath);
     }
 
@@ -23,7 +26,11 @@ public sealed record InstructionLoadResult
         ? null
         : Sources[0].SourcePath;
 
-    public IReadOnlyList<string> Warnings { get; init; }
+    public IReadOnlyList<string> Warnings
+    {
+        get => warnings;
+        init => warnings = NormalizeWarnings(value);
+    }
 
     public IReadOnlyList<InstructionSource> Sources
     {
@@ -104,5 +111,21 @@ public sealed record InstructionLoadResult
         return string.IsNullOrWhiteSpace(sourcePath)
             ? EmptySources
             : Array.AsReadOnly([new InstructionSource(sourcePath, 0)]);
+    }
+
+    private static IReadOnlyList<string> NormalizeWarnings(IReadOnlyList<string>? warnings)
+    {
+        if (warnings is null || warnings.Count == 0)
+        {
+            return EmptyWarnings;
+        }
+
+        string[] normalizedWarnings = new string[warnings.Count];
+        for (int index = 0; index < warnings.Count; index++)
+        {
+            normalizedWarnings[index] = warnings[index];
+        }
+
+        return Array.AsReadOnly(normalizedWarnings);
     }
 }

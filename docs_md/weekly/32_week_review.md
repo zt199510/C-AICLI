@@ -10,7 +10,7 @@
 - Step 5：更新 `doctor`、`config get`、`config list` 的 snapshot/report 展示。
 - Step 6：`chat --cwd` 与 agentic `exec --cwd` 使用目标路径选择 instruction target，并将合并后的指令传给模型。
 - Step 7：补充 root/subdir、多文件合并、越界路径、空文件、同目录 `AGENTS.md` 优先等 edge-case tests。
-- Step 8：更新 release quickstart、security model、capability status、changelog 等文档。
+- Step 8：更新 release quickstart、security model、capability status 等文档。
 
 验证：
 - 命令：`D:\AI\.dotnet\dotnet.exe test src\CSharpAiCli.sln --no-restore`

@@ -125,6 +125,48 @@ public sealed class InstructionLoadResultTests
     }
 
     [Fact]
+    public void Warnings_are_defensively_copied_when_initialized()
+    {
+        List<string> warnings = ["Missing subdir AGENTS.md"];
+
+        InstructionLoadResult result = new(
+            Instructions: "Use project instructions.",
+            SourcePath: "workspace/AGENTS.md",
+            Warnings: warnings);
+
+        warnings.Add("Missing workspace AGENTS.md");
+
+        string warning = Assert.Single(result.Warnings);
+        Assert.Equal("Missing subdir AGENTS.md", warning);
+    }
+
+    [Fact]
+    public void Warnings_cannot_be_mutated_by_downcasting_returned_collection()
+    {
+        InstructionLoadResult result = InstructionLoadResult.Empty(
+            ["Missing workspace AGENTS.md"]);
+
+        if (result.Warnings is string[] array)
+        {
+            array[0] = "Changed warning";
+        }
+
+        if (result.Warnings is IList<string> list)
+        {
+            try
+            {
+                list[0] = "Changed warning again";
+            }
+            catch (NotSupportedException)
+            {
+            }
+        }
+
+        string warning = Assert.Single(result.Warnings);
+        Assert.Equal("Missing workspace AGENTS.md", warning);
+    }
+
+    [Fact]
     public void Sources_rejects_null_when_initialized()
     {
         Assert.Throws<ArgumentNullException>(() =>
