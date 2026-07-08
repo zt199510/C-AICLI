@@ -65,6 +65,25 @@ public sealed class GitToolsTests
     }
 
     [Fact]
+    public void Git_diff_reports_canceling_staged_and_unstaged_tracked_changes()
+    {
+        using TempDirectory temp = TempDirectory.Create();
+        string filePath = InitializeGitRepository(temp.Path);
+        File.WriteAllText(filePath, "staged\n");
+        RunGit(temp.Path, "add", "tracked.txt");
+        File.WriteAllText(filePath, "original\n");
+        GitDiffTool tool = new(new WorkspaceGuard());
+
+        ToolExecutionResult result = tool.Execute(CreateContext(temp.Path));
+
+        Assert.True(result.Succeeded);
+        Assert.Contains("+staged", result.Summary, StringComparison.Ordinal);
+        Assert.Contains("-staged", result.Summary, StringComparison.Ordinal);
+        Assert.Contains("+original", result.Summary, StringComparison.Ordinal);
+        Assert.DoesNotContain("no diff", result.Summary, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void Git_diff_reports_untracked_file_in_temporary_repo()
     {
         using TempDirectory temp = TempDirectory.Create();
@@ -129,6 +148,25 @@ public sealed class GitToolsTests
         Assert.Contains("tracked.txt", result.Summary, StringComparison.Ordinal);
         Assert.Contains("1 file changed", result.Summary, StringComparison.Ordinal);
         Assert.DoesNotContain("diff --git", result.Summary, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Git_diff_stat_reports_canceling_staged_and_unstaged_tracked_changes()
+    {
+        using TempDirectory temp = TempDirectory.Create();
+        string filePath = InitializeGitRepository(temp.Path);
+        File.WriteAllText(filePath, "staged\n");
+        RunGit(temp.Path, "add", "tracked.txt");
+        File.WriteAllText(filePath, "original\n");
+        GitDiffTool tool = new(new WorkspaceGuard());
+
+        ToolExecutionResult result = tool.Execute(CreateContext(temp.Path, """{"stat":true}"""));
+
+        Assert.True(result.Succeeded);
+        Assert.Contains("tracked.txt", result.Summary, StringComparison.Ordinal);
+        Assert.Contains("1 file changed", result.Summary, StringComparison.Ordinal);
+        Assert.DoesNotContain("diff --git", result.Summary, StringComparison.Ordinal);
+        Assert.DoesNotContain("no diff", result.Summary, StringComparison.Ordinal);
     }
 
     [Fact]

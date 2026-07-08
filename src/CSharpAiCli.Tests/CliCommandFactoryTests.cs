@@ -95,6 +95,29 @@ public sealed class CliCommandFactoryTests
     }
 
     [Fact]
+    public void Diff_command_writes_canceling_staged_and_unstaged_tracked_changes()
+    {
+        using TempDirectory temp = TempDirectory.Create();
+        string filePath = InitializeGitRepository(temp.Path);
+        File.WriteAllText(filePath, "staged\n");
+        RunGit(temp.Path, "add", "tracked.txt");
+        File.WriteAllText(filePath, "original\n");
+        using StringWriter output = new();
+
+        int exitCode = CliCommandFactory
+            .Create(output, workspacePath => CreateSnapshot(workspacePath))
+            .Parse(["diff", "--workspace", temp.Path])
+            .Invoke();
+
+        string text = output.ToString();
+        Assert.Equal(0, exitCode);
+        Assert.Contains("+staged", text, StringComparison.Ordinal);
+        Assert.Contains("-staged", text, StringComparison.Ordinal);
+        Assert.Contains("+original", text, StringComparison.Ordinal);
+        Assert.DoesNotContain("no diff", text, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void Diff_command_writes_staged_and_untracked_changes_for_no_head_git_workspace()
     {
         using TempDirectory temp = TempDirectory.Create();
@@ -137,6 +160,29 @@ public sealed class CliCommandFactoryTests
         Assert.Contains("tracked.txt", text, StringComparison.Ordinal);
         Assert.Contains("1 file changed", text, StringComparison.Ordinal);
         Assert.DoesNotContain("diff --git", text, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Diff_command_stat_writes_canceling_staged_and_unstaged_tracked_changes()
+    {
+        using TempDirectory temp = TempDirectory.Create();
+        string filePath = InitializeGitRepository(temp.Path);
+        File.WriteAllText(filePath, "staged\n");
+        RunGit(temp.Path, "add", "tracked.txt");
+        File.WriteAllText(filePath, "original\n");
+        using StringWriter output = new();
+
+        int exitCode = CliCommandFactory
+            .Create(output, workspacePath => CreateSnapshot(workspacePath))
+            .Parse(["diff", "--stat", "--workspace", temp.Path])
+            .Invoke();
+
+        string text = output.ToString();
+        Assert.Equal(0, exitCode);
+        Assert.Contains("tracked.txt", text, StringComparison.Ordinal);
+        Assert.Contains("1 file changed", text, StringComparison.Ordinal);
+        Assert.DoesNotContain("diff --git", text, StringComparison.Ordinal);
+        Assert.DoesNotContain("no diff", text, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -278,6 +324,38 @@ public sealed class CliCommandFactoryTests
         Assert.NotNull(chatClient.LastNonStreamingPrompt);
         Assert.Contains("diff --git", chatClient.LastNonStreamingPrompt, StringComparison.Ordinal);
         Assert.Contains("+staged change", chatClient.LastNonStreamingPrompt, StringComparison.Ordinal);
+        Assert.DoesNotContain("no diff", chatClient.LastNonStreamingPrompt, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Review_command_sends_canceling_staged_and_unstaged_tracked_diff_to_non_streaming_model()
+    {
+        using TempDirectory temp = TempDirectory.Create();
+        string filePath = InitializeGitRepository(temp.Path);
+        File.WriteAllText(filePath, "staged\n");
+        RunGit(temp.Path, "add", "tracked.txt");
+        File.WriteAllText(filePath, "original\n");
+        using StringWriter output = new();
+        FakeChatModelClient chatClient = new(ChatModelResult.Success(new ChatResponse(
+            Provider: "openai",
+            Model: "gpt-test",
+            ResponseId: "resp_test",
+            Text: "review report")));
+
+        int exitCode = CliCommandFactory.Invoke(
+            CliCommandFactory.Create(
+                output,
+                workspacePath => CreateSnapshot(workspacePath, apiKey: "sk-test", apiKeySource: "OPENAI_API_KEY", model: "gpt-test"),
+                (_, _) => throw new InvalidOperationException("review must not write command logs"),
+                _ => chatClient),
+            ["review", "--workspace", temp.Path],
+            output);
+
+        Assert.Equal(0, exitCode);
+        Assert.NotNull(chatClient.LastNonStreamingPrompt);
+        Assert.Contains("+staged", chatClient.LastNonStreamingPrompt, StringComparison.Ordinal);
+        Assert.Contains("-staged", chatClient.LastNonStreamingPrompt, StringComparison.Ordinal);
+        Assert.Contains("+original", chatClient.LastNonStreamingPrompt, StringComparison.Ordinal);
         Assert.DoesNotContain("no diff", chatClient.LastNonStreamingPrompt, StringComparison.Ordinal);
     }
 

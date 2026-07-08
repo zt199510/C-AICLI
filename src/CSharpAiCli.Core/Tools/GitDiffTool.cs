@@ -64,49 +64,33 @@ public sealed class GitDiffTool : ITool
         GitCommandResult head = gitCommandRunner.RunArgumentList(
             workspaceRoot,
             ["rev-parse", "--verify", "HEAD"]);
-        if (head.Succeeded)
-        {
-            truncated |= IsTruncated(head);
-            GitCommandResult trackedDiff = gitCommandRunner.Run(
-                workspaceRoot,
-                stat ? "diff --stat HEAD --" : "diff HEAD --");
-            if (!trackedDiff.Succeeded)
-            {
-                return GitDiffReadResult.Failed(ToGitFailure(trackedDiff));
-            }
-
-            truncated |= IsTruncated(trackedDiff);
-            AddOutput(outputs, trackedDiff.Stdout);
-        }
-        else if (IsMissingHead(head))
-        {
-            truncated |= IsTruncated(head);
-            GitCommandResult stagedDiff = gitCommandRunner.Run(
-                workspaceRoot,
-                stat ? "diff --cached --stat --" : "diff --cached --");
-            if (!stagedDiff.Succeeded)
-            {
-                return GitDiffReadResult.Failed(ToGitFailure(stagedDiff));
-            }
-
-            truncated |= IsTruncated(stagedDiff);
-            AddOutput(outputs, stagedDiff.Stdout);
-
-            GitCommandResult unstagedDiff = gitCommandRunner.Run(
-                workspaceRoot,
-                stat ? "diff --stat --" : "diff --");
-            if (!unstagedDiff.Succeeded)
-            {
-                return GitDiffReadResult.Failed(ToGitFailure(unstagedDiff));
-            }
-
-            truncated |= IsTruncated(unstagedDiff);
-            AddOutput(outputs, unstagedDiff.Stdout);
-        }
-        else
+        if (!head.Succeeded && !IsMissingHead(head))
         {
             return GitDiffReadResult.Failed(ToGitFailure(head));
         }
+
+        truncated |= IsTruncated(head);
+        GitCommandResult stagedDiff = gitCommandRunner.Run(
+            workspaceRoot,
+            stat ? "diff --cached --stat --" : "diff --cached --");
+        if (!stagedDiff.Succeeded)
+        {
+            return GitDiffReadResult.Failed(ToGitFailure(stagedDiff));
+        }
+
+        truncated |= IsTruncated(stagedDiff);
+        AddOutput(outputs, stagedDiff.Stdout);
+
+        GitCommandResult unstagedDiff = gitCommandRunner.Run(
+            workspaceRoot,
+            stat ? "diff --stat --" : "diff --");
+        if (!unstagedDiff.Succeeded)
+        {
+            return GitDiffReadResult.Failed(ToGitFailure(unstagedDiff));
+        }
+
+        truncated |= IsTruncated(unstagedDiff);
+        AddOutput(outputs, unstagedDiff.Stdout);
 
         GitCommandResult untrackedFiles = gitCommandRunner.RunArgumentList(
             workspaceRoot,
