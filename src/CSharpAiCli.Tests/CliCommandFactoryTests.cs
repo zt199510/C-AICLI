@@ -1234,6 +1234,92 @@ public sealed class CliCommandFactoryTests
     }
 
     [Fact]
+    public void Exec_command_passes_cwd_to_snapshot_provider_and_merged_instructions_to_agent_request()
+    {
+        using TempDirectory temp = TempDirectory.Create();
+        using StringWriter output = new();
+        string cwd = Path.Combine("src", "app");
+        string? receivedWorkspace = null;
+        string? receivedCwd = null;
+        FakeAgentRunner agentRunner = new(AgentRunResult.Success("agent completed task", []));
+        RootCommand command = CliCommandFactory.Create(
+            output,
+            (workspacePath, instructionTargetPath) =>
+            {
+                receivedWorkspace = workspacePath;
+                receivedCwd = instructionTargetPath;
+                string workspaceRoot = workspacePath ?? temp.Path;
+                return CreateSnapshot(
+                    workspacePath,
+                    apiKey: "sk-test-secret",
+                    apiKeySource: "OPENAI_API_KEY",
+                    model: "gpt-test")
+                    with
+                    {
+                        Instructions = InstructionLoadResult.Loaded(
+                            "Root rules\n\nApp rules",
+                            [
+                                new InstructionSource(Path.Combine(workspaceRoot, "AICLI.md"), 0),
+                                new InstructionSource(Path.Combine(workspaceRoot, "src", "app", "AICLI.md"), 1)
+                            ])
+                    };
+            },
+            (_, _) => { },
+            _ => new FakeChatModelClient(ChatModelResult.Success(new ChatResponse("openai", "gpt-test", "resp", ""))),
+            writer => new TerminalChatStreamingRenderer(writer),
+            _ => new FakeConversationStore(),
+            () => DateTimeOffset.Parse("2024-01-01T00:00:00Z"),
+            (_, _, _) => agentRunner);
+
+        int exitCode = CliCommandFactory.Invoke(
+            command,
+            ["exec", "--workspace", temp.Path, "--cwd", cwd, "summarize workspace"],
+            output);
+
+        Assert.Equal(0, exitCode);
+        Assert.Equal(temp.Path, receivedWorkspace);
+        Assert.Equal(cwd, receivedCwd);
+        Assert.Equal(temp.Path, agentRunner.LastRequest?.Workspace.RootPath);
+        Assert.Equal("Root rules\n\nApp rules", agentRunner.LastRequest?.Instructions);
+        Assert.DoesNotContain("Root rules", output.ToString(), StringComparison.Ordinal);
+        Assert.DoesNotContain("sk-test-secret", output.ToString(), StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Exec_command_without_cwd_keeps_legacy_snapshot_provider_compatibility()
+    {
+        using TempDirectory temp = TempDirectory.Create();
+        using StringWriter output = new();
+        string? receivedWorkspace = null;
+        FakeAgentRunner agentRunner = new(AgentRunResult.Success("agent completed task", []));
+
+        int exitCode = CliCommandFactory
+            .Create(
+                output,
+                workspacePath =>
+                {
+                    receivedWorkspace = workspacePath;
+                    return CreateSnapshot(
+                        workspacePath,
+                        apiKey: "sk-test-secret",
+                        apiKeySource: "OPENAI_API_KEY",
+                        model: "gpt-test");
+                },
+                (_, _) => { },
+                _ => new FakeChatModelClient(ChatModelResult.Success(new ChatResponse("openai", "gpt-test", "resp", ""))),
+                writer => new TerminalChatStreamingRenderer(writer),
+                _ => new FakeConversationStore(),
+                () => DateTimeOffset.Parse("2024-01-01T00:00:00Z"),
+                (_, _, _) => agentRunner)
+            .Parse(["exec", "--workspace", temp.Path, "summarize workspace"])
+            .Invoke();
+
+        Assert.Equal(0, exitCode);
+        Assert.Equal(temp.Path, receivedWorkspace);
+        Assert.Null(agentRunner.LastRequest?.Instructions);
+    }
+
+    [Fact]
     public void Exec_uses_injected_agent_runner_and_renders_success_json_output()
     {
         using TempDirectory temp = TempDirectory.Create();
@@ -3842,6 +3928,38 @@ public sealed class CliCommandFactoryTests
     }
 
     [Fact]
+    public void Chat_command_without_cwd_keeps_legacy_snapshot_provider_compatibility()
+    {
+        using TempDirectory temp = TempDirectory.Create();
+        using StringWriter output = new();
+        string? receivedWorkspace = null;
+        FakeChatModelClient chatClient = new(ChatModelResult.Success(new ChatResponse(
+            Provider: "openai",
+            Model: "gpt-test",
+            ResponseId: "resp_test",
+            Text: "fake model output")));
+
+        int exitCode = CliCommandFactory
+            .Create(
+                output,
+                workspacePath =>
+                {
+                    receivedWorkspace = workspacePath;
+                    return CreateSnapshot(workspacePath, apiKey: "sk-test", apiKeySource: "OPENAI_API_KEY", model: "gpt-test");
+                },
+                (_, _) => { },
+                _ => chatClient,
+                writer => new TerminalChatStreamingRenderer(writer))
+            .Parse(["chat", "--workspace", temp.Path, "hello model"])
+            .Invoke();
+
+        Assert.Equal(0, exitCode);
+        Assert.Equal(temp.Path, receivedWorkspace);
+        Assert.Equal("hello model", chatClient.LastRequest?.Prompt);
+        Assert.Null(chatClient.LastRequest?.Instructions);
+    }
+
+    [Fact]
     public void Chat_command_passes_workspace_instructions_to_model_request()
     {
         using StringWriter output = new();
@@ -3873,6 +3991,54 @@ public sealed class CliCommandFactoryTests
         Assert.Equal(0, exitCode);
         Assert.Equal("hello model", chatClient.LastRequest?.Prompt);
         Assert.Equal("Be concise.", chatClient.LastRequest?.Instructions);
+    }
+
+    [Fact]
+    public void Chat_command_passes_cwd_to_snapshot_provider_and_merged_instructions_to_model_request()
+    {
+        using TempDirectory temp = TempDirectory.Create();
+        using StringWriter output = new();
+        string cwd = Path.Combine("src", "app");
+        string? receivedWorkspace = null;
+        string? receivedCwd = null;
+        FakeChatModelClient chatClient = new(ChatModelResult.Success(new ChatResponse(
+            Provider: "openai",
+            Model: "gpt-test",
+            ResponseId: "resp_test",
+            Text: "fake model output")));
+        RootCommand command = CliCommandFactory.Create(
+            output,
+            (workspacePath, instructionTargetPath) =>
+            {
+                receivedWorkspace = workspacePath;
+                receivedCwd = instructionTargetPath;
+                string workspaceRoot = workspacePath ?? temp.Path;
+                return CreateSnapshot(workspacePath, apiKey: "sk-test", apiKeySource: "OPENAI_API_KEY", model: "gpt-test")
+                    with
+                    {
+                        Instructions = InstructionLoadResult.Loaded(
+                            "Root rules\n\nApp rules",
+                            [
+                                new InstructionSource(Path.Combine(workspaceRoot, "AICLI.md"), 0),
+                                new InstructionSource(Path.Combine(workspaceRoot, "src", "app", "AICLI.md"), 1)
+                            ])
+                    };
+            },
+            (_, _) => { },
+            _ => chatClient,
+            writer => new TerminalChatStreamingRenderer(writer),
+            _ => new FakeConversationStore(),
+            () => DateTimeOffset.Parse("2024-01-01T00:00:00Z"),
+            (_, _, _) => new FakeAgentRunner(AgentRunResult.Success("agent completed task", [])));
+
+        int exitCode = CliCommandFactory.Invoke(command, ["chat", "--workspace", temp.Path, "--cwd", cwd, "hello model"], output);
+
+        Assert.Equal(0, exitCode);
+        Assert.Equal(temp.Path, receivedWorkspace);
+        Assert.Equal(cwd, receivedCwd);
+        Assert.Equal("hello model", chatClient.LastRequest?.Prompt);
+        Assert.Equal("Root rules\n\nApp rules", chatClient.LastRequest?.Instructions);
+        Assert.DoesNotContain("Root rules", output.ToString(), StringComparison.Ordinal);
     }
 
     private static CliEnvironmentSnapshot CreateSnapshot(string? workspacePath)
