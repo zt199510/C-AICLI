@@ -95,6 +95,45 @@ public sealed class DoctorReportTests
         Assert.Contains("instruction warning: ignored instruction file over 4 bytes", text);
     }
 
+    [Fact]
+    public void Create_prints_no_instruction_sources_when_none_are_loaded()
+    {
+        CliEnvironmentSnapshot snapshot = CreateSnapshot(
+            apiKey: null,
+            apiKeySource: "missing");
+
+        string text = DoctorReport.Create(snapshot).ToDisplayText();
+
+        Assert.Contains("instruction sources: none", text);
+    }
+
+    [Fact]
+    public void Create_prints_instruction_source_paths_in_order_without_instruction_content()
+    {
+        string rootInstructionPath = Path.Combine("workspace-root", "AGENTS.md");
+        string nestedInstructionPath = Path.Combine("workspace-root", "src", "AGENTS.md");
+        CliEnvironmentSnapshot snapshot = CreateSnapshot(
+            apiKey: null,
+            apiKeySource: "missing")
+            with
+            {
+                Instructions = InstructionLoadResult.Loaded(
+                    "Root guidance.\n\nNested secret instruction: sk-instruction-secret",
+                    [
+                        new InstructionSource(rootInstructionPath, 12),
+                        new InstructionSource(nestedInstructionPath, 99)
+                    ])
+            };
+
+        string text = DoctorReport.Create(snapshot).ToDisplayText();
+
+        Assert.Contains($"instruction source: 0: {rootInstructionPath}", text);
+        Assert.Contains($"instruction source: 1: {nestedInstructionPath}", text);
+        Assert.DoesNotContain("instruction sources: none", text, StringComparison.Ordinal);
+        Assert.DoesNotContain("Root guidance.", text, StringComparison.Ordinal);
+        Assert.DoesNotContain("sk-instruction-secret", text, StringComparison.Ordinal);
+    }
+
     private static CliEnvironmentSnapshot CreateSnapshot(
         string? apiKey,
         string apiKeySource,

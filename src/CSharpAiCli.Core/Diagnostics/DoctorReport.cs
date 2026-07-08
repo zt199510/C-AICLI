@@ -32,6 +32,8 @@ public sealed record DoctorReport(IReadOnlyList<string> Lines)
             $"agent backend status: {FormatAgentBackendStatus(snapshot.Configuration.AgentBackend)}"
         ];
 
+        AddInstructionSources(lines, snapshot.Instructions.Sources);
+
         foreach (string warning in snapshot.Configuration.Warnings)
         {
             lines.Add($"config warning: {warning}");
@@ -81,5 +83,19 @@ public sealed record DoctorReport(IReadOnlyList<string> Lines)
             "framework" => "unavailable: Microsoft Agent Framework adapter is an experimental stub and no framework package is enabled.",
             _ => "unknown"
         };
+    }
+
+    private static void AddInstructionSources(List<string> lines, IReadOnlyList<InstructionSource> sources)
+    {
+        if (sources.Count == 0)
+        {
+            lines.Add("instruction sources: none");
+            return;
+        }
+
+        foreach (InstructionSource source in sources)
+        {
+            lines.Add($"instruction source: {source.Order}: {source.SourcePath}");
+        }
     }
 }
