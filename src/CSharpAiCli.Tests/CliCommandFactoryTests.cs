@@ -2622,6 +2622,70 @@ public sealed class CliCommandFactoryTests
     }
 
     [Fact]
+    public void Session_export_format_json_with_malformed_file_transcript_returns_safe_failure()
+    {
+        using TempDirectory temp = TempDirectory.Create();
+        string userHome = Path.Combine(temp.Path, "user-home");
+        string workspace = Path.Combine(temp.Path, "workspace");
+        Directory.CreateDirectory(workspace);
+        string sessionDirectory = Path.Combine(userHome, ".caicli", "sessions");
+        Directory.CreateDirectory(sessionDirectory);
+        File.WriteAllText(Path.Combine(sessionDirectory, "smoke.transcript.json"), """{"schemaVersion":""");
+        using StringWriter exportOutput = new();
+        CliEnvironmentSnapshot snapshot = CreateSnapshot(
+            workspacePath: workspace,
+            apiKey: null,
+            apiKeySource: "missing",
+            model: "not configured",
+            userConfigPath: Path.Combine(userHome, ".caicli", "config.json"));
+
+        int exportExitCode = CliCommandFactory.Invoke(
+            CliCommandFactory.Create(exportOutput, _ => snapshot),
+            ["session", "export", "--format", "json", "smoke"],
+            exportOutput);
+
+        string text = exportOutput.ToString();
+        Assert.Equal(1, exportExitCode);
+        Assert.Contains("status: failed", text);
+        Assert.Contains("errorCode: session-transcript-invalid", text);
+        Assert.Contains("Conversation transcript is missing or uses an unsupported schema version.", text);
+        Assert.DoesNotContain("JsonReaderException", text, StringComparison.Ordinal);
+        Assert.DoesNotContain("System.Text.Json", text, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Session_export_format_markdown_with_malformed_file_transcript_returns_safe_failure()
+    {
+        using TempDirectory temp = TempDirectory.Create();
+        string userHome = Path.Combine(temp.Path, "user-home");
+        string workspace = Path.Combine(temp.Path, "workspace");
+        Directory.CreateDirectory(workspace);
+        string sessionDirectory = Path.Combine(userHome, ".caicli", "sessions");
+        Directory.CreateDirectory(sessionDirectory);
+        File.WriteAllText(Path.Combine(sessionDirectory, "smoke.transcript.json"), """{"schemaVersion":""");
+        using StringWriter exportOutput = new();
+        CliEnvironmentSnapshot snapshot = CreateSnapshot(
+            workspacePath: workspace,
+            apiKey: null,
+            apiKeySource: "missing",
+            model: "not configured",
+            userConfigPath: Path.Combine(userHome, ".caicli", "config.json"));
+
+        int exportExitCode = CliCommandFactory.Invoke(
+            CliCommandFactory.Create(exportOutput, _ => snapshot),
+            ["session", "export", "--format", "markdown", "smoke"],
+            exportOutput);
+
+        string text = exportOutput.ToString();
+        Assert.Equal(1, exportExitCode);
+        Assert.Contains("status: failed", text);
+        Assert.Contains("errorCode: session-transcript-invalid", text);
+        Assert.Contains("Conversation transcript is missing or uses an unsupported schema version.", text);
+        Assert.DoesNotContain("JsonReaderException", text, StringComparison.Ordinal);
+        Assert.DoesNotContain("System.Text.Json", text, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void Session_export_format_markdown_prints_safe_readable_transcript()
     {
         using StringWriter output = new();
@@ -2813,6 +2877,38 @@ public sealed class CliCommandFactoryTests
     }
 
     [Fact]
+    public void Session_list_with_malformed_file_transcript_returns_safe_failure()
+    {
+        using TempDirectory temp = TempDirectory.Create();
+        string userHome = Path.Combine(temp.Path, "user-home");
+        string workspace = Path.Combine(temp.Path, "workspace");
+        Directory.CreateDirectory(workspace);
+        string sessionDirectory = Path.Combine(userHome, ".caicli", "sessions");
+        Directory.CreateDirectory(sessionDirectory);
+        File.WriteAllText(Path.Combine(sessionDirectory, "smoke.transcript.json"), """{"schemaVersion":""");
+        using StringWriter output = new();
+        CliEnvironmentSnapshot snapshot = CreateSnapshot(
+            workspacePath: workspace,
+            apiKey: null,
+            apiKeySource: "missing",
+            model: "not configured",
+            userConfigPath: Path.Combine(userHome, ".caicli", "config.json"));
+
+        int exitCode = CliCommandFactory.Invoke(
+            CliCommandFactory.Create(output, _ => snapshot),
+            ["session", "list"],
+            output);
+
+        string text = output.ToString();
+        Assert.Equal(1, exitCode);
+        Assert.Contains("status: failed", text);
+        Assert.Contains("errorCode: session-transcript-invalid", text);
+        Assert.Contains("Conversation transcript is missing or uses an unsupported schema version.", text);
+        Assert.DoesNotContain("JsonReaderException", text, StringComparison.Ordinal);
+        Assert.DoesNotContain("System.Text.Json", text, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void Session_list_writes_empty_status_for_empty_store()
     {
         using StringWriter output = new();
@@ -2959,6 +3055,44 @@ public sealed class CliCommandFactoryTests
 
         Assert.Equal(0, exitCode);
         Assert.Equal(["session show"], loggedCommands);
+    }
+
+    [Fact]
+    public void Session_commands_wrap_expected_store_failures_without_leaking_details()
+    {
+        static RootCommand CreateCommand(StringWriter output, FakeConversationStore store)
+        {
+            return CliCommandFactory.Create(
+                output,
+                CreateSnapshot,
+                (_, _) => { },
+                _ => new FakeChatModelClient(ChatModelResult.Success(new ChatResponse("openai", "gpt-test", "resp_test", "ok"))),
+                writer => new TerminalChatStreamingRenderer(writer),
+                _ => store,
+                () => DateTimeOffset.Parse("2024-01-03T00:00:00Z"));
+        }
+
+        foreach ((string[] args, FakeConversationStore store) in new[]
+        {
+            (new[] { "session", "list" }, new FakeConversationStore { ListSummariesException = new IOException("cannot read C:\\secret\\smoke.transcript.json") }),
+            (new[] { "session", "show", "smoke" }, new FakeConversationStore { TryGetSummaryException = new IOException("cannot read C:\\secret\\smoke.transcript.json") }),
+            (new[] { "session", "export", "--format", "markdown", "smoke" }, new FakeConversationStore { TryLoadException = new IOException("cannot read C:\\secret\\smoke.transcript.json") }),
+            (new[] { "session", "clear", "smoke" }, new FakeConversationStore { DeleteException = new IOException("cannot delete C:\\secret\\smoke.transcript.json") }),
+            (new[] { "session", "delete", "smoke" }, new FakeConversationStore { DeleteException = new IOException("cannot delete C:\\secret\\smoke.transcript.json") }),
+            (new[] { "session", "rename", "smoke", "archive" }, new FakeConversationStore { RenameException = new IOException("cannot move C:\\secret\\smoke.transcript.json") }),
+        })
+        {
+            using StringWriter output = new();
+            int exitCode = CliCommandFactory.Invoke(CreateCommand(output, store), args, output);
+
+            string text = output.ToString();
+            Assert.Equal(1, exitCode);
+            Assert.Contains("status: failed", text);
+            Assert.Contains("errorCode: session-store-error", text);
+            Assert.Contains("Conversation session store operation failed.", text);
+            Assert.DoesNotContain("C:\\secret", text, StringComparison.Ordinal);
+            Assert.DoesNotContain("System.", text, StringComparison.Ordinal);
+        }
     }
 
     [Fact]
@@ -4448,6 +4582,11 @@ public sealed class CliCommandFactoryTests
         public bool DeleteResult { get; init; }
         public Exception? LoadOrCreateException { get; init; }
         public Exception? SaveException { get; init; }
+        public Exception? TryLoadException { get; init; }
+        public Exception? ListSummariesException { get; init; }
+        public Exception? TryGetSummaryException { get; init; }
+        public Exception? RenameException { get; init; }
+        public Exception? DeleteException { get; init; }
         public ConversationTranscript Transcript { get; init; } = ConversationTranscript.Create(
             "smoke",
             DateTimeOffset.Parse("2024-01-01T00:00:00Z"));
@@ -4462,6 +4601,11 @@ public sealed class CliCommandFactoryTests
         public bool TryLoad(ConversationSessionName sessionName, out ConversationTranscript? transcript)
         {
             TryLoadedSessionName = sessionName;
+            if (TryLoadException is not null)
+            {
+                throw TryLoadException;
+            }
+
             transcript = TryLoadResult ? Transcript : null;
             return TryLoadResult;
         }
@@ -4491,11 +4635,21 @@ public sealed class CliCommandFactoryTests
 
         public IReadOnlyList<ConversationTranscriptSummary> ListSummaries()
         {
+            if (ListSummariesException is not null)
+            {
+                throw ListSummariesException;
+            }
+
             return Summaries;
         }
 
         public bool TryGetSummary(ConversationSessionName sessionName, out ConversationTranscriptSummary? summary)
         {
+            if (TryGetSummaryException is not null)
+            {
+                throw TryGetSummaryException;
+            }
+
             summary = Summaries.FirstOrDefault(candidate =>
                 string.Equals(candidate.Name, sessionName.Value, StringComparison.Ordinal));
             return summary is not null;
@@ -4505,12 +4659,22 @@ public sealed class CliCommandFactoryTests
         {
             RenamedSourceSessionName = sourceSessionName;
             RenamedDestinationSessionName = destinationSessionName;
+            if (RenameException is not null)
+            {
+                throw RenameException;
+            }
+
             return RenameResult;
         }
 
         public bool Delete(ConversationSessionName sessionName)
         {
             DeletedSessionName = sessionName;
+            if (DeleteException is not null)
+            {
+                throw DeleteException;
+            }
+
             return DeleteResult;
         }
     }

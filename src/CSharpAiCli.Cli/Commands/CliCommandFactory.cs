@@ -602,8 +602,15 @@ public static class CliCommandFactory
             string? workspacePath = parseResult.GetValue(workspaceOption);
             CliEnvironmentSnapshot snapshot = snapshotProvider(workspacePath);
             TryWriteCommandLog(commandLogger, "session list", snapshot);
-            WriteSessionList(output, conversationStoreFactory(snapshot).ListSummaries());
-            return 0;
+            try
+            {
+                WriteSessionList(output, conversationStoreFactory(snapshot).ListSummaries());
+                return 0;
+            }
+            catch (Exception exception) when (IsConversationStoreException(exception))
+            {
+                return WriteSessionConversationStoreFailure(output, exception);
+            }
         });
         sessionShowCommand.SetAction(parseResult =>
         {
@@ -611,7 +618,14 @@ public static class CliCommandFactory
             string name = parseResult.GetValue(sessionNameArgument) ?? string.Empty;
             CliEnvironmentSnapshot snapshot = snapshotProvider(workspacePath);
             TryWriteCommandLog(commandLogger, "session show", snapshot);
-            return ShowSession(output, conversationStoreFactory(snapshot), name);
+            try
+            {
+                return ShowSession(output, conversationStoreFactory(snapshot), name);
+            }
+            catch (Exception exception) when (IsConversationStoreException(exception))
+            {
+                return WriteSessionConversationStoreFailure(output, exception);
+            }
         });
         sessionExportCommand.SetAction(parseResult =>
         {
@@ -620,12 +634,19 @@ public static class CliCommandFactory
             string format = parseResult.GetValue(sessionExportFormatOption) ?? "json";
             CliEnvironmentSnapshot snapshot = snapshotProvider(workspacePath);
             TryWriteCommandLog(commandLogger, "session export", snapshot);
-            if (string.Equals(format, "markdown", StringComparison.OrdinalIgnoreCase))
+            try
             {
-                return ExportSessionMarkdown(output, conversationStoreFactory(snapshot), name);
-            }
+                if (string.Equals(format, "markdown", StringComparison.OrdinalIgnoreCase))
+                {
+                    return ExportSessionMarkdown(output, conversationStoreFactory(snapshot), name);
+                }
 
-            return ExportSessionJson(output, snapshot, name);
+                return ExportSessionJson(output, snapshot, name);
+            }
+            catch (Exception exception) when (IsConversationStoreException(exception))
+            {
+                return WriteSessionConversationStoreFailure(output, exception);
+            }
         });
         sessionClearCommand.SetAction(parseResult =>
         {
@@ -633,7 +654,14 @@ public static class CliCommandFactory
             string name = parseResult.GetValue(sessionNameArgument) ?? string.Empty;
             CliEnvironmentSnapshot snapshot = snapshotProvider(workspacePath);
             TryWriteCommandLog(commandLogger, "session clear", snapshot);
-            return DeleteSession(output, conversationStoreFactory(snapshot), name, "cleared", missingExitCode: 0, writeMissingErrorCode: false);
+            try
+            {
+                return DeleteSession(output, conversationStoreFactory(snapshot), name, "cleared", missingExitCode: 0, writeMissingErrorCode: false);
+            }
+            catch (Exception exception) when (IsConversationStoreException(exception))
+            {
+                return WriteSessionConversationStoreFailure(output, exception);
+            }
         });
         sessionDeleteCommand.SetAction(parseResult =>
         {
@@ -641,7 +669,14 @@ public static class CliCommandFactory
             string name = parseResult.GetValue(sessionNameArgument) ?? string.Empty;
             CliEnvironmentSnapshot snapshot = snapshotProvider(workspacePath);
             TryWriteCommandLog(commandLogger, "session delete", snapshot);
-            return DeleteSession(output, conversationStoreFactory(snapshot), name, "deleted", missingExitCode: 1, writeMissingErrorCode: true);
+            try
+            {
+                return DeleteSession(output, conversationStoreFactory(snapshot), name, "deleted", missingExitCode: 1, writeMissingErrorCode: true);
+            }
+            catch (Exception exception) when (IsConversationStoreException(exception))
+            {
+                return WriteSessionConversationStoreFailure(output, exception);
+            }
         });
         sessionRenameCommand.SetAction(parseResult =>
         {
@@ -650,7 +685,14 @@ public static class CliCommandFactory
             string destination = parseResult.GetValue(sessionRenameDestinationArgument) ?? string.Empty;
             CliEnvironmentSnapshot snapshot = snapshotProvider(workspacePath);
             TryWriteCommandLog(commandLogger, "session rename", snapshot);
-            return RenameSession(output, conversationStoreFactory(snapshot), source, destination);
+            try
+            {
+                return RenameSession(output, conversationStoreFactory(snapshot), source, destination);
+            }
+            catch (Exception exception) when (IsConversationStoreException(exception))
+            {
+                return WriteSessionConversationStoreFailure(output, exception);
+            }
         });
         sessionCommand.Subcommands.Add(sessionListCommand);
         sessionCommand.Subcommands.Add(sessionShowCommand);
@@ -1015,6 +1057,13 @@ public static class CliCommandFactory
         return 1;
     }
 
+    private static int WriteSessionConversationStoreFailure(TextWriter output, Exception exception)
+    {
+        (string errorCode, string summary) = GetConversationStoreFailure(exception);
+        WriteSafeFailure(output, errorCode, summary);
+        return 1;
+    }
+
     private static (string ErrorCode, string Summary) GetConversationStoreFailure(Exception exception)
     {
         if (IsInvalidConversationTranscriptException(exception))
@@ -1112,13 +1161,14 @@ public static class CliCommandFactory
     private static int ExportSessionJson(TextWriter output, CliEnvironmentSnapshot snapshot, string name)
     {
         ConversationSessionName sessionName = ConversationSessionName.Parse(name);
-        string path = ResolveSessionPath(snapshot, sessionName);
-        if (!File.Exists(path))
+        FileConversationStore conversationStore = FileConversationStore.Create(snapshot);
+        if (!conversationStore.TryLoad(sessionName, out ConversationTranscript? transcript) || transcript is null)
         {
             WriteSessionNotFound(output);
             return 1;
         }
 
+        string path = ResolveSessionPath(snapshot, sessionName);
         output.Write(File.ReadAllText(path));
         return 0;
     }

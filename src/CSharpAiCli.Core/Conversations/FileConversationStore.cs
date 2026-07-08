@@ -5,6 +5,7 @@ namespace CSharpAiCli.Core;
 public sealed class FileConversationStore : IConversationStore
 {
     private const string InvalidTranscriptMessage = "Conversation transcript is missing or uses an unsupported schema version.";
+    private const string TranscriptFileSuffix = ".transcript.json";
 
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web)
     {
@@ -142,6 +143,7 @@ public sealed class FileConversationStore : IConversationStore
         ArgumentNullException.ThrowIfNull(sessionName);
         ArgumentNullException.ThrowIfNull(transcript);
 
+        ValidateTranscriptSessionMatch(sessionName, transcript);
         Directory.CreateDirectory(sessionDirectory);
         string path = GetPath(sessionName);
         string json = JsonSerializer.Serialize(transcript, JsonOptions);
@@ -183,7 +185,8 @@ public sealed class FileConversationStore : IConversationStore
                 throw new InvalidOperationException(InvalidTranscriptMessage);
             }
 
-            ValidateTranscriptShape(transcript);
+            ConversationSessionName transcriptSessionName = ValidateTranscriptShape(transcript);
+            ValidateTranscriptPathBinding(path, transcriptSessionName);
 
             return transcript;
         }
@@ -195,7 +198,7 @@ public sealed class FileConversationStore : IConversationStore
         }
     }
 
-    private static void ValidateTranscriptShape(ConversationTranscript transcript)
+    private static ConversationSessionName ValidateTranscriptShape(ConversationTranscript transcript)
     {
         if (string.IsNullOrWhiteSpace(transcript.SessionName) ||
             transcript.CreatedAtUtc == default ||
@@ -210,11 +213,40 @@ public sealed class FileConversationStore : IConversationStore
 
         try
         {
-            _ = ConversationSessionName.Parse(transcript.SessionName);
+            return ConversationSessionName.Parse(transcript.SessionName);
         }
         catch (ArgumentException exception)
         {
             throw new InvalidOperationException(InvalidTranscriptMessage, exception);
+        }
+    }
+
+    private static void ValidateTranscriptPathBinding(string path, ConversationSessionName transcriptSessionName)
+    {
+        string fileName = Path.GetFileName(path);
+        StringComparison comparison = OperatingSystem.IsWindows()
+            ? StringComparison.OrdinalIgnoreCase
+            : StringComparison.Ordinal;
+        if (!fileName.EndsWith(TranscriptFileSuffix, comparison))
+        {
+            throw new InvalidOperationException(InvalidTranscriptMessage);
+        }
+
+        string fileSafeName = fileName[..^TranscriptFileSuffix.Length];
+        if (!string.Equals(fileSafeName, transcriptSessionName.FileSafeName, comparison))
+        {
+            throw new InvalidOperationException(InvalidTranscriptMessage);
+        }
+    }
+
+    private static void ValidateTranscriptSessionMatch(
+        ConversationSessionName sessionName,
+        ConversationTranscript transcript)
+    {
+        ConversationSessionName transcriptSessionName = ValidateTranscriptShape(transcript);
+        if (!string.Equals(sessionName.FileSafeName, transcriptSessionName.FileSafeName, StringComparison.Ordinal))
+        {
+            throw new InvalidOperationException(InvalidTranscriptMessage);
         }
     }
 

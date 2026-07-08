@@ -1770,5 +1770,3 @@ Remove-Item -LiteralPath $tempWorkspace -Recurse -Force
 - `dotnet run --project src/CSharpAiCli.Cli -- config get --workspace .` 以 `0` 退出。
 - `doctor` 和 `config get` 永远不会打印来自 env、用户配置或工作区配置的原始 API key。
 - `docs_md/weekly/03_week_review.md` 记录验证输出和第 4 周输入。
-
-

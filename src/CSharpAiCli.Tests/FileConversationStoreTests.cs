@@ -375,6 +375,33 @@ public sealed class FileConversationStoreTests
         Assert.Equal("Conversation transcript is missing or uses an unsupported schema version.", exception.Message);
     }
 
+    [Fact]
+    public void Load_or_create_rejects_transcript_when_internal_session_name_does_not_match_filename()
+    {
+        using TempDirectory temp = TempDirectory.Create();
+        string sessionDirectory = Path.Combine(temp.Path, ".caicli", "sessions");
+        Directory.CreateDirectory(sessionDirectory);
+        File.WriteAllText(
+            Path.Combine(sessionDirectory, "smoke.transcript.json"),
+            """
+            {
+              "schemaVersion": 1,
+              "sessionName": "archive",
+              "createdAtUtc": "2024-01-01T00:00:00+00:00",
+              "updatedAtUtc": "2024-01-01T00:00:00+00:00",
+              "messages": [],
+              "toolCalls": [],
+              "errors": []
+            }
+            """);
+        FileConversationStore store = new(sessionDirectory);
+
+        InvalidOperationException exception = Assert.Throws<InvalidOperationException>(() => store.LoadOrCreate(
+            ConversationSessionName.Parse("smoke"),
+            DateTimeOffset.Parse("2024-01-01T00:01:00Z")));
+        Assert.Equal("Conversation transcript is missing or uses an unsupported schema version.", exception.Message);
+    }
+
     [Theory]
     [InlineData("smoke\nstatus: succeeded")]
     [InlineData("smoke\tstatus")]
@@ -399,6 +426,43 @@ public sealed class FileConversationStoreTests
         FileConversationStore store = new(sessionDirectory);
 
         InvalidOperationException exception = Assert.Throws<InvalidOperationException>(() => store.ListSummaries());
+        Assert.Equal("Conversation transcript is missing or uses an unsupported schema version.", exception.Message);
+    }
+
+    [Fact]
+    public void List_summaries_rejects_transcript_when_internal_session_name_does_not_match_filename()
+    {
+        using TempDirectory temp = TempDirectory.Create();
+        string sessionDirectory = Path.Combine(temp.Path, ".caicli", "sessions");
+        Directory.CreateDirectory(sessionDirectory);
+        File.WriteAllText(
+            Path.Combine(sessionDirectory, "smoke.transcript.json"),
+            """
+            {
+              "schemaVersion": 1,
+              "sessionName": "archive",
+              "createdAtUtc": "2024-01-01T00:00:00+00:00",
+              "updatedAtUtc": "2024-01-01T00:00:00+00:00",
+              "messages": [],
+              "toolCalls": [],
+              "errors": []
+            }
+            """);
+        FileConversationStore store = new(sessionDirectory);
+
+        InvalidOperationException exception = Assert.Throws<InvalidOperationException>(() => store.ListSummaries());
+        Assert.Equal("Conversation transcript is missing or uses an unsupported schema version.", exception.Message);
+    }
+
+    [Fact]
+    public void Save_rejects_transcript_when_session_name_argument_does_not_match_transcript_session_name()
+    {
+        using TempDirectory temp = TempDirectory.Create();
+        FileConversationStore store = new(Path.Combine(temp.Path, ".caicli", "sessions"));
+
+        InvalidOperationException exception = Assert.Throws<InvalidOperationException>(() => store.Save(
+            ConversationSessionName.Parse("smoke"),
+            ConversationTranscript.Create("archive", DateTimeOffset.Parse("2024-01-01T00:00:00Z"))));
         Assert.Equal("Conversation transcript is missing or uses an unsupported schema version.", exception.Message);
     }
 
