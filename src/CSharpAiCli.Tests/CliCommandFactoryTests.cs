@@ -1675,6 +1675,102 @@ public sealed class CliCommandFactoryTests
     }
 
     [Fact]
+    public void Exec_json_resume_invalid_session_name_renders_json_failure_without_running_agent_or_store()
+    {
+        using TempDirectory temp = TempDirectory.Create();
+        using StringWriter output = new();
+        bool storeFactoryInvoked = false;
+        bool runnerFactoryInvoked = false;
+
+        RootCommand command = CliCommandFactory
+            .Create(
+                output,
+                workspacePath => CreateSnapshot(
+                    workspacePath,
+                    apiKey: "sk-test-secret",
+                    apiKeySource: "OPENAI_API_KEY",
+                    model: "gpt-test"),
+                (_, _) => { },
+                _ => new FakeChatModelClient(ChatModelResult.Success(new ChatResponse("openai", "gpt-test", "resp", ""))),
+                writer => new TerminalChatStreamingRenderer(writer),
+                _ =>
+                {
+                    storeFactoryInvoked = true;
+                    return new FakeConversationStore();
+                },
+                () => DateTimeOffset.Parse("2024-01-01T00:00:05Z"),
+                (_, _, _) =>
+                {
+                    runnerFactoryInvoked = true;
+                    return new FakeAgentRunner(AgentRunResult.Success("agent completed task", [], []));
+                });
+        int exitCode = CliCommandFactory.Invoke(
+            command,
+            ["exec", "--json", "--workspace", temp.Path, "--resume", "../secret", "summarize workspace"],
+            output);
+
+        string[] lines = output.ToString().TrimEnd().Split(Environment.NewLine);
+        JsonObject result = Assert.IsType<JsonObject>(JsonNode.Parse(Assert.Single(lines)));
+        Assert.Equal(1, exitCode);
+        Assert.Equal("exec.result", result["type"]?.GetValue<string>());
+        Assert.Equal("invalid-session-name", result["errorCode"]?.GetValue<string>());
+        Assert.Equal("Session name contains invalid path characters.", result["summary"]?.GetValue<string>());
+        JsonObject payload = Assert.IsType<JsonObject>(result["payload"]);
+        Assert.Equal("failure", payload["status"]?.GetValue<string>());
+        Assert.Equal(1, payload["exitCode"]?.GetValue<int>());
+        Assert.False(storeFactoryInvoked);
+        Assert.False(runnerFactoryInvoked);
+    }
+
+    [Fact]
+    public void Exec_output_json_session_invalid_session_name_renders_json_failure_without_running_agent_or_store()
+    {
+        using TempDirectory temp = TempDirectory.Create();
+        using StringWriter output = new();
+        bool storeFactoryInvoked = false;
+        bool runnerFactoryInvoked = false;
+
+        RootCommand command = CliCommandFactory
+            .Create(
+                output,
+                workspacePath => CreateSnapshot(
+                    workspacePath,
+                    apiKey: "sk-test-secret",
+                    apiKeySource: "OPENAI_API_KEY",
+                    model: "gpt-test"),
+                (_, _) => { },
+                _ => new FakeChatModelClient(ChatModelResult.Success(new ChatResponse("openai", "gpt-test", "resp", ""))),
+                writer => new TerminalChatStreamingRenderer(writer),
+                _ =>
+                {
+                    storeFactoryInvoked = true;
+                    return new FakeConversationStore();
+                },
+                () => DateTimeOffset.Parse("2024-01-01T00:00:05Z"),
+                (_, _, _) =>
+                {
+                    runnerFactoryInvoked = true;
+                    return new FakeAgentRunner(AgentRunResult.Success("agent completed task", [], []));
+                });
+        int exitCode = CliCommandFactory.Invoke(
+            command,
+            ["exec", "--workspace", temp.Path, "--output", "json", "--session", "../secret", "summarize workspace"],
+            output);
+
+        string[] lines = output.ToString().TrimEnd().Split(Environment.NewLine);
+        JsonObject result = Assert.IsType<JsonObject>(JsonNode.Parse(Assert.Single(lines)));
+        Assert.Equal(1, exitCode);
+        Assert.Equal("exec.result", result["type"]?.GetValue<string>());
+        Assert.Equal("invalid-session-name", result["errorCode"]?.GetValue<string>());
+        Assert.Equal("Session name contains invalid path characters.", result["summary"]?.GetValue<string>());
+        JsonObject payload = Assert.IsType<JsonObject>(result["payload"]);
+        Assert.Equal("failure", payload["status"]?.GetValue<string>());
+        Assert.Equal(1, payload["exitCode"]?.GetValue<int>());
+        Assert.False(storeFactoryInvoked);
+        Assert.False(runnerFactoryInvoked);
+    }
+
+    [Fact]
     public void Exec_session_and_resume_conflict_returns_failure_without_running_agent()
     {
         using TempDirectory temp = TempDirectory.Create();

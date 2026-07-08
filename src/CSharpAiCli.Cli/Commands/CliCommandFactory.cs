@@ -435,7 +435,20 @@ public static class CliCommandFactory
             IConversationStore? conversationStore = null;
             if (!string.IsNullOrWhiteSpace(effectiveSession))
             {
-                sessionName = ConversationSessionName.Parse(effectiveSession);
+                try
+                {
+                    sessionName = ConversationSessionName.Parse(effectiveSession);
+                }
+                catch (ArgumentException exception)
+                {
+                    return WriteExecLocalValidationFailure(
+                        output,
+                        "invalid-session-name",
+                        GetSafeSessionNameParseMessage(exception),
+                        jsonRequested,
+                        outputMode);
+                }
+
                 conversationStore = conversationStoreFactory(snapshot);
                 if (!string.IsNullOrWhiteSpace(resume))
                 {
@@ -931,6 +944,20 @@ public static class CliCommandFactory
 
         WriteSafeFailure(output, errorCode, summary);
         return 1;
+    }
+
+    private static string GetSafeSessionNameParseMessage(ArgumentException exception)
+    {
+        string message = exception.Message;
+        if (string.IsNullOrEmpty(exception.ParamName))
+        {
+            return message;
+        }
+
+        string parameterSuffix = $" (Parameter '{exception.ParamName}')";
+        return message.EndsWith(parameterSuffix, StringComparison.Ordinal)
+            ? message[..^parameterSuffix.Length]
+            : message;
     }
 
     private static void WriteSessionNotFound(TextWriter output)
