@@ -151,7 +151,7 @@ The legacy `--approve` option remains supported for compatibility. Dangerous she
 artifacts\release\caicli-0.1.0-win-x64\caicli.exe session list
 artifacts\release\caicli-0.1.0-win-x64\caicli.exe session show smoke
 artifacts\release\caicli-0.1.0-win-x64\caicli.exe session rename smoke smoke-archive
-artifacts\release\caicli-0.1.0-win-x64\caicli.exe session export smoke
+artifacts\release\caicli-0.1.0-win-x64\caicli.exe session export smoke-archive
 artifacts\release\caicli-0.1.0-win-x64\caicli.exe session export --format markdown smoke-archive
 artifacts\release\caicli-0.1.0-win-x64\caicli.exe session delete smoke-archive
 ```

@@ -270,7 +270,7 @@ $exitCode
 
 ## Week 7 session and transcript behavior
 
-- `caicli chat --session <name> "<prompt>"` resumes or creates a named transcript.
+- `caicli chat --session <name> "<prompt>"` creates or appends to a named transcript.
 - Session transcripts are stored under `<user profile>/.caicli/sessions/<safe-session-name>.transcript.json`.
 - Transcript JSON uses `schemaVersion: 1`.
 - Successful turns append one `user` message and one `assistant` message.
