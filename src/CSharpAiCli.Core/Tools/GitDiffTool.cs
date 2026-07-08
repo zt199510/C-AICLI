@@ -96,14 +96,17 @@ public sealed class GitDiffTool : ITool
 
         GitCommandResult trackedFiles = gitCommandRunner.RunArgumentList(
             workspaceRoot,
-            ["diff-files", "--name-only", "-z", "--", CliCommandLogPathspec]);
+            ["ls-files", "--debug", "-z", "--", CliCommandLogPathspec]);
         if (!trackedFiles.Succeeded)
         {
             return GitDiffReadResult.Failed(ToGitFailure(trackedFiles));
         }
 
         truncated |= IsTruncated(trackedFiles);
-        foreach (string relativePath in ParseNullSeparatedPaths(trackedFiles.Stdout, trackedFiles.StdoutTruncated))
+        foreach (string relativePath in GetUnstagedTrackedCandidates(
+            workspaceRoot,
+            trackedFiles.Stdout,
+            trackedFiles.StdoutTruncated))
         {
             if (!outputs.HasBudget)
             {
@@ -164,6 +167,120 @@ public sealed class GitDiffTool : ITool
         }
 
         return GitDiffReadResult.Succeeded(outputs.ToString(), truncated);
+    }
+
+    private static IReadOnlyList<string> GetUnstagedTrackedCandidates(
+        string workspaceRoot,
+        string debugOutput,
+        bool truncated)
+    {
+        return ParseLsFilesDebugEntries(debugOutput, truncated)
+            .Where(entry => IsUnstagedTrackedCandidate(workspaceRoot, entry))
+            .Select(entry => entry.RelativePath)
+            .ToList();
+    }
+
+    private static IReadOnlyList<GitIndexDebugEntry> ParseLsFilesDebugEntries(
+        string debugOutput,
+        bool truncated)
+    {
+        List<GitIndexDebugEntry> entries = [];
+        int position = 0;
+        while (position < debugOutput.Length)
+        {
+            int pathEnd = debugOutput.IndexOf('\0', position);
+            if (pathEnd < 0)
+            {
+                break;
+            }
+
+            string relativePath = debugOutput[position..pathEnd];
+            int metadataStart = pathEnd + 1;
+            int metadataEnd = metadataStart;
+            while (metadataEnd < debugOutput.Length && debugOutput[metadataEnd] == ' ')
+            {
+                int lineEnd = debugOutput.IndexOf('\n', metadataEnd);
+                metadataEnd = lineEnd < 0 ? debugOutput.Length : lineEnd + 1;
+            }
+
+            if (!string.IsNullOrWhiteSpace(relativePath))
+            {
+                string metadata = debugOutput[metadataStart..metadataEnd];
+                entries.Add(new GitIndexDebugEntry(
+                    relativePath,
+                    TryReadDebugLong(metadata, "mtime:", SelectBeforeColon),
+                    TryReadDebugLong(metadata, "size:", SelectFirstToken)));
+            }
+
+            position = metadataEnd;
+        }
+
+        if (truncated && entries.Count > 0 && debugOutput.Length > 0 && debugOutput[^1] != '\n')
+        {
+            entries.RemoveAt(entries.Count - 1);
+        }
+
+        return entries;
+    }
+
+    private static string SelectBeforeColon(string value)
+    {
+        int colonIndex = value.IndexOf(':', StringComparison.Ordinal);
+        return colonIndex < 0 ? value : value[..colonIndex];
+    }
+
+    private static string SelectFirstToken(string value)
+    {
+        return value
+            .Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries)
+            .FirstOrDefault() ?? string.Empty;
+    }
+
+    private static long? TryReadDebugLong(
+        string metadata,
+        string key,
+        Func<string, string> selectValue)
+    {
+        foreach (string line in metadata.Split('\n', StringSplitOptions.RemoveEmptyEntries))
+        {
+            string trimmed = line.Trim();
+            if (!trimmed.StartsWith(key, StringComparison.Ordinal))
+            {
+                continue;
+            }
+
+            string selectedValue = selectValue(trimmed[key.Length..].Trim());
+            return long.TryParse(selectedValue, out long parsed)
+                ? parsed
+                : null;
+        }
+
+        return null;
+    }
+
+    private static bool IsUnstagedTrackedCandidate(string workspaceRoot, GitIndexDebugEntry entry)
+    {
+        string worktreeFullPath = Path.GetFullPath(
+            entry.RelativePath.Replace('/', Path.DirectorySeparatorChar),
+            workspaceRoot);
+        if (!File.Exists(worktreeFullPath))
+        {
+            return !Directory.Exists(worktreeFullPath);
+        }
+
+        FileInfo fileInfo = new(worktreeFullPath);
+        if (entry.Size.HasValue && fileInfo.Length != entry.Size.Value)
+        {
+            return true;
+        }
+
+        if (entry.MTimeSeconds.HasValue)
+        {
+            long worktreeMTimeSeconds = new DateTimeOffset(fileInfo.LastWriteTimeUtc).ToUnixTimeSeconds();
+            return worktreeMTimeSeconds != entry.MTimeSeconds.Value;
+        }
+
+        return false;
     }
 
     private static string[] CreateStagedDiffArguments(bool stat, bool hasHead)
@@ -625,6 +742,11 @@ public sealed class GitDiffTool : ITool
     {
         public bool IsRegularFile => Mode is "100644" or "100755";
     }
+
+    private sealed record GitIndexDebugEntry(
+        string RelativePath,
+        long? MTimeSeconds,
+        long? Size);
 
     private sealed record GitIndexEntryReadResult(
         GitIndexEntry? Entry,

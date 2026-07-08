@@ -204,7 +204,7 @@ public sealed class GitToolsTests
                 return SuccessfulGitResult(string.Empty);
             }
 
-            if (args is ["diff-files", "--name-only", "-z", "--", ":(exclude).caicli/logs/**"])
+            if (args is ["ls-files", "--debug", "-z", "--", ":(exclude).caicli/logs/**"])
             {
                 return SuccessfulGitResult(string.Empty);
             }
@@ -237,7 +237,7 @@ public sealed class GitToolsTests
 
         Assert.True(result.Succeeded);
         Assert.Equal("no diff", result.Summary);
-        Assert.Contains(runner.Commands, command => command is ["diff-files", "--name-only", "-z", "--", ":(exclude).caicli/logs/**"]);
+        Assert.Contains(runner.Commands, command => command is ["ls-files", "--debug", "-z", "--", ":(exclude).caicli/logs/**"]);
         Assert.DoesNotContain(runner.Commands, command => command.FirstOrDefault() == "show");
         Assert.DoesNotContain(runner.Commands, command => command.Contains("--no-index", StringComparer.Ordinal));
     }
@@ -258,9 +258,9 @@ public sealed class GitToolsTests
                 return SuccessfulGitResult(string.Empty);
             }
 
-            if (args is ["diff-files", "--name-only", "-z", "--", ":(exclude).caicli/logs/**"])
+            if (args is ["ls-files", "--debug", "-z", "--", ":(exclude).caicli/logs/**"])
             {
-                return SuccessfulGitResult("deps/sub\0");
+                return SuccessfulGitResult("deps/sub\0  mtime: 0:0\n  size: 0\tflags: 0\n");
             }
 
             if (args is ["ls-files", "-s", "-z", "--", "deps/sub"])
@@ -317,9 +317,9 @@ public sealed class GitToolsTests
                 return SuccessfulGitResult(string.Empty);
             }
 
-            if (args is ["diff-files", "--name-only", "-z", "--", ":(exclude).caicli/logs/**"])
+            if (args is ["ls-files", "--debug", "-z", "--", ":(exclude).caicli/logs/**"])
             {
-                return SuccessfulGitResult("script.sh\0");
+                return SuccessfulGitResult("script.sh\0  mtime: 0:0\n  size: 0\tflags: 0\n");
             }
 
             if (args is ["ls-files", "-s", "-z", "--", "script.sh"])
@@ -487,6 +487,22 @@ public sealed class GitToolsTests
     }
 
     [Fact]
+    public void Git_diff_ignores_staged_tracked_cli_command_log_changes()
+    {
+        using TempDirectory temp = TempDirectory.Create();
+        InitializeGitRepository(temp.Path);
+        string logPath = TrackCliCommandLogs(temp.Path);
+        File.AppendAllText(logPath, "command=diff\n");
+        RunGit(temp.Path, "add", ".caicli/logs");
+        GitDiffTool tool = new(new WorkspaceGuard());
+
+        ToolExecutionResult result = tool.Execute(CreateContext(temp.Path));
+
+        Assert.True(result.Succeeded);
+        Assert.Equal("no diff", result.Summary);
+    }
+
+    [Fact]
     public void Git_diff_ignores_tracked_cli_logs_without_hiding_tracked_caicli_files()
     {
         using TempDirectory temp = TempDirectory.Create();
@@ -502,6 +518,26 @@ public sealed class GitToolsTests
         Assert.True(result.Succeeded);
         Assert.Contains(".caicli/config.json", result.Summary, StringComparison.Ordinal);
         Assert.Contains("gpt-test", result.Summary, StringComparison.Ordinal);
+        Assert.DoesNotContain(".caicli/logs", result.Summary, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("no diff", result.Summary, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Git_diff_stat_ignores_staged_tracked_cli_logs_without_hiding_staged_user_files()
+    {
+        using TempDirectory temp = TempDirectory.Create();
+        string filePath = InitializeGitRepository(temp.Path);
+        string logPath = TrackCliCommandLogs(temp.Path);
+        File.AppendAllText(logPath, "command=diff\n");
+        File.AppendAllText(filePath, "visible staged user change\n");
+        RunGit(temp.Path, "add", ".caicli/logs", "tracked.txt");
+        GitDiffTool tool = new(new WorkspaceGuard());
+
+        ToolExecutionResult result = tool.Execute(CreateContext(temp.Path, """{"stat":true}"""));
+
+        Assert.True(result.Succeeded);
+        Assert.Contains("tracked.txt", result.Summary, StringComparison.Ordinal);
+        Assert.Contains("1 file changed", result.Summary, StringComparison.Ordinal);
         Assert.DoesNotContain(".caicli/logs", result.Summary, StringComparison.OrdinalIgnoreCase);
         Assert.DoesNotContain("no diff", result.Summary, StringComparison.Ordinal);
     }

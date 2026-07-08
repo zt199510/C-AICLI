@@ -542,6 +542,39 @@ public sealed class CliCommandFactoryTests
     }
 
     [Fact]
+    public void Review_command_ignores_staged_tracked_cli_logs_without_hiding_staged_user_files()
+    {
+        using TempDirectory temp = TempDirectory.Create();
+        string filePath = InitializeGitRepository(temp.Path);
+        string logPath = TrackCliCommandLogs(temp.Path);
+        File.AppendAllText(logPath, "command=review\n");
+        File.AppendAllText(filePath, "visible staged user change\n");
+        RunGit(temp.Path, "add", ".caicli/logs", "tracked.txt");
+        using StringWriter output = new();
+        FakeChatModelClient chatClient = new(ChatModelResult.Success(new ChatResponse(
+            Provider: "openai",
+            Model: "gpt-test",
+            ResponseId: "resp_test",
+            Text: "review report")));
+
+        int exitCode = CliCommandFactory.Invoke(
+            CliCommandFactory.Create(
+                output,
+                workspacePath => CreateSnapshot(workspacePath, apiKey: "sk-test", apiKeySource: "OPENAI_API_KEY", model: "gpt-test"),
+                (_, _) => throw new InvalidOperationException("review must not write command logs"),
+                _ => chatClient),
+            ["review", "--workspace", temp.Path],
+            output);
+
+        Assert.Equal(0, exitCode);
+        Assert.NotNull(chatClient.LastNonStreamingPrompt);
+        Assert.Contains("tracked.txt", chatClient.LastNonStreamingPrompt, StringComparison.Ordinal);
+        Assert.Contains("+visible staged user change", chatClient.LastNonStreamingPrompt, StringComparison.Ordinal);
+        Assert.DoesNotContain(".caicli/logs", chatClient.LastNonStreamingPrompt, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("no diff", chatClient.LastNonStreamingPrompt, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void Review_command_sends_no_head_staged_and_untracked_diff_to_non_streaming_model()
     {
         using TempDirectory temp = TempDirectory.Create();
