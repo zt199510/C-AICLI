@@ -21,7 +21,7 @@
 - 命令：从 `C:\Users\10335\AppData\Local\Temp` 运行 `dotnet test D:\AI\C-AICLI\.worktrees\week-32-project-instructions-agents-md\src\CSharpAiCli.Tests\CSharpAiCli.Tests.csproj -v minimal`
 - 结果：通过。失败 0，通过 672，跳过 0，总计 672。
 - 命令：`git diff --check`
-- 结果：通过；仅有 CRLF normalization warnings，无 whitespace/error。
+- 结果：通过，无 whitespace/error 输出。
 - 命令：`rg -n "status|models|diff|review|modelListApi|review --json|diff --stat" docs_md\release tools\Invoke-SmokeTests.ps1 src\CSharpAiCli.Tests\SmokeTestScriptTests.cs`
 - 结果：通过。命中 release docs、`tools\Invoke-SmokeTests.ps1` 与 smoke script tests 中的新命令、JSON review、`modelListApi: not called`、`diff --stat` 等预期引用。
 - 命令：检查 `artifacts\release\caicli-0.1.0-win-x64\caicli.exe`
