@@ -2685,6 +2685,54 @@ public sealed class CliCommandFactoryTests
         Assert.DoesNotContain("System.Text.Json", text, StringComparison.Ordinal);
     }
 
+    [Theory]
+    [InlineData("toolCalls")]
+    [InlineData("errors")]
+    public void Session_export_format_markdown_with_null_tool_call_or_error_returns_safe_failure(
+        string nullEntryCollectionName)
+    {
+        using TempDirectory temp = TempDirectory.Create();
+        string userHome = Path.Combine(temp.Path, "user-home");
+        string workspace = Path.Combine(temp.Path, "workspace");
+        Directory.CreateDirectory(workspace);
+        string sessionDirectory = Path.Combine(userHome, ".caicli", "sessions");
+        Directory.CreateDirectory(sessionDirectory);
+        string toolCallsJson = nullEntryCollectionName == "toolCalls" ? "[null]" : "[]";
+        string errorsJson = nullEntryCollectionName == "errors" ? "[null]" : "[]";
+        File.WriteAllText(Path.Combine(sessionDirectory, "smoke.transcript.json"), $$"""
+        {
+          "schemaVersion": 1,
+          "sessionName": "smoke",
+          "createdAtUtc": "2024-01-01T00:00:00+00:00",
+          "updatedAtUtc": "2024-01-01T00:00:00+00:00",
+          "messages": [],
+          "toolCalls": {{toolCallsJson}},
+          "errors": {{errorsJson}}
+        }
+        """);
+        using StringWriter exportOutput = new();
+        CliEnvironmentSnapshot snapshot = CreateSnapshot(
+            workspacePath: workspace,
+            apiKey: null,
+            apiKeySource: "missing",
+            model: "not configured",
+            userConfigPath: Path.Combine(userHome, ".caicli", "config.json"));
+
+        int exportExitCode = CliCommandFactory.Invoke(
+            CliCommandFactory.Create(exportOutput, _ => snapshot),
+            ["session", "export", "--format", "markdown", "smoke"],
+            exportOutput);
+
+        string text = exportOutput.ToString();
+        Assert.Equal(1, exportExitCode);
+        Assert.Contains("status: failed", text);
+        Assert.Contains("errorCode: session-transcript-invalid", text);
+        Assert.Contains("summary:", text);
+        Assert.Contains("Conversation transcript is missing or uses an unsupported schema version.", text);
+        Assert.DoesNotContain("NullReferenceException", text, StringComparison.Ordinal);
+        Assert.DoesNotContain("System.", text, StringComparison.Ordinal);
+    }
+
     [Fact]
     public void Session_export_format_markdown_prints_safe_readable_transcript()
     {

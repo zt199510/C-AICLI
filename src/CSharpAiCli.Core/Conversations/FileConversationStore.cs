@@ -206,7 +206,9 @@ public sealed class FileConversationStore : IConversationStore
             transcript.Messages is null ||
             transcript.ToolCalls is null ||
             transcript.Errors is null ||
-            transcript.Messages.Any(message => message is null))
+            transcript.Messages.Any(message => message is null) ||
+            transcript.ToolCalls.Any(toolCall => toolCall is null) ||
+            transcript.Errors.Any(error => error is null))
         {
             throw new InvalidOperationException(InvalidTranscriptMessage);
         }
