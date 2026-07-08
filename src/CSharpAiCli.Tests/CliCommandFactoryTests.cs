@@ -95,6 +95,31 @@ public sealed class CliCommandFactoryTests
     }
 
     [Fact]
+    public void Diff_command_writes_staged_and_untracked_changes_for_no_head_git_workspace()
+    {
+        using TempDirectory temp = TempDirectory.Create();
+        InitializeNoHeadGitRepository(temp.Path);
+        File.WriteAllText(Path.Combine(temp.Path, "staged.txt"), "staged\n");
+        RunGit(temp.Path, "add", "staged.txt");
+        File.WriteAllText(Path.Combine(temp.Path, "untracked.txt"), "loose\n");
+        using StringWriter output = new();
+
+        int exitCode = CliCommandFactory
+            .Create(output, workspacePath => CreateSnapshot(workspacePath))
+            .Parse(["diff", "--workspace", temp.Path])
+            .Invoke();
+
+        string text = output.ToString();
+        Assert.Equal(0, exitCode);
+        Assert.Contains("staged.txt", text, StringComparison.Ordinal);
+        Assert.Contains("+staged", text, StringComparison.Ordinal);
+        Assert.Contains("untracked.txt", text, StringComparison.Ordinal);
+        Assert.Contains("+loose", text, StringComparison.Ordinal);
+        Assert.DoesNotContain("bad revision", text, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("no diff", text, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void Diff_command_stat_writes_git_diff_stat()
     {
         using TempDirectory temp = TempDirectory.Create();
@@ -283,6 +308,40 @@ public sealed class CliCommandFactoryTests
         Assert.Contains("diff --git", chatClient.LastNonStreamingPrompt, StringComparison.Ordinal);
         Assert.Contains("new file.txt", chatClient.LastNonStreamingPrompt, StringComparison.Ordinal);
         Assert.Contains("+fresh", chatClient.LastNonStreamingPrompt, StringComparison.Ordinal);
+        Assert.DoesNotContain("no diff", chatClient.LastNonStreamingPrompt, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Review_command_sends_no_head_staged_and_untracked_diff_to_non_streaming_model()
+    {
+        using TempDirectory temp = TempDirectory.Create();
+        InitializeNoHeadGitRepository(temp.Path);
+        File.WriteAllText(Path.Combine(temp.Path, "staged.txt"), "staged\n");
+        RunGit(temp.Path, "add", "staged.txt");
+        File.WriteAllText(Path.Combine(temp.Path, "untracked.txt"), "loose\n");
+        using StringWriter output = new();
+        FakeChatModelClient chatClient = new(ChatModelResult.Success(new ChatResponse(
+            Provider: "openai",
+            Model: "gpt-test",
+            ResponseId: "resp_test",
+            Text: "review report")));
+
+        int exitCode = CliCommandFactory.Invoke(
+            CliCommandFactory.Create(
+                output,
+                workspacePath => CreateSnapshot(workspacePath, apiKey: "sk-test", apiKeySource: "OPENAI_API_KEY", model: "gpt-test"),
+                (_, _) => throw new InvalidOperationException("review must not write command logs"),
+                _ => chatClient),
+            ["review", "--workspace", temp.Path],
+            output);
+
+        Assert.Equal(0, exitCode);
+        Assert.NotNull(chatClient.LastNonStreamingPrompt);
+        Assert.Contains("staged.txt", chatClient.LastNonStreamingPrompt, StringComparison.Ordinal);
+        Assert.Contains("+staged", chatClient.LastNonStreamingPrompt, StringComparison.Ordinal);
+        Assert.Contains("untracked.txt", chatClient.LastNonStreamingPrompt, StringComparison.Ordinal);
+        Assert.Contains("+loose", chatClient.LastNonStreamingPrompt, StringComparison.Ordinal);
+        Assert.DoesNotContain("bad revision", chatClient.LastNonStreamingPrompt, StringComparison.OrdinalIgnoreCase);
         Assert.DoesNotContain("no diff", chatClient.LastNonStreamingPrompt, StringComparison.Ordinal);
     }
 
@@ -5332,6 +5391,13 @@ public sealed class CliCommandFactoryTests
             .Create(output, workspacePath => CreateSnapshot(workspacePath))
             .Parse([.. args])
             .Invoke();
+    }
+
+    private static void InitializeNoHeadGitRepository(string root)
+    {
+        RunGit(root, "init");
+        RunGit(root, "config", "user.email", "test@example.invalid");
+        RunGit(root, "config", "user.name", "Test User");
     }
 
     private static string InitializeGitRepository(string root, string? configuredHooksPath = null)

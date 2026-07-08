@@ -61,16 +61,52 @@ public sealed class GitDiffTool : ITool
         List<string> outputs = [];
         bool truncated = false;
 
-        GitCommandResult trackedDiff = gitCommandRunner.Run(
+        GitCommandResult head = gitCommandRunner.RunArgumentList(
             workspaceRoot,
-            stat ? "diff --stat HEAD --" : "diff HEAD --");
-        if (!trackedDiff.Succeeded)
+            ["rev-parse", "--verify", "HEAD"]);
+        if (head.Succeeded)
         {
-            return GitDiffReadResult.Failed(ToGitFailure(trackedDiff));
-        }
+            truncated |= IsTruncated(head);
+            GitCommandResult trackedDiff = gitCommandRunner.Run(
+                workspaceRoot,
+                stat ? "diff --stat HEAD --" : "diff HEAD --");
+            if (!trackedDiff.Succeeded)
+            {
+                return GitDiffReadResult.Failed(ToGitFailure(trackedDiff));
+            }
 
-        truncated |= IsTruncated(trackedDiff);
-        AddOutput(outputs, trackedDiff.Stdout);
+            truncated |= IsTruncated(trackedDiff);
+            AddOutput(outputs, trackedDiff.Stdout);
+        }
+        else if (IsMissingHead(head))
+        {
+            truncated |= IsTruncated(head);
+            GitCommandResult stagedDiff = gitCommandRunner.Run(
+                workspaceRoot,
+                stat ? "diff --cached --stat --" : "diff --cached --");
+            if (!stagedDiff.Succeeded)
+            {
+                return GitDiffReadResult.Failed(ToGitFailure(stagedDiff));
+            }
+
+            truncated |= IsTruncated(stagedDiff);
+            AddOutput(outputs, stagedDiff.Stdout);
+
+            GitCommandResult unstagedDiff = gitCommandRunner.Run(
+                workspaceRoot,
+                stat ? "diff --stat --" : "diff --");
+            if (!unstagedDiff.Succeeded)
+            {
+                return GitDiffReadResult.Failed(ToGitFailure(unstagedDiff));
+            }
+
+            truncated |= IsTruncated(unstagedDiff);
+            AddOutput(outputs, unstagedDiff.Stdout);
+        }
+        else
+        {
+            return GitDiffReadResult.Failed(ToGitFailure(head));
+        }
 
         GitCommandResult untrackedFiles = gitCommandRunner.RunArgumentList(
             workspaceRoot,
@@ -100,6 +136,12 @@ public sealed class GitDiffTool : ITool
         }
 
         return GitDiffReadResult.Succeeded(string.Join(Environment.NewLine + Environment.NewLine, outputs), truncated);
+    }
+
+    private static bool IsMissingHead(GitCommandResult result)
+    {
+        return result.ExitCode == 128
+            && result.Stderr.Contains("Needed a single revision", StringComparison.OrdinalIgnoreCase);
     }
 
     private static IReadOnlyList<string> ParseNullSeparatedPaths(string text, bool truncated)

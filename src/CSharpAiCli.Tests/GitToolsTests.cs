@@ -82,6 +82,27 @@ public sealed class GitToolsTests
     }
 
     [Fact]
+    public void Git_diff_reports_staged_and_untracked_files_in_no_head_repo()
+    {
+        using TempDirectory temp = TempDirectory.Create();
+        InitializeNoHeadGitRepository(temp.Path);
+        File.WriteAllText(Path.Combine(temp.Path, "staged.txt"), "staged\n");
+        RunGit(temp.Path, "add", "staged.txt");
+        File.WriteAllText(Path.Combine(temp.Path, "untracked.txt"), "loose\n");
+        GitDiffTool tool = new(new WorkspaceGuard());
+
+        ToolExecutionResult result = tool.Execute(CreateContext(temp.Path));
+
+        Assert.True(result.Succeeded);
+        Assert.Contains("staged.txt", result.Summary, StringComparison.Ordinal);
+        Assert.Contains("+staged", result.Summary, StringComparison.Ordinal);
+        Assert.Contains("untracked.txt", result.Summary, StringComparison.Ordinal);
+        Assert.Contains("+loose", result.Summary, StringComparison.Ordinal);
+        Assert.DoesNotContain("bad revision", result.Summary, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("no diff", result.Summary, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void Git_diff_reports_no_diff_for_clean_temporary_repo()
     {
         using TempDirectory temp = TempDirectory.Create();
@@ -126,6 +147,26 @@ public sealed class GitToolsTests
         Assert.Contains("tracked.txt", result.Summary, StringComparison.Ordinal);
         Assert.Contains("new file.txt", result.Summary, StringComparison.Ordinal);
         Assert.DoesNotContain("diff --git", result.Summary, StringComparison.Ordinal);
+        Assert.DoesNotContain("no diff", result.Summary, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Git_diff_stat_reports_staged_and_untracked_files_in_no_head_repo()
+    {
+        using TempDirectory temp = TempDirectory.Create();
+        InitializeNoHeadGitRepository(temp.Path);
+        File.WriteAllText(Path.Combine(temp.Path, "staged.txt"), "staged\n");
+        RunGit(temp.Path, "add", "staged.txt");
+        File.WriteAllText(Path.Combine(temp.Path, "untracked.txt"), "loose\n");
+        GitDiffTool tool = new(new WorkspaceGuard());
+
+        ToolExecutionResult result = tool.Execute(CreateContext(temp.Path, """{"stat":true}"""));
+
+        Assert.True(result.Succeeded);
+        Assert.Contains("staged.txt", result.Summary, StringComparison.Ordinal);
+        Assert.Contains("untracked.txt", result.Summary, StringComparison.Ordinal);
+        Assert.DoesNotContain("diff --git", result.Summary, StringComparison.Ordinal);
+        Assert.DoesNotContain("bad revision", result.Summary, StringComparison.OrdinalIgnoreCase);
         Assert.DoesNotContain("no diff", result.Summary, StringComparison.Ordinal);
     }
 
@@ -177,6 +218,13 @@ public sealed class GitToolsTests
             "call_git",
             WorkspaceContext.Detect(workspaceRoot, workspaceRoot),
             argumentsJson);
+    }
+
+    private static void InitializeNoHeadGitRepository(string root)
+    {
+        RunGit(root, "init");
+        RunGit(root, "config", "user.email", "test@example.invalid");
+        RunGit(root, "config", "user.name", "Test User");
     }
 
     private static string InitializeGitRepository(string root, string? configuredHooksPath = null)
