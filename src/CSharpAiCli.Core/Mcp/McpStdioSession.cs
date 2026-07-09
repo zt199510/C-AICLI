@@ -71,8 +71,9 @@ public sealed class McpStdioSession : IMcpJsonRpcSession, IDisposable
                 "MCP stdio command is not configured.");
         }
 
+        McpStdioStartupCommandRiskInput startupCommandRiskInput = McpStdioStartupCommandRiskInput.Create(options);
         DangerousCommandDetection startupCommandDetection = DangerousCommandDetector.Detect(
-            McpStdioStartupCommandFormatter.FormatForRiskDetection(options));
+            startupCommandRiskInput.DetectorCommand);
         if (startupCommandDetection.IsDangerous)
         {
             return McpStdioSessionOpenResult.Failure(
