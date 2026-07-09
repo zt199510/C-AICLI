@@ -161,10 +161,15 @@ public sealed record McpStdioStartupCommandRiskInput(
 
     private static bool IsPowerShellEncodedExecutionSwitch(string argument)
     {
-        return argument.Equals("-EncodedCommand", StringComparison.OrdinalIgnoreCase) ||
-            argument.Equals("-EncodedArguments", StringComparison.OrdinalIgnoreCase) ||
-            argument.Equals("-enc", StringComparison.OrdinalIgnoreCase) ||
-            argument.Equals("-e", StringComparison.OrdinalIgnoreCase);
+        if (argument.Length < 2 || argument[0] is not ('-' or '/'))
+        {
+            return false;
+        }
+
+        ReadOnlySpan<char> switchName = argument.AsSpan(1);
+        return switchName.Equals("ec".AsSpan(), StringComparison.OrdinalIgnoreCase) ||
+            "EncodedCommand".AsSpan().StartsWith(switchName, StringComparison.OrdinalIgnoreCase) ||
+            "EncodedArguments".AsSpan().StartsWith(switchName, StringComparison.OrdinalIgnoreCase);
     }
 
     private static bool IsPosixShellCommandSwitch(string argument)

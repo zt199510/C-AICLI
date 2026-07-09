@@ -138,6 +138,39 @@ public sealed class McpStdioStartupCommandRiskInputTests
         Assert.Equal("encoded powershell command", detection.MatchedRule);
     }
 
+    [Theory]
+    [InlineData("powershell.exe", "-e")]
+    [InlineData("powershell.exe", "-ec")]
+    [InlineData("pwsh", "-en")]
+    [InlineData("pwsh", "-enco")]
+    [InlineData("pwsh", "/enc")]
+    [InlineData("powershell", "/e")]
+    [InlineData("powershell", "/ec")]
+    [InlineData("powershell", "/EncodedCommand")]
+    [InlineData("pwsh.exe", "-EncodedCom")]
+    public void Create_marks_encoded_powershell_aliases_as_opaque_shell_execution_without_payload(
+        string executable,
+        string encodedSwitch)
+    {
+        string encodedPayload = Convert.ToBase64String(Encoding.Unicode.GetBytes("Write-Output hidden-alias"));
+
+        McpStdioStartupCommandRiskInput riskInput = McpStdioStartupCommandRiskInput.Create(
+            executable,
+            [
+                "-NoLogo",
+                encodedSwitch,
+                encodedPayload
+            ]);
+
+        DangerousCommandDetection detection = DangerousCommandDetector.Detect(riskInput.DetectorCommand);
+
+        Assert.Equal(McpStdioStartupCommandRiskInputKind.ShellCommandText, riskInput.Kind);
+        Assert.Equal($"{Path.GetFileNameWithoutExtension(executable)} -EncodedCommand", riskInput.DetectorCommand);
+        Assert.DoesNotContain(encodedPayload, riskInput.DetectorCommand, StringComparison.Ordinal);
+        Assert.True(detection.IsDangerous);
+        Assert.Equal("encoded powershell command", detection.MatchedRule);
+    }
+
     [Fact]
     public void Create_includes_arguments_for_direct_destructive_commands()
     {

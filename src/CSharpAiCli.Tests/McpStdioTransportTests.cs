@@ -549,6 +549,48 @@ public sealed class McpStdioTransportTests
     }
 
     [Fact]
+    public void OpenSession_denies_encoded_powershell_alias_startup_command_before_starting_process_without_echoing_payload()
+    {
+        using TempDirectory temp = TempDirectory.Create();
+        string markerPath = Path.Combine(temp.Path, "encoded-alias-startup-ran.txt");
+        string escapedMarkerPath = markerPath.Replace("'", "''", StringComparison.Ordinal);
+        string encodedPayload = Convert.ToBase64String(Encoding.Unicode.GetBytes(
+            $"[System.IO.File]::WriteAllText('{escapedMarkerPath}', 'started'); Start-Sleep -Seconds 5"));
+        McpStdioTransport transport = new(new WorkspaceGuard());
+
+        McpStdioSessionOpenResult result = transport.OpenSession(
+            WorkspaceContext.Detect(temp.Path, temp.Path),
+            new McpStdioServerOptions(
+                serverName: "fixture",
+                command: PowerShellExecutable,
+                arguments:
+                [
+                    "-NoLogo",
+                    "-NoProfile",
+                    "-NonInteractive",
+                    "-ec",
+                    encodedPayload
+                ],
+                workingDirectory: null,
+                timeoutMilliseconds: 10_000));
+
+        try
+        {
+            Assert.False(result.Succeeded);
+            Assert.Null(result.Session);
+            Assert.Equal(McpErrorCode.StartFailed, result.ErrorCode);
+            Assert.Contains("encoded PowerShell command", result.SafeMessage, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains("Matched rule: encoded powershell command.", result.SafeMessage, StringComparison.OrdinalIgnoreCase);
+            Assert.DoesNotContain(encodedPayload, result.SafeMessage, StringComparison.Ordinal);
+            Assert.False(WaitForFile(markerPath, TimeSpan.FromMilliseconds(300)));
+        }
+        finally
+        {
+            result.Session?.Dispose();
+        }
+    }
+
+    [Fact]
     public void Send_returns_safe_failure_when_process_cannot_start()
     {
         using TempDirectory temp = TempDirectory.Create();

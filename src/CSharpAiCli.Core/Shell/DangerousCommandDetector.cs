@@ -34,7 +34,7 @@ public static partial class DangerousCommandDetector
             return Dangerous("Command contains a permission modification pattern.", "permission modification pattern");
         }
 
-        if (EncodedPowerShellPattern().IsMatch(normalized))
+        if (ContainsEncodedPowerShellExecution(normalized))
         {
             return Dangerous("Command contains opaque encoded PowerShell execution.", "encoded powershell command");
         }
@@ -65,6 +65,36 @@ public static partial class DangerousCommandDetector
             MatchedRule: matchedRule);
     }
 
+    private static bool ContainsEncodedPowerShellExecution(string command)
+    {
+        foreach (Match executableMatch in PowerShellExecutablePattern().Matches(command))
+        {
+            string remainder = command[(executableMatch.Index + executableMatch.Length)..];
+            foreach (Match switchMatch in CommandSwitchPattern().Matches(remainder))
+            {
+                if (IsPowerShellEncodedExecutionSwitch(switchMatch.Groups[1].Value))
+                {
+                    return true;
+                }
+            }
+        }
+
+        return false;
+    }
+
+    private static bool IsPowerShellEncodedExecutionSwitch(string argument)
+    {
+        if (argument.Length < 2 || argument[0] is not ('-' or '/'))
+        {
+            return false;
+        }
+
+        ReadOnlySpan<char> switchName = argument.AsSpan(1);
+        return switchName.Equals("ec".AsSpan(), StringComparison.OrdinalIgnoreCase) ||
+            "EncodedCommand".AsSpan().StartsWith(switchName, StringComparison.OrdinalIgnoreCase) ||
+            "EncodedArguments".AsSpan().StartsWith(switchName, StringComparison.OrdinalIgnoreCase);
+    }
+
     [GeneratedRegex(@"(?i)(^|\s)(rm\s+-rf|del\s+/[a-z]*[sq]|rmdir\s+/[a-z]*s|remove-item\s+.*(-recurse|-r)\b)")]
     private static partial Regex DeletePattern();
 
@@ -74,8 +104,11 @@ public static partial class DangerousCommandDetector
     [GeneratedRegex(@"(?i)(^|\s)(chmod|chown|icacls|takeown)\b")]
     private static partial Regex PermissionPattern();
 
-    [GeneratedRegex(@"(?i)(^|\s)(powershell|pwsh)(\.exe)?\b[\s\S]*\s-(encodedcommand|encodedarguments|enc|e)\b")]
-    private static partial Regex EncodedPowerShellPattern();
+    [GeneratedRegex(@"(?i)(^|\s)(powershell|pwsh)(\.exe)?\b")]
+    private static partial Regex PowerShellExecutablePattern();
+
+    [GeneratedRegex(@"(?:^|\s)([-/]\S+)")]
+    private static partial Regex CommandSwitchPattern();
 
     [GeneratedRegex(@"(?i)(curl|wget|invoke-webrequest|iwr).*(\|\s*|;\s*|&&\s*)(sh|bash|powershell|pwsh|cmd|python)\b")]
     private static partial Regex DownloadExecutePattern();
