@@ -40,6 +40,12 @@ public sealed record McpStdioStartupCommandRiskInput(
         string executableName = GetExecutableName(executable);
         if (executableName is "powershell" or "pwsh")
         {
+            if (TryGetPowerShellEncodedExecutionSwitch(arguments, out string encodedSwitch))
+            {
+                shellCommandText = $"{executableName} {encodedSwitch}";
+                return true;
+            }
+
             return TryGetJoinedCommandAfterSwitch(
                 arguments,
                 static argument => IsPowerShellCommandSwitch(argument),
@@ -132,6 +138,33 @@ public sealed record McpStdioStartupCommandRiskInput(
     {
         return argument.Equals("-Command", StringComparison.OrdinalIgnoreCase) ||
             argument.Equals("-c", StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static bool TryGetPowerShellEncodedExecutionSwitch(
+        IReadOnlyList<string> arguments,
+        out string encodedSwitch)
+    {
+        foreach (string argument in arguments)
+        {
+            if (!IsPowerShellEncodedExecutionSwitch(argument))
+            {
+                continue;
+            }
+
+            encodedSwitch = "-EncodedCommand";
+            return true;
+        }
+
+        encodedSwitch = string.Empty;
+        return false;
+    }
+
+    private static bool IsPowerShellEncodedExecutionSwitch(string argument)
+    {
+        return argument.Equals("-EncodedCommand", StringComparison.OrdinalIgnoreCase) ||
+            argument.Equals("-EncodedArguments", StringComparison.OrdinalIgnoreCase) ||
+            argument.Equals("-enc", StringComparison.OrdinalIgnoreCase) ||
+            argument.Equals("-e", StringComparison.OrdinalIgnoreCase);
     }
 
     private static bool IsPosixShellCommandSwitch(string argument)

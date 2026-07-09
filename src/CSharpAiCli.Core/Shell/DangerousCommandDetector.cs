@@ -34,6 +34,11 @@ public static partial class DangerousCommandDetector
             return Dangerous("Command contains a permission modification pattern.", "permission modification pattern");
         }
 
+        if (EncodedPowerShellPattern().IsMatch(normalized))
+        {
+            return Dangerous("Command contains opaque encoded PowerShell execution.", "encoded powershell command");
+        }
+
         if (DownloadExecutePattern().IsMatch(normalized))
         {
             return Dangerous("Command appears to download and execute remote content.", "download and execute remote content");
@@ -68,6 +73,9 @@ public static partial class DangerousCommandDetector
 
     [GeneratedRegex(@"(?i)(^|\s)(chmod|chown|icacls|takeown)\b")]
     private static partial Regex PermissionPattern();
+
+    [GeneratedRegex(@"(?i)(^|\s)(powershell|pwsh)(\.exe)?\b[\s\S]*\s-(encodedcommand|encodedarguments|enc|e)\b")]
+    private static partial Regex EncodedPowerShellPattern();
 
     [GeneratedRegex(@"(?i)(curl|wget|invoke-webrequest|iwr).*(\|\s*|;\s*|&&\s*)(sh|bash|powershell|pwsh|cmd|python)\b")]
     private static partial Regex DownloadExecutePattern();
