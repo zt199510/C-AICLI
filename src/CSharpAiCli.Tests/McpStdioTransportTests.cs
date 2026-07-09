@@ -72,6 +72,34 @@ public sealed class McpStdioTransportTests
     }
 
     [Fact]
+    public void Send_redacts_authorization_bearer_stderr_without_leaking_token()
+    {
+        using TempDirectory temp = TempDirectory.Create();
+        string scriptPath = WritePowerShellScript(
+            temp.Path,
+            """
+            [Console]::Error.WriteLine('Authorization: Bearer super-secret-token')
+            $request = [Console]::In.ReadLine() | ConvertFrom-Json
+            $response = [ordered]@{
+                jsonrpc = '2.0'
+                id = $request.id
+                result = [ordered]@{ ok = $true }
+            } | ConvertTo-Json -Compress -Depth 5
+            [Console]::Out.WriteLine($response)
+            """);
+        McpStdioTransport transport = new(new WorkspaceGuard());
+
+        McpStdioTransportResult result = transport.Send(
+            WorkspaceContext.Detect(temp.Path, temp.Path),
+            CreateOptions(scriptPath),
+            new McpJsonRpcRequest(JsonSerializer.SerializeToElement("authorization"), "initialize"));
+
+        Assert.True(result.Succeeded, result.SafeMessage);
+        Assert.Contains("Authorization: Bearer [redacted]", result.StderrSnippet, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("super-secret-token", result.StderrSnippet, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void Send_times_out_silent_server_and_returns_safe_failure()
     {
         using TempDirectory temp = TempDirectory.Create();

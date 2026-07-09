@@ -12,8 +12,12 @@ public sealed class McpStdioTransport
     private const int CleanupWaitMilliseconds = 1000;
     private const int StderrSnippetMaxBytes = 4096;
 
+    private static readonly Regex AuthorizationHeaderPattern = new(
+        @"\b(authorization)\b\s*([:=])\s*(?:(Bearer)\s+)?(""[^""]*""|'[^']*'|[^\s]+)",
+        RegexOptions.Compiled | RegexOptions.CultureInvariant | RegexOptions.IgnoreCase);
+
     private static readonly Regex SecretAssignmentPattern = new(
-        @"\b(api[-_]?key|access[-_]?token|refresh[-_]?token|token|secret|password|authorization)\b\s*([:=])\s*(""[^""]*""|'[^']*'|[^\s]+)",
+        @"\b(api[-_]?key|access[-_]?token|refresh[-_]?token|token|secret|password)\b\s*([:=])\s*(""[^""]*""|'[^']*'|[^\s]+)",
         RegexOptions.Compiled | RegexOptions.CultureInvariant | RegexOptions.IgnoreCase);
 
     private static readonly Regex CommandLineSecretPattern = new(
@@ -326,13 +330,22 @@ public sealed class McpStdioTransport
         }
 
         string cleaned = builder.ToString();
+        cleaned = AuthorizationHeaderPattern.Replace(cleaned, RedactAuthorizationHeader);
+        cleaned = BearerTokenPattern.Replace(cleaned, "Bearer [redacted]");
         cleaned = SecretAssignmentPattern.Replace(
             cleaned,
             match => $"{match.Groups[1].Value}{match.Groups[2].Value}[redacted]");
         cleaned = CommandLineSecretPattern.Replace(
             cleaned,
             match => $"{match.Groups[1].Value}[redacted]");
-        return BearerTokenPattern.Replace(cleaned, "Bearer [redacted]");
+        return cleaned;
+    }
+
+    private static string RedactAuthorizationHeader(Match match)
+    {
+        string separator = match.Groups[2].Value == ":" ? ": " : match.Groups[2].Value;
+        string scheme = match.Groups[3].Success ? $"{match.Groups[3].Value} " : string.Empty;
+        return $"{match.Groups[1].Value}{separator}{scheme}[redacted]";
     }
 
     private static StderrCapture TruncateUtf8(string text, int maxBytes)
