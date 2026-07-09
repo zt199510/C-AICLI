@@ -10,6 +10,7 @@ public sealed class McpProtocolClient
 
     private const string InitializeMethod = "initialize";
     private const string InitializedNotificationMethod = "notifications/initialized";
+    private const string ToolsListMethod = "tools/list";
     private const int MaxJsonRpcErrorMessageLength = 512;
     private const int MaxProtocolVersionMessageLength = 64;
 
@@ -90,9 +91,59 @@ public sealed class McpProtocolClient
             notificationResult.StderrTruncated);
     }
 
+    public McpToolsListResult ListTools(CancellationToken cancellationToken = default)
+    {
+        JsonElement requestId = JsonSerializer.SerializeToElement(
+            Interlocked.Increment(ref nextRequestId));
+        McpJsonRpcRequest request = new(requestId, ToolsListMethod);
+
+        McpStdioTransportResult responseResult = session.Send(request, cancellationToken);
+        if (!responseResult.Succeeded)
+        {
+            return FromToolsListTransportFailure(responseResult);
+        }
+
+        McpJsonRpcResponse? response = responseResult.Response;
+        if (response is null)
+        {
+            return InvalidToolsListResponse(responseResult);
+        }
+
+        if (response.Error is not null)
+        {
+            return McpToolsListResult.Failure(
+                McpErrorCode.JsonRpcError,
+                "MCP tools/list returned a JSON-RPC error.",
+                jsonRpcErrorCode: response.Error.Code,
+                jsonRpcErrorMessage: SanitizeJsonRpcErrorMessage(response.Error.Message),
+                stderrSnippet: responseResult.StderrSnippet,
+                stderrTruncated: responseResult.StderrTruncated);
+        }
+
+        if (!TryParseToolsListResult(response.Result, out IReadOnlyList<McpDiscoveredTool> tools))
+        {
+            return InvalidToolsListResponse(responseResult);
+        }
+
+        return McpToolsListResult.Success(
+            tools,
+            responseResult.StderrSnippet,
+            responseResult.StderrTruncated);
+    }
+
     private static McpInitializeResult FromTransportFailure(McpStdioTransportResult result)
     {
         return McpInitializeResult.Failure(
+            result.ErrorCode ?? McpErrorCode.InvalidResponse,
+            result.SafeMessage,
+            timedOut: result.TimedOut,
+            stderrSnippet: result.StderrSnippet,
+            stderrTruncated: result.StderrTruncated);
+    }
+
+    private static McpToolsListResult FromToolsListTransportFailure(McpStdioTransportResult result)
+    {
+        return McpToolsListResult.Failure(
             result.ErrorCode ?? McpErrorCode.InvalidResponse,
             result.SafeMessage,
             timedOut: result.TimedOut,
@@ -118,6 +169,16 @@ public sealed class McpProtocolClient
         return McpInitializeResult.Failure(
             McpErrorCode.InvalidResponse,
             "MCP initialize response was missing or invalid.",
+            timedOut: result.TimedOut,
+            stderrSnippet: result.StderrSnippet,
+            stderrTruncated: result.StderrTruncated);
+    }
+
+    private static McpToolsListResult InvalidToolsListResponse(McpStdioTransportResult result)
+    {
+        return McpToolsListResult.Failure(
+            McpErrorCode.InvalidResponse,
+            "MCP tools/list response was missing or invalid.",
             timedOut: result.TimedOut,
             stderrSnippet: result.StderrSnippet,
             stderrTruncated: result.StderrTruncated);
@@ -167,6 +228,57 @@ public sealed class McpProtocolClient
         return true;
     }
 
+    private static bool TryParseToolsListResult(
+        JsonElement? result,
+        out IReadOnlyList<McpDiscoveredTool> tools)
+    {
+        tools = [];
+
+        if (!result.HasValue || result.Value.ValueKind != JsonValueKind.Object)
+        {
+            return false;
+        }
+
+        JsonElement root = result.Value;
+        if (!root.TryGetProperty("tools", out JsonElement toolsElement) ||
+            toolsElement.ValueKind != JsonValueKind.Array)
+        {
+            return false;
+        }
+
+        List<McpDiscoveredTool> parsedTools = [];
+        foreach (JsonElement toolElement in toolsElement.EnumerateArray())
+        {
+            if (!TryParseDiscoveredTool(toolElement, out McpDiscoveredTool? tool) ||
+                tool is null)
+            {
+                return false;
+            }
+
+            parsedTools.Add(tool);
+        }
+
+        tools = parsedTools;
+        return true;
+    }
+
+    private static bool TryParseDiscoveredTool(
+        JsonElement toolElement,
+        out McpDiscoveredTool? tool)
+    {
+        tool = null;
+        if (toolElement.ValueKind != JsonValueKind.Object ||
+            !TryGetRequiredString(toolElement, "name", out string name) ||
+            !TryGetOptionalString(toolElement, "description", out string description) ||
+            !TryGetInputSchema(toolElement, out JsonElement inputSchema))
+        {
+            return false;
+        }
+
+        tool = new McpDiscoveredTool(name, description, inputSchema);
+        return true;
+    }
+
     private static bool TryGetRequiredString(
         JsonElement element,
         string propertyName,
@@ -187,6 +299,51 @@ public sealed class McpProtocolClient
 
         value = text;
         return true;
+    }
+
+    private static bool TryGetOptionalString(
+        JsonElement element,
+        string propertyName,
+        out string value)
+    {
+        value = string.Empty;
+        if (!element.TryGetProperty(propertyName, out JsonElement property) ||
+            property.ValueKind == JsonValueKind.Null)
+        {
+            return true;
+        }
+
+        if (property.ValueKind != JsonValueKind.String)
+        {
+            return false;
+        }
+
+        value = property.GetString() ?? string.Empty;
+        return true;
+    }
+
+    private static bool TryGetInputSchema(JsonElement toolElement, out JsonElement inputSchema)
+    {
+        if (!toolElement.TryGetProperty("inputSchema", out JsonElement schemaElement) ||
+            schemaElement.ValueKind == JsonValueKind.Null)
+        {
+            inputSchema = CreateDefaultObjectSchema();
+            return true;
+        }
+
+        if (schemaElement.ValueKind != JsonValueKind.Object)
+        {
+            inputSchema = default;
+            return false;
+        }
+
+        inputSchema = schemaElement.Clone();
+        return true;
+    }
+
+    private static JsonElement CreateDefaultObjectSchema()
+    {
+        return JsonSerializer.SerializeToElement(new { type = "object" });
     }
 
     private static string SanitizeJsonRpcErrorMessage(string message)
