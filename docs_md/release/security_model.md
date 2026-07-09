@@ -80,8 +80,8 @@ Shell execution is restricted:
 - Denylist matching is boundary-aware, so it avoids matching inside larger words while still matching shell fragments.
 - Ordinary commands require approval.
 - Dangerous command patterns are denied before execution with `errorCode` `approval-denied` and `approvalStatus` `dangerous-shell-denied`.
-- Dangerous command output and structured payloads include a readable `matchedRule` where applicable.
-- Encoded PowerShell payloads and aliases are detected. Encoded payloads are not echoed in safe diagnostics.
+- Structured payloads include `matchedRule`, and text output includes a readable matched-rule summary where applicable.
+- Encoded PowerShell switches and supported abbreviations are detected. Encoded payloads are not echoed in safe diagnostics.
 - Commands have timeouts and stdout/stderr byte limits.
 - Timeout requests above `shellPolicy.maxTimeoutMilliseconds` are rejected with a safe explanation instead of being silently clamped.
 - Direct executable MCP policy input includes the executable and argv. Encoded PowerShell payloads are canonicalized/redacted in policy and detector messages.

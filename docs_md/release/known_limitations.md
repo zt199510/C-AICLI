@@ -36,7 +36,7 @@
 - Dangerous command detection and shell policy are conservative text/pattern checks, not complete shell parsing or semantic proof.
 - Shell allowlist entries are command text, not exact argv arrays; unusual quoted arguments with metacharacters may be conservatively blocked.
 - Timeout requests above the configured shell maximum are rejected rather than silently clamped.
-- Encoded PowerShell and aliases are detected where supported, and encoded payloads are redacted in safe diagnostics, but this is not a general-purpose malware detector.
+- Encoded PowerShell switches and supported abbreviations are detected where supported, and encoded payloads are redacted in safe diagnostics, but this is not a general-purpose malware detector.
 
 ## Configuration And Secrets
 
