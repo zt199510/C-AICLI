@@ -861,29 +861,30 @@ public sealed class FileConversationStoreTests
         string sessionDirectory,
         Func<TResult> operation)
     {
-        Task<TResult> operationTask = Task.Run(operation);
-        string? temporaryFilePath = await WaitForTemporaryFileAsync(sessionDirectory, operationTask);
-        TResult result = await operationTask;
-        return new TemporaryFileObservation<TResult>(result, temporaryFilePath);
-    }
-
-    private static async Task<string?> WaitForTemporaryFileAsync(string sessionDirectory, Task operationTask)
-    {
-        DateTimeOffset deadline = DateTimeOffset.UtcNow.AddSeconds(10);
-        while (!operationTask.IsCompleted && DateTimeOffset.UtcNow < deadline)
+        TaskCompletionSource<string?> temporaryFileObserved = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        using CancellationTokenSource timeout = new(TimeSpan.FromSeconds(10));
+        using CancellationTokenRegistration timeoutRegistration = timeout.Token.Register(
+            static state => ((TaskCompletionSource<string?>)state!).TrySetResult(null),
+            temporaryFileObserved);
+        using FileSystemWatcher watcher = new(sessionDirectory, "*.tmp")
         {
-            string? temporaryFilePath = Directory
-                .EnumerateFiles(sessionDirectory, "*.tmp", SearchOption.TopDirectoryOnly)
-                .FirstOrDefault();
-            if (temporaryFilePath is not null)
-            {
-                return temporaryFilePath;
-            }
+            IncludeSubdirectories = false,
+            NotifyFilter = NotifyFilters.FileName | NotifyFilters.CreationTime
+        };
+        watcher.Created += (_, args) => temporaryFileObserved.TrySetResult(args.FullPath);
+        watcher.Renamed += (_, args) =>
+        {
+            string observedPath = args.OldFullPath.EndsWith(".tmp", StringComparison.OrdinalIgnoreCase)
+                ? args.OldFullPath
+                : args.FullPath;
+            temporaryFileObserved.TrySetResult(observedPath);
+        };
+        watcher.EnableRaisingEvents = true;
 
-            await Task.Delay(1);
-        }
-
-        return null;
+        Task<TResult> operationTask = Task.Run(operation);
+        TResult result = await operationTask;
+        string? temporaryFilePath = await temporaryFileObserved.Task;
+        return new TemporaryFileObservation<TResult>(result, temporaryFilePath);
     }
 
     private static void AssertTemporaryFileWasObserved(string? temporaryFilePath)
