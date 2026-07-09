@@ -22,16 +22,14 @@ public sealed class DefaultMcpConnectionManager : IMcpConnectionManager
                 "Server configuration is incomplete.");
         }
 
-        if (server.TransportSummary.StartsWith("stdio command:", StringComparison.Ordinal))
+        if (server.Transport == "stdio")
         {
-            string command = server.TransportSummary["stdio command:".Length..].Trim();
-            if (string.IsNullOrWhiteSpace(command) || command == "not configured")
+            if (string.IsNullOrWhiteSpace(server.Command))
             {
                 return new McpConnectionStatus(server.Name, "invalid", "stdio command is not configured.");
             }
 
-            string executable = command.Split(' ', StringSplitOptions.RemoveEmptyEntries).FirstOrDefault() ?? string.Empty;
-            if (!IsExecutableAvailable(executable))
+            if (!IsExecutableAvailable(server.Command))
             {
                 return new McpConnectionStatus(
                     server.Name,
@@ -45,7 +43,7 @@ public sealed class DefaultMcpConnectionManager : IMcpConnectionManager
                 "stdio command is configured; live MCP handshake is not attempted in this diagnostic.");
         }
 
-        if (server.TransportSummary.Contains("url:", StringComparison.Ordinal))
+        if (server.Transport is "sse" or "http")
         {
             return new McpConnectionStatus(
                 server.Name,

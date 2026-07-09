@@ -79,6 +79,37 @@ public sealed class McpConfigurationLoaderTests
         Assert.Equal("stdio command: workspace-docs", docs.TransportSummary);
     }
 
+    [Fact]
+    public void Load_preserves_raw_stdio_settings_for_transport_use()
+    {
+        CliConfigFile config = new()
+        {
+            McpServers = new Dictionary<string, McpServerConfig>
+            {
+                ["docs"] = new()
+                {
+                    Enabled = true,
+                    Transport = "stdio",
+                    Command = "mcp-docs",
+                    Args = ["--workspace", "."],
+                    Cwd = "tools/mcp",
+                    TimeoutMilliseconds = 1234
+                }
+            }
+        };
+
+        McpConfiguration mcp = McpConfigurationLoader.Load(CreateConfiguration(
+            [new CliConfigFileSource("workspace config", "workspace-config.json", config)]));
+
+        McpServerDefinition docs = Assert.Single(mcp.Servers);
+        Assert.Equal("stdio", docs.Transport);
+        Assert.Equal("mcp-docs", docs.Command);
+        Assert.Equal(["--workspace", "."], docs.Args);
+        Assert.Equal("tools/mcp", docs.Cwd);
+        Assert.Equal(1234, docs.TimeoutMilliseconds);
+        Assert.Equal("stdio command: mcp-docs", docs.TransportSummary);
+    }
+
     private static EffectiveConfiguration CreateConfiguration(IReadOnlyList<CliConfigFileSource> sources)
     {
         return new EffectiveConfiguration(

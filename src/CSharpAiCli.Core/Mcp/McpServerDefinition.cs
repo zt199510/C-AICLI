@@ -5,4 +5,17 @@ public sealed record McpServerDefinition(
     bool Enabled,
     string Status,
     string TransportSummary,
-    string Source);
+    string Source)
+{
+    public string? Transport { get; init; }
+
+    public string? Command { get; init; }
+
+    public IReadOnlyList<string> Args { get; init; } = [];
+
+    public string? Cwd { get; init; }
+
+    public int? TimeoutMilliseconds { get; init; }
+
+    public string? Url { get; init; }
+}

@@ -35,20 +35,24 @@ public static class McpConfigurationLoader
         McpServerConfig config,
         string source)
     {
+        string? command = NormalizeOptional(config.Command);
+        string? url = NormalizeOptional(config.Url);
+        string? cwd = NormalizeOptional(config.Cwd);
+        IReadOnlyList<string> args = NormalizeArgs(config.Args);
         string transport = string.IsNullOrWhiteSpace(config.Transport)
             ? InferTransport(config)
             : config.Transport.Trim().ToLowerInvariant();
         string summary = transport switch
         {
-            "stdio" => string.IsNullOrWhiteSpace(config.Command) ? "stdio command: not configured" : $"stdio command: {config.Command}",
-            "sse" or "http" => string.IsNullOrWhiteSpace(config.Url) ? $"{transport} url: not configured" : $"{transport} url: {config.Url}",
+            "stdio" => command is null ? "stdio command: not configured" : $"stdio command: {command}",
+            "sse" or "http" => url is null ? $"{transport} url: not configured" : $"{transport} url: {url}",
             _ => $"transport: {transport}"
         };
 
         bool hasTransportTarget = transport switch
         {
-            "stdio" => !string.IsNullOrWhiteSpace(config.Command),
-            "sse" or "http" => !string.IsNullOrWhiteSpace(config.Url),
+            "stdio" => command is not null,
+            "sse" or "http" => url is not null,
             _ => false
         };
 
@@ -61,7 +65,15 @@ public static class McpConfigurationLoader
             Enabled: config.Enabled,
             Status: status,
             TransportSummary: summary,
-            Source: source);
+            Source: source)
+        {
+            Transport = transport,
+            Command = command,
+            Args = args,
+            Cwd = cwd,
+            TimeoutMilliseconds = config.TimeoutMilliseconds,
+            Url = url
+        };
     }
 
     private static string InferTransport(McpServerConfig config)
@@ -77,5 +89,20 @@ public static class McpConfigurationLoader
         }
 
         return "unknown";
+    }
+
+    private static string? NormalizeOptional(string? value)
+    {
+        return string.IsNullOrWhiteSpace(value) ? null : value.Trim();
+    }
+
+    private static IReadOnlyList<string> NormalizeArgs(string[]? args)
+    {
+        if (args is null || args.Length == 0)
+        {
+            return [];
+        }
+
+        return args.Where(argument => argument is not null).ToArray();
     }
 }

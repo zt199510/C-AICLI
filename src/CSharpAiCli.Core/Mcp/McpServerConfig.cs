@@ -8,5 +8,11 @@ public sealed class McpServerConfig
 
     public string? Command { get; init; }
 
+    public string[]? Args { get; init; }
+
+    public string? Cwd { get; init; }
+
+    public int? TimeoutMilliseconds { get; init; }
+
     public string? Url { get; init; }
 }
