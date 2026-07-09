@@ -110,6 +110,42 @@ public sealed class McpInitializeHandshakeTests
     }
 
     [Fact]
+    public void Initialize_unsupported_protocol_version_fails_without_sending_initialized_notification()
+    {
+        JsonElement responseResult = JsonSerializer.SerializeToElement(new
+        {
+            protocolVersion = "2024-11-05",
+            capabilities = new { },
+            serverInfo = new
+            {
+                name = "fixture-server",
+                version = "1.0.0"
+            }
+        });
+        FakeMcpSession session = new(
+            McpStdioTransportResult.Success(
+                new McpJsonRpcResponse
+                {
+                    Id = JsonSerializer.SerializeToElement(1),
+                    Result = responseResult
+                },
+                stderrSnippet: "",
+                stderrTruncated: false),
+            McpStdioTransportResult.NotificationSent(
+                stderrSnippet: "",
+                stderrTruncated: false));
+        McpProtocolClient client = new(session);
+
+        McpInitializeResult result = client.Initialize();
+
+        Assert.False(result.Succeeded);
+        Assert.Equal("mcp-protocol-version-mismatch", result.ErrorCode);
+        Assert.Contains("unsupported protocol version", result.SafeMessage, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("2024-11-05", result.SafeMessage, StringComparison.Ordinal);
+        Assert.Empty(session.Notifications);
+    }
+
+    [Fact]
     public void Initialize_json_rpc_error_returns_safe_failure_with_error_details()
     {
         using TempDirectory temp = TempDirectory.Create();

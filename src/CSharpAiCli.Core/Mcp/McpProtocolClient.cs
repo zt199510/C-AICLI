@@ -11,6 +11,7 @@ public sealed class McpProtocolClient
     private const string InitializeMethod = "initialize";
     private const string InitializedNotificationMethod = "notifications/initialized";
     private const int MaxJsonRpcErrorMessageLength = 512;
+    private const int MaxProtocolVersionMessageLength = 64;
 
     private readonly IMcpJsonRpcSession session;
     private long nextRequestId;
@@ -68,6 +69,11 @@ public sealed class McpProtocolClient
             return InvalidInitializeResponse(responseResult);
         }
 
+        if (!string.Equals(protocolVersion, ProtocolVersion, StringComparison.Ordinal))
+        {
+            return ProtocolVersionMismatchFailure(protocolVersion, responseResult);
+        }
+
         McpStdioTransportResult notificationResult = session.SendNotification(
             new McpJsonRpcNotification(InitializedNotificationMethod),
             cancellationToken);
@@ -89,6 +95,19 @@ public sealed class McpProtocolClient
         return McpInitializeResult.Failure(
             result.ErrorCode ?? McpErrorCode.InvalidResponse,
             result.SafeMessage,
+            timedOut: result.TimedOut,
+            stderrSnippet: result.StderrSnippet,
+            stderrTruncated: result.StderrTruncated);
+    }
+
+    private static McpInitializeResult ProtocolVersionMismatchFailure(
+        string protocolVersion,
+        McpStdioTransportResult result)
+    {
+        string safeProtocolVersion = SanitizeProtocolVersion(protocolVersion);
+        return McpInitializeResult.Failure(
+            McpErrorCode.ProtocolVersionMismatch,
+            $"MCP initialize returned unsupported protocol version '{safeProtocolVersion}'.",
             timedOut: result.TimedOut,
             stderrSnippet: result.StderrSnippet,
             stderrTruncated: result.StderrTruncated);
@@ -190,6 +209,28 @@ public sealed class McpProtocolClient
 
         string sanitized = builder.ToString().Trim();
         return sanitized.Length == 0 ? "JSON-RPC error" : sanitized;
+    }
+
+    private static string SanitizeProtocolVersion(string protocolVersion)
+    {
+        if (string.IsNullOrWhiteSpace(protocolVersion))
+        {
+            return "unknown";
+        }
+
+        StringBuilder builder = new(Math.Min(protocolVersion.Length, MaxProtocolVersionMessageLength));
+        foreach (char character in protocolVersion)
+        {
+            if (builder.Length >= MaxProtocolVersionMessageLength)
+            {
+                break;
+            }
+
+            builder.Append(char.IsControl(character) ? ' ' : character);
+        }
+
+        string sanitized = builder.ToString().Trim();
+        return sanitized.Length == 0 ? "unknown" : sanitized;
     }
 
     private sealed record InitializeParams(
