@@ -31,8 +31,12 @@
 - The tool is local and not a sandbox.
 - Workspace path checks reduce accidental boundary escapes but do not replace OS permissions or code review.
 - Patch editing is single-file exact-text replacement, not a full merge engine.
-- Shell execution is restricted and approved, but users must still inspect commands.
-- Dangerous command detection is conservative and pattern-based; it is not a complete proof of safety.
+- Patch writes remain approval-gated and recheck file content before apply, but previews do not make patching risk-free.
+- Shell policy and dangerous command detection run before approval/execution, including for MCP stdio startup commands, but users must still inspect commands.
+- Dangerous command detection and shell policy are conservative text/pattern checks, not complete shell parsing or semantic proof.
+- Shell allowlist entries are command text, not exact argv arrays; unusual quoted arguments with metacharacters may be conservatively blocked.
+- Timeout requests above the configured shell maximum are rejected rather than silently clamped.
+- Encoded PowerShell and aliases are detected where supported, and encoded payloads are redacted in safe diagnostics, but this is not a general-purpose malware detector.
 
 ## Configuration And Secrets
 
@@ -45,5 +49,6 @@
 ## Platform
 
 - Windows is the primary target.
+- Shell policy behavior is primarily designed and verified for Windows command execution.
 - Tests run on .NET 9 in the current environment.
 - The repository SDK is locked by root `global.json` to .NET SDK `9.0.308` with `latestPatch` roll-forward.
