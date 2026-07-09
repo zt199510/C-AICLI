@@ -64,4 +64,16 @@ public sealed class DangerousCommandDetectorTests
         Assert.Equal("Command contains opaque encoded PowerShell execution.", detection.Reason);
         Assert.Equal("encoded powershell command", detection.MatchedRule);
     }
+
+    [Theory]
+    [InlineData(@"C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe -ec VwByAGkAdABlAC0ATwB1AHQAcAB1AHQAIABoAGkAZABkAGUAbgA=")]
+    [InlineData("/usr/bin/pwsh -EncodedCommand VwByAGkAdABlAC0ATwB1AHQAcAB1AHQAIABoAGkAZABkAGUAbgA=")]
+    public void Detect_blocks_encoded_powershell_full_path_invocations(string command)
+    {
+        DangerousCommandDetection detection = DangerousCommandDetector.Detect(command);
+
+        Assert.True(detection.IsDangerous);
+        Assert.Equal("Command contains opaque encoded PowerShell execution.", detection.Reason);
+        Assert.Equal("encoded powershell command", detection.MatchedRule);
+    }
 }

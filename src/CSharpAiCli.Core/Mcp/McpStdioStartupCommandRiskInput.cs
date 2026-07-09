@@ -223,7 +223,10 @@ public sealed record McpStdioStartupCommandRiskInput(
     private static string GetExecutableName(string executable)
     {
         string trimmed = executable.Trim().Trim('"');
-        string fileName = Path.GetFileName(trimmed);
+        int separatorIndex = Math.Max(
+            trimmed.LastIndexOf('/'),
+            trimmed.LastIndexOf('\\'));
+        string fileName = separatorIndex >= 0 ? trimmed[(separatorIndex + 1)..] : Path.GetFileName(trimmed);
         if (string.IsNullOrEmpty(fileName))
         {
             fileName = trimmed;

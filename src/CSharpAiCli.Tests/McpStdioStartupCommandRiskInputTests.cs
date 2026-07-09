@@ -174,6 +174,8 @@ public sealed class McpStdioStartupCommandRiskInputTests
     [Theory]
     [InlineData("cmd.exe", "/c", "powershell", "-ec")]
     [InlineData("cmd", "/k", "pwsh", "/enc")]
+    [InlineData("cmd.exe", "/c", @"C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe", "-ec")]
+    [InlineData("cmd", "/k", "/usr/bin/pwsh", "-EncodedCommand")]
     public void Create_sanitizes_encoded_powershell_payload_after_cmd_wrapper_extraction(
         string executable,
         string commandSwitch,

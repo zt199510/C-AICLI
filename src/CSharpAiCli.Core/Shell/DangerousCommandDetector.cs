@@ -104,7 +104,7 @@ public static partial class DangerousCommandDetector
     [GeneratedRegex(@"(?i)(^|\s)(chmod|chown|icacls|takeown)\b")]
     private static partial Regex PermissionPattern();
 
-    [GeneratedRegex(@"(?i)(^|\s)(powershell|pwsh)(\.exe)?\b")]
+    [GeneratedRegex(@"(?i)(^|\s)(?:\S*[\\/])?(powershell|pwsh)(\.exe)?\b")]
     private static partial Regex PowerShellExecutablePattern();
 
     [GeneratedRegex(@"(?:^|\s)([-/]\S+)")]
