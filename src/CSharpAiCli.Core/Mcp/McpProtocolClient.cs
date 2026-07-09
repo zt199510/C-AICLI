@@ -11,6 +11,7 @@ public sealed class McpProtocolClient
     private const string InitializeMethod = "initialize";
     private const string InitializedNotificationMethod = "notifications/initialized";
     private const string ToolsListMethod = "tools/list";
+    private const string ToolsCallMethod = "tools/call";
     private const int MaxToolsListPages = 100;
     private const int MaxJsonRpcErrorMessageLength = 512;
     private const int MaxProtocolVersionMessageLength = 64;
@@ -148,6 +149,72 @@ public sealed class McpProtocolClient
         return ToolsListPaginationLimitFailure(lastResponseResult);
     }
 
+    public McpToolCallResult CallTool(
+        string name,
+        JsonElement arguments,
+        CancellationToken cancellationToken = default)
+    {
+        if (string.IsNullOrWhiteSpace(name))
+        {
+            return McpToolCallResult.Failure(
+                McpErrorCode.InvalidResponse,
+                "MCP tools/call tool name is required.");
+        }
+
+        if (arguments.ValueKind != JsonValueKind.Object)
+        {
+            return McpToolCallResult.Failure(
+                McpErrorCode.InvalidResponse,
+                "MCP tools/call arguments must be a JSON object.");
+        }
+
+        JsonElement requestId = JsonSerializer.SerializeToElement(
+            Interlocked.Increment(ref nextRequestId));
+        JsonElement parameters = JsonSerializer.SerializeToElement(new ToolsCallParams(name, arguments));
+        McpJsonRpcRequest request = new(requestId, ToolsCallMethod, parameters);
+
+        McpStdioTransportResult responseResult = session.Send(request, cancellationToken);
+        if (!responseResult.Succeeded)
+        {
+            return FromToolCallTransportFailure(responseResult);
+        }
+
+        McpJsonRpcResponse? response = responseResult.Response;
+        if (response is null)
+        {
+            return InvalidToolCallResponse(responseResult);
+        }
+
+        if (response.Error is not null)
+        {
+            return McpToolCallResult.Failure(
+                McpErrorCode.JsonRpcError,
+                "MCP tools/call returned a JSON-RPC error.",
+                jsonRpcErrorCode: response.Error.Code,
+                jsonRpcErrorMessage: SanitizeJsonRpcErrorMessage(response.Error.Message),
+                stderrSnippet: responseResult.StderrSnippet,
+                stderrTruncated: responseResult.StderrTruncated);
+        }
+
+        if (!TryParseToolCallResult(
+            response.Result,
+            out IReadOnlyList<JsonElement> content,
+            out JsonElement? structuredContent,
+            out bool isToolError,
+            out JsonElement rawResult))
+        {
+            return InvalidToolCallResponse(responseResult);
+        }
+
+        return McpToolCallResult.Success(
+            content,
+            structuredContent,
+            isToolError,
+            rawResult,
+            responseResult.StderrSnippet,
+            responseResult.StderrTruncated);
+    }
+
     private McpJsonRpcRequest CreateToolsListRequest(string? cursor)
     {
         JsonElement requestId = JsonSerializer.SerializeToElement(
@@ -174,6 +241,16 @@ public sealed class McpProtocolClient
     private static McpToolsListResult FromToolsListTransportFailure(McpStdioTransportResult result)
     {
         return McpToolsListResult.Failure(
+            result.ErrorCode ?? McpErrorCode.InvalidResponse,
+            result.SafeMessage,
+            timedOut: result.TimedOut,
+            stderrSnippet: result.StderrSnippet,
+            stderrTruncated: result.StderrTruncated);
+    }
+
+    private static McpToolCallResult FromToolCallTransportFailure(McpStdioTransportResult result)
+    {
+        return McpToolCallResult.Failure(
             result.ErrorCode ?? McpErrorCode.InvalidResponse,
             result.SafeMessage,
             timedOut: result.TimedOut,
@@ -209,6 +286,16 @@ public sealed class McpProtocolClient
         return McpToolsListResult.Failure(
             McpErrorCode.InvalidResponse,
             "MCP tools/list response was missing or invalid.",
+            timedOut: result.TimedOut,
+            stderrSnippet: result.StderrSnippet,
+            stderrTruncated: result.StderrTruncated);
+    }
+
+    private static McpToolCallResult InvalidToolCallResponse(McpStdioTransportResult result)
+    {
+        return McpToolCallResult.Failure(
+            McpErrorCode.InvalidResponse,
+            "MCP tools/call response was missing or invalid.",
             timedOut: result.TimedOut,
             stderrSnippet: result.StderrSnippet,
             stderrTruncated: result.StderrTruncated);
@@ -316,6 +403,60 @@ public sealed class McpProtocolClient
         }
 
         tools = parsedTools;
+        return true;
+    }
+
+    private static bool TryParseToolCallResult(
+        JsonElement? result,
+        out IReadOnlyList<JsonElement> content,
+        out JsonElement? structuredContent,
+        out bool isToolError,
+        out JsonElement rawResult)
+    {
+        content = [];
+        structuredContent = null;
+        isToolError = false;
+        rawResult = default;
+
+        if (!result.HasValue || result.Value.ValueKind != JsonValueKind.Object)
+        {
+            return false;
+        }
+
+        JsonElement root = result.Value;
+        if (root.TryGetProperty("content", out JsonElement contentElement))
+        {
+            if (contentElement.ValueKind != JsonValueKind.Array)
+            {
+                return false;
+            }
+
+            List<JsonElement> contentBlocks = [];
+            foreach (JsonElement contentBlock in contentElement.EnumerateArray())
+            {
+                contentBlocks.Add(contentBlock.Clone());
+            }
+
+            content = contentBlocks;
+        }
+
+        if (root.TryGetProperty("structuredContent", out JsonElement structuredContentElement))
+        {
+            structuredContent = structuredContentElement.Clone();
+        }
+
+        if (root.TryGetProperty("isError", out JsonElement isErrorElement))
+        {
+            if (isErrorElement.ValueKind != JsonValueKind.True &&
+                isErrorElement.ValueKind != JsonValueKind.False)
+            {
+                return false;
+            }
+
+            isToolError = isErrorElement.GetBoolean();
+        }
+
+        rawResult = root.Clone();
         return true;
     }
 
@@ -461,6 +602,10 @@ public sealed class McpProtocolClient
 
     private sealed record ToolsListParams(
         [property: JsonPropertyName("cursor")] string Cursor);
+
+    private sealed record ToolsCallParams(
+        [property: JsonPropertyName("name")] string Name,
+        [property: JsonPropertyName("arguments")] JsonElement Arguments);
 
     private sealed record ClientCapabilities;
 
