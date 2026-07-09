@@ -9,7 +9,7 @@ Completed:
 - Step 4: Added `workspace.apply_patch` dry-run preview structured payloads with paths, files, replacement counts, diff presence, and dirty workspace status.
 - Step 5: Reused shell command risk checks before MCP stdio startup, including matched-rule reporting, encoded PowerShell alias coverage, payload-safe canonicalization, and direct/full-path PowerShell handling.
 - Step 6: Added `doctor` diagnostics for shell policy, patch policy, and MCP execution policy, including trusted user-config stdio MCP counts.
-- Step 7: Added and enforced shell policy coverage for allowlist, denylist, timeout max, dangerous matched rules, and MCP startup blocking. The policy now applies before shell execution and before MCP stdio process start.
+- Step 7: Added and enforced shell policy coverage for allowlist, denylist, timeout max, dangerous matched rules, and MCP startup blocking. The policy now applies before shell execution and before MCP stdio process start. Final review follow-up added regressions for nonpositive MCP timeouts and quoted encoded PowerShell executable/switch forms.
 - Step 8: Updated release security model and known limitations for shell policy, patch preview, MCP startup policy, matched-rule diagnostics, and conservative limitations.
 - Step 9: Ran final build/test verification and created this weekly review.
 
@@ -18,7 +18,7 @@ Verification:
 - Command: `dotnet build src\CSharpAiCli.sln --no-restore`
 - Result: passed; 0 warnings, 0 errors.
 - Command: `dotnet test src\CSharpAiCli.sln --no-restore`
-- Result: passed; 890 passed, 0 failed, 0 skipped.
+- Result: passed; 899 passed, 0 failed, 0 skipped.
 - Command: `git diff --check`
 - Result: passed after creating this weekly review; no whitespace errors.
 
@@ -27,7 +27,8 @@ Runtime notes:
 - Denylist entries take precedence over allowlist entries; empty configured allowlists deny all shell commands.
 - Allowlist prefix matches allow ordinary arguments but conservatively reject shell control syntax such as `&`, `&&`, `||`, `;`, pipes, redirection, newlines, backticks, and command substitution.
 - Timeout requests above `shellPolicy.maxTimeoutMilliseconds` are rejected with a safe explanation instead of silently clamped.
-- MCP stdio startup evaluates dangerous command detection and configured shell policy before process start. Policy diagnostics use payload-safe startup command text, including redacted encoded PowerShell payloads.
+- MCP stdio startup evaluates dangerous command detection and configured shell policy before process start. Policy diagnostics use payload-safe startup command text, including redacted encoded PowerShell payloads. Nonpositive MCP timeouts are normalized before shell policy evaluation so policy and runtime use the same effective timeout.
+- Encoded PowerShell detection covers full-path, wrapped-shell, quoted executable, and quoted encoded switch forms.
 - `tools call mcp.*` now surfaces safe MCP startup policy failures instead of reducing configured policy blocks to `unknown-tool`; disabled or genuinely missing MCP tools still fail as unknown tools.
 - Patch dry-run preview is now represented in structured payloads but remains single-file exact-text replacement.
 
