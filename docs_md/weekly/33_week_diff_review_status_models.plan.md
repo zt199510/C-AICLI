@@ -20,14 +20,14 @@
 
 ## 任务清单
 
-- [ ] Step 1: 实现 `status` 命令，汇总 workspace、git status、配置状态、approval mode。
-- [ ] Step 2: 实现 `diff` 命令，复用 git diff tool 并支持 `--stat`。
-- [ ] Step 3: 实现 `review` 命令，读取 git diff 并构造审查 prompt。
-- [ ] Step 4: `review` 输出 findings-first 格式，失败时不改文件。
-- [ ] Step 5: 实现 `models` 命令，展示当前 model/baseUrl/source 和推荐配置示例。
-- [ ] Step 6: 增加测试覆盖无 git 仓库、有 git 仓库、空 diff、review 模型失败。
-- [ ] Step 7: 更新 docs 和 smoke tests。
-- [ ] Step 8: 运行 build/test 并创建 `33_week_review.md`。
+- [x] Step 1: 实现 `status` 命令，汇总 workspace、git status、配置状态、approval mode。
+- [x] Step 2: 实现 `diff` 命令，复用 git diff tool 并支持 `--stat`。
+- [x] Step 3: 实现 `review` 命令，读取 git diff 并构造审查 prompt。
+- [x] Step 4: `review` 输出 findings-first 格式，失败时不改文件。
+- [x] Step 5: 实现 `models` 命令，展示当前 model/baseUrl/source 和推荐配置示例。
+- [x] Step 6: 增加测试覆盖无 git 仓库、有 git 仓库、空 diff、review 模型失败。
+- [x] Step 7: 更新 docs 和 smoke tests。
+- [x] Step 8: 运行 build/test 并创建 `33_week_review.md`。
 
 ## 验收标准
 

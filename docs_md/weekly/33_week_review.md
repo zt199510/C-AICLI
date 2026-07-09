@@ -1,6 +1,6 @@
 ## 第 33 周回顾
 
-状态：已验证
+状态：已验收
 
 已完成：
 - 新增 `status` 命令，汇总 workspace、git 状态、有效配置与 approval mode；可在非 git workspace 下运行。
@@ -14,12 +14,14 @@
 - 补充 `status`、`diff`、`review`、`models` 相关测试，覆盖无 git/有 git workspace、空 diff、no-HEAD、staged/untracked/cancel-out、truncation、CLI log 排除、read-only diff hardening 与 review 模型失败等行为。
 - 更新 release docs：quickstart、configuration、capability status、known limitations、CHANGELOG 等记录新命令能力与限制。
 - 更新 release smoke 覆盖离线命令：`status`、`models`、`diff`、`diff --stat`；未运行 `review` smoke，因为它需要模型凭据。
+- 验收期间补强 Windows shell timeout 清理：超时后先终止进程树并等待输出管道收尾，避免临时 workspace 目录因子进程句柄未释放而删除失败。
 
 验证：
 - 命令：从 `C:\Users\10335\AppData\Local\Temp` 运行 `dotnet build D:\AI\C-AICLI\.worktrees\week-32-project-instructions-agents-md\src\CSharpAiCli.sln --no-restore -v minimal`
 - 结果：通过。`CSharpAiCli.Core`、`CSharpAiCli.AgentFramework`、`CSharpAiCli.Cli`、`CSharpAiCli.ProjectPacks`、`CSharpAiCli.Tests` 均成功生成；0 个警告，0 个错误。需要从 repo/worktree 外运行，因为 `global.json` pins SDK `9.0.308`，本机可用 SDK 为 `10.0.301`。
 - 命令：从 `C:\Users\10335\AppData\Local\Temp` 运行 `dotnet test D:\AI\C-AICLI\.worktrees\week-32-project-instructions-agents-md\src\CSharpAiCli.Tests\CSharpAiCli.Tests.csproj -v minimal`
 - 结果：通过。失败 0，通过 680，跳过 0，总计 680。
+- 验收补充：完整测试曾两次暴露 `RestrictedShellRunner` 超时路径在 Windows 下释放临时目录不稳定；修复后复跑同一完整测试命令，通过 680、失败 0、跳过 0。
 - 命令：`git diff --check`
 - 结果：通过，无 whitespace/error 输出。
 - 命令：`rg -n "status|models|diff|review|modelListApi|review --json|diff --stat" docs_md\release tools\Invoke-SmokeTests.ps1 src\CSharpAiCli.Tests\SmokeTestScriptTests.cs`
