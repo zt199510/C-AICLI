@@ -11,6 +11,7 @@ public sealed class McpProtocolClient
     private const string InitializeMethod = "initialize";
     private const string InitializedNotificationMethod = "notifications/initialized";
     private const string ToolsListMethod = "tools/list";
+    private const int MaxToolsListPages = 100;
     private const int MaxJsonRpcErrorMessageLength = 512;
     private const int MaxProtocolVersionMessageLength = 64;
 
@@ -93,42 +94,71 @@ public sealed class McpProtocolClient
 
     public McpToolsListResult ListTools(CancellationToken cancellationToken = default)
     {
+        List<McpDiscoveredTool> tools = [];
+        string? cursor = null;
+        McpStdioTransportResult? lastResponseResult = null;
+
+        for (int page = 0; page < MaxToolsListPages; page++)
+        {
+            McpJsonRpcRequest request = CreateToolsListRequest(cursor);
+            McpStdioTransportResult responseResult = session.Send(request, cancellationToken);
+            lastResponseResult = responseResult;
+            if (!responseResult.Succeeded)
+            {
+                return FromToolsListTransportFailure(responseResult);
+            }
+
+            McpJsonRpcResponse? response = responseResult.Response;
+            if (response is null)
+            {
+                return InvalidToolsListResponse(responseResult);
+            }
+
+            if (response.Error is not null)
+            {
+                return McpToolsListResult.Failure(
+                    McpErrorCode.JsonRpcError,
+                    "MCP tools/list returned a JSON-RPC error.",
+                    jsonRpcErrorCode: response.Error.Code,
+                    jsonRpcErrorMessage: SanitizeJsonRpcErrorMessage(response.Error.Message),
+                    stderrSnippet: responseResult.StderrSnippet,
+                    stderrTruncated: responseResult.StderrTruncated);
+            }
+
+            if (!TryParseToolsListResult(
+                response.Result,
+                out IReadOnlyList<McpDiscoveredTool> pageTools,
+                out string? nextCursor))
+            {
+                return InvalidToolsListResponse(responseResult);
+            }
+
+            tools.AddRange(pageTools);
+            if (string.IsNullOrWhiteSpace(nextCursor))
+            {
+                return McpToolsListResult.Success(
+                    tools,
+                    responseResult.StderrSnippet,
+                    responseResult.StderrTruncated);
+            }
+
+            cursor = nextCursor;
+        }
+
+        return ToolsListPaginationLimitFailure(lastResponseResult);
+    }
+
+    private McpJsonRpcRequest CreateToolsListRequest(string? cursor)
+    {
         JsonElement requestId = JsonSerializer.SerializeToElement(
             Interlocked.Increment(ref nextRequestId));
-        McpJsonRpcRequest request = new(requestId, ToolsListMethod);
-
-        McpStdioTransportResult responseResult = session.Send(request, cancellationToken);
-        if (!responseResult.Succeeded)
+        if (string.IsNullOrWhiteSpace(cursor))
         {
-            return FromToolsListTransportFailure(responseResult);
+            return new McpJsonRpcRequest(requestId, ToolsListMethod);
         }
 
-        McpJsonRpcResponse? response = responseResult.Response;
-        if (response is null)
-        {
-            return InvalidToolsListResponse(responseResult);
-        }
-
-        if (response.Error is not null)
-        {
-            return McpToolsListResult.Failure(
-                McpErrorCode.JsonRpcError,
-                "MCP tools/list returned a JSON-RPC error.",
-                jsonRpcErrorCode: response.Error.Code,
-                jsonRpcErrorMessage: SanitizeJsonRpcErrorMessage(response.Error.Message),
-                stderrSnippet: responseResult.StderrSnippet,
-                stderrTruncated: responseResult.StderrTruncated);
-        }
-
-        if (!TryParseToolsListResult(response.Result, out IReadOnlyList<McpDiscoveredTool> tools))
-        {
-            return InvalidToolsListResponse(responseResult);
-        }
-
-        return McpToolsListResult.Success(
-            tools,
-            responseResult.StderrSnippet,
-            responseResult.StderrTruncated);
+        JsonElement parameters = JsonSerializer.SerializeToElement(new ToolsListParams(cursor));
+        return new McpJsonRpcRequest(requestId, ToolsListMethod, parameters);
     }
 
     private static McpInitializeResult FromTransportFailure(McpStdioTransportResult result)
@@ -184,6 +214,16 @@ public sealed class McpProtocolClient
             stderrTruncated: result.StderrTruncated);
     }
 
+    private static McpToolsListResult ToolsListPaginationLimitFailure(McpStdioTransportResult? result)
+    {
+        return McpToolsListResult.Failure(
+            McpErrorCode.InvalidResponse,
+            "MCP tools/list pagination exceeded the maximum page count.",
+            timedOut: result?.TimedOut ?? false,
+            stderrSnippet: result?.StderrSnippet ?? "",
+            stderrTruncated: result?.StderrTruncated ?? false);
+    }
+
     private static bool TryParseInitializeResult(
         JsonElement? result,
         out string protocolVersion,
@@ -230,9 +270,11 @@ public sealed class McpProtocolClient
 
     private static bool TryParseToolsListResult(
         JsonElement? result,
-        out IReadOnlyList<McpDiscoveredTool> tools)
+        out IReadOnlyList<McpDiscoveredTool> tools,
+        out string? nextCursor)
     {
         tools = [];
+        nextCursor = null;
 
         if (!result.HasValue || result.Value.ValueKind != JsonValueKind.Object)
         {
@@ -256,6 +298,21 @@ public sealed class McpProtocolClient
             }
 
             parsedTools.Add(tool);
+        }
+
+        if (root.TryGetProperty("nextCursor", out JsonElement nextCursorElement) &&
+            nextCursorElement.ValueKind != JsonValueKind.Null)
+        {
+            if (nextCursorElement.ValueKind != JsonValueKind.String)
+            {
+                return false;
+            }
+
+            string? cursor = nextCursorElement.GetString();
+            if (!string.IsNullOrWhiteSpace(cursor))
+            {
+                nextCursor = cursor;
+            }
         }
 
         tools = parsedTools;
@@ -337,6 +394,13 @@ public sealed class McpProtocolClient
             return false;
         }
 
+        if (!TryGetRequiredString(schemaElement, "type", out string schemaType) ||
+            !string.Equals(schemaType, "object", StringComparison.Ordinal))
+        {
+            inputSchema = default;
+            return false;
+        }
+
         inputSchema = schemaElement.Clone();
         return true;
     }
@@ -394,6 +458,9 @@ public sealed class McpProtocolClient
         [property: JsonPropertyName("protocolVersion")] string ProtocolVersion,
         [property: JsonPropertyName("capabilities")] ClientCapabilities Capabilities,
         [property: JsonPropertyName("clientInfo")] ClientInfo ClientInfo);
+
+    private sealed record ToolsListParams(
+        [property: JsonPropertyName("cursor")] string Cursor);
 
     private sealed record ClientCapabilities;
 

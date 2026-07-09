@@ -101,6 +101,127 @@ public sealed class McpToolsListTests
     }
 
     [Fact]
+    public void ListTools_defaults_null_input_schema_to_object_schema()
+    {
+        JsonElement responseResult = JsonSerializer.SerializeToElement(new
+        {
+            tools = new[]
+            {
+                new
+                {
+                    name = "ping",
+                    inputSchema = (object?)null
+                }
+            }
+        });
+        FakeMcpSession session = new(McpStdioTransportResult.Success(
+            new McpJsonRpcResponse
+            {
+                Id = JsonSerializer.SerializeToElement(1),
+                Result = responseResult
+            },
+            stderrSnippet: "",
+            stderrTruncated: false));
+        McpProtocolClient client = new(session);
+
+        McpToolsListResult result = client.ListTools();
+
+        Assert.True(result.Succeeded, result.SafeMessage);
+        McpDiscoveredTool tool = Assert.Single(result.Tools);
+        Assert.Equal("object", tool.InputSchema.GetProperty("type").GetString());
+        Assert.Single(tool.InputSchema.EnumerateObject());
+    }
+
+    [Fact]
+    public void ListTools_requests_next_page_when_response_has_next_cursor()
+    {
+        JsonElement firstPage = JsonSerializer.SerializeToElement(new
+        {
+            tools = new[]
+            {
+                new
+                {
+                    name = "first",
+                    description = "First page tool.",
+                    inputSchema = new { type = "object" }
+                }
+            },
+            nextCursor = "cursor-1"
+        });
+        JsonElement secondPage = JsonSerializer.SerializeToElement(new
+        {
+            tools = new[]
+            {
+                new
+                {
+                    name = "second",
+                    description = "Second page tool.",
+                    inputSchema = new { type = "object" }
+                }
+            }
+        });
+        FakeMcpSession session = new(
+            McpStdioTransportResult.Success(
+                new McpJsonRpcResponse
+                {
+                    Id = JsonSerializer.SerializeToElement(1),
+                    Result = firstPage
+                },
+                stderrSnippet: "",
+                stderrTruncated: false),
+            McpStdioTransportResult.Success(
+                new McpJsonRpcResponse
+                {
+                    Id = JsonSerializer.SerializeToElement(2),
+                    Result = secondPage
+                },
+                stderrSnippet: "",
+                stderrTruncated: false));
+        McpProtocolClient client = new(session);
+
+        McpToolsListResult result = client.ListTools();
+
+        Assert.True(result.Succeeded, result.SafeMessage);
+        Assert.Equal(2, session.Requests.Count);
+        Assert.Null(session.Requests[0].Params);
+        JsonElement secondParams = AssertJsonElement(session.Requests[1].Params);
+        Assert.Equal("cursor-1", secondParams.GetProperty("cursor").GetString());
+        Assert.Collection(
+            result.Tools,
+            tool => Assert.Equal("first", tool.Name),
+            tool => Assert.Equal("second", tool.Name));
+    }
+
+    [Fact]
+    public void ListTools_runaway_pagination_returns_invalid_response_failure()
+    {
+        McpStdioTransportResult[] responses = Enumerable.Range(0, 101)
+            .Select(index => McpStdioTransportResult.Success(
+                new McpJsonRpcResponse
+                {
+                    Id = JsonSerializer.SerializeToElement(index + 1),
+                    Result = JsonSerializer.SerializeToElement(new
+                    {
+                        tools = Array.Empty<object>(),
+                        nextCursor = "cursor-" + index.ToString()
+                    })
+                },
+                stderrSnippet: "",
+                stderrTruncated: false))
+            .ToArray();
+        FakeMcpSession session = new(responses);
+        McpProtocolClient client = new(session);
+
+        McpToolsListResult result = client.ListTools();
+
+        Assert.False(result.Succeeded);
+        Assert.Equal(McpErrorCode.InvalidResponse, result.ErrorCode);
+        Assert.Contains("pagination", result.SafeMessage, StringComparison.OrdinalIgnoreCase);
+        Assert.Empty(result.Tools);
+        Assert.True(session.Requests.Count > 1);
+    }
+
+    [Fact]
     public void ListTools_json_rpc_error_returns_safe_failure_with_error_details()
     {
         FakeMcpSession session = new(McpStdioTransportResult.Success(
@@ -214,17 +335,25 @@ public sealed class McpToolsListTests
         {
             JsonSerializer.SerializeToElement(new { description = "missing name" }),
             JsonSerializer.SerializeToElement(new { name = "   " }),
-            JsonSerializer.SerializeToElement(new { name = "bad_schema", inputSchema = "not-object" })
+            JsonSerializer.SerializeToElement(new { name = "bad_schema", inputSchema = "not-object" }),
+            JsonSerializer.SerializeToElement(new { name = "empty_schema", inputSchema = new { } }),
+            JsonSerializer.SerializeToElement(new { name = "array_schema", inputSchema = new { type = "array" } })
         };
+    }
+
+    private static JsonElement AssertJsonElement(JsonElement? element)
+    {
+        Assert.True(element.HasValue);
+        return element.Value;
     }
 
     private sealed class FakeMcpSession : IMcpJsonRpcSession
     {
-        private readonly McpStdioTransportResult requestResult;
+        private readonly Queue<McpStdioTransportResult> requestResults;
 
-        public FakeMcpSession(McpStdioTransportResult requestResult)
+        public FakeMcpSession(params McpStdioTransportResult[] requestResults)
         {
-            this.requestResult = requestResult;
+            this.requestResults = new Queue<McpStdioTransportResult>(requestResults);
         }
 
         public List<McpJsonRpcRequest> Requests { get; } = [];
@@ -234,7 +363,12 @@ public sealed class McpToolsListTests
             CancellationToken cancellationToken = default)
         {
             Requests.Add(request);
-            return requestResult;
+            if (!requestResults.TryDequeue(out McpStdioTransportResult? result))
+            {
+                throw new InvalidOperationException("No fake MCP response was configured.");
+            }
+
+            return result;
         }
 
         public McpStdioTransportResult SendNotification(
