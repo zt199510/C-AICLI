@@ -30,7 +30,7 @@ Added:
 - Git status and diff tools.
 - Config support for `agentBackend`, MCP servers, workflow profiles, and `disabledTools`.
 - Microsoft Agent Framework adapter boundary and tool DTO bridge as an experimental Deferred backend.
-- MCP config/list/doctor, generic bridge, and user-configured stdio MCP v1 registry/tool support; remote/http MCP remains Deferred.
+- MCP config/list/doctor and generic bridge as Deferred enhanced capability.
 - Gerber/TIFF project pack status/profile MVP as Deferred enhanced capability.
 - Release build script, smoke test script, installation/configuration/security/quickstart docs, known limitations, and final acceptance checklist.
 
@@ -41,7 +41,7 @@ Changed:
 
 Known deferred items:
 - Real Microsoft Agent Framework runtime backend.
-- MCP remote/http transport and workspace-configured MCP registry auto-discovery.
+- Real MCP protocol handshake/tool discovery.
 - Real Gerber/TIFF toolchain execution.
 - Dotnet tool packaging.
 - OpenAI SDK tool-call continuation for agentic `exec`; the current SDK gateway returns `agent-backend-unavailable` until tool calls/results are translated. `run` remains the deterministic direct-tool smoke path.

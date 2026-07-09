@@ -20,7 +20,7 @@
 | Phase 02 - model streaming/sessions | Accepted | Included in MVP. |
 | Phase 03 - tools/safety/file editing | Accepted | Included in MVP. |
 | Phase 04 - Microsoft Agent Framework adapter | Deferred | Experimental adapter boundary only; not a direct backend blocker. |
-| Phase 05 - MCP/project workflows | Deferred | Config/diagnostic/profile MVP included; user-configured stdio MCP v1 registry/tool paths are available; remote/http MCP and real Gerber/TIFF toolchain execution remain Deferred. |
+| Phase 05 - MCP/project workflows | Deferred | Config/diagnostic/profile MVP only; real protocol/toolchain execution Deferred. |
 | Phase 06 - packaging/release hardening | Accepted | Included in MVP. |
 
 ## Acceptance Checklist
@@ -52,4 +52,4 @@ powershell -NoProfile -ExecutionPolicy Bypass -File tools/Invoke-SmokeTests.ps1
 
 ## Decision
 
-MVP release `0.1.0` is accepted. The verification commands above passed on 2026-06-08, and the release zip exists with the deterministic SHA256 recorded above. The complete enhanced plan remains partially Deferred because real Microsoft Agent Framework backend execution, MCP remote/http transport, workspace-configured MCP registry auto-discovery, and real Gerber/TIFF execution are not enabled in this release.
+MVP release `0.1.0` is accepted. The verification commands above passed on 2026-06-08, and the release zip exists with the deterministic SHA256 recorded above. The complete enhanced plan remains partially Deferred because real Microsoft Agent Framework backend execution, real MCP protocol execution, and real Gerber/TIFF execution are not enabled in this release.
