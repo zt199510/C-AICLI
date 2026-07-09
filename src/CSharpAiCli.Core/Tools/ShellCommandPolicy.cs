@@ -101,7 +101,7 @@ internal static class ShellCommandPolicy
     {
         return text.Contains("&&", StringComparison.Ordinal) ||
             text.Contains("||", StringComparison.Ordinal) ||
-            text.IndexOfAny([';', '|', '\n', '\r', '<', '>', '`']) >= 0;
+            text.IndexOfAny(['&', ';', '|', '\n', '\r', '<', '>', '`']) >= 0;
     }
 
     private static bool ContainsBoundaryAwareFragment(string command, string denied)

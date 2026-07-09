@@ -82,6 +82,7 @@ public sealed class WorkspaceShellToolTests
     }
 
     [Theory]
+    [InlineData("& whoami")]
     [InlineData("&& whoami")]
     [InlineData("|| whoami")]
     [InlineData("; whoami")]
