@@ -2,9 +2,13 @@ namespace CSharpAiCli.Core;
 
 public sealed class UnavailableMcpToolInvoker : IMcpToolInvoker
 {
-    public ToolExecutionResult Invoke(McpToolRequest request, CancellationToken cancellationToken = default)
+    public ToolExecutionResult Invoke(
+        McpToolRequest request,
+        WorkspaceContext workspace,
+        CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(request);
+        ArgumentNullException.ThrowIfNull(workspace);
         cancellationToken.ThrowIfCancellationRequested();
 
         return ToolExecutionResult.Failure(

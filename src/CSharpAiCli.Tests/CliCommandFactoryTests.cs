@@ -1774,8 +1774,10 @@ public sealed class CliCommandFactoryTests
     public void Tools_list_json_omits_disabled_mcp_tools_and_reports_disabled_names()
     {
         using StringWriter output = new();
+        using TempDirectory temp = TempDirectory.Create();
+        string scriptPath = WriteMcpEchoServerScript(temp.Path);
         CliEnvironmentSnapshot snapshot = CreateSnapshot(
-            workspacePath: null,
+            workspacePath: temp.Path,
             apiKey: null,
             apiKeySource: "missing",
             model: "not configured",
@@ -1788,24 +1790,14 @@ public sealed class CliCommandFactoryTests
                     {
                         McpServers = new Dictionary<string, McpServerConfig>
                         {
-                            ["active"] = new()
-                            {
-                                Enabled = true,
-                                Transport = "stdio",
-                                Command = "mcp-active"
-                            },
-                            ["disabled"] = new()
-                            {
-                                Enabled = true,
-                                Transport = "stdio",
-                                Command = "mcp-disabled"
-                            }
+                            ["active"] = CreateMcpEchoServerConfig(scriptPath),
+                            ["disabled"] = CreateMcpEchoServerConfig(scriptPath)
                         }
                     })
             ],
             disabledTools: new HashSet<string>(StringComparer.Ordinal)
             {
-                "mcp.disabled.call"
+                "mcp.disabled.echo"
             });
 
         int exitCode = CliCommandFactory
@@ -1820,20 +1812,22 @@ public sealed class CliCommandFactoryTests
         string[] toolNames = toolObjects
             .Select(tool => tool["name"]?.GetValue<string>() ?? string.Empty)
             .ToArray();
-        Assert.Contains("mcp.active.call", toolNames);
-        Assert.DoesNotContain("mcp.disabled.call", toolNames);
+        Assert.Contains("mcp.active.echo", toolNames);
+        Assert.DoesNotContain("mcp.disabled.echo", toolNames);
 
         JsonObject activeMcpTool = Assert.Single(
             toolObjects,
-            tool => tool["name"]?.GetValue<string>() == "mcp.active.call");
-        Assert.Equal("Call MCP server 'active' through stdio command: mcp-active.", activeMcpTool["description"]?.GetValue<string>());
+            tool => tool["name"]?.GetValue<string>() == "mcp.active.echo");
+        Assert.Equal("Echo from MCP. (MCP server 'active', tool 'echo'.)", activeMcpTool["description"]?.GetValue<string>());
         Assert.Equal("shell", activeMcpTool["riskLevel"]?.GetValue<string>());
         JsonObject parameters = Assert.IsType<JsonObject>(activeMcpTool["parameters"]);
         Assert.Equal("object", parameters["type"]?.GetValue<string>());
+        JsonObject properties = Assert.IsType<JsonObject>(parameters["properties"]);
+        Assert.True(properties.ContainsKey("text"));
 
         JsonArray disabledTools = Assert.IsType<JsonArray>(json["disabledTools"]);
         string disabledToolName = Assert.Single(disabledTools.Select(tool => tool?.GetValue<string>() ?? string.Empty));
-        Assert.Equal("mcp.disabled.call", disabledToolName);
+        Assert.Equal("mcp.disabled.echo", disabledToolName);
     }
 
     [Fact]
@@ -1891,8 +1885,10 @@ public sealed class CliCommandFactoryTests
     public void Tools_call_returns_unknown_tool_when_mcp_tool_is_disabled()
     {
         using StringWriter output = new();
+        using TempDirectory temp = TempDirectory.Create();
+        string scriptPath = WriteMcpEchoServerScript(temp.Path);
         CliEnvironmentSnapshot snapshot = CreateSnapshot(
-            workspacePath: null,
+            workspacePath: temp.Path,
             apiKey: null,
             apiKeySource: "missing",
             model: "not configured",
@@ -1905,27 +1901,59 @@ public sealed class CliCommandFactoryTests
                     {
                         McpServers = new Dictionary<string, McpServerConfig>
                         {
-                            ["active"] = new()
-                            {
-                                Enabled = true,
-                                Transport = "stdio",
-                                Command = "mcp-active"
-                            }
+                            ["active"] = CreateMcpEchoServerConfig(scriptPath)
                         }
                     })
             ],
             disabledTools: new HashSet<string>(StringComparer.Ordinal)
             {
-                "mcp.active.call"
+                "mcp.active.echo"
             });
 
         int exitCode = CliCommandFactory
             .Create(output, _ => snapshot)
-            .Parse(["tools", "call", "mcp.active.call", """{"tool":"echo"}"""])
+            .Parse(["tools", "call", "mcp.active.echo", """{"text":"hello"}"""])
             .Invoke();
 
         Assert.Equal(1, exitCode);
         Assert.Contains("errorCode: unknown-tool", output.ToString());
+    }
+
+    [Fact]
+    public void Tools_call_invokes_discovered_mcp_tool()
+    {
+        using StringWriter output = new();
+        using TempDirectory temp = TempDirectory.Create();
+        string scriptPath = WriteMcpEchoServerScript(temp.Path);
+        CliEnvironmentSnapshot snapshot = CreateSnapshot(
+            workspacePath: temp.Path,
+            apiKey: null,
+            apiKeySource: "missing",
+            model: "not configured",
+            configSources:
+            [
+                new CliConfigFileSource(
+                    "workspace config",
+                    "workspace-config.json",
+                    new CliConfigFile
+                    {
+                        McpServers = new Dictionary<string, McpServerConfig>
+                        {
+                            ["active"] = CreateMcpEchoServerConfig(scriptPath)
+                        }
+                    })
+            ]);
+
+        int exitCode = CliCommandFactory
+            .Create(output, _ => snapshot)
+            .Parse(["tools", "call", "--approve", "mcp.active.echo", """{"text":"hello"}"""])
+            .Invoke();
+
+        string text = output.ToString();
+        Assert.Equal(0, exitCode);
+        Assert.Contains("status: succeeded", text, StringComparison.Ordinal);
+        Assert.Contains("approvalStatus: approved", text, StringComparison.Ordinal);
+        Assert.Contains("echo: hello", text, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -5895,6 +5923,117 @@ public sealed class CliCommandFactoryTests
             .Parse([.. args])
             .Invoke();
     }
+
+    private static McpServerConfig CreateMcpEchoServerConfig(string scriptPath)
+    {
+        return new McpServerConfig
+        {
+            Enabled = true,
+            Transport = "stdio",
+            Command = PowerShellExecutable,
+            Args =
+            [
+                "-NoLogo",
+                "-NoProfile",
+                "-NonInteractive",
+                "-ExecutionPolicy",
+                "Bypass",
+                "-File",
+                scriptPath
+            ],
+            TimeoutMilliseconds = 10_000
+        };
+    }
+
+    private static string WriteMcpEchoServerScript(string directory)
+    {
+        string scriptPath = Path.Combine(directory, "mcp-echo-fixture-" + Guid.NewGuid().ToString("N") + ".ps1");
+        File.WriteAllText(
+            scriptPath,
+            """
+            while (($line = [Console]::In.ReadLine()) -ne $null) {
+                $request = $line | ConvertFrom-Json
+                if ($null -eq $request.id) {
+                    continue
+                }
+
+                if ($request.method -eq 'initialize') {
+                    $result = [ordered]@{
+                        protocolVersion = '2025-03-26'
+                        capabilities = [ordered]@{}
+                        serverInfo = [ordered]@{
+                            name = 'cli-test-mcp'
+                            version = '1.0.0'
+                        }
+                    }
+                    $response = [ordered]@{
+                        jsonrpc = '2.0'
+                        id = $request.id
+                        result = $result
+                    } | ConvertTo-Json -Compress -Depth 10
+                    [Console]::Out.WriteLine($response)
+                    continue
+                }
+
+                if ($request.method -eq 'tools/list') {
+                    $result = [ordered]@{
+                        tools = @(
+                            [ordered]@{
+                                name = 'echo'
+                                description = 'Echo from MCP.'
+                                inputSchema = [ordered]@{
+                                    type = 'object'
+                                    properties = [ordered]@{
+                                        text = [ordered]@{
+                                            type = 'string'
+                                        }
+                                    }
+                                }
+                            }
+                        )
+                    }
+                    $response = [ordered]@{
+                        jsonrpc = '2.0'
+                        id = $request.id
+                        result = $result
+                    } | ConvertTo-Json -Compress -Depth 10
+                    [Console]::Out.WriteLine($response)
+                    continue
+                }
+
+                if ($request.method -eq 'tools/call') {
+                    $result = [ordered]@{
+                        content = @(
+                            [ordered]@{
+                                type = 'text'
+                                text = ('echo: ' + $request.params.arguments.text)
+                            }
+                        )
+                    }
+                    $response = [ordered]@{
+                        jsonrpc = '2.0'
+                        id = $request.id
+                        result = $result
+                    } | ConvertTo-Json -Compress -Depth 10
+                    [Console]::Out.WriteLine($response)
+                    continue
+                }
+
+                $response = [ordered]@{
+                    jsonrpc = '2.0'
+                    id = $request.id
+                    error = [ordered]@{
+                        code = -32601
+                        message = 'Method not found'
+                    }
+                } | ConvertTo-Json -Compress -Depth 10
+                [Console]::Out.WriteLine($response)
+            }
+            """);
+        return scriptPath;
+    }
+
+    private static string PowerShellExecutable => OperatingSystem.IsWindows() ? "powershell.exe" : "pwsh";
 
     private static void InitializeNoHeadGitRepository(string root)
     {

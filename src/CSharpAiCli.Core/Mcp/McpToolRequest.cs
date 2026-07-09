@@ -1,5 +1,9 @@
 namespace CSharpAiCli.Core;
 
 public sealed record McpToolRequest(
-    string ServerName,
-    string ArgumentsJson);
+    McpServerDefinition Server,
+    string RemoteToolName,
+    string ArgumentsJson)
+{
+    public string ServerName => Server.Name;
+}

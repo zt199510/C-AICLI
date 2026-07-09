@@ -1,3 +1,4 @@
+using System.Text.Json;
 using CSharpAiCli.Core;
 
 namespace CSharpAiCli.Tests;
@@ -5,62 +6,116 @@ namespace CSharpAiCli.Tests;
 public sealed class McpToolBridgeTests
 {
     [Fact]
-    public void Register_tools_adds_only_enabled_configured_servers_to_registry()
+    public void Register_tools_maps_discovered_stdio_tools_to_tool_definitions()
     {
         McpConfiguration configuration = new(
             [
-                new McpServerDefinition("active", true, "configured", "stdio command: mcp-active", "workspace config"),
-                new McpServerDefinition("disabled", false, "inactive", "stdio command: mcp-disabled", "workspace config"),
-                new McpServerDefinition("invalid", true, "invalid", "transport: unknown", "workspace config")
+                CreateServer("active"),
+                CreateServer("disabled", enabled: false, status: "inactive"),
+                CreateServer("http", transport: "http", command: null, url: "https://mcp.example.invalid")
             ]);
+        JsonElement schema = JsonSerializer.SerializeToElement(new
+        {
+            type = "object",
+            properties = new
+            {
+                path = new { type = "string" }
+            },
+            required = new[] { "path" }
+        });
+        FakeMcpToolDiscoverer discoverer = new(
+            new McpDiscoveredTool("Read File!", "Read a file from the server.", schema));
         ToolRegistry registry = new();
 
-        new McpToolBridge(new FakeMcpToolInvoker()).RegisterTools(registry, configuration);
+        new McpToolBridge(discoverer, new FakeMcpToolInvoker())
+            .RegisterTools(registry, configuration, CreateWorkspace());
 
         ToolDefinition definition = Assert.Single(registry.List());
-        Assert.Equal("mcp.active.call", definition.Name);
-        Assert.True(registry.TryGet("mcp.active.call", out ITool? _));
-        Assert.False(registry.TryGet("mcp.disabled.call", out ITool? _));
-        Assert.False(registry.TryGet("mcp.invalid.call", out ITool? _));
+        Assert.Equal("mcp.active.read_file", definition.Name);
+        Assert.Contains("Read a file from the server.", definition.Description, StringComparison.Ordinal);
+        Assert.Contains("active", definition.Description, StringComparison.Ordinal);
+        Assert.Contains("Read File!", definition.Description, StringComparison.Ordinal);
+        Assert.Equal("""{"type":"object","properties":{"path":{"type":"string"}},"required":["path"]}""", definition.ParametersSchema);
+        Assert.Equal(ToolRiskLevel.Shell, definition.RiskLevel);
+        Assert.True(registry.TryGet("mcp.active.read_file", out ITool? _));
+        Assert.Equal(["active"], discoverer.DiscoveredServerNames);
     }
 
     [Fact]
-    public void Enabled_mcp_tool_can_be_invoked_through_tool_executor()
+    public void Disabled_mcp_server_does_not_trigger_discovery_or_register_tools()
     {
         McpConfiguration configuration = new(
             [
-                new McpServerDefinition("active", true, "configured", "stdio command: mcp-active", "workspace config")
+                CreateServer("disabled", enabled: false, status: "inactive")
             ]);
+        FakeMcpToolDiscoverer discoverer = new(new McpDiscoveredTool("echo", "Echo.", CreateObjectSchema()));
+        ToolRegistry registry = new();
+
+        new McpToolBridge(discoverer, new FakeMcpToolInvoker())
+            .RegisterTools(registry, configuration, CreateWorkspace());
+
+        Assert.Empty(registry.List());
+        Assert.Empty(discoverer.DiscoveredServerNames);
+    }
+
+    [Fact]
+    public void Duplicate_normalized_remote_tool_names_get_deterministic_suffixes()
+    {
+        McpConfiguration configuration = new([CreateServer("active")]);
+        FakeMcpToolDiscoverer discoverer = new(
+            new McpDiscoveredTool("read file", "First.", CreateObjectSchema()),
+            new McpDiscoveredTool("read/file", "Second.", CreateObjectSchema()),
+            new McpDiscoveredTool("read_file", "Third.", CreateObjectSchema()));
+        ToolRegistry registry = new();
+
+        new McpToolBridge(discoverer, new FakeMcpToolInvoker())
+            .RegisterTools(registry, configuration, CreateWorkspace());
+
+        string[] names = registry.List().Select(definition => definition.Name).ToArray();
+        Assert.Equal(
+            ["mcp.active.read_file", "mcp.active.read_file_2", "mcp.active.read_file_3"],
+            names);
+    }
+
+    [Fact]
+    public void Enabled_mcp_tool_can_be_invoked_through_tool_executor_with_remote_name_and_arguments()
+    {
+        McpConfiguration configuration = new([CreateServer("active")]);
+        FakeMcpToolDiscoverer discoverer = new(
+            new McpDiscoveredTool("echo tool", "Echo input.", CreateObjectSchema()));
         FakeMcpToolInvoker invoker = new();
         ToolRegistry registry = new();
-        new McpToolBridge(invoker, ApprovalPolicyResolver.Resolve(ApprovalMode.Always)).RegisterTools(registry, configuration);
+        new McpToolBridge(discoverer, invoker, ApprovalPolicyResolver.Resolve(ApprovalMode.Always))
+            .RegisterTools(registry, configuration, CreateWorkspace());
         ToolExecutor executor = new(registry);
 
         ToolExecutionResult result = executor.Execute(
-            "mcp.active.call",
-            CreateContext("""{"tool":"echo","arguments":{"text":"hello"}}"""));
+            "mcp.active.echo_tool",
+            CreateContext("""{"text":"hello"}"""));
 
         Assert.True(result.Succeeded);
-        Assert.Equal("mcp active invoked with {\"tool\":\"echo\",\"arguments\":{\"text\":\"hello\"}}", result.Summary);
+        Assert.Equal("mcp active echo tool invoked with {\"text\":\"hello\"}", result.Summary);
         Assert.Equal("approved", result.ApprovalStatus);
         Assert.Equal("active", invoker.LastRequest?.ServerName);
+        Assert.Equal("echo tool", invoker.LastRequest?.RemoteToolName);
+        Assert.Equal("""{"text":"hello"}""", invoker.LastRequest?.ArgumentsJson);
     }
 
     [Fact]
     public void Enabled_mcp_tool_denies_on_request_approval_without_invoking_server()
     {
-        McpConfiguration configuration = new(
-            [
-                new McpServerDefinition("active", true, "configured", "stdio command: mcp-active", "workspace config")
-            ]);
+        McpConfiguration configuration = new([CreateServer("active")]);
+        FakeMcpToolDiscoverer discoverer = new(
+            new McpDiscoveredTool("echo", "Echo.", CreateObjectSchema()));
         FakeMcpToolInvoker invoker = new();
         ToolRegistry registry = new();
-        new McpToolBridge(invoker, ApprovalPolicyResolver.Resolve(ApprovalMode.OnRequest)).RegisterTools(registry, configuration);
+        new McpToolBridge(discoverer, invoker, ApprovalPolicyResolver.Resolve(ApprovalMode.OnRequest))
+            .RegisterTools(registry, configuration, CreateWorkspace());
         ToolExecutor executor = new(registry);
 
         ToolExecutionResult result = executor.Execute(
-            "mcp.active.call",
-            CreateContext("""{"tool":"echo","arguments":{"text":"hello"}}"""));
+            "mcp.active.echo",
+            CreateContext("""{"text":"hello"}"""));
 
         Assert.False(result.Succeeded);
         Assert.Equal("approval-denied", result.ErrorCode);
@@ -70,31 +125,32 @@ public sealed class McpToolBridgeTests
     }
 
     [Fact]
-    public void Enabled_mcp_tool_requests_approval_with_shell_risk_and_safe_metadata()
+    public void Enabled_mcp_tool_requests_approval_with_shell_risk_and_mcp_metadata()
     {
-        McpConfiguration configuration = new(
-            [
-                new McpServerDefinition("active", true, "configured", "stdio command: mcp-active", "workspace config")
-            ]);
+        McpConfiguration configuration = new([CreateServer("active")]);
+        FakeMcpToolDiscoverer discoverer = new(
+            new McpDiscoveredTool("echo", "Echo.", CreateObjectSchema()));
         FakeMcpToolInvoker invoker = new();
         RecordingApprovalPolicy approvalPolicy = new(ApprovalDecision.Deny("Denied by recording policy."));
         ToolRegistry registry = new();
-        new McpToolBridge(invoker, approvalPolicy).RegisterTools(registry, configuration);
+        new McpToolBridge(discoverer, invoker, approvalPolicy)
+            .RegisterTools(registry, configuration, CreateWorkspace());
         ToolExecutor executor = new(registry);
 
         ToolExecutionResult result = executor.Execute(
-            "mcp.active.call",
-            CreateContext("""{"tool":"echo","arguments":{"text":"hello"}}"""));
+            "mcp.active.echo",
+            CreateContext("""{"text":"hello"}"""));
 
         Assert.False(result.Succeeded);
         ApprovalRequest request = approvalPolicy.SingleRequest;
-        Assert.Equal("mcp.active.call", request.Operation);
+        Assert.Equal("mcp.active.echo", request.Operation);
         Assert.Equal(ToolRiskLevel.Shell, request.RiskLevel);
         Assert.Null(request.Diff);
         Assert.False(request.IsDirtyWorkspace);
         Assert.NotNull(request.Metadata);
-        Assert.Equal(2, request.Metadata.Count);
         Assert.Equal("active", request.Metadata["server"]);
+        Assert.Equal("echo", request.Metadata["remoteTool"]);
+        Assert.Equal("mcp.active.echo", request.Metadata["localTool"]);
         Assert.Equal("MCP external tool invocation requires approval.", request.Metadata["reason"]);
         Assert.Equal(0, invoker.InvocationCount);
     }
@@ -102,18 +158,18 @@ public sealed class McpToolBridgeTests
     [Fact]
     public void Enabled_mcp_tool_reports_local_approval_status_when_invoker_sets_one()
     {
-        McpConfiguration configuration = new(
-            [
-                new McpServerDefinition("active", true, "configured", "stdio command: mcp-active", "workspace config")
-            ]);
+        McpConfiguration configuration = new([CreateServer("active")]);
+        FakeMcpToolDiscoverer discoverer = new(
+            new McpDiscoveredTool("echo", "Echo.", CreateObjectSchema()));
         FakeMcpToolInvoker invoker = new(ToolExecutionResult.Success("mcp active invoked", "mcp-invoker-approved"));
         ToolRegistry registry = new();
-        new McpToolBridge(invoker, ApprovalPolicyResolver.Resolve(ApprovalMode.Always)).RegisterTools(registry, configuration);
+        new McpToolBridge(discoverer, invoker, ApprovalPolicyResolver.Resolve(ApprovalMode.Always))
+            .RegisterTools(registry, configuration, CreateWorkspace());
         ToolExecutor executor = new(registry);
 
         ToolExecutionResult result = executor.Execute(
-            "mcp.active.call",
-            CreateContext("""{"tool":"echo"}"""));
+            "mcp.active.echo",
+            CreateContext("""{"text":"hello"}"""));
 
         Assert.True(result.Succeeded);
         Assert.Equal("approved", result.ApprovalStatus);
@@ -125,13 +181,16 @@ public sealed class McpToolBridgeTests
     {
         McpConfiguration configuration = new(
             [
-                new McpServerDefinition("disabled", false, "inactive", "stdio command: mcp-disabled", "workspace config")
+                CreateServer("disabled", enabled: false, status: "inactive")
             ]);
         ToolRegistry registry = new();
-        new McpToolBridge(new FakeMcpToolInvoker()).RegisterTools(registry, configuration);
+        new McpToolBridge(
+                new FakeMcpToolDiscoverer(new McpDiscoveredTool("echo", "Echo.", CreateObjectSchema())),
+                new FakeMcpToolInvoker())
+            .RegisterTools(registry, configuration, CreateWorkspace());
         ToolExecutor executor = new(registry);
 
-        ToolExecutionResult result = executor.Execute("mcp.disabled.call", CreateContext("{}"));
+        ToolExecutionResult result = executor.Execute("mcp.disabled.echo", CreateContext("{}"));
 
         Assert.False(result.Succeeded);
         Assert.Equal("unknown-tool", result.ErrorCode);
@@ -140,12 +199,13 @@ public sealed class McpToolBridgeTests
     [Fact]
     public void Mcp_tool_result_is_recorded_in_transcript_by_offline_runner()
     {
-        McpConfiguration configuration = new(
-            [
-                new McpServerDefinition("active", true, "configured", "stdio command: mcp-active", "workspace config")
-            ]);
+        McpConfiguration configuration = new([CreateServer("active")]);
         ToolRegistry registry = new();
-        new McpToolBridge(new FakeMcpToolInvoker(), ApprovalPolicyResolver.Resolve(ApprovalMode.Always)).RegisterTools(registry, configuration);
+        new McpToolBridge(
+                new FakeMcpToolDiscoverer(new McpDiscoveredTool("echo", "Echo.", CreateObjectSchema())),
+                new FakeMcpToolInvoker(),
+                ApprovalPolicyResolver.Resolve(ApprovalMode.Always))
+            .RegisterTools(registry, configuration, CreateWorkspace());
         OfflineAgentRunner runner = new(
             new McpToolCallingModel(),
             new ToolExecutor(registry),
@@ -158,10 +218,36 @@ public sealed class McpToolBridgeTests
 
         Assert.True(result.IsSuccess);
         ConversationToolCall toolCall = Assert.Single(transcript.ToolCalls);
-        Assert.Equal("mcp.active.call", toolCall.ToolName);
+        Assert.Equal("mcp.active.echo", toolCall.ToolName);
         Assert.True(toolCall.Succeeded);
         Assert.Equal("approved", toolCall.ApprovalStatus);
-        Assert.Contains("mcp active invoked", toolCall.OutputSummary, StringComparison.Ordinal);
+        Assert.Contains("mcp active echo invoked", toolCall.OutputSummary, StringComparison.Ordinal);
+    }
+
+    private static McpServerDefinition CreateServer(
+        string name,
+        bool enabled = true,
+        string status = "configured",
+        string transport = "stdio",
+        string? command = "mcp-active",
+        string? url = null)
+    {
+        return new McpServerDefinition(
+            name,
+            enabled,
+            status,
+            command is null ? $"{transport} url: {url}" : $"stdio command: {command}",
+            "workspace config")
+        {
+            Transport = transport,
+            Command = command,
+            Url = url
+        };
+    }
+
+    private static JsonElement CreateObjectSchema()
+    {
+        return JsonSerializer.SerializeToElement(new { type = "object" });
     }
 
     private static ToolExecutionContext CreateContext(string argumentsJson)
@@ -177,16 +263,37 @@ public sealed class McpToolBridgeTests
             Status: WorkspaceStatus.Ready);
     }
 
+    private sealed class FakeMcpToolDiscoverer(params McpDiscoveredTool[] tools) : IMcpToolDiscoverer
+    {
+        private readonly List<string> discoveredServerNames = [];
+
+        public IReadOnlyList<string> DiscoveredServerNames => discoveredServerNames.ToArray();
+
+        public McpToolsListResult DiscoverTools(
+            McpServerDefinition server,
+            WorkspaceContext workspace,
+            CancellationToken cancellationToken = default)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            discoveredServerNames.Add(server.Name);
+            return McpToolsListResult.Success(tools, stderrSnippet: "", stderrTruncated: false);
+        }
+    }
+
     private sealed class FakeMcpToolInvoker(ToolExecutionResult? result = null) : IMcpToolInvoker
     {
         public McpToolRequest? LastRequest { get; private set; }
         public int InvocationCount { get; private set; }
 
-        public ToolExecutionResult Invoke(McpToolRequest request, CancellationToken cancellationToken = default)
+        public ToolExecutionResult Invoke(
+            McpToolRequest request,
+            WorkspaceContext workspace,
+            CancellationToken cancellationToken = default)
         {
             InvocationCount++;
             LastRequest = request;
-            return result ?? ToolExecutionResult.Success($"mcp {request.ServerName} invoked with {request.ArgumentsJson}");
+            return result ?? ToolExecutionResult.Success(
+                $"mcp {request.ServerName} {request.RemoteToolName} invoked with {request.ArgumentsJson}");
         }
     }
 
@@ -209,8 +316,8 @@ public sealed class McpToolBridgeTests
         {
             return AgentModelTurn.RequestTools(new AgentToolCallRequest(
                 "call_mcp",
-                "mcp.active.call",
-                """{"tool":"echo"}"""));
+                "mcp.active.echo",
+                """{"text":"hello"}"""));
         }
 
         public AgentModelTurn Continue(

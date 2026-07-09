@@ -67,7 +67,10 @@ public sealed class ToolRiskMetadataTests
 
     private sealed class FakeMcpToolInvoker : IMcpToolInvoker
     {
-        public ToolExecutionResult Invoke(McpToolRequest request, CancellationToken cancellationToken = default)
+        public ToolExecutionResult Invoke(
+            McpToolRequest request,
+            WorkspaceContext workspace,
+            CancellationToken cancellationToken = default)
         {
             return ToolExecutionResult.Success("{}");
         }

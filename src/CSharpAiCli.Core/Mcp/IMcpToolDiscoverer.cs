@@ -1,9 +1,9 @@
 namespace CSharpAiCli.Core;
 
-public interface IMcpToolInvoker
+public interface IMcpToolDiscoverer
 {
-    ToolExecutionResult Invoke(
-        McpToolRequest request,
+    McpToolsListResult DiscoverTools(
+        McpServerDefinition server,
         WorkspaceContext workspace,
         CancellationToken cancellationToken = default);
 }
