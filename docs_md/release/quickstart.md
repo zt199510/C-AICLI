@@ -92,7 +92,28 @@ artifacts\release\caicli-0.1.0-win-x64\caicli.exe exec --workspace . --cwd src\a
 
 If both `AGENTS.md` and `AICLI.md` exist in the same directory, only `AGENTS.md` is considered for that directory. There is no same-directory fallback to `AICLI.md` when `AGENTS.md` exists but is empty, invalid, or oversized. `doctor`, `config get`, and `config list` report instruction source paths and order without printing instruction contents.
 
-## 7. Inspect Optional Features
+## 7. Inspect Development Commands
+
+```powershell
+artifacts\release\caicli-0.1.0-win-x64\caicli.exe status --workspace .
+artifacts\release\caicli-0.1.0-win-x64\caicli.exe models --workspace .
+artifacts\release\caicli-0.1.0-win-x64\caicli.exe diff --workspace .
+artifacts\release\caicli-0.1.0-win-x64\caicli.exe diff --stat --workspace .
+```
+
+`status` reports workspace, git, and effective configuration state. `models` is local-only: it prints the current model, base URL, sources, and static examples without calling a model list API and without requiring an API key. `diff` prints the current git diff, or a stat summary with `--stat`.
+
+Use `review` when you want model-assisted feedback on the current diff:
+
+```powershell
+artifacts\release\caicli-0.1.0-win-x64\caicli.exe review --workspace .
+artifacts\release\caicli-0.1.0-win-x64\caicli.exe review --json --workspace .
+artifacts\release\caicli-0.1.0-win-x64\caicli.exe review --output json --workspace .
+```
+
+`review` is read-only for the workspace. It does not execute patch or shell tools and does not write workspace files, logs, transcripts, or patches. Diff collection may create transient temp files/directories outside the workspace and clean them up. It does send the current git diff to the configured model, so real use needs configured model credentials.
+
+## 8. Inspect Optional Features
 
 ```powershell
 artifacts\release\caicli-0.1.0-win-x64\caicli.exe mcp list
@@ -102,7 +123,7 @@ artifacts\release\caicli-0.1.0-win-x64\caicli.exe workflow list
 
 MCP and Gerber/TIFF workflow execution are enhanced capabilities and are not part of the direct backend MVP.
 
-## 8. Run An Agentic Exec Task
+## 9. Run An Agentic Exec Task
 
 `exec` is the agentic v1 surface and contract. It is routed through `IAgentRunner`, emits model/tool/final/error events in the newline-delimited `--json` stream, supports loop limits and session transcripts, and returns exit code `0` on success, `1` on task failure, and `2` on argument error.
 
@@ -136,7 +157,7 @@ Without an approving mode, approval-gated write and shell actions are denied. In
 
 Text output and `exec --json` events/results include `approvalStatus` for approval-gated tool activity.
 
-## 9. Run A Local Smoke Task
+## 10. Run A Local Smoke Task
 
 ```powershell
 artifacts\release\caicli-0.1.0-win-x64\caicli.exe run --workspace . --approve "create smoke note"
@@ -145,7 +166,7 @@ artifacts\release\caicli-0.1.0-win-x64\caicli.exe run --workspace . --approve "c
 This deterministic smoke task creates or updates `caicli-smoke.txt` in the workspace. Under the default `on-request` approval mode, the write is denied without `--approve`.
 `run` remains the deterministic direct-tool compatibility path for release smoke checks. It does not support `--approval`; configured `approvalMode` applies when `--approve` is not supplied, and the existing `--approve` option remains for compatibility.
 
-## 10. Inspect And Call Tools
+## 11. Inspect And Call Tools
 
 ```powershell
 artifacts\release\caicli-0.1.0-win-x64\caicli.exe tools list --workspace .
@@ -167,7 +188,7 @@ artifacts\release\caicli-0.1.0-win-x64\caicli.exe tools call --workspace . --app
 
 The legacy `--approve` option remains supported for compatibility. Dangerous shell commands are denied with `errorCode` `approval-denied` and `approvalStatus` `dangerous-shell-denied`, even under `--approval always` or legacy `--approve`.
 
-## 11. Manage Sessions
+## 12. Manage Sessions
 
 ```powershell
 artifacts\release\caicli-0.1.0-win-x64\caicli.exe session list

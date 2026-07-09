@@ -6,10 +6,13 @@ Added:
 - `session list`, `session show <name>`, `session rename <old> <new>`, and `session delete <name>` for local transcript management.
 - `chat --resume <session>` and `exec --resume <session>` require an existing transcript and pass normalized prior transcript context to the model or agent request.
 - `session export --format json|markdown <name>` supports raw JSON transcript export and readable markdown export.
+- `status`, `models`, `diff` / `diff --stat`, and read-only `review` commands for local development inspection.
+- `review --json` and `review --output json` for machine-readable review results.
 
 Changed:
 - `session clear <name>` remains supported for compatibility, but `session delete <name>` is the recommended delete command.
 - Markdown session export omits raw tool arguments, fences transcript-controlled bodies, escapes metadata, and redacts common secret values.
+- Release smoke coverage now exercises offline `status`, `models`, and git `diff` paths without model credentials.
 
 ## 0.1.0 - 2026-06-07
 

@@ -191,6 +191,117 @@ public static class CliCommandFactory
             return 0;
         });
 
+        Command statusCommand = new("status", "Summarize workspace, git, configuration, and approval status.");
+        statusCommand.SetAction(parseResult =>
+        {
+            string? workspacePath = parseResult.GetValue(workspaceOption);
+            CliEnvironmentSnapshot snapshot = workspaceSnapshotProvider(workspacePath);
+            TryWriteCommandLog(commandLogger, "status", snapshot);
+            GitStatusTool gitStatusTool = new(new WorkspaceGuard());
+            ToolExecutionResult gitStatus = gitStatusTool.Execute(new ToolExecutionContext(
+                "cli_status",
+                snapshot.Workspace,
+                "{}"));
+            output.WriteLine(StatusReport.Create(snapshot, gitStatus).ToDisplayText());
+            return 0;
+        });
+
+        Command modelsCommand = new("models", "Show current model configuration and static model examples.");
+        modelsCommand.SetAction(parseResult =>
+        {
+            string? workspacePath = parseResult.GetValue(workspaceOption);
+            CliEnvironmentSnapshot snapshot = workspaceSnapshotProvider(workspacePath);
+            TryWriteCommandLog(commandLogger, "models", snapshot);
+            output.WriteLine(ModelsReport.Create(snapshot).ToDisplayText());
+            return 0;
+        });
+
+        Command diffCommand = new("diff", "Show current git diff for the workspace.");
+        Option<bool> diffStatOption = new("--stat")
+        {
+            Description = "Show git diff stat instead of the full patch.",
+        };
+        diffCommand.Options.Add(diffStatOption);
+        diffCommand.SetAction(parseResult =>
+        {
+            string? workspacePath = parseResult.GetValue(workspaceOption);
+            bool stat = parseResult.GetValue(diffStatOption);
+            CliEnvironmentSnapshot snapshot = workspaceSnapshotProvider(workspacePath);
+            TryWriteCommandLog(commandLogger, "diff", snapshot);
+            GitDiffTool gitDiffTool = new(new WorkspaceGuard());
+            string argumentsJson = stat ? """{"stat":true}""" : "{}";
+            ToolExecutionResult result = gitDiffTool.Execute(new ToolExecutionContext(
+                "cli_diff",
+                snapshot.Workspace,
+                argumentsJson));
+
+            if (result.Succeeded)
+            {
+                output.WriteLine(result.Summary);
+            }
+            else
+            {
+                WriteToolResult(output, result);
+            }
+
+            return result.Succeeded ? 0 : 1;
+        });
+
+        Command reviewCommand = new("review", "Review the current git diff with the configured model.");
+        Option<bool> reviewJsonOption = new("--json")
+        {
+            Description = "Write a single JSON review result object.",
+        };
+        Option<string> reviewOutputOption = new("--output")
+        {
+            Description = "Select text or json output.",
+        };
+        reviewOutputOption.DefaultValueFactory = _ => "text";
+        reviewOutputOption.Validators.Add(result =>
+        {
+            string outputMode = result.GetValueOrDefault<string>() ?? "text";
+            if (!string.Equals(outputMode, "text", StringComparison.OrdinalIgnoreCase) &&
+                !string.Equals(outputMode, "json", StringComparison.OrdinalIgnoreCase))
+            {
+                result.AddError("Invalid value for --output. Allowed values are text and json.");
+            }
+        });
+        reviewCommand.Options.Add(reviewJsonOption);
+        reviewCommand.Options.Add(reviewOutputOption);
+        reviewCommand.SetAction(parseResult =>
+        {
+            string? workspacePath = parseResult.GetValue(workspaceOption);
+            bool jsonRequested = parseResult.GetValue(reviewJsonOption);
+            string outputMode = parseResult.GetValue(reviewOutputOption) ?? "text";
+            CliEnvironmentSnapshot snapshot = workspaceSnapshotProvider(workspacePath);
+
+            GitDiffTool gitDiffTool = new(new WorkspaceGuard());
+            ToolExecutionResult gitDiff = gitDiffTool.Execute(new ToolExecutionContext(
+                "cli_review",
+                snapshot.Workspace,
+                "{}"));
+            if (!gitDiff.Succeeded)
+            {
+                WriteReviewReport(output, ReviewReport.ToolFailure(gitDiff), jsonRequested, outputMode);
+                return 1;
+            }
+
+            string prompt = ReviewPromptBuilder.Build(gitDiff.Summary);
+            ChatRequest request = new(prompt, Instructions: snapshot.Instructions.Instructions);
+            ChatModelResult result = chatModelClientFactory(snapshot).Send(request);
+            if (result.Response is not null)
+            {
+                ChatResponse response = gitDiff.Summary.Contains(GitDiffTool.TruncationWarning, StringComparison.Ordinal)
+                    ? PrependReviewWarning(result.Response, GitDiffTool.TruncationWarning)
+                    : result.Response;
+                WriteReviewReport(output, ReviewReport.Completed(response), jsonRequested, outputMode);
+                return 0;
+            }
+
+            WriteReviewReport(output, ReviewReport.ModelFailure(result), jsonRequested, outputMode);
+            return 1;
+        });
+
         Command configCommand = new("config", "Inspect CLI configuration.");
         Command configGetCommand = new("get", "Print the effective configuration summary.");
         configGetCommand.SetAction(parseResult =>
@@ -884,6 +995,10 @@ public static class CliCommandFactory
 
         rootCommand.Subcommands.Add(versionCommand);
         rootCommand.Subcommands.Add(doctorCommand);
+        rootCommand.Subcommands.Add(statusCommand);
+        rootCommand.Subcommands.Add(modelsCommand);
+        rootCommand.Subcommands.Add(diffCommand);
+        rootCommand.Subcommands.Add(reviewCommand);
         rootCommand.Subcommands.Add(configCommand);
         rootCommand.Subcommands.Add(mcpCommand);
         rootCommand.Subcommands.Add(workflowCommand);
@@ -1070,6 +1185,28 @@ public static class CliCommandFactory
 
         output.WriteLine("summary:");
         output.WriteLine(result.Summary);
+    }
+
+    private static void WriteReviewReport(
+        TextWriter output,
+        ReviewReport report,
+        bool jsonRequested,
+        string outputMode)
+    {
+        ArgumentNullException.ThrowIfNull(output);
+        ArgumentNullException.ThrowIfNull(report);
+
+        output.WriteLine(IsJsonOutputRequested(jsonRequested, outputMode)
+            ? report.ToJson()
+            : report.ToDisplayText());
+    }
+
+    private static ChatResponse PrependReviewWarning(ChatResponse response, string warning)
+    {
+        string text = string.IsNullOrWhiteSpace(response.Text)
+            ? warning
+            : warning + Environment.NewLine + Environment.NewLine + response.Text.TrimStart('\r', '\n');
+        return response with { Text = text };
     }
 
     private static void WriteConfigEditResult(TextWriter output, ConfigFileEditResult result)

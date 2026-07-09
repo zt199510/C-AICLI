@@ -5,5 +5,7 @@ internal sealed record GitCommandResult(
     int? ExitCode,
     string Stdout,
     string Stderr,
+    bool StdoutTruncated,
+    bool StderrTruncated,
     string? ErrorCode,
     string Summary);

@@ -1,10 +1,13 @@
 using System.Diagnostics;
+using System.Globalization;
 using System.Text;
 
 namespace CSharpAiCli.Core;
 
 public sealed class RestrictedShellRunner : IShellRunner
 {
+    private const int PostTimeoutCleanupWaitMilliseconds = 1000;
+
     private readonly IWorkspaceGuard workspaceGuard;
 
     public RestrictedShellRunner(IWorkspaceGuard workspaceGuard)
@@ -51,7 +54,10 @@ public sealed class RestrictedShellRunner : IShellRunner
 
             if (!process.WaitForExit(timeoutMilliseconds))
             {
-                TryKill(process);
+                long cleanupDeadline = Environment.TickCount64 + PostTimeoutCleanupWaitMilliseconds;
+                TryKill(process, cleanupDeadline);
+                TryWaitForExit(process, RemainingMilliseconds(cleanupDeadline));
+                TryWaitForCompletion(Task.WhenAll(stdoutTask, stderrTask), RemainingMilliseconds(cleanupDeadline));
                 string timedOutStdout = TryReadCompleted(stdoutTask);
                 string timedOutStderr = TryReadCompleted(stderrTask);
                 TruncatedText stdout = Truncate(timedOutStdout, maxStdoutBytes);
@@ -121,8 +127,14 @@ public sealed class RestrictedShellRunner : IShellRunner
         };
     }
 
-    private static void TryKill(Process process)
+    private static void TryKill(Process process, long cleanupDeadline)
     {
+        if (OperatingSystem.IsWindows() &&
+            TryKillWindowsProcessTree(process.Id, cleanupDeadline))
+        {
+            return;
+        }
+
         try
         {
             process.Kill(entireProcessTree: true);
@@ -130,6 +142,117 @@ public sealed class RestrictedShellRunner : IShellRunner
         catch
         {
         }
+    }
+
+    private static bool TryKillWindowsProcessTree(int processId, long cleanupDeadline)
+    {
+        if (RemainingMilliseconds(cleanupDeadline) <= 0 ||
+            !TryGetWindowsTaskkillPath(out string taskkillPath))
+        {
+            return false;
+        }
+
+        try
+        {
+            using Process taskkill = new()
+            {
+                StartInfo = new ProcessStartInfo(taskkillPath)
+                {
+                    UseShellExecute = false,
+                    CreateNoWindow = true,
+                    RedirectStandardOutput = true,
+                    RedirectStandardError = true,
+                }
+            };
+
+            taskkill.StartInfo.ArgumentList.Add("/PID");
+            taskkill.StartInfo.ArgumentList.Add(processId.ToString(CultureInfo.InvariantCulture));
+            taskkill.StartInfo.ArgumentList.Add("/T");
+            taskkill.StartInfo.ArgumentList.Add("/F");
+
+            taskkill.Start();
+            Task<string> stdoutTask = taskkill.StandardOutput.ReadToEndAsync();
+            Task<string> stderrTask = taskkill.StandardError.ReadToEndAsync();
+            if (!taskkill.WaitForExit(RemainingMilliseconds(cleanupDeadline)))
+            {
+                TryKillTaskkill(taskkill);
+                return false;
+            }
+
+            TryWaitForCompletion(Task.WhenAll(stdoutTask, stderrTask), RemainingMilliseconds(cleanupDeadline));
+            return taskkill.ExitCode == 0;
+        }
+        catch
+        {
+            return false;
+        }
+    }
+
+    private static bool TryGetWindowsTaskkillPath(out string taskkillPath)
+    {
+        string systemDirectory = Environment.GetFolderPath(Environment.SpecialFolder.System);
+        if (string.IsNullOrWhiteSpace(systemDirectory))
+        {
+            taskkillPath = string.Empty;
+            return false;
+        }
+
+        taskkillPath = Path.Combine(systemDirectory, "taskkill.exe");
+        return File.Exists(taskkillPath);
+    }
+
+    private static void TryKillTaskkill(Process process)
+    {
+        try
+        {
+            process.Kill();
+        }
+        catch
+        {
+        }
+    }
+
+    private static void TryWaitForExit(Process process, int timeoutMilliseconds)
+    {
+        if (timeoutMilliseconds <= 0)
+        {
+            return;
+        }
+
+        try
+        {
+            process.WaitForExit(timeoutMilliseconds);
+        }
+        catch
+        {
+        }
+    }
+
+    private static void TryWaitForCompletion(Task task, int timeoutMilliseconds)
+    {
+        if (timeoutMilliseconds <= 0)
+        {
+            return;
+        }
+
+        try
+        {
+            task.Wait(timeoutMilliseconds);
+        }
+        catch
+        {
+        }
+    }
+
+    private static int RemainingMilliseconds(long deadline)
+    {
+        long remaining = deadline - Environment.TickCount64;
+        if (remaining <= 0)
+        {
+            return 0;
+        }
+
+        return remaining > int.MaxValue ? int.MaxValue : (int)remaining;
     }
 
     private static string TryReadCompleted(Task<string> task)

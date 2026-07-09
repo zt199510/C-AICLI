@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using System.CommandLine;
 using System.Text.Json.Nodes;
 using CSharpAiCli.Cli;
@@ -20,6 +21,946 @@ public sealed class CliCommandFactoryTests
         Assert.Equal(0, exitCode);
         Assert.Contains("C# AI CLI doctor", output.ToString());
         Assert.Contains("api key: missing", output.ToString());
+    }
+
+    [Fact]
+    public void Status_command_writes_status_report_for_non_git_workspace()
+    {
+        using TempDirectory temp = TempDirectory.Create();
+        using StringWriter output = new();
+
+        int exitCode = CliCommandFactory
+            .Create(output, workspacePath => CreateSnapshot(workspacePath))
+            .Parse(["status", "--workspace", temp.Path])
+            .Invoke();
+
+        string text = output.ToString();
+        Assert.Equal(0, exitCode);
+        Assert.Contains("C# AI CLI status", text);
+        Assert.Contains($"workspace: {temp.Path}", text);
+        Assert.Contains("workspaceStatus: ready", text);
+        Assert.Contains("gitStatus: not a git repository", text);
+        Assert.Contains("configurationStatus: incomplete", text);
+        Assert.Contains("model: not configured (default)", text);
+        Assert.Contains("baseUrl: https://api.openai.com/v1 (default)", text);
+        Assert.Contains("apiKey: missing (missing)", text);
+        Assert.Contains("approvalMode: on-request (default)", text);
+    }
+
+    [Fact]
+    public void Diff_command_writes_current_diff_for_git_workspace()
+    {
+        using TempDirectory temp = TempDirectory.Create();
+        string filePath = InitializeGitRepository(temp.Path);
+        File.AppendAllText(filePath, "changed\n");
+        using StringWriter output = new();
+        List<string> loggedCommands = [];
+
+        int exitCode = CliCommandFactory
+            .Create(
+                output,
+                workspacePath => CreateSnapshot(workspacePath),
+                (commandName, _) => loggedCommands.Add(commandName))
+            .Parse(["diff", "--workspace", temp.Path])
+            .Invoke();
+
+        string text = output.ToString();
+        Assert.Equal(0, exitCode);
+        Assert.Equal(["diff"], loggedCommands);
+        Assert.Contains("diff --git", text, StringComparison.Ordinal);
+        Assert.Contains("+changed", text, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Diff_command_with_default_logger_writes_no_diff_for_clean_git_workspace()
+    {
+        using TempDirectory temp = TempDirectory.Create();
+        InitializeGitRepository(temp.Path);
+        using StringWriter output = new();
+
+        int exitCode = CliCommandFactory
+            .Create(output)
+            .Parse(["diff", "--workspace", temp.Path])
+            .Invoke();
+
+        string text = output.ToString().TrimEnd();
+        Assert.Equal(0, exitCode);
+        Assert.Equal("no diff", text);
+        Assert.True(Directory.Exists(Path.Combine(temp.Path, ".caicli", "logs")));
+    }
+
+    [Fact]
+    public void Diff_command_with_default_logger_stays_no_diff_when_rerun()
+    {
+        using TempDirectory temp = TempDirectory.Create();
+        InitializeGitRepository(temp.Path);
+        using StringWriter firstOutput = new();
+        using StringWriter secondOutput = new();
+
+        int firstExitCode = CliCommandFactory
+            .Create(firstOutput)
+            .Parse(["diff", "--workspace", temp.Path])
+            .Invoke();
+        int secondExitCode = CliCommandFactory
+            .Create(secondOutput)
+            .Parse(["diff", "--workspace", temp.Path])
+            .Invoke();
+
+        Assert.Equal(0, firstExitCode);
+        Assert.Equal("no diff", firstOutput.ToString().TrimEnd());
+        Assert.Equal(0, secondExitCode);
+        Assert.Equal("no diff", secondOutput.ToString().TrimEnd());
+    }
+
+    [Fact]
+    public void Diff_command_stat_with_default_logger_writes_no_diff_for_clean_git_workspace()
+    {
+        using TempDirectory temp = TempDirectory.Create();
+        InitializeGitRepository(temp.Path);
+        using StringWriter output = new();
+
+        int exitCode = CliCommandFactory
+            .Create(output)
+            .Parse(["diff", "--stat", "--workspace", temp.Path])
+            .Invoke();
+
+        string text = output.ToString().TrimEnd();
+        Assert.Equal(0, exitCode);
+        Assert.Equal("no diff", text);
+        Assert.True(Directory.Exists(Path.Combine(temp.Path, ".caicli", "logs")));
+    }
+
+    [Fact]
+    public void Diff_command_with_default_logger_writes_no_diff_when_cli_log_is_tracked()
+    {
+        using TempDirectory temp = TempDirectory.Create();
+        InitializeGitRepository(temp.Path);
+        TrackCliCommandLogs(temp.Path);
+        using StringWriter output = new();
+
+        int exitCode = CliCommandFactory
+            .Create(output)
+            .Parse(["diff", "--workspace", temp.Path])
+            .Invoke();
+
+        string text = output.ToString().TrimEnd();
+        Assert.Equal(0, exitCode);
+        Assert.Equal("no diff", text);
+    }
+
+    [Fact]
+    public void Diff_command_stat_with_default_logger_writes_no_diff_when_cli_log_is_tracked()
+    {
+        using TempDirectory temp = TempDirectory.Create();
+        InitializeGitRepository(temp.Path);
+        TrackCliCommandLogs(temp.Path);
+        using StringWriter output = new();
+
+        int exitCode = CliCommandFactory
+            .Create(output)
+            .Parse(["diff", "--stat", "--workspace", temp.Path])
+            .Invoke();
+
+        string text = output.ToString().TrimEnd();
+        Assert.Equal(0, exitCode);
+        Assert.Equal("no diff", text);
+    }
+
+    [Fact]
+    public void Diff_command_writes_staged_and_untracked_changes_for_git_workspace()
+    {
+        using TempDirectory temp = TempDirectory.Create();
+        string filePath = InitializeGitRepository(temp.Path);
+        File.AppendAllText(filePath, "staged change\n");
+        RunGit(temp.Path, "add", "tracked.txt");
+        File.WriteAllText(Path.Combine(temp.Path, "new file.txt"), "fresh\n");
+        using StringWriter output = new();
+
+        int exitCode = CliCommandFactory
+            .Create(output, workspacePath => CreateSnapshot(workspacePath))
+            .Parse(["diff", "--workspace", temp.Path])
+            .Invoke();
+
+        string text = output.ToString();
+        Assert.Equal(0, exitCode);
+        Assert.Contains("+staged change", text, StringComparison.Ordinal);
+        Assert.Contains("new file.txt", text, StringComparison.Ordinal);
+        Assert.Contains("+fresh", text, StringComparison.Ordinal);
+        Assert.DoesNotContain("no diff", text, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Diff_command_writes_canceling_staged_and_unstaged_tracked_changes()
+    {
+        using TempDirectory temp = TempDirectory.Create();
+        string filePath = InitializeGitRepository(temp.Path);
+        File.WriteAllText(filePath, "staged\n");
+        RunGit(temp.Path, "add", "tracked.txt");
+        File.WriteAllText(filePath, "original\n");
+        using StringWriter output = new();
+
+        int exitCode = CliCommandFactory
+            .Create(output, workspacePath => CreateSnapshot(workspacePath))
+            .Parse(["diff", "--workspace", temp.Path])
+            .Invoke();
+
+        string text = output.ToString();
+        Assert.Equal(0, exitCode);
+        Assert.Contains("+staged", text, StringComparison.Ordinal);
+        Assert.Contains("-staged", text, StringComparison.Ordinal);
+        Assert.Contains("+original", text, StringComparison.Ordinal);
+        Assert.DoesNotContain("no diff", text, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Diff_command_writes_staged_and_untracked_changes_for_no_head_git_workspace()
+    {
+        using TempDirectory temp = TempDirectory.Create();
+        InitializeNoHeadGitRepository(temp.Path);
+        File.WriteAllText(Path.Combine(temp.Path, "staged.txt"), "staged\n");
+        RunGit(temp.Path, "add", "staged.txt");
+        File.WriteAllText(Path.Combine(temp.Path, "untracked.txt"), "loose\n");
+        using StringWriter output = new();
+
+        int exitCode = CliCommandFactory
+            .Create(output, workspacePath => CreateSnapshot(workspacePath))
+            .Parse(["diff", "--workspace", temp.Path])
+            .Invoke();
+
+        string text = output.ToString();
+        Assert.Equal(0, exitCode);
+        Assert.Contains("staged.txt", text, StringComparison.Ordinal);
+        Assert.Contains("+staged", text, StringComparison.Ordinal);
+        Assert.Contains("untracked.txt", text, StringComparison.Ordinal);
+        Assert.Contains("+loose", text, StringComparison.Ordinal);
+        Assert.DoesNotContain("bad revision", text, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("no diff", text, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Diff_command_stat_writes_git_diff_stat()
+    {
+        using TempDirectory temp = TempDirectory.Create();
+        string filePath = InitializeGitRepository(temp.Path);
+        File.AppendAllText(filePath, "changed\n");
+        using StringWriter output = new();
+
+        int exitCode = CliCommandFactory
+            .Create(output, workspacePath => CreateSnapshot(workspacePath))
+            .Parse(["diff", "--stat", "--workspace", temp.Path])
+            .Invoke();
+
+        string text = output.ToString();
+        Assert.Equal(0, exitCode);
+        Assert.Contains("tracked.txt", text, StringComparison.Ordinal);
+        Assert.Contains("1 file changed", text, StringComparison.Ordinal);
+        Assert.DoesNotContain("diff --git", text, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Diff_command_stat_writes_canceling_staged_and_unstaged_tracked_changes()
+    {
+        using TempDirectory temp = TempDirectory.Create();
+        string filePath = InitializeGitRepository(temp.Path);
+        File.WriteAllText(filePath, "staged\n");
+        RunGit(temp.Path, "add", "tracked.txt");
+        File.WriteAllText(filePath, "original\n");
+        using StringWriter output = new();
+
+        int exitCode = CliCommandFactory
+            .Create(output, workspacePath => CreateSnapshot(workspacePath))
+            .Parse(["diff", "--stat", "--workspace", temp.Path])
+            .Invoke();
+
+        string text = output.ToString();
+        Assert.Equal(0, exitCode);
+        Assert.Contains("tracked.txt", text, StringComparison.Ordinal);
+        Assert.Contains("1 file changed", text, StringComparison.Ordinal);
+        Assert.DoesNotContain("diff --git", text, StringComparison.Ordinal);
+        Assert.DoesNotContain("no diff", text, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Diff_command_writes_no_diff_for_clean_git_workspace()
+    {
+        using TempDirectory temp = TempDirectory.Create();
+        InitializeGitRepository(temp.Path);
+        using StringWriter output = new();
+
+        int exitCode = CliCommandFactory
+            .Create(output, workspacePath => CreateSnapshot(workspacePath))
+            .Parse(["diff", "--workspace", temp.Path])
+            .Invoke();
+
+        Assert.Equal(0, exitCode);
+        Assert.Equal("no diff", output.ToString().TrimEnd());
+    }
+
+    [Fact]
+    public void Models_command_writes_current_configuration_and_examples_without_api_key_or_model_client()
+    {
+        using TempDirectory temp = TempDirectory.Create();
+        using StringWriter output = new();
+        List<string> loggedCommands = [];
+        string? receivedWorkspace = null;
+
+        int exitCode = CliCommandFactory.Invoke(
+            CliCommandFactory.Create(
+                output,
+                workspacePath =>
+                {
+                    receivedWorkspace = workspacePath;
+                    return CreateSnapshot(
+                        workspacePath,
+                        apiKey: null,
+                        apiKeySource: "missing",
+                        model: "gpt-cli",
+                        baseUrl: "https://gateway.example.test/v1",
+                        baseUrlSource: "workspace config");
+                },
+                (commandName, _) => loggedCommands.Add(commandName),
+                _ => throw new InvalidOperationException("models must not create a chat model client")),
+            ["models", "--workspace", temp.Path],
+            output);
+
+        string text = output.ToString();
+        Assert.Equal(0, exitCode);
+        Assert.Equal(temp.Path, receivedWorkspace);
+        Assert.Equal(["models"], loggedCommands);
+        Assert.Contains("C# AI CLI models", text, StringComparison.Ordinal);
+        Assert.Contains("currentModel: gpt-cli", text, StringComparison.Ordinal);
+        Assert.Contains("currentModelSource: workspace config", text, StringComparison.Ordinal);
+        Assert.Contains("baseUrl: https://gateway.example.test/v1", text, StringComparison.Ordinal);
+        Assert.Contains("baseUrlSource: workspace config", text, StringComparison.Ordinal);
+        Assert.Contains("apiKey: missing", text, StringComparison.Ordinal);
+        Assert.Contains("modelListApi: not called", text, StringComparison.Ordinal);
+        Assert.Contains("recommendedModels:", text, StringComparison.Ordinal);
+        Assert.Contains("caicli config set model gpt-4.1-mini", text, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Review_command_sends_current_diff_to_non_streaming_model_without_logging()
+    {
+        using TempDirectory temp = TempDirectory.Create();
+        string filePath = InitializeGitRepository(temp.Path);
+        File.AppendAllText(filePath, "changed\n");
+        using StringWriter output = new();
+        bool loggerInvoked = false;
+        string? receivedWorkspace = null;
+        FakeChatModelClient chatClient = new(ChatModelResult.Success(new ChatResponse(
+            Provider: "openai",
+            Model: "gpt-test",
+            ResponseId: "resp_test",
+            Text: "review report")));
+        CliEnvironmentSnapshot snapshot = CreateSnapshot(
+            temp.Path,
+            apiKey: "sk-test",
+            apiKeySource: "OPENAI_API_KEY",
+            model: "gpt-test")
+            with
+            {
+                Instructions = InstructionLoadResult.Loaded("Use the project review style.", Path.Combine(temp.Path, "AICLI.md"))
+            };
+
+        int exitCode = CliCommandFactory.Invoke(
+            CliCommandFactory.Create(
+                output,
+                workspacePath =>
+                {
+                    receivedWorkspace = workspacePath;
+                    return snapshot;
+                },
+                (_, _) =>
+                {
+                    loggerInvoked = true;
+                    throw new InvalidOperationException("review must not write command logs");
+                },
+                _ => chatClient),
+            ["review", "--workspace", temp.Path],
+            output);
+
+        string text = output.ToString();
+        Assert.Equal(0, exitCode);
+        Assert.Equal(temp.Path, receivedWorkspace);
+        Assert.False(loggerInvoked);
+        Assert.Null(chatClient.LastStreamingPrompt);
+        Assert.NotNull(chatClient.LastNonStreamingPrompt);
+        Assert.Contains("code review", chatClient.LastNonStreamingPrompt, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("diff --git", chatClient.LastNonStreamingPrompt, StringComparison.Ordinal);
+        Assert.Contains("+changed", chatClient.LastNonStreamingPrompt, StringComparison.Ordinal);
+        Assert.Equal("Use the project review style.", chatClient.LastRequest?.Instructions);
+        Assert.Contains("review report", text, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Review_command_sends_staged_diff_to_non_streaming_model()
+    {
+        using TempDirectory temp = TempDirectory.Create();
+        string filePath = InitializeGitRepository(temp.Path);
+        File.AppendAllText(filePath, "staged change\n");
+        RunGit(temp.Path, "add", "tracked.txt");
+        using StringWriter output = new();
+        FakeChatModelClient chatClient = new(ChatModelResult.Success(new ChatResponse(
+            Provider: "openai",
+            Model: "gpt-test",
+            ResponseId: "resp_test",
+            Text: "review report")));
+
+        int exitCode = CliCommandFactory.Invoke(
+            CliCommandFactory.Create(
+                output,
+                workspacePath => CreateSnapshot(workspacePath, apiKey: "sk-test", apiKeySource: "OPENAI_API_KEY", model: "gpt-test"),
+                (_, _) => throw new InvalidOperationException("review must not write command logs"),
+                _ => chatClient),
+            ["review", "--workspace", temp.Path],
+            output);
+
+        Assert.Equal(0, exitCode);
+        Assert.NotNull(chatClient.LastNonStreamingPrompt);
+        Assert.Contains("diff --git", chatClient.LastNonStreamingPrompt, StringComparison.Ordinal);
+        Assert.Contains("+staged change", chatClient.LastNonStreamingPrompt, StringComparison.Ordinal);
+        Assert.DoesNotContain("no diff", chatClient.LastNonStreamingPrompt, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Review_command_sends_canceling_staged_and_unstaged_tracked_diff_to_non_streaming_model()
+    {
+        using TempDirectory temp = TempDirectory.Create();
+        string filePath = InitializeGitRepository(temp.Path);
+        File.WriteAllText(filePath, "staged\n");
+        RunGit(temp.Path, "add", "tracked.txt");
+        File.WriteAllText(filePath, "original\n");
+        using StringWriter output = new();
+        FakeChatModelClient chatClient = new(ChatModelResult.Success(new ChatResponse(
+            Provider: "openai",
+            Model: "gpt-test",
+            ResponseId: "resp_test",
+            Text: "review report")));
+
+        int exitCode = CliCommandFactory.Invoke(
+            CliCommandFactory.Create(
+                output,
+                workspacePath => CreateSnapshot(workspacePath, apiKey: "sk-test", apiKeySource: "OPENAI_API_KEY", model: "gpt-test"),
+                (_, _) => throw new InvalidOperationException("review must not write command logs"),
+                _ => chatClient),
+            ["review", "--workspace", temp.Path],
+            output);
+
+        Assert.Equal(0, exitCode);
+        Assert.NotNull(chatClient.LastNonStreamingPrompt);
+        Assert.Contains("+staged", chatClient.LastNonStreamingPrompt, StringComparison.Ordinal);
+        Assert.Contains("-staged", chatClient.LastNonStreamingPrompt, StringComparison.Ordinal);
+        Assert.Contains("+original", chatClient.LastNonStreamingPrompt, StringComparison.Ordinal);
+        Assert.DoesNotContain("no diff", chatClient.LastNonStreamingPrompt, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Review_command_sends_untracked_diff_to_non_streaming_model()
+    {
+        using TempDirectory temp = TempDirectory.Create();
+        InitializeGitRepository(temp.Path);
+        File.WriteAllText(Path.Combine(temp.Path, "new file.txt"), "fresh\n");
+        using StringWriter output = new();
+        FakeChatModelClient chatClient = new(ChatModelResult.Success(new ChatResponse(
+            Provider: "openai",
+            Model: "gpt-test",
+            ResponseId: "resp_test",
+            Text: "review report")));
+
+        int exitCode = CliCommandFactory.Invoke(
+            CliCommandFactory.Create(
+                output,
+                workspacePath => CreateSnapshot(workspacePath, apiKey: "sk-test", apiKeySource: "OPENAI_API_KEY", model: "gpt-test"),
+                (_, _) => throw new InvalidOperationException("review must not write command logs"),
+                _ => chatClient),
+            ["review", "--workspace", temp.Path],
+            output);
+
+        Assert.Equal(0, exitCode);
+        Assert.NotNull(chatClient.LastNonStreamingPrompt);
+        Assert.Contains("diff --git", chatClient.LastNonStreamingPrompt, StringComparison.Ordinal);
+        Assert.Contains("new file.txt", chatClient.LastNonStreamingPrompt, StringComparison.Ordinal);
+        Assert.Contains("+fresh", chatClient.LastNonStreamingPrompt, StringComparison.Ordinal);
+        Assert.DoesNotContain("no diff", chatClient.LastNonStreamingPrompt, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Review_command_sends_no_diff_when_only_untracked_cli_logs_exist()
+    {
+        using TempDirectory temp = TempDirectory.Create();
+        InitializeGitRepository(temp.Path);
+        WriteCliCommandLog(temp.Path);
+        using StringWriter output = new();
+        FakeChatModelClient chatClient = new(ChatModelResult.Success(new ChatResponse(
+            Provider: "openai",
+            Model: "gpt-test",
+            ResponseId: "resp_test",
+            Text: "review report")));
+
+        int exitCode = CliCommandFactory.Invoke(
+            CliCommandFactory.Create(
+                output,
+                workspacePath => CreateSnapshot(workspacePath, apiKey: "sk-test", apiKeySource: "OPENAI_API_KEY", model: "gpt-test"),
+                (_, _) => throw new InvalidOperationException("review must not write command logs"),
+                _ => chatClient),
+            ["review", "--workspace", temp.Path],
+            output);
+
+        Assert.Equal(0, exitCode);
+        Assert.NotNull(chatClient.LastNonStreamingPrompt);
+        Assert.Contains("no diff", chatClient.LastNonStreamingPrompt, StringComparison.Ordinal);
+        Assert.DoesNotContain(".caicli/logs", chatClient.LastNonStreamingPrompt, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void Review_command_sends_no_diff_when_only_tracked_cli_log_changes_exist()
+    {
+        using TempDirectory temp = TempDirectory.Create();
+        InitializeGitRepository(temp.Path);
+        string logPath = TrackCliCommandLogs(temp.Path);
+        File.AppendAllText(logPath, "command=diff\n");
+        using StringWriter output = new();
+        FakeChatModelClient chatClient = new(ChatModelResult.Success(new ChatResponse(
+            Provider: "openai",
+            Model: "gpt-test",
+            ResponseId: "resp_test",
+            Text: "review report")));
+
+        int exitCode = CliCommandFactory.Invoke(
+            CliCommandFactory.Create(
+                output,
+                workspacePath => CreateSnapshot(workspacePath, apiKey: "sk-test", apiKeySource: "OPENAI_API_KEY", model: "gpt-test"),
+                (_, _) => throw new InvalidOperationException("review must not write command logs"),
+                _ => chatClient),
+            ["review", "--workspace", temp.Path],
+            output);
+
+        Assert.Equal(0, exitCode);
+        Assert.NotNull(chatClient.LastNonStreamingPrompt);
+        Assert.Contains("no diff", chatClient.LastNonStreamingPrompt, StringComparison.Ordinal);
+        Assert.DoesNotContain(".caicli/logs", chatClient.LastNonStreamingPrompt, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void Review_command_ignores_staged_tracked_cli_logs_without_hiding_staged_user_files()
+    {
+        using TempDirectory temp = TempDirectory.Create();
+        string filePath = InitializeGitRepository(temp.Path);
+        string logPath = TrackCliCommandLogs(temp.Path);
+        File.AppendAllText(logPath, "command=review\n");
+        File.AppendAllText(filePath, "visible staged user change\n");
+        RunGit(temp.Path, "add", ".caicli/logs", "tracked.txt");
+        using StringWriter output = new();
+        FakeChatModelClient chatClient = new(ChatModelResult.Success(new ChatResponse(
+            Provider: "openai",
+            Model: "gpt-test",
+            ResponseId: "resp_test",
+            Text: "review report")));
+
+        int exitCode = CliCommandFactory.Invoke(
+            CliCommandFactory.Create(
+                output,
+                workspacePath => CreateSnapshot(workspacePath, apiKey: "sk-test", apiKeySource: "OPENAI_API_KEY", model: "gpt-test"),
+                (_, _) => throw new InvalidOperationException("review must not write command logs"),
+                _ => chatClient),
+            ["review", "--workspace", temp.Path],
+            output);
+
+        Assert.Equal(0, exitCode);
+        Assert.NotNull(chatClient.LastNonStreamingPrompt);
+        Assert.Contains("tracked.txt", chatClient.LastNonStreamingPrompt, StringComparison.Ordinal);
+        Assert.Contains("+visible staged user change", chatClient.LastNonStreamingPrompt, StringComparison.Ordinal);
+        Assert.DoesNotContain(".caicli/logs", chatClient.LastNonStreamingPrompt, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("no diff", chatClient.LastNonStreamingPrompt, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Review_command_sends_no_head_staged_and_untracked_diff_to_non_streaming_model()
+    {
+        using TempDirectory temp = TempDirectory.Create();
+        InitializeNoHeadGitRepository(temp.Path);
+        File.WriteAllText(Path.Combine(temp.Path, "staged.txt"), "staged\n");
+        RunGit(temp.Path, "add", "staged.txt");
+        File.WriteAllText(Path.Combine(temp.Path, "untracked.txt"), "loose\n");
+        using StringWriter output = new();
+        FakeChatModelClient chatClient = new(ChatModelResult.Success(new ChatResponse(
+            Provider: "openai",
+            Model: "gpt-test",
+            ResponseId: "resp_test",
+            Text: "review report")));
+
+        int exitCode = CliCommandFactory.Invoke(
+            CliCommandFactory.Create(
+                output,
+                workspacePath => CreateSnapshot(workspacePath, apiKey: "sk-test", apiKeySource: "OPENAI_API_KEY", model: "gpt-test"),
+                (_, _) => throw new InvalidOperationException("review must not write command logs"),
+                _ => chatClient),
+            ["review", "--workspace", temp.Path],
+            output);
+
+        Assert.Equal(0, exitCode);
+        Assert.NotNull(chatClient.LastNonStreamingPrompt);
+        Assert.Contains("staged.txt", chatClient.LastNonStreamingPrompt, StringComparison.Ordinal);
+        Assert.Contains("+staged", chatClient.LastNonStreamingPrompt, StringComparison.Ordinal);
+        Assert.Contains("untracked.txt", chatClient.LastNonStreamingPrompt, StringComparison.Ordinal);
+        Assert.Contains("+loose", chatClient.LastNonStreamingPrompt, StringComparison.Ordinal);
+        Assert.DoesNotContain("bad revision", chatClient.LastNonStreamingPrompt, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("no diff", chatClient.LastNonStreamingPrompt, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Review_command_output_warns_when_diff_is_truncated()
+    {
+        using TempDirectory temp = TempDirectory.Create();
+        string filePath = InitializeGitRepository(temp.Path);
+        File.AppendAllText(filePath, new string('x', 70 * 1024) + "\n");
+        using StringWriter output = new();
+        FakeChatModelClient chatClient = new(ChatModelResult.Success(new ChatResponse(
+            Provider: "openai",
+            Model: "gpt-test",
+            ResponseId: "resp_test",
+            Text: "review report")));
+
+        int exitCode = CliCommandFactory.Invoke(
+            CliCommandFactory.Create(
+                output,
+                workspacePath => CreateSnapshot(workspacePath, apiKey: "sk-test", apiKeySource: "OPENAI_API_KEY", model: "gpt-test"),
+                (_, _) => throw new InvalidOperationException("review must not write command logs"),
+                _ => chatClient),
+            ["review", "--workspace", temp.Path],
+            output);
+
+        string text = output.ToString();
+        Assert.Equal(0, exitCode);
+        Assert.Contains("WARNING: git output was truncated; diff is incomplete.", chatClient.LastNonStreamingPrompt, StringComparison.Ordinal);
+        Assert.Contains("WARNING: git output was truncated; diff is incomplete.", text, StringComparison.Ordinal);
+        Assert.Contains("review report", text, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Review_command_sends_no_diff_to_non_streaming_model_for_clean_git_workspace()
+    {
+        using TempDirectory temp = TempDirectory.Create();
+        InitializeGitRepository(temp.Path);
+        using StringWriter output = new();
+        FakeChatModelClient chatClient = new(ChatModelResult.Success(new ChatResponse(
+            Provider: "openai",
+            Model: "gpt-test",
+            ResponseId: "resp_test",
+            Text: "review report")));
+
+        int exitCode = CliCommandFactory.Invoke(
+            CliCommandFactory.Create(
+                output,
+                workspacePath => CreateSnapshot(workspacePath, apiKey: "sk-test", apiKeySource: "OPENAI_API_KEY", model: "gpt-test"),
+                (_, _) => throw new InvalidOperationException("review must not write command logs"),
+                _ => chatClient),
+            ["review", "--workspace", temp.Path],
+            output);
+
+        string text = output.ToString();
+        Assert.Equal(0, exitCode);
+        Assert.Null(chatClient.LastStreamingPrompt);
+        Assert.NotNull(chatClient.LastNonStreamingPrompt);
+        Assert.Contains("Current git diff:", chatClient.LastNonStreamingPrompt, StringComparison.Ordinal);
+        Assert.Contains("no diff", chatClient.LastNonStreamingPrompt, StringComparison.Ordinal);
+        Assert.DoesNotContain("diff --git", chatClient.LastNonStreamingPrompt, StringComparison.Ordinal);
+        Assert.Contains("review report", text, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Review_command_text_success_writes_findings_first_with_metadata()
+    {
+        using TempDirectory temp = TempDirectory.Create();
+        string filePath = InitializeGitRepository(temp.Path);
+        File.AppendAllText(filePath, "changed\n");
+        using StringWriter output = new();
+        string findingsText = """
+        Findings:
+        - src/Example.cs:10: Important issue.
+        """;
+        FakeChatModelClient chatClient = new(ChatModelResult.Success(new ChatResponse(
+            Provider: "openai",
+            Model: "gpt-test",
+            ResponseId: "resp_test",
+            Text: findingsText)));
+
+        int exitCode = CliCommandFactory.Invoke(
+            CliCommandFactory.Create(
+                output,
+                workspacePath => CreateSnapshot(workspacePath, apiKey: "sk-test", apiKeySource: "OPENAI_API_KEY", model: "gpt-test"),
+                (_, _) => throw new InvalidOperationException("review must not write command logs"),
+                _ => chatClient),
+            ["review", "--workspace", temp.Path],
+            output);
+
+        string text = output.ToString();
+        Assert.Equal(0, exitCode);
+        Assert.StartsWith(findingsText, text, StringComparison.Ordinal);
+        Assert.True(
+            text.IndexOf("status: completed", StringComparison.Ordinal) > text.IndexOf("Important issue.", StringComparison.Ordinal),
+            text);
+        Assert.Contains("provider: openai", text, StringComparison.Ordinal);
+        Assert.Contains("model: gpt-test", text, StringComparison.Ordinal);
+        Assert.Contains("responseId: resp_test", text, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Review_command_json_success_writes_single_result_object()
+    {
+        using TempDirectory temp = TempDirectory.Create();
+        string filePath = InitializeGitRepository(temp.Path);
+        File.AppendAllText(filePath, "changed\n");
+        using StringWriter output = new();
+        FakeChatModelClient chatClient = new(ChatModelResult.Success(new ChatResponse(
+            Provider: "openai",
+            Model: "gpt-test",
+            ResponseId: "resp_test",
+            Text: "review report")));
+
+        int exitCode = CliCommandFactory.Invoke(
+            CliCommandFactory.Create(
+                output,
+                workspacePath => CreateSnapshot(workspacePath, apiKey: "sk-test", apiKeySource: "OPENAI_API_KEY", model: "gpt-test"),
+                (_, _) => throw new InvalidOperationException("review must not write command logs"),
+                _ => chatClient),
+            ["review", "--json", "--workspace", temp.Path],
+            output);
+
+        JsonObject json = AssertSingleReviewJsonResult(output);
+        Assert.Equal(0, exitCode);
+        Assert.Equal("completed", json["status"]?.GetValue<string>());
+        Assert.Equal("openai", json["provider"]?.GetValue<string>());
+        Assert.Equal("gpt-test", json["model"]?.GetValue<string>());
+        Assert.Equal("resp_test", json["responseId"]?.GetValue<string>());
+        Assert.Equal("review report", json["findingsText"]?.GetValue<string>());
+    }
+
+    [Fact]
+    public void Review_command_json_success_includes_empty_findings_text()
+    {
+        using TempDirectory temp = TempDirectory.Create();
+        string filePath = InitializeGitRepository(temp.Path);
+        File.AppendAllText(filePath, "changed\n");
+        using StringWriter output = new();
+        FakeChatModelClient chatClient = new(ChatModelResult.Success(new ChatResponse(
+            Provider: "openai",
+            Model: "gpt-test",
+            ResponseId: "resp_test",
+            Text: "")));
+
+        int exitCode = CliCommandFactory.Invoke(
+            CliCommandFactory.Create(
+                output,
+                workspacePath => CreateSnapshot(workspacePath, apiKey: "sk-test", apiKeySource: "OPENAI_API_KEY", model: "gpt-test"),
+                (_, _) => throw new InvalidOperationException("review must not write command logs"),
+                _ => chatClient),
+            ["review", "--json", "--workspace", temp.Path],
+            output);
+
+        JsonObject json = AssertSingleReviewJsonResult(output);
+        Assert.Equal(0, exitCode);
+        Assert.True(json.ContainsKey("findingsText"));
+        Assert.Equal(string.Empty, json["findingsText"]?.GetValue<string>());
+    }
+
+    [Fact]
+    public void Review_command_output_json_success_writes_single_result_object()
+    {
+        using TempDirectory temp = TempDirectory.Create();
+        string filePath = InitializeGitRepository(temp.Path);
+        File.AppendAllText(filePath, "changed\n");
+        using StringWriter output = new();
+        FakeChatModelClient chatClient = new(ChatModelResult.Success(new ChatResponse(
+            Provider: "openai",
+            Model: "gpt-test",
+            ResponseId: "resp_test",
+            Text: "review report")));
+
+        int exitCode = CliCommandFactory.Invoke(
+            CliCommandFactory.Create(
+                output,
+                workspacePath => CreateSnapshot(workspacePath, apiKey: "sk-test", apiKeySource: "OPENAI_API_KEY", model: "gpt-test"),
+                (_, _) => throw new InvalidOperationException("review must not write command logs"),
+                _ => chatClient),
+            ["review", "--output", "json", "--workspace", temp.Path],
+            output);
+
+        JsonObject json = AssertSingleReviewJsonResult(output);
+        Assert.Equal(0, exitCode);
+        Assert.Equal("completed", json["status"]?.GetValue<string>());
+        Assert.Equal("review report", json["findingsText"]?.GetValue<string>());
+    }
+
+    [Fact]
+    public void Review_output_rejects_unknown_value_before_calling_model_or_logger()
+    {
+        using TempDirectory temp = TempDirectory.Create();
+        string filePath = InitializeGitRepository(temp.Path);
+        File.AppendAllText(filePath, "changed\n");
+        using StringWriter output = new();
+        bool loggerInvoked = false;
+        FakeChatModelClient chatClient = new(ChatModelResult.Success(new ChatResponse(
+            Provider: "openai",
+            Model: "gpt-test",
+            ResponseId: "resp_test",
+            Text: "review report")));
+
+        int exitCode = CliCommandFactory.Invoke(
+            CliCommandFactory.Create(
+                output,
+                workspacePath => CreateSnapshot(workspacePath, apiKey: "sk-test", apiKeySource: "OPENAI_API_KEY", model: "gpt-test"),
+                (_, _) => loggerInvoked = true,
+                _ => chatClient),
+            ["review", "--output", "banana", "--workspace", temp.Path],
+            output);
+
+        Assert.Equal(2, exitCode);
+        Assert.False(loggerInvoked);
+        Assert.Null(chatClient.LastNonStreamingPrompt);
+        Assert.Null(chatClient.LastStreamingPrompt);
+        Assert.Contains("Invalid value for --output. Allowed values are text and json.", output.ToString(), StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Review_command_returns_model_failure_without_streaming()
+    {
+        using TempDirectory temp = TempDirectory.Create();
+        string filePath = InitializeGitRepository(temp.Path);
+        File.AppendAllText(filePath, "changed\n");
+        using StringWriter output = new();
+        FakeChatModelClient chatClient = new(ChatModelResult.Failure(new ModelError(
+            Provider: "openai",
+            Operation: "responses.create",
+            StatusCode: null,
+            LocalErrorCode: "missing-openai-api-key",
+            SafeMessage: "OpenAI API key is missing.",
+            Retryable: false)));
+
+        int exitCode = CliCommandFactory.Invoke(
+            CliCommandFactory.Create(
+                output,
+                workspacePath => CreateSnapshot(workspacePath, apiKey: null, apiKeySource: "missing", model: "gpt-test"),
+                (_, _) => { },
+                _ => chatClient),
+            ["review", "--workspace", temp.Path],
+            output);
+
+        string text = output.ToString();
+        Assert.Equal(1, exitCode);
+        Assert.NotNull(chatClient.LastNonStreamingPrompt);
+        Assert.Null(chatClient.LastStreamingPrompt);
+        Assert.Contains("status: failed", text, StringComparison.Ordinal);
+        Assert.Contains("missing-openai-api-key", text, StringComparison.Ordinal);
+        Assert.Contains("OpenAI API key is missing.", text, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Review_command_json_model_failure_writes_safe_failure_without_streaming_or_logging()
+    {
+        using TempDirectory temp = TempDirectory.Create();
+        string filePath = InitializeGitRepository(temp.Path);
+        File.AppendAllText(filePath, "changed\n");
+        using StringWriter output = new();
+        bool loggerInvoked = false;
+        FakeChatModelClient chatClient = new(ChatModelResult.Failure(new ModelError(
+            Provider: "openai",
+            Operation: "responses.create",
+            StatusCode: 429,
+            LocalErrorCode: "rate-limited",
+            SafeMessage: "OpenAI request was rate limited.",
+            Retryable: true)));
+
+        int exitCode = CliCommandFactory.Invoke(
+            CliCommandFactory.Create(
+                output,
+                workspacePath => CreateSnapshot(workspacePath, apiKey: "sk-test", apiKeySource: "OPENAI_API_KEY", model: "gpt-test"),
+                (_, _) => loggerInvoked = true,
+                _ => chatClient),
+            ["review", "--json", "--workspace", temp.Path],
+            output);
+
+        JsonObject json = AssertSingleReviewJsonResult(output);
+        Assert.Equal(1, exitCode);
+        Assert.False(loggerInvoked);
+        Assert.NotNull(chatClient.LastNonStreamingPrompt);
+        Assert.Null(chatClient.LastStreamingPrompt);
+        Assert.Equal("failed", json["status"]?.GetValue<string>());
+        Assert.Equal("rate-limited", json["errorCode"]?.GetValue<string>());
+        Assert.Equal("OpenAI request was rate limited.", json["safeMessage"]?.GetValue<string>());
+        Assert.Equal("openai", json["provider"]?.GetValue<string>());
+        Assert.Equal("responses.create", json["operation"]?.GetValue<string>());
+        Assert.Equal(429, json["statusCode"]?.GetValue<int>());
+        Assert.True(json["retryable"]?.GetValue<bool>());
+    }
+
+    [Fact]
+    public void Review_command_returns_git_diff_failure_without_calling_model()
+    {
+        using TempDirectory temp = TempDirectory.Create();
+        using StringWriter output = new();
+        FakeChatModelClient chatClient = new(ChatModelResult.Success(new ChatResponse(
+            Provider: "openai",
+            Model: "gpt-test",
+            ResponseId: "resp_test",
+            Text: "review report")));
+
+        int exitCode = CliCommandFactory.Invoke(
+            CliCommandFactory.Create(
+                output,
+                workspacePath => CreateSnapshot(workspacePath, apiKey: "sk-test", apiKeySource: "OPENAI_API_KEY", model: "gpt-test"),
+                (_, _) => { },
+                _ => chatClient),
+            ["review", "--workspace", temp.Path],
+            output);
+
+        string text = output.ToString();
+        Assert.Equal(1, exitCode);
+        Assert.Null(chatClient.LastNonStreamingPrompt);
+        Assert.Null(chatClient.LastStreamingPrompt);
+        Assert.Contains("status: failed", text, StringComparison.Ordinal);
+        Assert.Contains("errorCode: git-not-repository", text, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Review_command_json_git_diff_failure_writes_single_result_object_without_calling_model()
+    {
+        using TempDirectory temp = TempDirectory.Create();
+        using StringWriter output = new();
+        FakeChatModelClient chatClient = new(ChatModelResult.Success(new ChatResponse(
+            Provider: "openai",
+            Model: "gpt-test",
+            ResponseId: "resp_test",
+            Text: "review report")));
+
+        int exitCode = CliCommandFactory.Invoke(
+            CliCommandFactory.Create(
+                output,
+                workspacePath => CreateSnapshot(workspacePath, apiKey: "sk-test", apiKeySource: "OPENAI_API_KEY", model: "gpt-test"),
+                (_, _) => throw new InvalidOperationException("review must not write command logs"),
+                _ => chatClient),
+            ["review", "--output", "json", "--workspace", temp.Path],
+            output);
+
+        JsonObject json = AssertSingleReviewJsonResult(output);
+        Assert.Equal(1, exitCode);
+        Assert.Null(chatClient.LastNonStreamingPrompt);
+        Assert.Null(chatClient.LastStreamingPrompt);
+        Assert.Equal("failed", json["status"]?.GetValue<string>());
+        Assert.Equal("git-not-repository", json["errorCode"]?.GetValue<string>());
+        Assert.False(string.IsNullOrWhiteSpace(json["safeMessage"]?.GetValue<string>()));
+    }
+
+    [Fact]
+    public void Diff_temp_repo_commit_ignores_configured_prepare_commit_msg_hook()
+    {
+        using TempDirectory temp = TempDirectory.Create();
+        string hooksPath = Path.Combine(temp.Path, "failing-hooks");
+        WriteFailingHook(hooksPath, "prepare-commit-msg");
+
+        string filePath = InitializeGitRepository(temp.Path, hooksPath);
+
+        Assert.True(File.Exists(filePath));
     }
 
     [Fact]
@@ -3786,6 +4727,24 @@ public sealed class CliCommandFactoryTests
     }
 
     [Fact]
+    public void Status_command_writes_command_log_through_delegate()
+    {
+        using StringWriter output = new();
+        List<string> loggedCommands = [];
+
+        int exitCode = CliCommandFactory
+            .Create(
+                output,
+                CreateSnapshot,
+                (commandName, _) => loggedCommands.Add(commandName))
+            .Parse(["status"])
+            .Invoke();
+
+        Assert.Equal(0, exitCode);
+        Assert.Equal(["status"], loggedCommands);
+    }
+
+    [Fact]
     public void Config_get_command_writes_command_log_through_delegate()
     {
         using StringWriter output = new();
@@ -4665,6 +5624,14 @@ public sealed class CliCommandFactoryTests
         return result;
     }
 
+    private static JsonObject AssertSingleReviewJsonResult(StringWriter output)
+    {
+        string[] lines = output.ToString().TrimEnd().Split(Environment.NewLine);
+        JsonObject result = Assert.IsType<JsonObject>(JsonNode.Parse(Assert.Single(lines)));
+        Assert.Equal("review.result", result["type"]?.GetValue<string>());
+        return result;
+    }
+
     private static int InvokeToolsCallPatch(TempDirectory temp, StringWriter output, string[] approvalArgs)
     {
         File.WriteAllText(Path.Combine(temp.Path, "note.txt"), "before");
@@ -4689,6 +5656,117 @@ public sealed class CliCommandFactoryTests
             .Invoke();
     }
 
+    private static void InitializeNoHeadGitRepository(string root)
+    {
+        RunGit(root, "init");
+        RunGit(root, "config", "user.email", "test@example.invalid");
+        RunGit(root, "config", "user.name", "Test User");
+    }
+
+    private static string InitializeGitRepository(string root, string? configuredHooksPath = null)
+    {
+        RunGit(root, "init");
+        RunGit(root, "config", "user.email", "test@example.invalid");
+        RunGit(root, "config", "user.name", "Test User");
+        if (!string.IsNullOrWhiteSpace(configuredHooksPath))
+        {
+            RunGit(root, "config", "core.hooksPath", configuredHooksPath);
+        }
+
+        string filePath = Path.Combine(root, "tracked.txt");
+        File.WriteAllText(filePath, "original\n");
+        RunGit(root, "add", "tracked.txt");
+        string emptyHooksPath = Path.Combine(root, ".caicli-empty-hooks");
+        Directory.CreateDirectory(emptyHooksPath);
+        RunGit(
+            root,
+            "-c",
+            "commit.gpgSign=false",
+            "-c",
+            "core.hooksPath=" + emptyHooksPath,
+            "commit",
+            "--no-gpg-sign",
+            "--no-verify",
+            "-m",
+            "initial");
+        return filePath;
+    }
+
+    private static void WriteFailingHook(string hooksPath, string hookName)
+    {
+        Directory.CreateDirectory(hooksPath);
+        File.WriteAllText(
+            Path.Combine(hooksPath, hookName),
+            "#!/bin/sh\necho configured hook failed >&2\nexit 1\n");
+    }
+
+    private static void WriteCliCommandLog(string root)
+    {
+        string logsPath = Path.Combine(root, ".caicli", "logs");
+        Directory.CreateDirectory(logsPath);
+        File.WriteAllText(Path.Combine(logsPath, "2026-07-09.log"), "command=diff\n");
+    }
+
+    private static string TrackCliCommandLogs(string root)
+    {
+        string logsPath = Path.Combine(root, ".caicli", "logs");
+        Directory.CreateDirectory(logsPath);
+        DateTime utcToday = DateTime.UtcNow.Date;
+        string currentLogPath = Path.Combine(logsPath, utcToday.ToString("yyyy-MM-dd") + ".log");
+        foreach (DateTime date in new[] { utcToday.AddDays(-1), utcToday, utcToday.AddDays(1) })
+        {
+            File.WriteAllText(Path.Combine(logsPath, date.ToString("yyyy-MM-dd") + ".log"), "initial\n");
+        }
+
+        RunGit(root, "add", ".caicli/logs");
+        CommitAll(root, "track cli logs");
+        return currentLogPath;
+    }
+
+    private static void RunGit(string workingDirectory, params string[] arguments)
+    {
+        ProcessStartInfo startInfo = new("git")
+        {
+            WorkingDirectory = workingDirectory,
+            RedirectStandardOutput = true,
+            RedirectStandardError = true,
+            UseShellExecute = false,
+            CreateNoWindow = true,
+        };
+        foreach (string argument in arguments)
+        {
+            startInfo.ArgumentList.Add(argument);
+        }
+
+        using Process process = new()
+        {
+            StartInfo = startInfo
+        };
+
+        process.Start();
+        string commandText = string.Join(" ", arguments);
+        Assert.True(process.WaitForExit(10_000), "git command timed out: " + commandText);
+        string stderr = process.StandardError.ReadToEnd();
+        Assert.True(process.ExitCode == 0, $"git {commandText} failed: {stderr}");
+    }
+
+    private static void CommitAll(string workingDirectory, string message)
+    {
+        string emptyHooksPath = Path.Combine(workingDirectory, ".caicli-empty-hooks");
+        Directory.CreateDirectory(emptyHooksPath);
+        RunGit(
+            workingDirectory,
+            "-c",
+            "commit.gpgSign=false",
+            "-c",
+            "core.hooksPath=" + emptyHooksPath,
+            "commit",
+            "--no-gpg-sign",
+            "--no-verify",
+            "-m",
+            message);
+    }
+
     private sealed class TempDirectory : IDisposable
     {
         private TempDirectory(string path)
@@ -4709,7 +5787,21 @@ public sealed class CliCommandFactoryTests
         {
             if (Directory.Exists(Path))
             {
+                ClearReadOnlyAttributes(Path);
                 Directory.Delete(Path, recursive: true);
+            }
+        }
+
+        private static void ClearReadOnlyAttributes(string path)
+        {
+            foreach (string filePath in Directory.EnumerateFiles(path, "*", SearchOption.AllDirectories))
+            {
+                File.SetAttributes(filePath, FileAttributes.Normal);
+            }
+
+            foreach (string directoryPath in Directory.EnumerateDirectories(path, "*", SearchOption.AllDirectories))
+            {
+                File.SetAttributes(directoryPath, FileAttributes.Normal);
             }
         }
     }
