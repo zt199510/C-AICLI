@@ -2262,6 +2262,126 @@ public sealed class CliCommandFactoryTests
     }
 
     [Fact]
+    public void Tools_call_shell_enforces_configured_allowlist_from_snapshot()
+    {
+        using TempDirectory temp = TempDirectory.Create();
+        using StringWriter output = new();
+        string argumentsPath = Path.Combine(temp.Path, "arguments.json");
+        string markerPath = Path.Combine(temp.Path, "blocked-by-allowlist.txt");
+        File.WriteAllText(argumentsPath, """{"command":"dotnet --version > blocked-by-allowlist.txt","timeoutMilliseconds":10000}""");
+        ShellPolicyConfiguration shellPolicy = new(
+            AllowedCommands: ["dotnet test"],
+            AllowedCommandsConfigured: true,
+            AllowedCommandsSource: "workspace config",
+            DeniedCommands: [],
+            MaxTimeoutMilliseconds: null,
+            MaxTimeoutMillisecondsSource: "default");
+        CliEnvironmentSnapshot snapshot = CreateSnapshotWithShellPolicy(temp.Path, shellPolicy);
+
+        int exitCode = CliCommandFactory
+            .Create(output, _ => snapshot)
+            .Parse([
+                "tools",
+                "call",
+                "--workspace",
+                temp.Path,
+                "--approval",
+                "always",
+                "workspace.run_shell",
+                "--arguments-file",
+                argumentsPath
+            ])
+            .Invoke();
+
+        string text = output.ToString();
+        Assert.Equal(1, exitCode);
+        Assert.Contains("errorCode: shell-policy-denied", text, StringComparison.Ordinal);
+        Assert.Contains("approvalStatus: shell-policy-denied", text, StringComparison.Ordinal);
+        Assert.Contains("workspace config", text, StringComparison.Ordinal);
+        Assert.False(File.Exists(markerPath));
+    }
+
+    [Fact]
+    public void Tools_call_shell_enforces_configured_denylist_from_snapshot()
+    {
+        using TempDirectory temp = TempDirectory.Create();
+        using StringWriter output = new();
+        string argumentsPath = Path.Combine(temp.Path, "arguments.json");
+        string markerPath = Path.Combine(temp.Path, "blocked-by-denylist.txt");
+        File.WriteAllText(argumentsPath, """{"command":"dotnet --version > blocked-by-denylist.txt","timeoutMilliseconds":10000}""");
+        ShellPolicyConfiguration shellPolicy = new(
+            AllowedCommands: ["dotnet"],
+            AllowedCommandsConfigured: true,
+            AllowedCommandsSource: "workspace config",
+            DeniedCommands: ["--version"],
+            MaxTimeoutMilliseconds: null,
+            MaxTimeoutMillisecondsSource: "default");
+        CliEnvironmentSnapshot snapshot = CreateSnapshotWithShellPolicy(temp.Path, shellPolicy);
+
+        int exitCode = CliCommandFactory
+            .Create(output, _ => snapshot)
+            .Parse([
+                "tools",
+                "call",
+                "--workspace",
+                temp.Path,
+                "--approval",
+                "always",
+                "workspace.run_shell",
+                "--arguments-file",
+                argumentsPath
+            ])
+            .Invoke();
+
+        string text = output.ToString();
+        Assert.Equal(1, exitCode);
+        Assert.Contains("errorCode: shell-policy-denied", text, StringComparison.Ordinal);
+        Assert.Contains("approvalStatus: shell-policy-denied", text, StringComparison.Ordinal);
+        Assert.Contains("--version", text, StringComparison.Ordinal);
+        Assert.False(File.Exists(markerPath));
+    }
+
+    [Fact]
+    public void Tools_call_shell_enforces_configured_timeout_max_from_snapshot()
+    {
+        using TempDirectory temp = TempDirectory.Create();
+        using StringWriter output = new();
+        string argumentsPath = Path.Combine(temp.Path, "arguments.json");
+        File.WriteAllText(argumentsPath, """{"command":"dotnet --version","timeoutMilliseconds":5000}""");
+        ShellPolicyConfiguration shellPolicy = new(
+            AllowedCommands: [],
+            AllowedCommandsConfigured: false,
+            AllowedCommandsSource: "default",
+            DeniedCommands: [],
+            MaxTimeoutMilliseconds: 1000,
+            MaxTimeoutMillisecondsSource: "user config");
+        CliEnvironmentSnapshot snapshot = CreateSnapshotWithShellPolicy(temp.Path, shellPolicy);
+
+        int exitCode = CliCommandFactory
+            .Create(output, _ => snapshot)
+            .Parse([
+                "tools",
+                "call",
+                "--workspace",
+                temp.Path,
+                "--approval",
+                "always",
+                "workspace.run_shell",
+                "--arguments-file",
+                argumentsPath
+            ])
+            .Invoke();
+
+        string text = output.ToString();
+        Assert.Equal(1, exitCode);
+        Assert.Contains("errorCode: shell-policy-denied", text, StringComparison.Ordinal);
+        Assert.Contains("timeout", text, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("5000", text, StringComparison.Ordinal);
+        Assert.Contains("1000", text, StringComparison.Ordinal);
+        Assert.Contains("user config", text, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void Tools_call_approve_still_applies_patch()
     {
         using TempDirectory temp = TempDirectory.Create();
@@ -5915,6 +6035,25 @@ public sealed class CliCommandFactoryTests
             DotnetRuntime: ".NET 9.0.0",
             TargetFramework: "net9.0",
             HasGlobalJson: false);
+    }
+
+    private static CliEnvironmentSnapshot CreateSnapshotWithShellPolicy(
+        string workspacePath,
+        ShellPolicyConfiguration shellPolicy)
+    {
+        CliEnvironmentSnapshot snapshot = CreateSnapshot(
+            workspacePath,
+            apiKey: null,
+            apiKeySource: "missing",
+            model: "not configured");
+
+        return snapshot with
+        {
+            Configuration = snapshot.Configuration with
+            {
+                ShellPolicy = shellPolicy
+            }
+        };
     }
 
     private static JsonObject ReadJsonObject(string path)

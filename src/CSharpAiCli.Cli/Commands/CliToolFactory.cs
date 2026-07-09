@@ -20,7 +20,8 @@ internal static class CliToolFactory
             approvalPolicy));
         RegisterIfEnabled(registry, snapshot, new WorkspaceShellTool(
             new RestrictedShellRunner(workspaceGuard),
-            approvalPolicy));
+            approvalPolicy,
+            snapshot.Configuration.ShellPolicy));
         RegisterIfEnabled(registry, snapshot, new GitStatusTool(workspaceGuard));
         RegisterIfEnabled(registry, snapshot, new GitDiffTool(workspaceGuard));
 

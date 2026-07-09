@@ -11,14 +11,19 @@ public sealed class WorkspaceShellTool : ITool
 
     private readonly IShellRunner shellRunner;
     private readonly IApprovalPolicy approvalPolicy;
+    private readonly ShellPolicyConfiguration shellPolicy;
 
-    public WorkspaceShellTool(IShellRunner shellRunner, IApprovalPolicy approvalPolicy)
+    public WorkspaceShellTool(
+        IShellRunner shellRunner,
+        IApprovalPolicy approvalPolicy,
+        ShellPolicyConfiguration? shellPolicy = null)
     {
         ArgumentNullException.ThrowIfNull(shellRunner);
         ArgumentNullException.ThrowIfNull(approvalPolicy);
 
         this.shellRunner = shellRunner;
         this.approvalPolicy = approvalPolicy;
+        this.shellPolicy = shellPolicy ?? ShellPolicyConfiguration.Default;
     }
 
     public ToolDefinition Definition { get; } = new(
@@ -40,6 +45,23 @@ public sealed class WorkspaceShellTool : ITool
 
         DangerousCommandDetection detection = DangerousCommandDetector.Detect(request.Command);
         string commandRiskSummary = FormatCommandRiskSummary(detection);
+        string? matchedRule = detection.IsDangerous ? detection.MatchedRule : null;
+        ShellPolicyDecision shellPolicyDecision = ShellCommandPolicy.Evaluate(shellPolicy, request);
+        if (!shellPolicyDecision.Allowed)
+        {
+            return ToolExecutionResult.Failure(
+                ToolErrorCode.ShellPolicyDenied,
+                AppendCommandRiskSummary(shellPolicyDecision.SafeMessage, commandRiskSummary),
+                approvalStatus: ToolErrorCode.ShellPolicyDenied,
+                structuredPayload: CreateShellPayload(
+                    request,
+                    ToolErrorCode.ShellPolicyDenied,
+                    commandRiskSummary,
+                    errorCode: ToolErrorCode.ShellPolicyDenied,
+                    matchedRule: matchedRule,
+                    policyDecision: shellPolicyDecision));
+        }
+
         ToolRiskLevel riskLevel = detection.IsDangerous ? ToolRiskLevel.DangerousShell : Definition.RiskLevel;
         string approvalReason = detection.IsDangerous
             ? detection.Reason
@@ -63,7 +85,6 @@ public sealed class WorkspaceShellTool : ITool
             IsDirtyWorkspace: false,
             Metadata: metadata,
             RiskLevel: riskLevel));
-        string? matchedRule = detection.IsDangerous ? detection.MatchedRule : null;
 
         if (!approval.Approved)
         {
@@ -271,7 +292,8 @@ public sealed class WorkspaceShellTool : ITool
         string commandRiskSummary,
         ShellCommandResult? result = null,
         string? errorCode = null,
-        string? matchedRule = null)
+        string? matchedRule = null,
+        ShellPolicyDecision? policyDecision = null)
     {
         List<(string Name, object? Value)> properties =
         [
@@ -293,6 +315,25 @@ public sealed class WorkspaceShellTool : ITool
         if (!string.IsNullOrWhiteSpace(matchedRule))
         {
             properties.Add(("matchedRule", matchedRule));
+        }
+
+        if (policyDecision is not null)
+        {
+            properties.Add(("policyReason", policyDecision.Reason));
+            if (!string.IsNullOrWhiteSpace(policyDecision.MatchedEntry))
+            {
+                properties.Add(("policyMatchedEntry", policyDecision.MatchedEntry));
+            }
+
+            if (!string.IsNullOrWhiteSpace(policyDecision.Source))
+            {
+                properties.Add(("policySource", policyDecision.Source));
+            }
+
+            if (policyDecision.MaxTimeoutMilliseconds is not null)
+            {
+                properties.Add(("policyMaxTimeoutMilliseconds", policyDecision.MaxTimeoutMilliseconds));
+            }
         }
 
         return ToolStructuredPayload.Create([.. properties]);
