@@ -81,6 +81,43 @@ public sealed class WorkspaceShellToolTests
         Assert.Equal("dotnet test src\\CSharpAiCli.sln", shellRunner.LastRequest?.Command);
     }
 
+    [Theory]
+    [InlineData("&& whoami")]
+    [InlineData("|| whoami")]
+    [InlineData("; whoami")]
+    [InlineData("| whoami")]
+    [InlineData("\nwhoami")]
+    [InlineData("\rwhoami")]
+    [InlineData("> out.txt")]
+    [InlineData("< input.txt")]
+    [InlineData("`whoami`")]
+    public void Execute_denies_allowlisted_prefix_when_remainder_contains_shell_syntax(string suffix)
+    {
+        using TempDirectory temp = TempDirectory.Create();
+        SuccessfulCountingShellRunner shellRunner = new();
+        RecordingApprovalPolicy approvalPolicy = new(ApprovalDecision.Approve());
+        WorkspaceShellTool tool = new(
+            shellRunner,
+            approvalPolicy,
+            CreateShellPolicy(
+                allowedCommands: ["dotnet test"],
+                allowedCommandsConfigured: true,
+                allowedCommandsSource: "workspace config"));
+
+        ToolExecutionResult result = tool.Execute(CreateContext(
+            temp.Path,
+            CreateShellArgumentsJson("dotnet test " + suffix)));
+
+        Assert.False(result.Succeeded);
+        Assert.Equal(ToolErrorCode.ShellPolicyDenied, result.ErrorCode);
+        Assert.Equal("shell-policy-denied", result.ApprovalStatus);
+        Assert.Equal(0, approvalPolicy.RequestCount);
+        Assert.Equal(0, shellRunner.RunCount);
+        Assert.Contains("shell syntax", result.Summary, StringComparison.OrdinalIgnoreCase);
+        IReadOnlyDictionary<string, JsonElement> payload = AssertPayload(result);
+        Assert.Equal("allowlist-shell-syntax", payload["policyReason"].GetString());
+    }
+
     [Fact]
     public void Execute_denies_non_allowlisted_command_before_approval_and_execution()
     {
@@ -162,6 +199,56 @@ public sealed class WorkspaceShellToolTests
         Assert.Equal(0, shellRunner.RunCount);
         Assert.Contains("denied by configured shell policy", result.Summary, StringComparison.OrdinalIgnoreCase);
         Assert.Contains("--version", result.Summary, StringComparison.Ordinal);
+        IReadOnlyDictionary<string, JsonElement> payload = AssertPayload(result);
+        Assert.Equal("denylist", payload["policyReason"].GetString());
+    }
+
+    [Theory]
+    [InlineData("terraform plan")]
+    [InlineData("format code")]
+    public void Execute_denylist_does_not_match_inside_larger_words(string command)
+    {
+        using TempDirectory temp = TempDirectory.Create();
+        SuccessfulCountingShellRunner shellRunner = new();
+        RecordingApprovalPolicy approvalPolicy = new(ApprovalDecision.Approve());
+        WorkspaceShellTool tool = new(
+            shellRunner,
+            approvalPolicy,
+            CreateShellPolicy(deniedCommands: ["rm"]));
+
+        ToolExecutionResult result = tool.Execute(CreateContext(
+            temp.Path,
+            CreateShellArgumentsJson(command)));
+
+        Assert.True(result.Succeeded);
+        Assert.Equal(1, approvalPolicy.RequestCount);
+        Assert.Equal(1, shellRunner.RunCount);
+        Assert.Equal(command, shellRunner.LastRequest?.Command);
+    }
+
+    [Theory]
+    [InlineData("rm")]
+    [InlineData("rm -rf .")]
+    public void Execute_denylist_blocks_boundary_matched_command_fragments(string deniedCommand)
+    {
+        using TempDirectory temp = TempDirectory.Create();
+        SuccessfulCountingShellRunner shellRunner = new();
+        RecordingApprovalPolicy approvalPolicy = new(ApprovalDecision.Approve());
+        WorkspaceShellTool tool = new(
+            shellRunner,
+            approvalPolicy,
+            CreateShellPolicy(deniedCommands: [deniedCommand]));
+
+        ToolExecutionResult result = tool.Execute(CreateContext(
+            temp.Path,
+            """{"command":"echo ok && rm -rf .","timeoutMilliseconds":10000}"""));
+
+        Assert.False(result.Succeeded);
+        Assert.Equal(ToolErrorCode.ShellPolicyDenied, result.ErrorCode);
+        Assert.Equal("shell-policy-denied", result.ApprovalStatus);
+        Assert.Equal(0, approvalPolicy.RequestCount);
+        Assert.Equal(0, shellRunner.RunCount);
+        Assert.Contains(deniedCommand, result.Summary, StringComparison.Ordinal);
         IReadOnlyDictionary<string, JsonElement> payload = AssertPayload(result);
         Assert.Equal("denylist", payload["policyReason"].GetString());
     }
@@ -398,6 +485,15 @@ public sealed class WorkspaceShellToolTests
     private static IReadOnlyDictionary<string, JsonElement> AssertPayload(ToolExecutionResult result)
     {
         return result.StructuredPayload ?? throw new InvalidOperationException("Structured payload was not set.");
+    }
+
+    private static string CreateShellArgumentsJson(string command)
+    {
+        return JsonSerializer.Serialize(new
+        {
+            command,
+            timeoutMilliseconds = 10000
+        });
     }
 
     private static ShellPolicyConfiguration CreateShellPolicy(

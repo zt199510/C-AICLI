@@ -19,7 +19,7 @@ internal static class ShellCommandPolicy
                 continue;
             }
 
-            if (command.Contains(denied, StringComparison.OrdinalIgnoreCase))
+            if (ContainsBoundaryAwareFragment(command, denied))
             {
                 return ShellPolicyDecision.Denied(
                     "denylist",
@@ -62,8 +62,23 @@ internal static class ShellCommandPolicy
                 continue;
             }
 
-            if (IsAllowedCommandMatch(command, allowed))
+            if (string.Equals(command, allowed, StringComparison.OrdinalIgnoreCase))
             {
+                return ShellPolicyDecision.Allow;
+            }
+
+            if (IsAllowedPrefixMatch(command, allowed))
+            {
+                string remainder = command[allowed.Length..];
+                if (ContainsShellSyntax(remainder))
+                {
+                    return ShellPolicyDecision.Denied(
+                        "allowlist-shell-syntax",
+                        $"Shell command not allowed by configured shell policy: allowlisted prefix '{allowed}' is followed by shell syntax.",
+                        null,
+                        policy.AllowedCommandsSource);
+                }
+
                 return ShellPolicyDecision.Allow;
             }
         }
@@ -75,16 +90,48 @@ internal static class ShellCommandPolicy
             policy.AllowedCommandsSource);
     }
 
-    private static bool IsAllowedCommandMatch(string command, string allowed)
+    private static bool IsAllowedPrefixMatch(string command, string allowed)
     {
-        if (string.Equals(command, allowed, StringComparison.OrdinalIgnoreCase))
-        {
-            return true;
-        }
-
         return command.Length > allowed.Length &&
             char.IsWhiteSpace(command[allowed.Length]) &&
             command.StartsWith(allowed, StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static bool ContainsShellSyntax(string text)
+    {
+        return text.Contains("&&", StringComparison.Ordinal) ||
+            text.Contains("||", StringComparison.Ordinal) ||
+            text.IndexOfAny([';', '|', '\n', '\r', '<', '>', '`']) >= 0;
+    }
+
+    private static bool ContainsBoundaryAwareFragment(string command, string denied)
+    {
+        int index = 0;
+        while ((index = command.IndexOf(denied, index, StringComparison.OrdinalIgnoreCase)) >= 0)
+        {
+            int endIndex = index + denied.Length;
+            if (IsFragmentBoundary(command, index - 1) &&
+                IsFragmentBoundary(command, endIndex))
+            {
+                return true;
+            }
+
+            index++;
+        }
+
+        return false;
+    }
+
+    private static bool IsFragmentBoundary(string text, int index)
+    {
+        return index < 0 ||
+            index >= text.Length ||
+            !IsWordCharacter(text[index]);
+    }
+
+    private static bool IsWordCharacter(char value)
+    {
+        return char.IsLetterOrDigit(value) || value == '_';
     }
 }
 
