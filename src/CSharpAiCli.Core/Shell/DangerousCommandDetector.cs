@@ -107,7 +107,7 @@ public static partial class DangerousCommandDetector
     [GeneratedRegex(@"(?i)(^|[\s""'])(?:\S*[\\/])?(powershell|pwsh)(\.exe)?\b")]
     private static partial Regex PowerShellExecutablePattern();
 
-    [GeneratedRegex(@"(?:^|\s)([-/]\S+)")]
+    [GeneratedRegex(@"(?:^|\s)[""']?([-/][^""'\s]+)")]
     private static partial Regex CommandSwitchPattern();
 
     [GeneratedRegex(@"(?i)(curl|wget|invoke-webrequest|iwr).*(\|\s*|;\s*|&&\s*)(sh|bash|powershell|pwsh|cmd|python)\b")]
