@@ -22,7 +22,7 @@ public sealed record McpStdioStartupCommandRiskInput(
                 executable,
                 argumentArray,
                 McpStdioStartupCommandRiskInputKind.ShellCommandText,
-                NormalizeLineBreaks(shellCommandText));
+                FormatShellCommandRiskText(shellCommandText));
         }
 
         return new McpStdioStartupCommandRiskInput(
@@ -113,6 +113,46 @@ public sealed record McpStdioStartupCommandRiskInput(
         return false;
     }
 
+    private static string FormatShellCommandRiskText(string shellCommandText)
+    {
+        if (TryGetEncodedPowerShellShellCommandText(shellCommandText, out string encodedPowerShellCommandText))
+        {
+            return encodedPowerShellCommandText;
+        }
+
+        return NormalizeLineBreaks(shellCommandText);
+    }
+
+    private static bool TryGetEncodedPowerShellShellCommandText(string shellCommandText, out string commandText)
+    {
+        string[] tokens = shellCommandText.Split(
+            [' ', '\t', '\r', '\n'],
+            StringSplitOptions.RemoveEmptyEntries);
+
+        for (int executableIndex = 0; executableIndex < tokens.Length; executableIndex++)
+        {
+            string executableName = GetExecutableName(tokens[executableIndex]);
+            if (executableName is not ("powershell" or "pwsh"))
+            {
+                continue;
+            }
+
+            for (int argumentIndex = executableIndex + 1; argumentIndex < tokens.Length; argumentIndex++)
+            {
+                if (!IsPowerShellEncodedExecutionSwitch(TrimShellToken(tokens[argumentIndex])))
+                {
+                    continue;
+                }
+
+                commandText = $"{executableName} -EncodedCommand";
+                return true;
+            }
+        }
+
+        commandText = string.Empty;
+        return false;
+    }
+
     private static string FormatDirectExecutableRiskText(string executable, IReadOnlyList<string> arguments)
     {
         if (!DirectExecutableNeedsArguments(executable))
@@ -197,6 +237,11 @@ public sealed record McpStdioStartupCommandRiskInput(
     private static string NormalizeLineBreaks(string value)
     {
         return value.Replace('\r', ' ').Replace('\n', ' ');
+    }
+
+    private static string TrimShellToken(string value)
+    {
+        return value.Trim().Trim('"');
     }
 
     private static string FormatPart(string value)

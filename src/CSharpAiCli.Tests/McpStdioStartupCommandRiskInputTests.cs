@@ -171,6 +171,34 @@ public sealed class McpStdioStartupCommandRiskInputTests
         Assert.Equal("encoded powershell command", detection.MatchedRule);
     }
 
+    [Theory]
+    [InlineData("cmd.exe", "/c", "powershell", "-ec")]
+    [InlineData("cmd", "/k", "pwsh", "/enc")]
+    public void Create_sanitizes_encoded_powershell_payload_after_cmd_wrapper_extraction(
+        string executable,
+        string commandSwitch,
+        string wrappedExecutable,
+        string encodedSwitch)
+    {
+        string encodedPayload = Convert.ToBase64String(Encoding.Unicode.GetBytes("Write-Output wrapped-hidden"));
+
+        McpStdioStartupCommandRiskInput riskInput = McpStdioStartupCommandRiskInput.Create(
+            executable,
+            [
+                commandSwitch,
+                wrappedExecutable,
+                encodedSwitch,
+                encodedPayload
+            ]);
+
+        DangerousCommandDetection detection = DangerousCommandDetector.Detect(riskInput.DetectorCommand);
+
+        Assert.Equal(McpStdioStartupCommandRiskInputKind.ShellCommandText, riskInput.Kind);
+        Assert.True(detection.IsDangerous);
+        Assert.Equal("encoded powershell command", detection.MatchedRule);
+        Assert.DoesNotContain(encodedPayload, riskInput.DetectorCommand, StringComparison.Ordinal);
+    }
+
     [Fact]
     public void Create_includes_arguments_for_direct_destructive_commands()
     {
