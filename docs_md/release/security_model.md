@@ -58,7 +58,8 @@ Approval status is included in text output and in `exec` JSON events/results thr
 
 The release MVP uses a single-file exact-text patch tool.
 
-- Patch preview runs before apply.
+- `workspace.apply_patch` performs single-file exact-text replacement.
+- Patch dry-run preview returns structured details, including preview type, paths, files, replacement counts, whether a diff exists, and dirty workspace status/summary.
 - Patch apply rechecks the file content before writing.
 - Dirty workspace state is included in the preview.
 - File edits require approval unless the effective approval mode or CLI override approves them.
@@ -69,9 +70,21 @@ The release MVP uses a single-file exact-text patch tool.
 Shell execution is restricted:
 
 - The working directory must remain inside the workspace.
+- Config JSON supports `shellPolicy.allowedCommands`, `shellPolicy.deniedCommands`, and `shellPolicy.maxTimeoutMilliseconds`.
+- `config get` reports the effective shell policy. `doctor` reports shell, patch, and MCP execution policy diagnostics.
+- Shell policy applies to `workspace.run_shell` and MCP stdio startup commands.
+- Shell policy is enforced before approval and before command execution or MCP startup.
+- Denied commands take precedence over allowed commands.
+- An empty configured allowlist denies all shell commands.
+- Allowlist entries are command-text policy strings. Exact matches are allowed. Prefix matches allow ordinary arguments but reject shell control and metacharacter syntax after the prefix, including `&`, `&&`, `||`, `;`, `|`, newlines, carriage returns, redirection, backticks, and command substitution syntax.
+- Denylist matching is boundary-aware, so it avoids matching inside larger words while still matching shell fragments.
 - Ordinary commands require approval.
 - Dangerous command patterns are denied before execution with `errorCode` `approval-denied` and `approvalStatus` `dangerous-shell-denied`.
+- Dangerous command output and structured payloads include a readable `matchedRule` where applicable.
+- Encoded PowerShell payloads and aliases are detected. Encoded payloads are not echoed in safe diagnostics.
 - Commands have timeouts and stdout/stderr byte limits.
+- Timeout requests above `shellPolicy.maxTimeoutMilliseconds` are rejected with a safe explanation instead of being silently clamped.
+- Direct executable MCP policy input includes the executable and argv. Encoded PowerShell payloads are canonicalized/redacted in policy and detector messages.
 - Timeout, denied approval, and non-zero exit are returned as safe tool failures.
 
 ## Tool Disable Controls
@@ -99,6 +112,8 @@ Users can disable tools through `disabledTools` in user or workspace config. Dis
 - MCP config/list/doctor and a generic bridge exist. Registry/tool paths can discover and call user-configured stdio MCP v1 servers through the real initialize, `tools/list`, and `tools/call` paths.
 - Workspace-configured MCP servers are not auto-discovered or started during ordinary tool registry creation, including `tools list`, `tools call`, `exec`, and `run`.
 - `mcp doctor` may explicitly perform real stdio handshake diagnostics for configured stdio servers, including workspace config. Disabled servers are not started.
+- MCP stdio startup commands run dangerous command detection and shell policy checks before process start.
+- MCP startup policy failures surface safe diagnostics in `tools call mcp.*` when configured server/tool discovery is blocked, instead of only returning `unknown-tool`.
 - Remote/http MCP transport remains Deferred.
 - Gerber/TIFF project pack status/profile support exists, but real Gerber execution is Deferred.
 
@@ -108,5 +123,7 @@ These deferred capabilities do not block the direct backend release.
 
 - The tool cannot guarantee semantic correctness of generated code.
 - It does not run destructive commands without the shell runner safety checks, but users should still review commands and diffs.
+- Dangerous command detection and shell policy use conservative text and pattern boundaries, not full shell parsing or semantic proof.
+- Allowlist entries are command text, not exact argv arrays. Unusual quoted arguments containing metacharacters may be conservatively blocked.
 - The first release is Windows-focused.
 - Dotnet tool packaging is not enabled for the first release package.
