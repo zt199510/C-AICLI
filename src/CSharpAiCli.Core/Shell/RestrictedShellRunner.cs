@@ -32,9 +32,12 @@ public sealed class RestrictedShellRunner : IShellRunner
                 cwdResult.SafeMessage.Length == 0 ? "Shell cwd must be inside the workspace." : cwdResult.SafeMessage);
         }
 
-        if (DangerousCommandDetector.IsDangerous(request.Command, out string dangerReason))
+        DangerousCommandDetection detection = DangerousCommandDetector.Detect(request.Command);
+        if (detection.IsDangerous)
         {
-            return ShellCommandResult.Failure(ToolErrorCode.DangerousCommandDenied, dangerReason);
+            return ShellCommandResult.Failure(
+                ToolErrorCode.DangerousCommandDenied,
+                FormatDangerousCommandSummary(detection));
         }
 
         int timeoutMilliseconds = request.TimeoutMilliseconds > 0 ? request.TimeoutMilliseconds : 30_000;
@@ -125,6 +128,13 @@ public sealed class RestrictedShellRunner : IShellRunner
             UseShellExecute = false,
             CreateNoWindow = true,
         };
+    }
+
+    private static string FormatDangerousCommandSummary(DangerousCommandDetection detection)
+    {
+        return string.IsNullOrWhiteSpace(detection.MatchedRule)
+            ? detection.Reason
+            : $"{detection.Reason} Matched rule: {detection.MatchedRule}.";
     }
 
     private static void TryKill(Process process, long cleanupDeadline)

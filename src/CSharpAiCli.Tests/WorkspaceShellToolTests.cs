@@ -99,6 +99,7 @@ public sealed class WorkspaceShellToolTests
         Assert.Equal("rm -rf .", metadata["command"]);
         Assert.Equal(".", metadata["cwd"]);
         Assert.Equal("Command contains a destructive delete pattern.", metadata["reason"]);
+        Assert.Equal("destructive delete pattern", metadata["matchedRule"]);
     }
 
     [Fact]
@@ -143,6 +144,7 @@ public sealed class WorkspaceShellToolTests
         Assert.False(payload["stdoutTruncated"].GetBoolean());
         Assert.False(payload["stderrTruncated"].GetBoolean());
         Assert.Equal("approved", payload["approvalStatus"].GetString());
+        Assert.Equal("destructive delete pattern", payload["matchedRule"].GetString());
     }
 
     [Fact]

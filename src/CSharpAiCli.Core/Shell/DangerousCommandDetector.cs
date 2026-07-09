@@ -6,51 +6,58 @@ public static partial class DangerousCommandDetector
 {
     public static bool IsDangerous(string command, out string reason)
     {
-        reason = string.Empty;
+        DangerousCommandDetection detection = Detect(command);
+        reason = detection.Reason;
+        return detection.IsDangerous;
+    }
+
+    public static DangerousCommandDetection Detect(string command)
+    {
         if (string.IsNullOrWhiteSpace(command))
         {
-            reason = "Command is required.";
-            return true;
+            return Dangerous("Command is required.", "empty command");
         }
 
         string normalized = command.Trim();
         if (DeletePattern().IsMatch(normalized))
         {
-            reason = "Command contains a destructive delete pattern.";
-            return true;
+            return Dangerous("Command contains a destructive delete pattern.", "destructive delete pattern");
         }
 
         if (FormatPattern().IsMatch(normalized))
         {
-            reason = "Command contains a destructive format pattern.";
-            return true;
+            return Dangerous("Command contains a destructive format pattern.", "destructive format pattern");
         }
 
         if (PermissionPattern().IsMatch(normalized))
         {
-            reason = "Command contains a permission modification pattern.";
-            return true;
+            return Dangerous("Command contains a permission modification pattern.", "permission modification pattern");
         }
 
         if (DownloadExecutePattern().IsMatch(normalized))
         {
-            reason = "Command appears to download and execute remote content.";
-            return true;
+            return Dangerous("Command appears to download and execute remote content.", "download and execute remote content");
         }
 
         if (BackgroundPattern().IsMatch(normalized))
         {
-            reason = "Command appears to start a background process.";
-            return true;
+            return Dangerous("Command appears to start a background process.", "background process pattern");
         }
 
         if (InfiniteLoopPattern().IsMatch(normalized))
         {
-            reason = "Command contains an infinite loop pattern.";
-            return true;
+            return Dangerous("Command contains an infinite loop pattern.", "infinite loop pattern");
         }
 
-        return false;
+        return DangerousCommandDetection.Safe;
+    }
+
+    private static DangerousCommandDetection Dangerous(string reason, string matchedRule)
+    {
+        return new DangerousCommandDetection(
+            IsDangerous: true,
+            Reason: reason,
+            MatchedRule: matchedRule);
     }
 
     [GeneratedRegex(@"(?i)(^|\s)(rm\s+-rf|del\s+/[a-z]*[sq]|rmdir\s+/[a-z]*s|remove-item\s+.*(-recurse|-r)\b)")]

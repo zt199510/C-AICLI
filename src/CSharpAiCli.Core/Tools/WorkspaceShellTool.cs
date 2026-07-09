@@ -38,24 +38,30 @@ public sealed class WorkspaceShellTool : ITool
             return failure;
         }
 
-        bool isDangerous = DangerousCommandDetector.IsDangerous(request.Command, out string dangerReason);
-        ToolRiskLevel riskLevel = isDangerous ? ToolRiskLevel.DangerousShell : Definition.RiskLevel;
-        string approvalReason = isDangerous
-            ? dangerReason
+        DangerousCommandDetection detection = DangerousCommandDetector.Detect(request.Command);
+        ToolRiskLevel riskLevel = detection.IsDangerous ? ToolRiskLevel.DangerousShell : Definition.RiskLevel;
+        string approvalReason = detection.IsDangerous
+            ? detection.Reason
             : "Shell command execution requires approval.";
+        Dictionary<string, string> metadata = new(StringComparer.Ordinal)
+        {
+            ["command"] = request.Command,
+            ["cwd"] = request.WorkingDirectory,
+            ["reason"] = approvalReason
+        };
+        if (detection.IsDangerous)
+        {
+            metadata["matchedRule"] = detection.MatchedRule;
+        }
 
         ApprovalDecision approval = approvalPolicy.RequestApproval(new ApprovalRequest(
             Operation: Definition.Name,
             Summary: $"Run shell command in workspace: {request.Command}",
             Diff: null,
             IsDirtyWorkspace: false,
-            Metadata: new Dictionary<string, string>
-            {
-                ["command"] = request.Command,
-                ["cwd"] = request.WorkingDirectory,
-                ["reason"] = approvalReason
-            },
+            Metadata: metadata,
             RiskLevel: riskLevel));
+        string? matchedRule = detection.IsDangerous ? detection.MatchedRule : null;
 
         if (!approval.Approved)
         {
@@ -63,7 +69,11 @@ public sealed class WorkspaceShellTool : ITool
                 ToolErrorCode.ApprovalDenied,
                 approval.SafeMessage,
                 approvalStatus: approval.Status,
-                structuredPayload: CreateShellPayload(request, approval.Status, errorCode: ToolErrorCode.ApprovalDenied));
+                structuredPayload: CreateShellPayload(
+                    request,
+                    approval.Status,
+                    errorCode: ToolErrorCode.ApprovalDenied,
+                    matchedRule: matchedRule));
         }
 
         ShellCommandResult shellResult = shellRunner.Run(context.Workspace, request, cancellationToken);
@@ -72,7 +82,11 @@ public sealed class WorkspaceShellTool : ITool
             ? ToolExecutionResult.Success(
                 summary,
                 approval.Status,
-                structuredPayload: CreateShellPayload(request, approval.Status, shellResult))
+                structuredPayload: CreateShellPayload(
+                    request,
+                    approval.Status,
+                    shellResult,
+                    matchedRule: matchedRule))
             : ToolExecutionResult.Failure(
                 shellResult.ErrorCode ?? ToolErrorCode.ShellCommandFailed,
                 summary,
@@ -81,7 +95,8 @@ public sealed class WorkspaceShellTool : ITool
                     request,
                     approval.Status,
                     shellResult,
-                    shellResult.ErrorCode ?? ToolErrorCode.ShellCommandFailed));
+                    shellResult.ErrorCode ?? ToolErrorCode.ShellCommandFailed,
+                    matchedRule));
     }
 
     private static string FormatSummary(ShellCommandResult result)
@@ -224,25 +239,30 @@ public sealed class WorkspaceShellTool : ITool
         ShellCommandRequest request,
         string approvalStatus,
         ShellCommandResult? result = null,
-        string? errorCode = null)
+        string? errorCode = null,
+        string? matchedRule = null)
     {
-        return errorCode is null
-            ? ToolStructuredPayload.Create(
-                ("command", request.Command),
-                ("cwd", request.WorkingDirectory),
-                ("exitCode", result?.ExitCode),
-                ("timedOut", result?.TimedOut ?? false),
-                ("stdoutTruncated", result?.StdoutTruncated ?? false),
-                ("stderrTruncated", result?.StderrTruncated ?? false),
-                ("approvalStatus", approvalStatus))
-            : ToolStructuredPayload.Create(
-                ("command", request.Command),
-                ("cwd", request.WorkingDirectory),
-                ("exitCode", result?.ExitCode),
-                ("timedOut", result?.TimedOut ?? false),
-                ("stdoutTruncated", result?.StdoutTruncated ?? false),
-                ("stderrTruncated", result?.StderrTruncated ?? false),
-                ("approvalStatus", approvalStatus),
-                ("errorCode", errorCode));
+        List<(string Name, object? Value)> properties =
+        [
+            ("command", request.Command),
+            ("cwd", request.WorkingDirectory),
+            ("exitCode", result?.ExitCode),
+            ("timedOut", result?.TimedOut ?? false),
+            ("stdoutTruncated", result?.StdoutTruncated ?? false),
+            ("stderrTruncated", result?.StderrTruncated ?? false),
+            ("approvalStatus", approvalStatus)
+        ];
+
+        if (errorCode is not null)
+        {
+            properties.Add(("errorCode", errorCode));
+        }
+
+        if (!string.IsNullOrWhiteSpace(matchedRule))
+        {
+            properties.Add(("matchedRule", matchedRule));
+        }
+
+        return ToolStructuredPayload.Create([.. properties]);
     }
 }

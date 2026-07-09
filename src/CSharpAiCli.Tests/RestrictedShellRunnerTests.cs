@@ -65,6 +65,7 @@ public sealed class RestrictedShellRunnerTests
 
         Assert.False(result.Succeeded);
         Assert.Equal("dangerous-command-denied", result.ErrorCode);
+        Assert.Contains("Matched rule: destructive delete pattern.", result.Summary, StringComparison.Ordinal);
     }
 
     [Fact]
