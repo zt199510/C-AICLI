@@ -6,7 +6,7 @@ using System.Text.RegularExpressions;
 
 namespace CSharpAiCli.Core;
 
-public sealed class McpStdioSession : IDisposable
+public sealed class McpStdioSession : IMcpJsonRpcSession, IDisposable
 {
     private const int DefaultTimeoutMilliseconds = 30_000;
     private const int CleanupWaitMilliseconds = 1000;
