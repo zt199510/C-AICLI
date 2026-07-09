@@ -90,6 +90,35 @@ public sealed class McpDoctorReportTests
     }
 
     [Fact]
+    public void Create_uses_configured_shell_policy_for_stdio_startup_timeout()
+    {
+        using FakeMcpStdioServer server = FakeMcpStdioServer.CreateSuccessful();
+        CliConfigFile config = new()
+        {
+            McpServers = new Dictionary<string, McpServerConfig>
+            {
+                ["blocked-timeout"] = server.CreateConfig(timeoutMilliseconds: 10_000)
+            }
+        };
+        ShellPolicyConfiguration shellPolicy = ShellPolicyConfiguration.Default with
+        {
+            MaxTimeoutMilliseconds = 1_000,
+            MaxTimeoutMillisecondsSource = "workspace config"
+        };
+
+        string text = McpDoctorReport.Create(CreateSnapshot(
+            [new CliConfigFileSource("workspace config", "workspace-config.json", config)],
+            server.WorkspacePath,
+            shellPolicy)).ToDisplayText();
+
+        Assert.Contains("server: blocked-timeout", text);
+        Assert.Contains("connectionStatus: unavailable", text);
+        Assert.Contains("shell policy", text, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("timeout", text, StringComparison.OrdinalIgnoreCase);
+        Assert.False(server.HasStarted);
+    }
+
+    [Fact]
     public void Create_reports_invalid_stdio_initialize_response_as_unavailable()
     {
         using FakeMcpStdioServer server = FakeMcpStdioServer.CreateInvalidJson();
@@ -185,7 +214,8 @@ public sealed class McpDoctorReportTests
 
     private static CliEnvironmentSnapshot CreateSnapshot(
         IReadOnlyList<CliConfigFileSource> sources,
-        string? workspaceRoot = null)
+        string? workspaceRoot = null,
+        ShellPolicyConfiguration? shellPolicy = null)
     {
         string rootPath = workspaceRoot ?? "workspace-root";
         WorkspaceContext workspace = new(
@@ -205,7 +235,10 @@ public sealed class McpDoctorReportTests
             ApiKeySource: "missing",
             LoadedConfigPaths: [],
             Warnings: [],
-            ConfigSources: sources);
+            ConfigSources: sources)
+        {
+            ShellPolicy = shellPolicy ?? ShellPolicyConfiguration.Default
+        };
 
         return new CliEnvironmentSnapshot(
             Workspace: workspace,
