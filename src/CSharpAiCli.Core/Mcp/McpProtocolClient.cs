@@ -153,7 +153,7 @@ public sealed class McpProtocolClient
         capabilities = capabilitiesElement.Clone();
         if (!root.TryGetProperty("serverInfo", out JsonElement serverInfoElement))
         {
-            return true;
+            return false;
         }
 
         if (serverInfoElement.ValueKind != JsonValueKind.Object ||

@@ -146,6 +146,36 @@ public sealed class McpInitializeHandshakeTests
     }
 
     [Fact]
+    public void Initialize_missing_server_info_returns_invalid_response_without_sending_initialized_notification()
+    {
+        JsonElement responseResult = JsonSerializer.SerializeToElement(new
+        {
+            protocolVersion = McpProtocolClient.ProtocolVersion,
+            capabilities = new { }
+        });
+        FakeMcpSession session = new(
+            McpStdioTransportResult.Success(
+                new McpJsonRpcResponse
+                {
+                    Id = JsonSerializer.SerializeToElement(1),
+                    Result = responseResult
+                },
+                stderrSnippet: "",
+                stderrTruncated: false),
+            McpStdioTransportResult.NotificationSent(
+                stderrSnippet: "",
+                stderrTruncated: false));
+        McpProtocolClient client = new(session);
+
+        McpInitializeResult result = client.Initialize();
+
+        Assert.False(result.Succeeded);
+        Assert.Equal("mcp-invalid-response", result.ErrorCode);
+        Assert.Contains("invalid", result.SafeMessage, StringComparison.OrdinalIgnoreCase);
+        Assert.Empty(session.Notifications);
+    }
+
+    [Fact]
     public void Initialize_json_rpc_error_returns_safe_failure_with_error_details()
     {
         using TempDirectory temp = TempDirectory.Create();
