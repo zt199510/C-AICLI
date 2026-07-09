@@ -145,7 +145,10 @@ public sealed class WorkspaceShellToolTests
         Assert.False(result.Succeeded);
         Assert.Equal("dangerous-command-denied", result.ErrorCode);
         Assert.Equal("approved", result.ApprovalStatus);
+        Assert.StartsWith("Shell command denied before execution.", result.Summary, StringComparison.Ordinal);
         Assert.Contains($"commandRisk: {expectedRiskSummary}", result.Summary, StringComparison.Ordinal);
+        Assert.Equal(1, CountOccurrences(result.Summary, "Command contains a destructive delete pattern."));
+        Assert.Equal(1, CountOccurrences(result.Summary, "Matched rule: destructive delete pattern."));
         IReadOnlyDictionary<string, JsonElement> payload = AssertPayload(result);
         Assert.Equal("rm -rf .", payload["command"].GetString());
         Assert.Equal(".", payload["cwd"].GetString());
@@ -261,6 +264,19 @@ public sealed class WorkspaceShellToolTests
         return OperatingSystem.IsWindows()
             ? "ping -n 3 127.0.0.1 > nul"
             : "sleep 2";
+    }
+
+    private static int CountOccurrences(string text, string value)
+    {
+        int count = 0;
+        int index = 0;
+        while ((index = text.IndexOf(value, index, StringComparison.Ordinal)) >= 0)
+        {
+            count++;
+            index += value.Length;
+        }
+
+        return count;
     }
 
     private sealed class ShellToolCallingModel : IToolCallingModel

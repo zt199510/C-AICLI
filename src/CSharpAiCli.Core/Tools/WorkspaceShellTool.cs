@@ -108,7 +108,7 @@ public sealed class WorkspaceShellTool : ITool
     {
         List<string> lines =
         [
-            result.Summary,
+            FormatResultSummary(result),
             $"commandRisk: {commandRiskSummary}"
         ];
 
@@ -133,6 +133,13 @@ public sealed class WorkspaceShellTool : ITool
         }
 
         return string.Join(Environment.NewLine, lines);
+    }
+
+    private static string FormatResultSummary(ShellCommandResult result)
+    {
+        return string.Equals(result.ErrorCode, ToolErrorCode.DangerousCommandDenied, StringComparison.Ordinal)
+            ? "Shell command denied before execution."
+            : result.Summary;
     }
 
     private static string AppendCommandRiskSummary(string summary, string commandRiskSummary)
