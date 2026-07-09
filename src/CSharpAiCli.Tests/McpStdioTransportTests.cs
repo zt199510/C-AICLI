@@ -591,6 +591,192 @@ public sealed class McpStdioTransportTests
     }
 
     [Fact]
+    public void OpenSession_denies_shell_policy_denylisted_startup_before_starting_process()
+    {
+        using TempDirectory temp = TempDirectory.Create();
+        string markerPath = Path.Combine(temp.Path, "policy-denylist-startup-ran.txt");
+        string escapedMarkerPath = markerPath.Replace("'", "''", StringComparison.Ordinal);
+        string startupScript =
+            $"[System.IO.File]::WriteAllText('{escapedMarkerPath}', 'started'); " +
+            "Start-Sleep -Seconds 5";
+        McpStdioTransport transport = new(
+            new WorkspaceGuard(),
+            CreateShellPolicy(deniedCommands: ["WriteAllText"]));
+
+        McpStdioSessionOpenResult result = transport.OpenSession(
+            WorkspaceContext.Detect(temp.Path, temp.Path),
+            new McpStdioServerOptions(
+                serverName: "fixture",
+                command: PowerShellExecutable,
+                arguments:
+                [
+                    "-NoLogo",
+                    "-NoProfile",
+                    "-NonInteractive",
+                    "-Command",
+                    startupScript
+                ],
+                workingDirectory: null,
+                timeoutMilliseconds: 10_000));
+
+        try
+        {
+            Assert.False(result.Succeeded);
+            Assert.Null(result.Session);
+            Assert.Equal(McpErrorCode.StartFailed, result.ErrorCode);
+            Assert.Contains("shell policy", result.SafeMessage, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains("WriteAllText", result.SafeMessage, StringComparison.Ordinal);
+            Assert.False(WaitForFile(markerPath, TimeSpan.FromMilliseconds(300)));
+        }
+        finally
+        {
+            result.Session?.Dispose();
+        }
+    }
+
+    [Fact]
+    public void OpenSession_denies_shell_policy_timeout_above_max_before_starting_process()
+    {
+        using TempDirectory temp = TempDirectory.Create();
+        string markerPath = Path.Combine(temp.Path, "policy-timeout-startup-ran.txt");
+        string escapedMarkerPath = markerPath.Replace("'", "''", StringComparison.Ordinal);
+        string startupScript =
+            $"[System.IO.File]::WriteAllText('{escapedMarkerPath}', 'started'); " +
+            "Start-Sleep -Seconds 5";
+        McpStdioTransport transport = new(
+            new WorkspaceGuard(),
+            CreateShellPolicy(
+                maxTimeoutMilliseconds: 1000,
+                maxTimeoutMillisecondsSource: "user config"));
+
+        McpStdioSessionOpenResult result = transport.OpenSession(
+            WorkspaceContext.Detect(temp.Path, temp.Path),
+            new McpStdioServerOptions(
+                serverName: "fixture",
+                command: PowerShellExecutable,
+                arguments:
+                [
+                    "-NoLogo",
+                    "-NoProfile",
+                    "-NonInteractive",
+                    "-Command",
+                    startupScript
+                ],
+                workingDirectory: null,
+                timeoutMilliseconds: 5000));
+
+        try
+        {
+            Assert.False(result.Succeeded);
+            Assert.Null(result.Session);
+            Assert.Equal(McpErrorCode.StartFailed, result.ErrorCode);
+            Assert.Contains("shell policy", result.SafeMessage, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains("timeout", result.SafeMessage, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains("5000", result.SafeMessage, StringComparison.Ordinal);
+            Assert.Contains("1000", result.SafeMessage, StringComparison.Ordinal);
+            Assert.Contains("user config", result.SafeMessage, StringComparison.Ordinal);
+            Assert.False(WaitForFile(markerPath, TimeSpan.FromMilliseconds(300)));
+        }
+        finally
+        {
+            result.Session?.Dispose();
+        }
+    }
+
+    [Fact]
+    public void OpenSession_denies_shell_policy_empty_allowlist_before_starting_process()
+    {
+        using TempDirectory temp = TempDirectory.Create();
+        string markerPath = Path.Combine(temp.Path, "policy-allowlist-startup-ran.txt");
+        string escapedMarkerPath = markerPath.Replace("'", "''", StringComparison.Ordinal);
+        string startupScript =
+            $"[System.IO.File]::WriteAllText('{escapedMarkerPath}', 'started'); " +
+            "Start-Sleep -Seconds 5";
+        McpStdioTransport transport = new(
+            new WorkspaceGuard(),
+            CreateShellPolicy(
+                allowedCommands: [],
+                allowedCommandsConfigured: true,
+                allowedCommandsSource: "workspace config"));
+
+        McpStdioSessionOpenResult result = transport.OpenSession(
+            WorkspaceContext.Detect(temp.Path, temp.Path),
+            new McpStdioServerOptions(
+                serverName: "fixture",
+                command: PowerShellExecutable,
+                arguments:
+                [
+                    "-NoLogo",
+                    "-NoProfile",
+                    "-NonInteractive",
+                    "-Command",
+                    startupScript
+                ],
+                workingDirectory: null,
+                timeoutMilliseconds: 10_000));
+
+        try
+        {
+            Assert.False(result.Succeeded);
+            Assert.Null(result.Session);
+            Assert.Equal(McpErrorCode.StartFailed, result.ErrorCode);
+            Assert.Contains("shell policy", result.SafeMessage, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains("allowlist is configured but empty", result.SafeMessage, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains("workspace config", result.SafeMessage, StringComparison.Ordinal);
+            Assert.False(WaitForFile(markerPath, TimeSpan.FromMilliseconds(300)));
+        }
+        finally
+        {
+            result.Session?.Dispose();
+        }
+    }
+
+    [Fact]
+    public void OpenSession_with_shell_policy_keeps_encoded_powershell_startup_payload_safe()
+    {
+        using TempDirectory temp = TempDirectory.Create();
+        string markerPath = Path.Combine(temp.Path, "policy-encoded-startup-ran.txt");
+        string escapedMarkerPath = markerPath.Replace("'", "''", StringComparison.Ordinal);
+        string encodedPayload = Convert.ToBase64String(Encoding.Unicode.GetBytes(
+            $"[System.IO.File]::WriteAllText('{escapedMarkerPath}', 'started'); Start-Sleep -Seconds 5"));
+        McpStdioTransport transport = new(
+            new WorkspaceGuard(),
+            CreateShellPolicy(
+                allowedCommands: [],
+                allowedCommandsConfigured: true,
+                allowedCommandsSource: "workspace config"));
+
+        McpStdioSessionOpenResult result = transport.OpenSession(
+            WorkspaceContext.Detect(temp.Path, temp.Path),
+            new McpStdioServerOptions(
+                serverName: "fixture",
+                command: PowerShellExecutable,
+                arguments:
+                [
+                    "-NoLogo",
+                    "-NoProfile",
+                    "-NonInteractive",
+                    "-EncodedCommand",
+                    encodedPayload
+                ],
+                workingDirectory: null,
+                timeoutMilliseconds: 10_000));
+
+        try
+        {
+            Assert.False(result.Succeeded);
+            Assert.Null(result.Session);
+            Assert.Equal(McpErrorCode.StartFailed, result.ErrorCode);
+            Assert.DoesNotContain(encodedPayload, result.SafeMessage, StringComparison.Ordinal);
+            Assert.False(WaitForFile(markerPath, TimeSpan.FromMilliseconds(300)));
+        }
+        finally
+        {
+            result.Session?.Dispose();
+        }
+    }
+
+    [Fact]
     public void Send_returns_safe_failure_when_process_cannot_start()
     {
         using TempDirectory temp = TempDirectory.Create();
@@ -673,6 +859,23 @@ public sealed class McpStdioTransportTests
             ],
             workingDirectory: null,
             timeoutMilliseconds: timeoutMilliseconds);
+    }
+
+    private static ShellPolicyConfiguration CreateShellPolicy(
+        IReadOnlyList<string>? allowedCommands = null,
+        bool allowedCommandsConfigured = false,
+        string allowedCommandsSource = "default",
+        IReadOnlyList<string>? deniedCommands = null,
+        int? maxTimeoutMilliseconds = null,
+        string maxTimeoutMillisecondsSource = "default")
+    {
+        return new ShellPolicyConfiguration(
+            AllowedCommands: allowedCommands ?? [],
+            AllowedCommandsConfigured: allowedCommandsConfigured,
+            AllowedCommandsSource: allowedCommandsSource,
+            DeniedCommands: deniedCommands ?? [],
+            MaxTimeoutMilliseconds: maxTimeoutMilliseconds,
+            MaxTimeoutMillisecondsSource: maxTimeoutMillisecondsSource);
     }
 
     private static string WritePowerShellScript(string directory, string script)

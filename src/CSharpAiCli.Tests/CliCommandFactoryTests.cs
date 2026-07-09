@@ -1996,6 +1996,57 @@ public sealed class CliCommandFactoryTests
     }
 
     [Fact]
+    public void Tools_call_mcp_startup_enforces_configured_shell_policy_from_snapshot()
+    {
+        using StringWriter output = new();
+        using TempDirectory temp = TempDirectory.Create();
+        string markerPath = Path.Combine(temp.Path, "mcp-policy-startup-ran.txt");
+        string scriptPath = WriteMcpEchoServerScript(temp.Path, markerPath);
+        CliEnvironmentSnapshot baseSnapshot = CreateSnapshot(
+            workspacePath: temp.Path,
+            apiKey: null,
+            apiKeySource: "missing",
+            model: "not configured",
+            configSources:
+            [
+                new CliConfigFileSource(
+                    "user config",
+                    "user-config.json",
+                    new CliConfigFile
+                    {
+                        McpServers = new Dictionary<string, McpServerConfig>
+                        {
+                            ["active"] = CreateMcpEchoServerConfig(scriptPath)
+                        }
+                    })
+            ]);
+        CliEnvironmentSnapshot snapshot = baseSnapshot with
+        {
+            Configuration = baseSnapshot.Configuration with
+            {
+                ShellPolicy = new ShellPolicyConfiguration(
+                    AllowedCommands: [],
+                    AllowedCommandsConfigured: false,
+                    AllowedCommandsSource: "default",
+                    DeniedCommands: [PowerShellPolicyCommandName],
+                    MaxTimeoutMilliseconds: null,
+                    MaxTimeoutMillisecondsSource: "default")
+            }
+        };
+
+        int exitCode = CliCommandFactory
+            .Create(output, _ => snapshot)
+            .Parse(["tools", "call", "--approve", "mcp.active.echo", """{"text":"hello"}"""])
+            .Invoke();
+
+        string text = output.ToString();
+        Assert.Equal(1, exitCode);
+        Assert.Contains("errorCode: unknown-tool", text, StringComparison.Ordinal);
+        Assert.DoesNotContain("echo: hello", text, StringComparison.Ordinal);
+        Assert.False(File.Exists(markerPath));
+    }
+
+    [Fact]
     public void Tools_call_stdin_reads_arguments_from_injected_reader()
     {
         using TempDirectory temp = TempDirectory.Create();
@@ -6123,11 +6174,15 @@ public sealed class CliCommandFactoryTests
         };
     }
 
-    private static string WriteMcpEchoServerScript(string directory)
+    private static string WriteMcpEchoServerScript(string directory, string? startupMarkerPath = null)
     {
         string scriptPath = Path.Combine(directory, "mcp-echo-fixture-" + Guid.NewGuid().ToString("N") + ".ps1");
+        string startupMarkerScript = string.IsNullOrWhiteSpace(startupMarkerPath)
+            ? string.Empty
+            : $"[System.IO.File]::WriteAllText('{startupMarkerPath.Replace("'", "''", StringComparison.Ordinal)}', 'started'){Environment.NewLine}";
         File.WriteAllText(
             scriptPath,
+            startupMarkerScript +
             """
             while (($line = [Console]::In.ReadLine()) -ne $null) {
                 $request = $line | ConvertFrom-Json
@@ -6212,6 +6267,8 @@ public sealed class CliCommandFactoryTests
     }
 
     private static string PowerShellExecutable => OperatingSystem.IsWindows() ? "powershell.exe" : "pwsh";
+
+    private static string PowerShellPolicyCommandName => OperatingSystem.IsWindows() ? "powershell" : "pwsh";
 
     private static void InitializeNoHeadGitRepository(string root)
     {

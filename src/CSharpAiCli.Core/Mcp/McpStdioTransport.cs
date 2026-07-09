@@ -3,11 +3,15 @@ namespace CSharpAiCli.Core;
 public sealed class McpStdioTransport
 {
     private readonly IWorkspaceGuard workspaceGuard;
+    private readonly ShellPolicyConfiguration shellPolicy;
 
-    public McpStdioTransport(IWorkspaceGuard workspaceGuard)
+    public McpStdioTransport(
+        IWorkspaceGuard workspaceGuard,
+        ShellPolicyConfiguration? shellPolicy = null)
     {
         ArgumentNullException.ThrowIfNull(workspaceGuard);
         this.workspaceGuard = workspaceGuard;
+        this.shellPolicy = shellPolicy ?? ShellPolicyConfiguration.Default;
     }
 
     public McpStdioSessionOpenResult OpenSession(
@@ -15,7 +19,7 @@ public sealed class McpStdioTransport
         McpStdioServerOptions options,
         CancellationToken cancellationToken = default)
     {
-        return McpStdioSession.Open(workspace, options, workspaceGuard, cancellationToken);
+        return McpStdioSession.Open(workspace, options, workspaceGuard, shellPolicy, cancellationToken);
     }
 
     public McpStdioTransportResult Send(

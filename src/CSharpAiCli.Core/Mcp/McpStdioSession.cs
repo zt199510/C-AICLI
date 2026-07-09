@@ -51,11 +51,13 @@ public sealed class McpStdioSession : IMcpJsonRpcSession, IDisposable
         WorkspaceContext workspace,
         McpStdioServerOptions options,
         IWorkspaceGuard workspaceGuard,
+        ShellPolicyConfiguration shellPolicy,
         CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(workspace);
         ArgumentNullException.ThrowIfNull(options);
         ArgumentNullException.ThrowIfNull(workspaceGuard);
+        ArgumentNullException.ThrowIfNull(shellPolicy);
 
         if (cancellationToken.IsCancellationRequested)
         {
@@ -79,6 +81,21 @@ public sealed class McpStdioSession : IMcpJsonRpcSession, IDisposable
             return McpStdioSessionOpenResult.Failure(
                 McpErrorCode.StartFailed,
                 FormatDangerousStartupCommandMessage(startupCommandDetection));
+        }
+
+        ShellPolicyDecision startupPolicyDecision = ShellCommandPolicy.Evaluate(
+            shellPolicy,
+            new ShellCommandRequest(
+                startupCommandRiskInput.DetectorCommand,
+                options.WorkingDirectory ?? ".",
+                options.TimeoutMilliseconds,
+                MaxStdoutBytes: 4096,
+                MaxStderrBytes: 4096));
+        if (!startupPolicyDecision.Allowed)
+        {
+            return McpStdioSessionOpenResult.Failure(
+                McpErrorCode.StartFailed,
+                FormatShellPolicyStartupCommandMessage(startupPolicyDecision));
         }
 
         WorkspaceGuardResult cwdResult = ResolveWorkingDirectory(
@@ -601,6 +618,11 @@ public sealed class McpStdioSession : IMcpJsonRpcSession, IDisposable
         return string.IsNullOrWhiteSpace(detection.MatchedRule)
             ? $"MCP stdio server startup command was blocked. {detection.Reason}"
             : $"MCP stdio server startup command was blocked. {detection.Reason} Matched rule: {detection.MatchedRule}.";
+    }
+
+    private static string FormatShellPolicyStartupCommandMessage(ShellPolicyDecision decision)
+    {
+        return $"MCP stdio server startup command was blocked by shell policy. {decision.SafeMessage}";
     }
 
     private static JsonRpcLineKind ClassifyJsonRpcLine(
