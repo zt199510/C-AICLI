@@ -424,21 +424,25 @@ public sealed class McpProtocolClient
         }
 
         JsonElement root = result.Value;
-        if (root.TryGetProperty("content", out JsonElement contentElement))
+        if (!root.TryGetProperty("content", out JsonElement contentElement) ||
+            contentElement.ValueKind != JsonValueKind.Array)
         {
-            if (contentElement.ValueKind != JsonValueKind.Array)
+            return false;
+        }
+
+        List<JsonElement> contentBlocks = [];
+        foreach (JsonElement contentBlock in contentElement.EnumerateArray())
+        {
+            if (contentBlock.ValueKind != JsonValueKind.Object ||
+                !TryGetRequiredString(contentBlock, "type", out _))
             {
                 return false;
             }
 
-            List<JsonElement> contentBlocks = [];
-            foreach (JsonElement contentBlock in contentElement.EnumerateArray())
-            {
-                contentBlocks.Add(contentBlock.Clone());
-            }
-
-            content = contentBlocks;
+            contentBlocks.Add(contentBlock.Clone());
         }
+
+        content = contentBlocks;
 
         if (root.TryGetProperty("structuredContent", out JsonElement structuredContentElement))
         {

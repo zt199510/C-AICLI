@@ -219,6 +219,35 @@ public sealed class McpToolsCallTests
     }
 
     [Fact]
+    public void CallTool_missing_content_returns_invalid_response()
+    {
+        JsonElement responseResult = JsonSerializer.SerializeToElement(new
+        {
+            structuredContent = new
+            {
+                status = "complete"
+            }
+        });
+        FakeMcpSession session = new(McpStdioTransportResult.Success(
+            new McpJsonRpcResponse
+            {
+                Id = JsonSerializer.SerializeToElement(1),
+                Result = responseResult
+            },
+            stderrSnippet: "",
+            stderrTruncated: false));
+        McpProtocolClient client = new(session);
+
+        McpToolCallResult result = client.CallTool("search", JsonSerializer.SerializeToElement(new { query = "mcp" }));
+
+        Assert.False(result.Succeeded);
+        Assert.Equal(McpErrorCode.InvalidResponse, result.ErrorCode);
+        Assert.Contains("invalid", result.SafeMessage, StringComparison.OrdinalIgnoreCase);
+        Assert.Empty(result.Content);
+        Assert.Null(result.RawResult);
+    }
+
+    [Fact]
     public void CallTool_missing_result_returns_invalid_response()
     {
         FakeMcpSession session = new(McpStdioTransportResult.Success(
@@ -256,6 +285,10 @@ public sealed class McpToolsCallTests
         {
             JsonSerializer.SerializeToElement(new object[] { }),
             JsonSerializer.SerializeToElement(new { content = "not-array" }),
+            JsonSerializer.SerializeToElement(new { content = new object[] { "bad" } }),
+            JsonSerializer.SerializeToElement(new { content = new object?[] { null } }),
+            JsonSerializer.SerializeToElement(new { content = new[] { new { text = "missing type" } } }),
+            JsonSerializer.SerializeToElement(new { content = new[] { new { type = "   " } } }),
             JsonSerializer.SerializeToElement(new { content = Array.Empty<object>(), isError = "not-bool" })
         };
     }
