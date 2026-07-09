@@ -1784,8 +1784,8 @@ public sealed class CliCommandFactoryTests
             configSources:
             [
                 new CliConfigFileSource(
-                    "workspace config",
-                    "workspace-config.json",
+                    "user config",
+                    "user-config.json",
                     new CliConfigFile
                     {
                         McpServers = new Dictionary<string, McpServerConfig>
@@ -1828,6 +1828,45 @@ public sealed class CliCommandFactoryTests
         JsonArray disabledTools = Assert.IsType<JsonArray>(json["disabledTools"]);
         string disabledToolName = Assert.Single(disabledTools.Select(tool => tool?.GetValue<string>() ?? string.Empty));
         Assert.Equal("mcp.disabled.echo", disabledToolName);
+    }
+
+    [Fact]
+    public void Tools_list_json_does_not_start_workspace_configured_mcp_stdio_server()
+    {
+        using StringWriter output = new();
+        using FakeMcpStdioServer server = FakeMcpStdioServer.CreateSuccessful();
+        CliEnvironmentSnapshot snapshot = CreateSnapshot(
+            workspacePath: server.WorkspacePath,
+            apiKey: null,
+            apiKeySource: "missing",
+            model: "not configured",
+            configSources:
+            [
+                new CliConfigFileSource(
+                    "workspace config",
+                    "workspace-config.json",
+                    new CliConfigFile
+                    {
+                        McpServers = new Dictionary<string, McpServerConfig>
+                        {
+                            ["workspace"] = server.CreateConfig(timeoutMilliseconds: 10_000)
+                        }
+                    })
+            ]);
+
+        int exitCode = CliCommandFactory
+            .Create(output, _ => snapshot)
+            .Parse(["tools", "list", "--json"])
+            .Invoke();
+
+        Assert.Equal(0, exitCode);
+        Assert.False(server.HasStarted);
+        JsonObject json = Assert.IsType<JsonObject>(JsonNode.Parse(output.ToString()));
+        JsonArray tools = Assert.IsType<JsonArray>(json["tools"]);
+        string[] toolNames = tools
+            .Select(tool => Assert.IsType<JsonObject>(tool)["name"]?.GetValue<string>() ?? string.Empty)
+            .ToArray();
+        Assert.DoesNotContain("mcp.workspace.echo", toolNames);
     }
 
     [Fact]
@@ -1895,8 +1934,8 @@ public sealed class CliCommandFactoryTests
             configSources:
             [
                 new CliConfigFileSource(
-                    "workspace config",
-                    "workspace-config.json",
+                    "user config",
+                    "user-config.json",
                     new CliConfigFile
                     {
                         McpServers = new Dictionary<string, McpServerConfig>
@@ -1920,7 +1959,7 @@ public sealed class CliCommandFactoryTests
     }
 
     [Fact]
-    public void Tools_call_invokes_discovered_mcp_tool()
+    public void Tools_call_invokes_user_configured_discovered_mcp_tool()
     {
         using StringWriter output = new();
         using TempDirectory temp = TempDirectory.Create();
@@ -1933,8 +1972,8 @@ public sealed class CliCommandFactoryTests
             configSources:
             [
                 new CliConfigFileSource(
-                    "workspace config",
-                    "workspace-config.json",
+                    "user config",
+                    "user-config.json",
                     new CliConfigFile
                     {
                         McpServers = new Dictionary<string, McpServerConfig>

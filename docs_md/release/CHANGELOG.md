@@ -13,6 +13,7 @@ Changed:
 - `session clear <name>` remains supported for compatibility, but `session delete <name>` is the recommended delete command.
 - Markdown session export omits raw tool arguments, fences transcript-controlled bodies, escapes metadata, and redacts common secret values.
 - Release smoke coverage now exercises offline `status`, `models`, and git `diff` paths without model credentials.
+- Stdio MCP v1 registry/tool support is limited to user-configured stdio servers; workspace-configured MCP servers are not auto-started during ordinary registry creation, while `mcp doctor` remains an explicit diagnostic path for configured stdio servers.
 
 ## 0.1.0 - 2026-06-07
 
@@ -29,7 +30,7 @@ Added:
 - Git status and diff tools.
 - Config support for `agentBackend`, MCP servers, workflow profiles, and `disabledTools`.
 - Microsoft Agent Framework adapter boundary and tool DTO bridge as an experimental Deferred backend.
-- MCP config/list/doctor and generic bridge as Deferred enhanced capability.
+- MCP config/list/doctor, generic bridge, and user-configured stdio MCP v1 registry/tool support; remote/http MCP remains Deferred.
 - Gerber/TIFF project pack status/profile MVP as Deferred enhanced capability.
 - Release build script, smoke test script, installation/configuration/security/quickstart docs, known limitations, and final acceptance checklist.
 
@@ -40,7 +41,7 @@ Changed:
 
 Known deferred items:
 - Real Microsoft Agent Framework runtime backend.
-- Real MCP protocol handshake/tool discovery.
+- MCP remote/http transport and workspace-configured MCP registry auto-discovery.
 - Real Gerber/TIFF toolchain execution.
 - Dotnet tool packaging.
 - OpenAI SDK tool-call continuation for agentic `exec`; the current SDK gateway returns `agent-backend-unavailable` until tool calls/results are translated. `run` remains the deterministic direct-tool smoke path.

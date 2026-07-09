@@ -218,6 +218,33 @@ public sealed class McpToolsCallTests
         Assert.Null(result.RawResult);
     }
 
+    [Theory]
+    [MemberData(nameof(InvalidTextContentBlocks))]
+    public void CallTool_text_content_block_requires_text_string(JsonElement contentBlock)
+    {
+        JsonElement responseResult = JsonSerializer.SerializeToElement(new
+        {
+            content = new[] { contentBlock }
+        });
+        FakeMcpSession session = new(McpStdioTransportResult.Success(
+            new McpJsonRpcResponse
+            {
+                Id = JsonSerializer.SerializeToElement(1),
+                Result = responseResult
+            },
+            stderrSnippet: "",
+            stderrTruncated: false));
+        McpProtocolClient client = new(session);
+
+        McpToolCallResult result = client.CallTool("search", JsonSerializer.SerializeToElement(new { query = "mcp" }));
+
+        Assert.False(result.Succeeded);
+        Assert.Equal(McpErrorCode.InvalidResponse, result.ErrorCode);
+        Assert.Contains("invalid", result.SafeMessage, StringComparison.OrdinalIgnoreCase);
+        Assert.Empty(result.Content);
+        Assert.Null(result.RawResult);
+    }
+
     [Fact]
     public void CallTool_missing_content_returns_invalid_response()
     {
@@ -290,6 +317,17 @@ public sealed class McpToolsCallTests
             JsonSerializer.SerializeToElement(new { content = new[] { new { text = "missing type" } } }),
             JsonSerializer.SerializeToElement(new { content = new[] { new { type = "   " } } }),
             JsonSerializer.SerializeToElement(new { content = Array.Empty<object>(), isError = "not-bool" })
+        };
+    }
+
+    public static TheoryData<JsonElement> InvalidTextContentBlocks()
+    {
+        return new TheoryData<JsonElement>
+        {
+            JsonSerializer.SerializeToElement(new { type = "text" }),
+            JsonSerializer.SerializeToElement(new { type = "text", text = 123 }),
+            JsonSerializer.SerializeToElement(new { type = "text", text = (object?)null }),
+            JsonSerializer.SerializeToElement(new { type = "text", text = new { value = "not-string" } })
         };
     }
 

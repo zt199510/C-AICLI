@@ -110,6 +110,7 @@ Disabled tool names are merged from user and workspace config. A disabled tool i
 ```
 
 Do not put `apiKey` in workspace config. If present, it is ignored.
+Workspace `mcpServers` are visible to `mcp list` and explicit `mcp doctor` diagnostics, but they are not auto-discovered or started during ordinary registry/tool commands. Put stdio MCP servers in user config when you want them available through `tools list`, `tools call`, `exec`, or `run`.
 
 ## Config Commands
 

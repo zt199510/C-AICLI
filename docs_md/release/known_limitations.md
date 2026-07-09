@@ -20,7 +20,9 @@
 ## MCP And Project Packs
 
 - MCP config/list/doctor are available.
-- Stdio MCP v1 is available for configured stdio servers, including the real initialize handshake, MVP tool discovery, and the MVP tool call path.
+- Stdio MCP v1 is available in registry/tool paths for user-configured stdio servers, including the real initialize handshake, MVP tool discovery, and the MVP tool call path.
+- Workspace-configured MCP servers are not auto-discovered or started during ordinary registry creation such as `tools list`, `tools call`, `exec`, or `run`.
+- `mcp doctor` can explicitly diagnose configured stdio servers, including workspace config, with a real initialize handshake. Disabled servers are not started.
 - Remote/http MCP transport remains Deferred.
 - The Gerber/TIFF project pack records status/profile behavior, but real Gerber/TIFF conversion execution is Deferred.
 

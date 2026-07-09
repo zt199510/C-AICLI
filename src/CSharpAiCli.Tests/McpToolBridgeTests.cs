@@ -59,6 +59,48 @@ public sealed class McpToolBridgeTests
     }
 
     [Fact]
+    public void Workspace_config_stdio_server_does_not_trigger_discovery_or_register_tools()
+    {
+        McpConfiguration configuration = new(
+            [
+                CreateServer("workspace", source: "workspace config")
+            ]);
+        FakeMcpToolDiscoverer discoverer = new(new McpDiscoveredTool("echo", "Echo.", CreateObjectSchema()));
+        ToolRegistry registry = new();
+
+        new McpToolBridge(discoverer, new FakeMcpToolInvoker())
+            .RegisterTools(registry, configuration, CreateWorkspace());
+
+        Assert.Empty(registry.List());
+        Assert.Empty(discoverer.DiscoveredServerNames);
+    }
+
+    [Fact]
+    public void Workspace_config_override_of_user_server_does_not_trigger_discovery_or_register_tools()
+    {
+        McpConfiguration configuration = McpConfigurationLoader.Load(CreateEffectiveConfiguration(
+            [
+                new CliConfigFileSource(
+                    "user config",
+                    "user-config.json",
+                    CreateMcpConfig("active", "user-active")),
+                new CliConfigFileSource(
+                    "workspace config",
+                    "workspace-config.json",
+                    CreateMcpConfig("active", "workspace-active"))
+            ]));
+        FakeMcpToolDiscoverer discoverer = new(new McpDiscoveredTool("echo", "Echo.", CreateObjectSchema()));
+        ToolRegistry registry = new();
+
+        Assert.Equal("workspace config", Assert.Single(configuration.Servers).Source);
+        new McpToolBridge(discoverer, new FakeMcpToolInvoker())
+            .RegisterTools(registry, configuration, CreateWorkspace());
+
+        Assert.Empty(registry.List());
+        Assert.Empty(discoverer.DiscoveredServerNames);
+    }
+
+    [Fact]
     public void Duplicate_normalized_remote_tool_names_get_deterministic_suffixes()
     {
         McpConfiguration configuration = new([CreateServer("active")]);
@@ -230,14 +272,15 @@ public sealed class McpToolBridgeTests
         string status = "configured",
         string transport = "stdio",
         string? command = "mcp-active",
-        string? url = null)
+        string? url = null,
+        string source = "user config")
     {
         return new McpServerDefinition(
             name,
             enabled,
             status,
             command is null ? $"{transport} url: {url}" : $"stdio command: {command}",
-            "workspace config")
+            source)
         {
             Transport = transport,
             Command = command,
@@ -261,6 +304,40 @@ public sealed class McpToolBridgeTests
             RootPath: Path.GetTempPath(),
             ConfigPath: Path.Combine(Path.GetTempPath(), ".caicli", "config.json"),
             Status: WorkspaceStatus.Ready);
+    }
+
+    private static CliConfigFile CreateMcpConfig(string serverName, string command)
+    {
+        return new CliConfigFile
+        {
+            McpServers = new Dictionary<string, McpServerConfig>
+            {
+                [serverName] = new()
+                {
+                    Enabled = true,
+                    Transport = "stdio",
+                    Command = command
+                }
+            }
+        };
+    }
+
+    private static EffectiveConfiguration CreateEffectiveConfiguration(IReadOnlyList<CliConfigFileSource> sources)
+    {
+        return new EffectiveConfiguration(
+            WorkspaceRoot: "workspace-root",
+            UserConfigPath: "user-config.json",
+            WorkspaceConfigPath: "workspace-config.json",
+            Model: "not configured",
+            ModelSource: "default",
+            AgentBackend: "direct",
+            AgentBackendSource: "default",
+            DisabledTools: new HashSet<string>(StringComparer.Ordinal),
+            ApiKey: null,
+            ApiKeySource: "missing",
+            LoadedConfigPaths: [],
+            Warnings: [],
+            ConfigSources: sources);
     }
 
     private sealed class FakeMcpToolDiscoverer(params McpDiscoveredTool[] tools) : IMcpToolDiscoverer

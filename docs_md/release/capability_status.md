@@ -19,6 +19,8 @@
 | `caicli review` | Accepted | Sends the current git diff to the configured model for workspace-read-only review; supports text, `--json`, and `--output json`; does not write workspace files, logs, transcripts, patches, or run shell/patch tools. Diff collection may use cleaned-up temp files outside the workspace. |
 | `caicli run` | Solidified | Deterministic direct-tool release smoke tasks: create smoke note, read file, run approved shell command. |
 | `tools list/call` | Solidified | Text `tools list` is preserved; `tools list --json` emits a stable `tools.list` object with sorted `tools[]` metadata and sorted `disabledTools[]`; `tools call` accepts inline JSON, `--arguments-file`, or `--stdin` JSON. |
+| Stdio MCP v1 tools | Solidified | User-configured stdio MCP servers can be discovered and called through registry/tool paths using real initialize, `tools/list`, and `tools/call`. Workspace-configured MCP servers are not auto-discovered or started during ordinary registry creation. |
+| `caicli mcp list/doctor` | Accepted | Lists configured MCP servers. `mcp doctor` can explicitly diagnose configured stdio servers with a real initialize handshake, including workspace config; disabled servers are not started. |
 | Tool schema/result contracts | Solidified | `ToolSchemaRenderer` normalizes parameter schemas for OpenAI mapping, the Agent Framework bridge, and `tools list --json`; tool failures use centralized `ToolErrorCode` values; tool results can carry optional structured payloads for agent/runtime consumers while keeping CLI text output compatible. |
 | Workspace read/search tools | Accepted | Enforced by workspace guard. |
 | Patch tool | Accepted | Single-file exact-text patch with approval and dirty-workspace awareness. |
@@ -31,7 +33,7 @@
 | Capability | Status | Notes |
 |---|---|---|
 | Microsoft Agent Framework real backend | Deferred | Adapter project and tool bridge exist; real framework package/runtime is not enabled. |
-| MCP real protocol handshake | Deferred | Config/list/doctor and generic bridge exist; real discovery/execution is not enabled. |
+| MCP remote/http transport | Deferred | Stdio MCP v1 is available for user-configured stdio servers in registry/tool paths and for explicit `mcp doctor` diagnostics; remote/http transport is not enabled. |
 | Gerber/TIFF real workflow execution | Deferred | Project pack status/profile MVP exists; real toolchain execution is not enabled. |
 | Dotnet tool package | Deferred | Windows self-contained package is the first release artifact. |
 | Direct OpenAI SDK agent tool loop | Deferred | Offline/fake agent loop contracts are implemented and tested, but the default SDK gateway still returns `agent-backend-unavailable` for tool-call continuation until SDK tool calls/results are translated. |

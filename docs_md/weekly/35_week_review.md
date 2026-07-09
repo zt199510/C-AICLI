@@ -8,10 +8,10 @@ Completed:
 - Step 3: Implemented the MCP initialize handshake using protocol `2025-03-26`, required `serverInfo`, and fail-fast protocol mismatch handling before the initialized notification.
 - Step 4: Implemented `tools/list` with `nextCursor` pagination, a 100-page ceiling, and input schema validation/defaulting.
 - Step 5: Implemented `tools/call` with JSON object arguments, required content arrays, content block validation, and `isError: true` protocol-success semantics.
-- Step 6: Mapped discovered stdio MCP tools into the local registry as `ToolDefinition` entries named like `mcp.<server>.<tool>`, with deterministic normalization/collision suffixing, real stdio discovery/invocation, and `isError: true` mapped to failed local tool results.
+- Step 6: Mapped discovered user-configured stdio MCP tools into the local registry as `ToolDefinition` entries named like `mcp.<server>.<tool>`, with deterministic normalization/collision suffixing, real stdio discovery/invocation, and `isError: true` mapped to failed local tool results.
 - Step 7: Added real stdio initialize handshake diagnostics to `mcp doctor`; stdio servers become active on success, unavailable on safe failure, disabled without start, and remote/http remains deferred.
 - Step 8: Added a reusable fake stdio MCP server fixture covering handshake, `tools/list`, `tools/call`, timeout, and invalid JSON; stabilized the FileConversationStore temp-file observation race.
-- Step 9: Updated `docs_md/release/known_limitations.md` to state that stdio MCP v1 is available and remote/http MCP remains Deferred.
+- Step 9: Updated `docs_md/release/known_limitations.md` to state that stdio MCP v1 is available for user-configured stdio registry/tool use, `mcp doctor` can diagnose configured stdio servers, workspace-configured servers are not auto-started by ordinary registry creation, and remote/http MCP remains Deferred.
 - Step 10: Ran final build/test verification and created this weekly review.
 
 Verification:
@@ -26,9 +26,10 @@ Verification:
 - Result: passed with exit code 0; no whitespace errors. Git emitted an LF-to-CRLF normalization notice for this new markdown file.
 
 Runtime notes:
-- stdio MCP v1 is available for configured stdio servers: initialize, `tools/list`, discovered tool registration, and `tools/call` are now on real stdio protocol paths.
+- stdio MCP v1 is available for user-configured stdio servers in registry/tool paths: initialize, `tools/list`, discovered tool registration, and `tools/call` are now on real stdio protocol paths.
+- Workspace-configured MCP servers are not auto-discovered or started during ordinary registry creation such as `tools list`, `tools call`, `exec`, or `run`.
 - Remote/http MCP remains Deferred and should not be presented as available.
-- `mcp doctor` now performs real stdio handshake diagnostics for enabled stdio servers and keeps disabled or unsupported transports safe.
+- `mcp doctor` now performs real stdio handshake diagnostics for enabled configured stdio servers, including workspace config, and keeps disabled or unsupported transports safe.
 - MCP protocol `isError: true` remains a successful JSON-RPC response but is surfaced locally as a failed tool result.
 - The fake stdio MCP fixture is now the reusable regression surface for handshake, discovery, invocation, timeout, and invalid JSON behavior.
 

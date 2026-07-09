@@ -121,7 +121,7 @@ artifacts\release\caicli-0.1.0-win-x64\caicli.exe mcp doctor
 artifacts\release\caicli-0.1.0-win-x64\caicli.exe workflow list
 ```
 
-MCP and Gerber/TIFF workflow execution are enhanced capabilities and are not part of the direct backend MVP.
+MCP config/list/doctor are available. User-configured stdio MCP servers can be discovered and called through ordinary registry/tool paths, while workspace-configured MCP servers are not auto-started by `tools list`, `tools call`, `exec`, or `run`. `mcp doctor` can explicitly diagnose configured stdio servers. Remote/http MCP and Gerber/TIFF workflow execution remain enhanced Deferred capabilities.
 
 ## 9. Run An Agentic Exec Task
 

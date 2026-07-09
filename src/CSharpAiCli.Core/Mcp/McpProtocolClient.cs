@@ -434,7 +434,14 @@ public sealed class McpProtocolClient
         foreach (JsonElement contentBlock in contentElement.EnumerateArray())
         {
             if (contentBlock.ValueKind != JsonValueKind.Object ||
-                !TryGetRequiredString(contentBlock, "type", out _))
+                !TryGetRequiredString(contentBlock, "type", out string contentType))
+            {
+                return false;
+            }
+
+            if (string.Equals(contentType, "text", StringComparison.Ordinal) &&
+                (!contentBlock.TryGetProperty("text", out JsonElement textElement) ||
+                    textElement.ValueKind != JsonValueKind.String))
             {
                 return false;
             }

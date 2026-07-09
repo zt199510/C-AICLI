@@ -96,7 +96,10 @@ Users can disable tools through `disabledTools` in user or workspace config. Dis
 ## Optional And Deferred Capabilities
 
 - Microsoft Agent Framework integration is an experimental adapter boundary in this release. The real framework runtime is not enabled.
-- MCP config/list/doctor and a generic bridge exist, but real MCP protocol handshake and tool discovery are Deferred.
+- MCP config/list/doctor and a generic bridge exist. Registry/tool paths can discover and call user-configured stdio MCP v1 servers through the real initialize, `tools/list`, and `tools/call` paths.
+- Workspace-configured MCP servers are not auto-discovered or started during ordinary tool registry creation, including `tools list`, `tools call`, `exec`, and `run`.
+- `mcp doctor` may explicitly perform real stdio handshake diagnostics for configured stdio servers, including workspace config. Disabled servers are not started.
+- Remote/http MCP transport remains Deferred.
 - Gerber/TIFF project pack status/profile support exists, but real Gerber execution is Deferred.
 
 These deferred capabilities do not block the direct backend release.

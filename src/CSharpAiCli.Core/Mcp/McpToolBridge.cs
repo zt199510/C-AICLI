@@ -5,6 +5,8 @@ namespace CSharpAiCli.Core;
 
 public sealed class McpToolBridge
 {
+    private const string TrustedRegistrySource = "user config";
+
     private readonly IMcpToolDiscoverer discoverer;
     private readonly IMcpToolInvoker invoker;
     private readonly IApprovalPolicy approvalPolicy;
@@ -125,7 +127,8 @@ public sealed class McpToolBridge
     {
         return server.Enabled &&
             string.Equals(server.Status, "configured", StringComparison.Ordinal) &&
-            string.Equals(server.Transport, "stdio", StringComparison.Ordinal);
+            string.Equals(server.Transport, "stdio", StringComparison.Ordinal) &&
+            string.Equals(server.Source, TrustedRegistrySource, StringComparison.Ordinal);
     }
 
     private static string CreateDescription(McpServerDefinition server, McpDiscoveredTool discoveredTool)
