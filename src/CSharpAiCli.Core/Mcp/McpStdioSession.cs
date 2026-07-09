@@ -150,6 +150,28 @@ public sealed class McpStdioSession : IDisposable
         }
     }
 
+    public McpStdioTransportResult SendNotification(
+        McpJsonRpcNotification notification,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(notification);
+
+        lock (sendGate)
+        {
+            if (disposed || HasExited(process))
+            {
+                StderrCapture stderr = stderrCapture.Snapshot();
+                return McpStdioTransportResult.Failure(
+                    McpErrorCode.ServerExited,
+                    "MCP stdio server exited before accepting a notification.",
+                    stderrSnippet: stderr.Text,
+                    stderrTruncated: stderr.Truncated);
+            }
+
+            return SendNotificationCoreAsync(notification, cancellationToken).GetAwaiter().GetResult();
+        }
+    }
+
     public void Dispose()
     {
         lock (sendGate)
@@ -174,10 +196,8 @@ public sealed class McpStdioSession : IDisposable
 
         try
         {
-            string requestJson = JsonSerializer.Serialize(request);
-            byte[] requestBytes = Encoding.UTF8.GetBytes(requestJson + "\n");
-            DeadlineOutcome writeOutcome = await WaitForDeadlineAsync(
-                process.StandardInput.BaseStream.WriteAsync(requestBytes).AsTask(),
+            DeadlineOutcome writeOutcome = await WriteJsonLineAsync(
+                request,
                 deadline,
                 cancellationToken).ConfigureAwait(false);
             if (writeOutcome != DeadlineOutcome.Completed)
@@ -185,47 +205,58 @@ public sealed class McpStdioSession : IDisposable
                 return DeadlineFailure(writeOutcome);
             }
 
-            DeadlineOutcome flushOutcome = await WaitForDeadlineAsync(
-                process.StandardInput.BaseStream.FlushAsync(),
-                deadline,
-                cancellationToken).ConfigureAwait(false);
-            if (flushOutcome != DeadlineOutcome.Completed)
+            bool sawMismatchedResponse = false;
+            while (true)
             {
-                return DeadlineFailure(flushOutcome);
-            }
+                DeadlineValueOutcome<string?> readOutcome = await WaitForDeadlineAsync(
+                    process.StandardOutput.ReadLineAsync(),
+                    deadline,
+                    cancellationToken).ConfigureAwait(false);
+                if (readOutcome.Outcome != DeadlineOutcome.Completed)
+                {
+                    return readOutcome.Outcome == DeadlineOutcome.TimedOut && sawMismatchedResponse
+                        ? MismatchedIdFailure()
+                        : DeadlineFailure(readOutcome.Outcome);
+                }
 
-            DeadlineValueOutcome<string?> readOutcome = await WaitForDeadlineAsync(
-                process.StandardOutput.ReadLineAsync(),
-                deadline,
-                cancellationToken).ConfigureAwait(false);
-            if (readOutcome.Outcome != DeadlineOutcome.Completed)
-            {
-                return DeadlineFailure(readOutcome.Outcome);
-            }
+                string? responseLine = readOutcome.Value;
+                StderrCapture stderr = stderrCapture.Snapshot();
+                if (responseLine is null)
+                {
+                    CleanupProcess(process);
+                    return sawMismatchedResponse
+                        ? MismatchedIdFailure()
+                        : McpStdioTransportResult.Failure(
+                            McpErrorCode.ServerExited,
+                            "MCP stdio server exited before returning a response.",
+                            stderrSnippet: stderr.Text,
+                            stderrTruncated: stderr.Truncated);
+                }
 
-            string? responseLine = readOutcome.Value;
-            StderrCapture stderr = stderrCapture.Snapshot();
-            if (responseLine is null)
-            {
-                CleanupProcess(process);
-                return McpStdioTransportResult.Failure(
-                    McpErrorCode.ServerExited,
-                    "MCP stdio server exited before returning a response.",
-                    stderrSnippet: stderr.Text,
-                    stderrTruncated: stderr.Truncated);
-            }
+                JsonRpcLineKind lineKind = ClassifyJsonRpcLine(responseLine, out McpJsonRpcResponse? response);
+                if (lineKind == JsonRpcLineKind.Notification)
+                {
+                    continue;
+                }
 
-            if (!TryDeserializeResponse(responseLine, out McpJsonRpcResponse? response))
-            {
-                CleanupProcess(process);
-                return McpStdioTransportResult.Failure(
-                    McpErrorCode.InvalidResponse,
-                    "MCP stdio server returned an invalid JSON-RPC response.",
-                    stderrSnippet: stderr.Text,
-                    stderrTruncated: stderr.Truncated);
-            }
+                if (lineKind != JsonRpcLineKind.Response || response is null)
+                {
+                    CleanupProcess(process);
+                    return McpStdioTransportResult.Failure(
+                        McpErrorCode.InvalidResponse,
+                        "MCP stdio server returned an invalid JSON-RPC response.",
+                        stderrSnippet: stderr.Text,
+                        stderrTruncated: stderr.Truncated);
+                }
 
-            return McpStdioTransportResult.Success(response, stderr.Text, stderr.Truncated);
+                if (!JsonElementIdsEqual(request.Id, response.Id))
+                {
+                    sawMismatchedResponse = true;
+                    continue;
+                }
+
+                return McpStdioTransportResult.Success(response, stderr.Text, stderr.Truncated);
+            }
         }
         catch (OperationCanceledException)
         {
@@ -248,6 +279,69 @@ public sealed class McpStdioSession : IDisposable
         }
     }
 
+    private async Task<McpStdioTransportResult> SendNotificationCoreAsync(
+        McpJsonRpcNotification notification,
+        CancellationToken cancellationToken)
+    {
+        long deadline = Environment.TickCount64 + timeoutMilliseconds;
+
+        try
+        {
+            DeadlineOutcome writeOutcome = await WriteJsonLineAsync(
+                notification,
+                deadline,
+                cancellationToken).ConfigureAwait(false);
+            if (writeOutcome != DeadlineOutcome.Completed)
+            {
+                return DeadlineFailure(writeOutcome);
+            }
+
+            StderrCapture stderr = stderrCapture.Snapshot();
+            return McpStdioTransportResult.NotificationSent(stderr.Text, stderr.Truncated);
+        }
+        catch (OperationCanceledException)
+        {
+            return DeadlineFailure(
+                cancellationToken.IsCancellationRequested
+                    ? DeadlineOutcome.Cancelled
+                    : DeadlineOutcome.TimedOut);
+        }
+        catch (Exception exception) when (exception is InvalidOperationException
+            or IOException
+            or ObjectDisposedException)
+        {
+            CleanupProcess(process);
+            StderrCapture stderr = stderrCapture.Snapshot();
+            return McpStdioTransportResult.Failure(
+                McpErrorCode.ServerExited,
+                "MCP stdio server exited before accepting a notification.",
+                stderrSnippet: stderr.Text,
+                stderrTruncated: stderr.Truncated);
+        }
+    }
+
+    private async Task<DeadlineOutcome> WriteJsonLineAsync<T>(
+        T message,
+        long deadline,
+        CancellationToken cancellationToken)
+    {
+        string json = JsonSerializer.Serialize(message);
+        byte[] bytes = Encoding.UTF8.GetBytes(json + "\n");
+        DeadlineOutcome writeOutcome = await WaitForDeadlineAsync(
+            process.StandardInput.BaseStream.WriteAsync(bytes).AsTask(),
+            deadline,
+            cancellationToken).ConfigureAwait(false);
+        if (writeOutcome != DeadlineOutcome.Completed)
+        {
+            return writeOutcome;
+        }
+
+        return await WaitForDeadlineAsync(
+            process.StandardInput.BaseStream.FlushAsync(),
+            deadline,
+            cancellationToken).ConfigureAwait(false);
+    }
+
     private McpStdioTransportResult DeadlineFailure(DeadlineOutcome outcome)
     {
         CleanupProcess(process);
@@ -265,6 +359,17 @@ public sealed class McpStdioSession : IDisposable
             McpErrorCode.Timeout,
             $"MCP stdio server timed out after {timeoutMilliseconds} ms.",
             timedOut: true,
+            stderrSnippet: stderr.Text,
+            stderrTruncated: stderr.Truncated);
+    }
+
+    private McpStdioTransportResult MismatchedIdFailure()
+    {
+        CleanupProcess(process);
+        StderrCapture stderr = stderrCapture.FinalSnapshot(CleanupWaitMilliseconds);
+        return McpStdioTransportResult.Failure(
+            McpErrorCode.InvalidResponse,
+            "MCP stdio server returned a response with a mismatched id.",
             stderrSnippet: stderr.Text,
             stderrTruncated: stderr.Truncated);
     }
@@ -366,9 +471,11 @@ public sealed class McpStdioSession : IDisposable
         return startInfo;
     }
 
-    private static bool TryDeserializeResponse(string responseLine, out McpJsonRpcResponse response)
+    private static JsonRpcLineKind ClassifyJsonRpcLine(
+        string responseLine,
+        out McpJsonRpcResponse? response)
     {
-        response = null!;
+        response = null;
 
         try
         {
@@ -377,30 +484,56 @@ public sealed class McpStdioSession : IDisposable
             if (root.ValueKind != JsonValueKind.Object ||
                 !root.TryGetProperty("jsonrpc", out JsonElement jsonRpc) ||
                 jsonRpc.ValueKind != JsonValueKind.String ||
-                jsonRpc.GetString() != "2.0" ||
-                !root.TryGetProperty("id", out _) ||
-                (!root.TryGetProperty("result", out _) && !root.TryGetProperty("error", out _)))
+                jsonRpc.GetString() != "2.0")
             {
-                return false;
+                return JsonRpcLineKind.Invalid;
+            }
+
+            bool hasId = root.TryGetProperty("id", out _);
+            bool hasMethod = root.TryGetProperty("method", out JsonElement method) &&
+                method.ValueKind == JsonValueKind.String;
+            bool hasResponsePayload = root.TryGetProperty("result", out _) ||
+                root.TryGetProperty("error", out _);
+            if (!hasId && hasMethod)
+            {
+                return JsonRpcLineKind.Notification;
+            }
+
+            if (!hasId || !hasResponsePayload)
+            {
+                return JsonRpcLineKind.Invalid;
             }
 
             McpJsonRpcResponse? parsed = JsonSerializer.Deserialize<McpJsonRpcResponse>(responseLine);
             if (parsed is null)
             {
-                return false;
+                return JsonRpcLineKind.Invalid;
             }
 
             response = parsed;
-            return true;
+            return JsonRpcLineKind.Response;
         }
         catch (JsonException)
         {
+            return JsonRpcLineKind.Invalid;
+        }
+    }
+
+    private static bool JsonElementIdsEqual(JsonElement expected, JsonElement actual)
+    {
+        if (expected.ValueKind != actual.ValueKind)
+        {
             return false;
         }
+
+        return expected.ValueKind == JsonValueKind.String
+            ? string.Equals(expected.GetString(), actual.GetString(), StringComparison.Ordinal)
+            : string.Equals(expected.GetRawText(), actual.GetRawText(), StringComparison.Ordinal);
     }
 
     private static void CleanupProcess(Process process)
     {
+        TryCloseStandardInput(process);
         TryWaitForExit(process, 200);
         if (HasExited(process))
         {
@@ -421,6 +554,17 @@ public sealed class McpStdioSession : IDisposable
         try
         {
             process.Kill(entireProcessTree: true);
+        }
+        catch
+        {
+        }
+    }
+
+    private static void TryCloseStandardInput(Process process)
+    {
+        try
+        {
+            process.StandardInput.Close();
         }
         catch
         {
@@ -613,6 +757,13 @@ public sealed class McpStdioSession : IDisposable
         Completed,
         TimedOut,
         Cancelled
+    }
+
+    private enum JsonRpcLineKind
+    {
+        Invalid,
+        Notification,
+        Response
     }
 
     private readonly record struct DeadlineValueOutcome<T>(DeadlineOutcome Outcome, T? Value);

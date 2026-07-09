@@ -26,6 +26,25 @@ public sealed record McpJsonRpcRequest
     public JsonElement? Params { get; init; }
 }
 
+public sealed record McpJsonRpcNotification
+{
+    public McpJsonRpcNotification(string method, JsonElement? @params = null)
+    {
+        Method = method;
+        Params = @params;
+    }
+
+    [JsonPropertyName("jsonrpc")]
+    public string JsonRpc { get; init; } = "2.0";
+
+    [JsonPropertyName("method")]
+    public string Method { get; init; }
+
+    [JsonPropertyName("params")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public JsonElement? Params { get; init; }
+}
+
 public sealed record McpJsonRpcResponse
 {
     [JsonPropertyName("jsonrpc")]

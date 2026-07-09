@@ -227,6 +227,101 @@ public sealed class McpStdioTransportTests
     }
 
     [Fact]
+    public void Session_sends_notification_without_id_and_without_waiting_for_response()
+    {
+        using TempDirectory temp = TempDirectory.Create();
+        string markerPath = Path.Combine(temp.Path, "notification-observed.txt");
+        string escapedMarkerPath = markerPath.Replace("'", "''", StringComparison.Ordinal);
+        string scriptPath = WritePowerShellScript(
+            temp.Path,
+            $$"""
+            $request = [Console]::In.ReadLine() | ConvertFrom-Json
+            $response = [ordered]@{
+                jsonrpc = '2.0'
+                id = $request.id
+                result = [ordered]@{ ok = $true }
+            } | ConvertTo-Json -Compress -Depth 5
+            [Console]::Out.WriteLine($response)
+            $notificationLine = [Console]::In.ReadLine()
+            $notification = $notificationLine | ConvertFrom-Json
+            $hasId = $notification.PSObject.Properties.Name -contains 'id'
+            [System.IO.File]::WriteAllText('{{escapedMarkerPath}}', "$($notification.method)|hasId=$hasId")
+            Start-Sleep -Seconds 5
+            """);
+        McpStdioTransport transport = new(new WorkspaceGuard());
+        McpStdioSessionOpenResult openResult = transport.OpenSession(
+            WorkspaceContext.Detect(temp.Path, temp.Path),
+            CreateOptions(scriptPath));
+
+        Assert.True(openResult.Succeeded, openResult.SafeMessage);
+        using McpStdioSession session = openResult.Session!;
+        McpStdioTransportResult requestResult = session.Send(
+            new McpJsonRpcRequest(JsonSerializer.SerializeToElement("initialize"), "initialize"));
+        Stopwatch stopwatch = Stopwatch.StartNew();
+        McpStdioTransportResult notificationResult = session.SendNotification(
+            new McpJsonRpcNotification("notifications/initialized"));
+        stopwatch.Stop();
+
+        Assert.True(requestResult.Succeeded, requestResult.SafeMessage);
+        Assert.True(notificationResult.Succeeded, notificationResult.SafeMessage);
+        Assert.Null(notificationResult.Response);
+        Assert.True(stopwatch.Elapsed < TimeSpan.FromSeconds(2), $"Elapsed: {stopwatch.Elapsed}");
+        Assert.True(WaitForFile(markerPath, TimeSpan.FromSeconds(2)));
+        Assert.Equal("notifications/initialized|hasId=False", File.ReadAllText(markerPath));
+    }
+
+    [Fact]
+    public void Send_skips_server_notification_before_matching_response()
+    {
+        using TempDirectory temp = TempDirectory.Create();
+        string scriptPath = WritePowerShellScript(
+            temp.Path,
+            """
+            $request = [Console]::In.ReadLine() | ConvertFrom-Json
+            [Console]::Out.WriteLine('{"jsonrpc":"2.0","method":"notifications/progress","params":{"message":"working"}}')
+            $response = [ordered]@{
+                jsonrpc = '2.0'
+                id = $request.id
+                result = [ordered]@{ ok = $true }
+            } | ConvertTo-Json -Compress -Depth 5
+            [Console]::Out.WriteLine($response)
+            """);
+        McpStdioTransport transport = new(new WorkspaceGuard());
+
+        McpStdioTransportResult result = transport.Send(
+            WorkspaceContext.Detect(temp.Path, temp.Path),
+            CreateOptions(scriptPath),
+            new McpJsonRpcRequest(JsonSerializer.SerializeToElement("expected"), "initialize"));
+
+        Assert.True(result.Succeeded, result.SafeMessage);
+        Assert.Equal("expected", result.Response!.Id.GetString());
+    }
+
+    [Fact]
+    public void Send_rejects_mismatched_response_id()
+    {
+        using TempDirectory temp = TempDirectory.Create();
+        string scriptPath = WritePowerShellScript(
+            temp.Path,
+            """
+            $null = [Console]::In.ReadLine()
+            [Console]::Out.WriteLine('{"jsonrpc":"2.0","id":"wrong","result":{"ok":true}}')
+            Start-Sleep -Seconds 5
+            """);
+        McpStdioTransport transport = new(new WorkspaceGuard());
+
+        McpStdioTransportResult result = transport.Send(
+            WorkspaceContext.Detect(temp.Path, temp.Path),
+            CreateOptions(scriptPath, timeoutMilliseconds: 300),
+            new McpJsonRpcRequest(JsonSerializer.SerializeToElement("expected"), "initialize"));
+
+        Assert.False(result.Succeeded);
+        Assert.False(result.TimedOut);
+        Assert.Equal(McpErrorCode.InvalidResponse, result.ErrorCode);
+        Assert.Contains("mismatched", result.SafeMessage, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
     public void Send_denies_cwd_outside_workspace_before_starting_process()
     {
         using TempDirectory temp = TempDirectory.Create();
@@ -366,6 +461,22 @@ public sealed class McpStdioTransportTests
     }
 
     private static string PowerShellExecutable => OperatingSystem.IsWindows() ? "powershell.exe" : "pwsh";
+
+    private static bool WaitForFile(string path, TimeSpan timeout)
+    {
+        Stopwatch stopwatch = Stopwatch.StartNew();
+        while (stopwatch.Elapsed < timeout)
+        {
+            if (File.Exists(path))
+            {
+                return true;
+            }
+
+            Thread.Sleep(25);
+        }
+
+        return File.Exists(path);
+    }
 
     private static JsonElement AssertJsonElement(JsonElement? element)
     {

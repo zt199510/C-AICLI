@@ -24,6 +24,20 @@ public sealed record McpStdioTransportResult(
             StderrTruncated: stderrTruncated);
     }
 
+    public static McpStdioTransportResult NotificationSent(
+        string stderrSnippet,
+        bool stderrTruncated)
+    {
+        return new McpStdioTransportResult(
+            Succeeded: true,
+            Response: null,
+            ErrorCode: null,
+            SafeMessage: "MCP stdio notification sent.",
+            TimedOut: false,
+            StderrSnippet: stderrSnippet,
+            StderrTruncated: stderrTruncated);
+    }
+
     public static McpStdioTransportResult Failure(
         string errorCode,
         string safeMessage,

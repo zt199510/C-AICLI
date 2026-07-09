@@ -53,6 +53,29 @@ public sealed class McpJsonRpcDtoTests
     }
 
     [Fact]
+    public void Notification_serializes_jsonrpc_method_params_and_no_id()
+    {
+        using JsonDocument parameters = JsonDocument.Parse(
+            """
+            {
+              "level": "debug"
+            }
+            """);
+        McpJsonRpcNotification notification = new(
+            "notifications/initialized",
+            parameters.RootElement.Clone());
+
+        string json = JsonSerializer.Serialize(notification);
+
+        using JsonDocument document = JsonDocument.Parse(json);
+        JsonElement root = document.RootElement;
+        Assert.Equal("2.0", root.GetProperty("jsonrpc").GetString());
+        Assert.Equal("notifications/initialized", root.GetProperty("method").GetString());
+        Assert.Equal("debug", root.GetProperty("params").GetProperty("level").GetString());
+        Assert.False(root.TryGetProperty("id", out _));
+    }
+
+    [Fact]
     public void Response_serializes_jsonrpc_id_and_result()
     {
         using JsonDocument resultPayload = JsonDocument.Parse(
