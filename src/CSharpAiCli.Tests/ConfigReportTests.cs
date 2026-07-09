@@ -31,8 +31,10 @@ public sealed class ConfigReportTests
         Assert.Contains("agentBackendSource: default", text);
         Assert.Contains("approvalMode: on-request", text);
         Assert.Contains("approvalModeSource: default", text);
-        Assert.Contains("shellPolicyAllowedCommands: none", text);
-        Assert.Contains("shellPolicyDeniedCommands: none", text);
+        Assert.Contains("shellPolicyAllowedCommandsConfigured: false", text);
+        Assert.Contains("shellPolicyAllowedCommandsSource: default", text);
+        Assert.Contains("shellPolicyAllowedCommands: []", text);
+        Assert.Contains("shellPolicyDeniedCommands: []", text);
         Assert.Contains("shellPolicyMaxTimeoutMilliseconds: none", text);
         Assert.Contains("shellPolicyMaxTimeoutMillisecondsSource: default", text);
         Assert.Contains("apiKey: missing", text);
@@ -83,16 +85,43 @@ public sealed class ConfigReportTests
             apiKeySource: "missing",
             shellPolicy: new ShellPolicyConfiguration(
                 AllowedCommands: ["dotnet test", "git status"],
+                AllowedCommandsConfigured: true,
+                AllowedCommandsSource: "workspace config",
                 DeniedCommands: ["rm -rf ."],
                 MaxTimeoutMilliseconds: 5000,
                 MaxTimeoutMillisecondsSource: "workspace config"));
 
         string text = ConfigReport.Create(snapshot).ToDisplayText();
 
-        Assert.Contains("shellPolicyAllowedCommands: dotnet test, git status", text);
-        Assert.Contains("shellPolicyDeniedCommands: rm -rf .", text);
+        Assert.Contains("shellPolicyAllowedCommandsConfigured: true", text);
+        Assert.Contains("shellPolicyAllowedCommandsSource: workspace config", text);
+        Assert.Contains("""shellPolicyAllowedCommands: ["dotnet test","git status"]""", text);
+        Assert.Contains("""shellPolicyDeniedCommands: ["rm -rf ."]""", text);
         Assert.Contains("shellPolicyMaxTimeoutMilliseconds: 5000", text);
         Assert.Contains("shellPolicyMaxTimeoutMillisecondsSource: workspace config", text);
+    }
+
+    [Fact]
+    public void Create_escapes_shell_policy_commands_as_json_arrays()
+    {
+        CliEnvironmentSnapshot snapshot = CreateSnapshot(
+            apiKey: null,
+            apiKeySource: "missing",
+            shellPolicy: new ShellPolicyConfiguration(
+                AllowedCommands: ["git,status", "echo line1\r\nconfigWarning: injected"],
+                AllowedCommandsConfigured: true,
+                AllowedCommandsSource: "user config",
+                DeniedCommands: ["deny,with,commas", "deny\r\ninstructionWarning: injected"],
+                MaxTimeoutMilliseconds: null,
+                MaxTimeoutMillisecondsSource: "default"));
+
+        string text = ConfigReport.Create(snapshot).ToDisplayText();
+        string[] lines = text.Split(Environment.NewLine);
+
+        Assert.Contains("""shellPolicyAllowedCommands: ["git,status","echo line1\r\nconfigWarning: injected"]""", text);
+        Assert.Contains("""shellPolicyDeniedCommands: ["deny,with,commas","deny\r\ninstructionWarning: injected"]""", text);
+        Assert.DoesNotContain(lines, line => string.Equals(line, "configWarning: injected", StringComparison.Ordinal));
+        Assert.DoesNotContain(lines, line => string.Equals(line, "instructionWarning: injected", StringComparison.Ordinal));
     }
 
     [Fact]

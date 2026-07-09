@@ -140,8 +140,8 @@ public static class ConfigLoader
     private static bool HasMeaningfulShellPolicy(ShellPolicyConfig? policy)
     {
         return policy is not null
-            && (policy.AllowedCommands is { Length: > 0 }
-                || policy.DeniedCommands is { Length: > 0 }
+            && (policy.AllowedCommands is not null
+                || policy.DeniedCommands is not null
                 || policy.MaxTimeoutMilliseconds.HasValue);
     }
 
@@ -361,7 +361,8 @@ public static class ConfigLoader
         CliConfigFile? workspaceConfig,
         List<string> warnings)
     {
-        List<string> allowedCommands = SelectAllowedShellPolicyCommands(
+        (List<string> allowedCommands, bool allowedCommandsConfigured, string allowedCommandsSource) =
+            SelectAllowedShellPolicyCommands(
             userConfig?.ShellPolicy?.AllowedCommands,
             workspaceConfig?.ShellPolicy?.AllowedCommands);
 
@@ -375,39 +376,48 @@ public static class ConfigLoader
 
         return new ShellPolicyConfiguration(
             AllowedCommands: allowedCommands,
+            AllowedCommandsConfigured: allowedCommandsConfigured,
+            AllowedCommandsSource: allowedCommandsSource,
             DeniedCommands: deniedCommands,
             MaxTimeoutMilliseconds: maxTimeoutMilliseconds,
             MaxTimeoutMillisecondsSource: maxTimeoutMillisecondsSource);
     }
 
-    private static List<string> SelectAllowedShellPolicyCommands(
+    private static (List<string> Commands, bool Configured, string Source) SelectAllowedShellPolicyCommands(
         string[]? userCommands,
         string[]? workspaceCommands)
     {
+        bool userConfigured = userCommands is not null;
+        bool workspaceConfigured = workspaceCommands is not null;
         List<string> normalizedUserCommands = NormalizeShellPolicyCommands(userCommands);
         List<string> normalizedWorkspaceCommands = NormalizeShellPolicyCommands(workspaceCommands);
 
-        if (normalizedUserCommands.Count == 0)
+        if (userConfigured && workspaceConfigured)
         {
-            return normalizedWorkspaceCommands;
-        }
-
-        if (normalizedWorkspaceCommands.Count == 0)
-        {
-            return normalizedUserCommands;
-        }
-
-        HashSet<string> workspaceCommandSet = new(normalizedWorkspaceCommands, StringComparer.Ordinal);
-        List<string> allowedCommands = [];
-        foreach (string command in normalizedUserCommands)
-        {
-            if (workspaceCommandSet.Contains(command))
+            HashSet<string> workspaceCommandSet = new(normalizedWorkspaceCommands, StringComparer.Ordinal);
+            List<string> allowedCommands = [];
+            foreach (string command in normalizedUserCommands)
             {
-                allowedCommands.Add(command);
+                if (workspaceCommandSet.Contains(command))
+                {
+                    allowedCommands.Add(command);
+                }
             }
+
+            return (allowedCommands, true, "user config, workspace config");
         }
 
-        return allowedCommands;
+        if (userConfigured)
+        {
+            return (normalizedUserCommands, true, "user config");
+        }
+
+        if (workspaceConfigured)
+        {
+            return (normalizedWorkspaceCommands, true, "workspace config");
+        }
+
+        return ([], false, "default");
     }
 
     private static List<string> NormalizeShellPolicyCommands(string[]? configuredCommands)

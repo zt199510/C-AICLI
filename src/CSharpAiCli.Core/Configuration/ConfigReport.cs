@@ -1,3 +1,5 @@
+using System.Text.Json;
+
 namespace CSharpAiCli.Core;
 
 public sealed record ConfigReport(IReadOnlyList<string> Lines)
@@ -28,6 +30,8 @@ public sealed record ConfigReport(IReadOnlyList<string> Lines)
             $"agentBackendSource: {configuration.AgentBackendSource}",
             $"approvalMode: {FormatApprovalMode(configuration.ApprovalMode)}",
             $"approvalModeSource: {configuration.ApprovalModeSource}",
+            $"shellPolicyAllowedCommandsConfigured: {FormatBoolean(configuration.ShellPolicy.AllowedCommandsConfigured)}",
+            $"shellPolicyAllowedCommandsSource: {configuration.ShellPolicy.AllowedCommandsSource}",
             $"shellPolicyAllowedCommands: {FormatShellPolicyCommands(configuration.ShellPolicy.AllowedCommands)}",
             $"shellPolicyDeniedCommands: {FormatShellPolicyCommands(configuration.ShellPolicy.DeniedCommands)}",
             $"shellPolicyMaxTimeoutMilliseconds: {FormatShellPolicyMaxTimeout(configuration.ShellPolicy.MaxTimeoutMilliseconds)}",
@@ -90,9 +94,7 @@ public sealed record ConfigReport(IReadOnlyList<string> Lines)
 
     private static string FormatShellPolicyCommands(IReadOnlyList<string> commands)
     {
-        return commands.Count == 0
-            ? "none"
-            : string.Join(", ", commands);
+        return JsonSerializer.Serialize(commands);
     }
 
     private static string FormatShellPolicyMaxTimeout(int? maxTimeoutMilliseconds)
@@ -100,6 +102,11 @@ public sealed record ConfigReport(IReadOnlyList<string> Lines)
         return maxTimeoutMilliseconds.HasValue
             ? maxTimeoutMilliseconds.Value.ToString(System.Globalization.CultureInfo.InvariantCulture)
             : "none";
+    }
+
+    private static string FormatBoolean(bool value)
+    {
+        return value ? "true" : "false";
     }
 
     private static void AddInstructionSources(List<string> lines, IReadOnlyList<InstructionSource> sources)
