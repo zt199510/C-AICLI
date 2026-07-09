@@ -43,117 +43,67 @@ public sealed class McpDoctorReportTests
     [Fact]
     public void Create_does_not_start_disabled_stdio_server()
     {
-        using TempDirectory temp = TempDirectory.Create();
-        string markerPath = Path.Combine(temp.Path, "disabled-started.txt");
-        string scriptPath = WritePowerShellScript(
-            temp.Path,
-            $$"""
-            [System.IO.File]::WriteAllText({{ToPowerShellStringLiteral(markerPath)}}, 'started')
-            """);
+        using FakeMcpStdioServer server = FakeMcpStdioServer.CreateSuccessful();
         CliConfigFile config = new()
         {
             McpServers = new Dictionary<string, McpServerConfig>
             {
-                ["disabled"] = new()
-                {
-                    Enabled = false,
-                    Transport = "stdio",
-                    Command = PowerShellExecutable,
-                    Args = CreatePowerShellScriptArgs(scriptPath),
-                    TimeoutMilliseconds = 10_000
-                }
+                ["disabled"] = server.CreateConfig(enabled: false, timeoutMilliseconds: 10_000)
             }
         };
 
         string text = McpDoctorReport.Create(CreateSnapshot(
             [new CliConfigFileSource("workspace config", "workspace-config.json", config)],
-            temp.Path)).ToDisplayText();
+            server.WorkspacePath)).ToDisplayText();
 
         Assert.Contains("server: disabled", text);
         Assert.Contains("connectionStatus: inactive", text);
-        Assert.False(File.Exists(markerPath));
+        Assert.False(server.HasStarted);
     }
 
     [Fact]
     public void Create_marks_enabled_stdio_server_active_after_initialize_handshake()
     {
-        using TempDirectory temp = TempDirectory.Create();
-        string markerPath = Path.Combine(temp.Path, "doctor-handshake-observed.json");
-        string scriptPath = WritePowerShellScript(
-            temp.Path,
-            $$"""
-            $requestLine = [Console]::In.ReadLine()
-            $request = $requestLine | ConvertFrom-Json
-            $response = [ordered]@{
-                jsonrpc = '2.0'
-                id = $request.id
-                result = [ordered]@{
-                    protocolVersion = '2025-03-26'
-                    capabilities = [ordered]@{}
-                    serverInfo = [ordered]@{
-                        name = 'doctor-fixture'
-                        version = '1.0.0'
-                    }
-                }
-            } | ConvertTo-Json -Compress -Depth 10
-            [Console]::Out.WriteLine($response)
-
-            $notificationLine = [Console]::In.ReadLine()
-            $notification = $notificationLine | ConvertFrom-Json
-            $observation = [ordered]@{
-                requestMethod = $request.method
-                protocolVersion = $request.params.protocolVersion
-                notificationMethod = $notification.method
-            } | ConvertTo-Json -Compress -Depth 5
-            [System.IO.File]::WriteAllText({{ToPowerShellStringLiteral(markerPath)}}, $observation)
-            Start-Sleep -Milliseconds 100
-            """);
+        using FakeMcpStdioServer server = FakeMcpStdioServer.CreateSuccessful();
         CliConfigFile config = new()
         {
             McpServers = new Dictionary<string, McpServerConfig>
             {
-                ["active"] = CreateStdioServerConfig(scriptPath, timeoutMilliseconds: 10_000)
+                ["active"] = server.CreateConfig(timeoutMilliseconds: 10_000)
             }
         };
 
         string text = McpDoctorReport.Create(CreateSnapshot(
             [new CliConfigFileSource("workspace config", "workspace-config.json", config)],
-            temp.Path)).ToDisplayText();
+            server.WorkspacePath)).ToDisplayText();
 
         Assert.Contains("server: active", text);
         Assert.Contains("configStatus: configured", text);
         Assert.Contains("connectionStatus: active", text);
         Assert.Contains("MCP stdio initialize completed.", text);
-        Assert.True(WaitForFile(markerPath, TimeSpan.FromSeconds(2)));
-        using JsonDocument observation = JsonDocument.Parse(File.ReadAllText(markerPath));
-        JsonElement root = observation.RootElement;
-        Assert.Equal("initialize", root.GetProperty("requestMethod").GetString());
-        Assert.Equal(McpProtocolClient.ProtocolVersion, root.GetProperty("protocolVersion").GetString());
-        Assert.Equal("notifications/initialized", root.GetProperty("notificationMethod").GetString());
+        Assert.True(server.WaitForObservationCount(2, TimeSpan.FromSeconds(2)));
+        IReadOnlyList<JsonElement> observations = server.ReadObservations();
+        Assert.Equal("initialize", observations[0].GetProperty("method").GetString());
+        Assert.Equal(McpProtocolClient.ProtocolVersion, observations[0].GetProperty("protocolVersion").GetString());
+        Assert.Equal("notifications/initialized", observations[1].GetProperty("method").GetString());
+        Assert.False(observations[1].GetProperty("hasId").GetBoolean());
     }
 
     [Fact]
     public void Create_reports_invalid_stdio_initialize_response_as_unavailable()
     {
-        using TempDirectory temp = TempDirectory.Create();
-        string scriptPath = WritePowerShellScript(
-            temp.Path,
-            """
-            $null = [Console]::In.ReadLine()
-            [Console]::Out.WriteLine('not-json')
-            Start-Sleep -Milliseconds 200
-            """);
+        using FakeMcpStdioServer server = FakeMcpStdioServer.CreateInvalidJson();
         CliConfigFile config = new()
         {
             McpServers = new Dictionary<string, McpServerConfig>
             {
-                ["invalid-response"] = CreateStdioServerConfig(scriptPath, timeoutMilliseconds: 10_000)
+                ["invalid-response"] = server.CreateConfig(timeoutMilliseconds: 10_000)
             }
         };
 
         string text = McpDoctorReport.Create(CreateSnapshot(
             [new CliConfigFileSource("workspace config", "workspace-config.json", config)],
-            temp.Path)).ToDisplayText();
+            server.WorkspacePath)).ToDisplayText();
 
         Assert.Contains("server: invalid-response", text);
         Assert.Contains("connectionStatus: unavailable", text);
@@ -163,28 +113,25 @@ public sealed class McpDoctorReportTests
     [Fact]
     public void Create_reports_stdio_initialize_timeout_as_unavailable()
     {
-        using TempDirectory temp = TempDirectory.Create();
-        string scriptPath = WritePowerShellScript(
-            temp.Path,
-            """
-            $null = [Console]::In.ReadLine()
-            Start-Sleep -Seconds 5
-            """);
+        using FakeMcpStdioServer server = FakeMcpStdioServer.CreateTimeout();
         CliConfigFile config = new()
         {
             McpServers = new Dictionary<string, McpServerConfig>
             {
-                ["timeout"] = CreateStdioServerConfig(scriptPath, timeoutMilliseconds: 200)
+                ["timeout"] = server.CreateConfig(timeoutMilliseconds: 200)
             }
         };
 
+        Stopwatch stopwatch = Stopwatch.StartNew();
         string text = McpDoctorReport.Create(CreateSnapshot(
             [new CliConfigFileSource("workspace config", "workspace-config.json", config)],
-            temp.Path)).ToDisplayText();
+            server.WorkspacePath)).ToDisplayText();
+        stopwatch.Stop();
 
         Assert.Contains("server: timeout", text);
         Assert.Contains("connectionStatus: unavailable", text);
         Assert.Contains("timed out after 200 ms", text, StringComparison.OrdinalIgnoreCase);
+        Assert.True(stopwatch.Elapsed < TimeSpan.FromSeconds(2), $"Elapsed: {stopwatch.Elapsed}");
     }
 
     [Fact]
@@ -269,86 +216,4 @@ public sealed class McpDoctorReportTests
             HasGlobalJson: false);
     }
 
-    private static McpServerConfig CreateStdioServerConfig(string scriptPath, int timeoutMilliseconds)
-    {
-        return new McpServerConfig
-        {
-            Enabled = true,
-            Transport = "stdio",
-            Command = PowerShellExecutable,
-            Args = CreatePowerShellScriptArgs(scriptPath),
-            TimeoutMilliseconds = timeoutMilliseconds
-        };
-    }
-
-    private static string[] CreatePowerShellScriptArgs(string scriptPath)
-    {
-        return
-        [
-            "-NoLogo",
-            "-NoProfile",
-            "-NonInteractive",
-            "-ExecutionPolicy",
-            "Bypass",
-            "-File",
-            scriptPath
-        ];
-    }
-
-    private static string WritePowerShellScript(string directory, string script)
-    {
-        string scriptPath = Path.Combine(directory, "mcp-doctor-fixture-" + Guid.NewGuid().ToString("N") + ".ps1");
-        File.WriteAllText(scriptPath, script);
-        return scriptPath;
-    }
-
-    private static string ToPowerShellStringLiteral(string value)
-    {
-        return "'" + value.Replace("'", "''", StringComparison.Ordinal) + "'";
-    }
-
-    private static string PowerShellExecutable => OperatingSystem.IsWindows() ? "powershell.exe" : "pwsh";
-
-    private static bool WaitForFile(string path, TimeSpan timeout)
-    {
-        Stopwatch stopwatch = Stopwatch.StartNew();
-        while (stopwatch.Elapsed < timeout)
-        {
-            if (File.Exists(path))
-            {
-                return true;
-            }
-
-            Thread.Sleep(25);
-        }
-
-        return File.Exists(path);
-    }
-
-    private sealed class TempDirectory : IDisposable
-    {
-        private TempDirectory(string path)
-        {
-            Path = path;
-        }
-
-        public string Path { get; }
-
-        public static TempDirectory Create()
-        {
-            string path = System.IO.Path.Combine(
-                System.IO.Path.GetTempPath(),
-                "caicli-tests-" + Guid.NewGuid().ToString("N"));
-            Directory.CreateDirectory(path);
-            return new TempDirectory(path);
-        }
-
-        public void Dispose()
-        {
-            if (Directory.Exists(Path))
-            {
-                Directory.Delete(Path, recursive: true);
-            }
-        }
-    }
 }

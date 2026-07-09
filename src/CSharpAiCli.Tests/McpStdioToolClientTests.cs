@@ -6,6 +6,50 @@ namespace CSharpAiCli.Tests;
 public sealed class McpStdioToolClientTests
 {
     [Fact]
+    public void Discover_and_invoke_use_real_stdio_fake_server()
+    {
+        using FakeMcpStdioServer server = FakeMcpStdioServer.CreateSuccessful();
+        McpServerDefinition definition = server.CreateServerDefinition(timeoutMilliseconds: 2_000);
+        WorkspaceContext workspace = server.CreateWorkspace();
+        McpStdioClientSessionFactory sessionFactory = new(new McpStdioTransport(new WorkspaceGuard()));
+        McpStdioToolDiscoverer discoverer = new(sessionFactory);
+        McpStdioToolInvoker invoker = new(sessionFactory);
+
+        McpToolsListResult tools = discoverer.DiscoverTools(definition, workspace);
+        ToolExecutionResult call = invoker.Invoke(
+            new McpToolRequest(definition, "echo", """{"text":"hello"}"""),
+            workspace);
+
+        Assert.True(tools.Succeeded, tools.SafeMessage);
+        McpDiscoveredTool tool = Assert.Single(tools.Tools);
+        Assert.Equal("echo", tool.Name);
+        Assert.Equal("Echo input.", tool.Description);
+        Assert.True(call.Succeeded, call.Summary);
+        Assert.Equal("echo: hello", call.Summary);
+        Assert.NotNull(call.StructuredPayload);
+        Assert.Equal("hello", call.StructuredPayload["structuredContent"].GetProperty("echoed").GetString());
+
+        Assert.True(server.WaitForObservationCount(6, TimeSpan.FromSeconds(2)));
+        IReadOnlyList<JsonElement> observations = server.ReadObservations();
+        Assert.Equal(
+            [
+                "initialize",
+                "notifications/initialized",
+                "tools/list",
+                "initialize",
+                "notifications/initialized",
+                "tools/call"
+            ],
+            observations
+                .Select(observation => observation.GetProperty("method").GetString() ?? string.Empty)
+                .ToArray());
+        Assert.Equal(McpProtocolClient.ProtocolVersion, observations[0].GetProperty("protocolVersion").GetString());
+        Assert.False(observations[1].GetProperty("hasId").GetBoolean());
+        Assert.Equal("echo", observations[5].GetProperty("toolName").GetString());
+        Assert.Equal("hello", observations[5].GetProperty("textArgument").GetString());
+    }
+
+    [Fact]
     public void Discover_tools_initializes_session_then_lists_tools()
     {
         JsonElement toolsResult = JsonSerializer.SerializeToElement(new
