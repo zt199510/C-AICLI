@@ -14,6 +14,8 @@ public sealed class CliConfigFile
 
     public string[]? DisabledTools { get; init; }
 
+    public ShellPolicyConfig? ShellPolicy { get; init; }
+
     public Dictionary<string, McpServerConfig>? McpServers { get; init; }
 
     public Dictionary<string, WorkflowProfileConfig>? WorkflowProfiles { get; init; }

@@ -56,6 +56,7 @@ public static class ConfigLoader
         (ApprovalMode approvalMode, string approvalModeSource) = SelectApprovalMode(userConfig, workspaceConfig, warnings);
         (string baseUrl, string baseUrlSource) = SelectBaseUrl(openAiBaseUrl, userConfig, workspaceConfig, warnings);
         (SecretValue? apiKey, string apiKeySource) = SelectApiKey(openAiApiKey, userConfig);
+        ShellPolicyConfiguration shellPolicy = SelectShellPolicy(userConfig, workspaceConfig, warnings);
 
         return new EffectiveConfiguration(
             WorkspaceRoot: workspace.RootPath,
@@ -75,7 +76,8 @@ public static class ConfigLoader
             BaseUrl = baseUrl,
             BaseUrlSource = baseUrlSource,
             ApprovalMode = approvalMode,
-            ApprovalModeSource = approvalModeSource
+            ApprovalModeSource = approvalModeSource,
+            ShellPolicy = shellPolicy
         };
     }
 
@@ -130,8 +132,17 @@ public static class ConfigLoader
             || !string.IsNullOrWhiteSpace(config.AgentBackend)
             || !string.IsNullOrWhiteSpace(config.ApprovalMode)
             || config.DisabledTools is { Length: > 0 }
+            || HasMeaningfulShellPolicy(config.ShellPolicy)
             || config.McpServers is { Count: > 0 }
             || config.WorkflowProfiles is { Count: > 0 };
+    }
+
+    private static bool HasMeaningfulShellPolicy(ShellPolicyConfig? policy)
+    {
+        return policy is not null
+            && (policy.AllowedCommands is { Length: > 0 }
+                || policy.DeniedCommands is { Length: > 0 }
+                || policy.MaxTimeoutMilliseconds.HasValue);
     }
 
     public static bool TryNormalizeBaseUrl(string? value, out string? baseUrl)
@@ -343,6 +354,152 @@ public static class ConfigLoader
                 disabledTools.Add(toolName.Trim());
             }
         }
+    }
+
+    private static ShellPolicyConfiguration SelectShellPolicy(
+        CliConfigFile? userConfig,
+        CliConfigFile? workspaceConfig,
+        List<string> warnings)
+    {
+        List<string> allowedCommands = SelectAllowedShellPolicyCommands(
+            userConfig?.ShellPolicy?.AllowedCommands,
+            workspaceConfig?.ShellPolicy?.AllowedCommands);
+
+        List<string> deniedCommands = [];
+        HashSet<string> seenDeniedCommands = new(StringComparer.Ordinal);
+        AddShellPolicyCommands(deniedCommands, seenDeniedCommands, userConfig?.ShellPolicy?.DeniedCommands);
+        AddShellPolicyCommands(deniedCommands, seenDeniedCommands, workspaceConfig?.ShellPolicy?.DeniedCommands);
+
+        (int? maxTimeoutMilliseconds, string maxTimeoutMillisecondsSource) =
+            SelectShellMaxTimeoutMilliseconds(userConfig, workspaceConfig, warnings);
+
+        return new ShellPolicyConfiguration(
+            AllowedCommands: allowedCommands,
+            DeniedCommands: deniedCommands,
+            MaxTimeoutMilliseconds: maxTimeoutMilliseconds,
+            MaxTimeoutMillisecondsSource: maxTimeoutMillisecondsSource);
+    }
+
+    private static List<string> SelectAllowedShellPolicyCommands(
+        string[]? userCommands,
+        string[]? workspaceCommands)
+    {
+        List<string> normalizedUserCommands = NormalizeShellPolicyCommands(userCommands);
+        List<string> normalizedWorkspaceCommands = NormalizeShellPolicyCommands(workspaceCommands);
+
+        if (normalizedUserCommands.Count == 0)
+        {
+            return normalizedWorkspaceCommands;
+        }
+
+        if (normalizedWorkspaceCommands.Count == 0)
+        {
+            return normalizedUserCommands;
+        }
+
+        HashSet<string> workspaceCommandSet = new(normalizedWorkspaceCommands, StringComparer.Ordinal);
+        List<string> allowedCommands = [];
+        foreach (string command in normalizedUserCommands)
+        {
+            if (workspaceCommandSet.Contains(command))
+            {
+                allowedCommands.Add(command);
+            }
+        }
+
+        return allowedCommands;
+    }
+
+    private static List<string> NormalizeShellPolicyCommands(string[]? configuredCommands)
+    {
+        List<string> commands = [];
+        HashSet<string> seenCommands = new(StringComparer.Ordinal);
+        AddShellPolicyCommands(commands, seenCommands, configuredCommands);
+        return commands;
+    }
+
+    private static void AddShellPolicyCommands(
+        List<string> commands,
+        HashSet<string> seenCommands,
+        string[]? configuredCommands)
+    {
+        if (configuredCommands is null)
+        {
+            return;
+        }
+
+        foreach (string command in configuredCommands)
+        {
+            if (string.IsNullOrWhiteSpace(command))
+            {
+                continue;
+            }
+
+            string trimmed = command.Trim();
+            if (seenCommands.Add(trimmed))
+            {
+                commands.Add(trimmed);
+            }
+        }
+    }
+
+    private static (int? MaxTimeoutMilliseconds, string Source) SelectShellMaxTimeoutMilliseconds(
+        CliConfigFile? userConfig,
+        CliConfigFile? workspaceConfig,
+        List<string> warnings)
+    {
+        bool hasUserTimeout = TryNormalizeShellMaxTimeoutMilliseconds(
+            userConfig?.ShellPolicy?.MaxTimeoutMilliseconds,
+            warnings,
+            "user config",
+            out int userMaxTimeoutMilliseconds);
+
+        bool hasWorkspaceTimeout = TryNormalizeShellMaxTimeoutMilliseconds(
+            workspaceConfig?.ShellPolicy?.MaxTimeoutMilliseconds,
+            warnings,
+            "workspace config",
+            out int workspaceMaxTimeoutMilliseconds);
+
+        if (hasUserTimeout && hasWorkspaceTimeout)
+        {
+            return userMaxTimeoutMilliseconds <= workspaceMaxTimeoutMilliseconds
+                ? (userMaxTimeoutMilliseconds, "user config")
+                : (workspaceMaxTimeoutMilliseconds, "workspace config");
+        }
+
+        if (hasUserTimeout)
+        {
+            return (userMaxTimeoutMilliseconds, "user config");
+        }
+
+        if (hasWorkspaceTimeout)
+        {
+            return (workspaceMaxTimeoutMilliseconds, "workspace config");
+        }
+
+        return (null, "default");
+    }
+
+    private static bool TryNormalizeShellMaxTimeoutMilliseconds(
+        int? value,
+        List<string> warnings,
+        string source,
+        out int maxTimeoutMilliseconds)
+    {
+        maxTimeoutMilliseconds = 0;
+        if (!value.HasValue)
+        {
+            return false;
+        }
+
+        if (value.Value > 0)
+        {
+            maxTimeoutMilliseconds = value.Value;
+            return true;
+        }
+
+        warnings.Add($"ignored invalid shellPolicy.maxTimeoutMilliseconds from {source}");
+        return false;
     }
 
     private static (string Backend, string Source) SelectAgentBackend(

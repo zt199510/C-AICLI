@@ -28,6 +28,10 @@ public sealed record ConfigReport(IReadOnlyList<string> Lines)
             $"agentBackendSource: {configuration.AgentBackendSource}",
             $"approvalMode: {FormatApprovalMode(configuration.ApprovalMode)}",
             $"approvalModeSource: {configuration.ApprovalModeSource}",
+            $"shellPolicyAllowedCommands: {FormatShellPolicyCommands(configuration.ShellPolicy.AllowedCommands)}",
+            $"shellPolicyDeniedCommands: {FormatShellPolicyCommands(configuration.ShellPolicy.DeniedCommands)}",
+            $"shellPolicyMaxTimeoutMilliseconds: {FormatShellPolicyMaxTimeout(configuration.ShellPolicy.MaxTimeoutMilliseconds)}",
+            $"shellPolicyMaxTimeoutMillisecondsSource: {configuration.ShellPolicy.MaxTimeoutMillisecondsSource}",
             $"disabledTools: {FormatDisabledTools(configuration.DisabledTools)}",
             $"apiKey: {apiKeyStatus}",
             $"apiKeySource: {configuration.ApiKeySource}",
@@ -82,6 +86,20 @@ public sealed record ConfigReport(IReadOnlyList<string> Lines)
         return disabledTools.Count == 0
             ? "none"
             : string.Join(", ", disabledTools.Order(StringComparer.Ordinal));
+    }
+
+    private static string FormatShellPolicyCommands(IReadOnlyList<string> commands)
+    {
+        return commands.Count == 0
+            ? "none"
+            : string.Join(", ", commands);
+    }
+
+    private static string FormatShellPolicyMaxTimeout(int? maxTimeoutMilliseconds)
+    {
+        return maxTimeoutMilliseconds.HasValue
+            ? maxTimeoutMilliseconds.Value.ToString(System.Globalization.CultureInfo.InvariantCulture)
+            : "none";
     }
 
     private static void AddInstructionSources(List<string> lines, IReadOnlyList<InstructionSource> sources)

@@ -31,6 +31,10 @@ public sealed class ConfigReportTests
         Assert.Contains("agentBackendSource: default", text);
         Assert.Contains("approvalMode: on-request", text);
         Assert.Contains("approvalModeSource: default", text);
+        Assert.Contains("shellPolicyAllowedCommands: none", text);
+        Assert.Contains("shellPolicyDeniedCommands: none", text);
+        Assert.Contains("shellPolicyMaxTimeoutMilliseconds: none", text);
+        Assert.Contains("shellPolicyMaxTimeoutMillisecondsSource: default", text);
         Assert.Contains("apiKey: missing", text);
         Assert.Contains("apiKeySource: missing", text);
         Assert.Contains("loadedConfigPaths: none", text);
@@ -69,6 +73,26 @@ public sealed class ConfigReportTests
         string text = ConfigReport.Create(snapshot).ToDisplayText();
 
         Assert.Contains("disabledTools: workspace.apply_patch, workspace.run_shell", text);
+    }
+
+    [Fact]
+    public void Create_prints_shell_policy()
+    {
+        CliEnvironmentSnapshot snapshot = CreateSnapshot(
+            apiKey: null,
+            apiKeySource: "missing",
+            shellPolicy: new ShellPolicyConfiguration(
+                AllowedCommands: ["dotnet test", "git status"],
+                DeniedCommands: ["rm -rf ."],
+                MaxTimeoutMilliseconds: 5000,
+                MaxTimeoutMillisecondsSource: "workspace config"));
+
+        string text = ConfigReport.Create(snapshot).ToDisplayText();
+
+        Assert.Contains("shellPolicyAllowedCommands: dotnet test, git status", text);
+        Assert.Contains("shellPolicyDeniedCommands: rm -rf .", text);
+        Assert.Contains("shellPolicyMaxTimeoutMilliseconds: 5000", text);
+        Assert.Contains("shellPolicyMaxTimeoutMillisecondsSource: workspace config", text);
     }
 
     [Fact]
@@ -150,7 +174,8 @@ public sealed class ConfigReportTests
         string baseUrlSource = "default",
         IReadOnlyList<string>? loadedConfigPaths = null,
         IReadOnlyList<string>? warnings = null,
-        IReadOnlySet<string>? disabledTools = null)
+        IReadOnlySet<string>? disabledTools = null,
+        ShellPolicyConfiguration? shellPolicy = null)
     {
         WorkspaceContext workspace = new(
             RootPath: "workspace-root",
@@ -173,7 +198,8 @@ public sealed class ConfigReportTests
             ConfigSources: [])
         {
             BaseUrl = baseUrl,
-            BaseUrlSource = baseUrlSource
+            BaseUrlSource = baseUrlSource,
+            ShellPolicy = shellPolicy ?? ShellPolicyConfiguration.Default
         };
 
         return new CliEnvironmentSnapshot(
