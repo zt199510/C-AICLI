@@ -8,7 +8,6 @@ namespace CSharpAiCli.Core;
 
 public sealed class McpStdioSession : IMcpJsonRpcSession, IDisposable
 {
-    private const int DefaultTimeoutMilliseconds = 30_000;
     private const int CleanupWaitMilliseconds = 1000;
     private const int StderrSnippetMaxBytes = 4096;
     private const int MaxStdoutLineBytes = 1024 * 1024;
@@ -144,9 +143,7 @@ public sealed class McpStdioSession : IMcpJsonRpcSession, IDisposable
                 "MCP stdio server could not be started safely.");
         }
 
-        int timeout = options.TimeoutMilliseconds > 0
-            ? options.TimeoutMilliseconds
-            : DefaultTimeoutMilliseconds;
+        int timeout = options.TimeoutMilliseconds;
         BoundedStderrCapture stderrCapture = BoundedStderrCapture.Start(
             process.StandardError.BaseStream,
             StderrSnippetMaxBytes);

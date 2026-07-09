@@ -795,6 +795,58 @@ public sealed class McpStdioTransportTests
         }
     }
 
+    [Theory]
+    [InlineData(0)]
+    [InlineData(-1)]
+    public void OpenSession_denies_shell_policy_nonpositive_timeout_after_defaulting_before_starting_process(
+        int timeoutMilliseconds)
+    {
+        using TempDirectory temp = TempDirectory.Create();
+        string markerPath = Path.Combine(temp.Path, $"policy-default-timeout-{timeoutMilliseconds}-startup-ran.txt");
+        string escapedMarkerPath = markerPath.Replace("'", "''", StringComparison.Ordinal);
+        string startupScript =
+            $"[System.IO.File]::WriteAllText('{escapedMarkerPath}', 'started'); " +
+            "Start-Sleep -Seconds 5";
+        McpStdioTransport transport = new(
+            new WorkspaceGuard(),
+            CreateShellPolicy(
+                maxTimeoutMilliseconds: 1000,
+                maxTimeoutMillisecondsSource: "user config"));
+
+        McpStdioSessionOpenResult result = transport.OpenSession(
+            WorkspaceContext.Detect(temp.Path, temp.Path),
+            new McpStdioServerOptions(
+                serverName: "fixture",
+                command: PowerShellExecutable,
+                arguments:
+                [
+                    "-NoLogo",
+                    "-NoProfile",
+                    "-NonInteractive",
+                    "-Command",
+                    startupScript
+                ],
+                workingDirectory: null,
+                timeoutMilliseconds: timeoutMilliseconds));
+
+        try
+        {
+            Assert.False(result.Succeeded);
+            Assert.Null(result.Session);
+            Assert.Equal(McpErrorCode.StartFailed, result.ErrorCode);
+            Assert.Contains("shell policy", result.SafeMessage, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains("timeout", result.SafeMessage, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains("30000", result.SafeMessage, StringComparison.Ordinal);
+            Assert.Contains("1000", result.SafeMessage, StringComparison.Ordinal);
+            Assert.Contains("user config", result.SafeMessage, StringComparison.Ordinal);
+            Assert.False(WaitForFile(markerPath, TimeSpan.FromMilliseconds(300)));
+        }
+        finally
+        {
+            result.Session?.Dispose();
+        }
+    }
+
     [Fact]
     public void OpenSession_denies_shell_policy_empty_allowlist_before_starting_process()
     {
