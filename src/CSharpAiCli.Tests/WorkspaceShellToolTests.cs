@@ -9,6 +9,7 @@ public sealed class WorkspaceShellToolTests
     public void Execute_runs_approved_harmless_command()
     {
         using TempDirectory temp = TempDirectory.Create();
+        const string expectedRiskSummary = "normal shell risk: no dangerous shell pattern matched; approval may still be required.";
         WorkspaceShellTool tool = new(
             new RestrictedShellRunner(new WorkspaceGuard()),
             new AlwaysApproveApprovalPolicy());
@@ -19,11 +20,13 @@ public sealed class WorkspaceShellToolTests
 
         Assert.True(result.Succeeded);
         Assert.Equal("approved", result.ApprovalStatus);
+        Assert.Contains($"commandRisk: {expectedRiskSummary}", result.Summary, StringComparison.Ordinal);
         Assert.Contains("exitCode: 0", result.Summary, StringComparison.Ordinal);
         Assert.Contains("stdout:", result.Summary, StringComparison.Ordinal);
         IReadOnlyDictionary<string, JsonElement> payload = AssertPayload(result);
         Assert.Equal("dotnet --version", payload["command"].GetString());
         Assert.Equal(".", payload["cwd"].GetString());
+        Assert.Equal(expectedRiskSummary, payload["commandRiskSummary"].GetString());
         Assert.Equal(0, payload["exitCode"].GetInt32());
         Assert.False(payload["timedOut"].GetBoolean());
         Assert.False(payload["stdoutTruncated"].GetBoolean());
@@ -106,6 +109,7 @@ public sealed class WorkspaceShellToolTests
     public void Execute_denies_dangerous_shell_by_policy_before_runner_executes()
     {
         using TempDirectory temp = TempDirectory.Create();
+        const string expectedRiskSummary = "dangerous shell risk: Command contains a destructive delete pattern. Matched rule: destructive delete pattern.";
         CountingShellRunner shellRunner = new();
         WorkspaceShellTool tool = new(
             shellRunner,
@@ -119,12 +123,17 @@ public sealed class WorkspaceShellToolTests
         Assert.Equal("approval-denied", result.ErrorCode);
         Assert.Equal("dangerous-shell-denied", result.ApprovalStatus);
         Assert.Equal(0, shellRunner.RunCount);
+        Assert.Contains($"commandRisk: {expectedRiskSummary}", result.Summary, StringComparison.Ordinal);
+        IReadOnlyDictionary<string, JsonElement> payload = AssertPayload(result);
+        Assert.Equal(expectedRiskSummary, payload["commandRiskSummary"].GetString());
+        Assert.Equal("destructive delete pattern", payload["matchedRule"].GetString());
     }
 
     [Fact]
     public void Execute_returns_failure_for_dangerous_command()
     {
         using TempDirectory temp = TempDirectory.Create();
+        const string expectedRiskSummary = "dangerous shell risk: Command contains a destructive delete pattern. Matched rule: destructive delete pattern.";
         WorkspaceShellTool tool = new(
             new RestrictedShellRunner(new WorkspaceGuard()),
             new AlwaysApproveApprovalPolicy());
@@ -136,9 +145,11 @@ public sealed class WorkspaceShellToolTests
         Assert.False(result.Succeeded);
         Assert.Equal("dangerous-command-denied", result.ErrorCode);
         Assert.Equal("approved", result.ApprovalStatus);
+        Assert.Contains($"commandRisk: {expectedRiskSummary}", result.Summary, StringComparison.Ordinal);
         IReadOnlyDictionary<string, JsonElement> payload = AssertPayload(result);
         Assert.Equal("rm -rf .", payload["command"].GetString());
         Assert.Equal(".", payload["cwd"].GetString());
+        Assert.Equal(expectedRiskSummary, payload["commandRiskSummary"].GetString());
         Assert.Equal(JsonValueKind.Null, payload["exitCode"].ValueKind);
         Assert.False(payload["timedOut"].GetBoolean());
         Assert.False(payload["stdoutTruncated"].GetBoolean());

@@ -39,6 +39,7 @@ public sealed class WorkspaceShellTool : ITool
         }
 
         DangerousCommandDetection detection = DangerousCommandDetector.Detect(request.Command);
+        string commandRiskSummary = FormatCommandRiskSummary(detection);
         ToolRiskLevel riskLevel = detection.IsDangerous ? ToolRiskLevel.DangerousShell : Definition.RiskLevel;
         string approvalReason = detection.IsDangerous
             ? detection.Reason
@@ -47,7 +48,8 @@ public sealed class WorkspaceShellTool : ITool
         {
             ["command"] = request.Command,
             ["cwd"] = request.WorkingDirectory,
-            ["reason"] = approvalReason
+            ["reason"] = approvalReason,
+            ["commandRiskSummary"] = commandRiskSummary
         };
         if (detection.IsDangerous)
         {
@@ -67,17 +69,18 @@ public sealed class WorkspaceShellTool : ITool
         {
             return ToolExecutionResult.Failure(
                 ToolErrorCode.ApprovalDenied,
-                approval.SafeMessage,
+                AppendCommandRiskSummary(approval.SafeMessage, commandRiskSummary),
                 approvalStatus: approval.Status,
                 structuredPayload: CreateShellPayload(
                     request,
                     approval.Status,
+                    commandRiskSummary,
                     errorCode: ToolErrorCode.ApprovalDenied,
                     matchedRule: matchedRule));
         }
 
         ShellCommandResult shellResult = shellRunner.Run(context.Workspace, request, cancellationToken);
-        string summary = FormatSummary(shellResult);
+        string summary = FormatSummary(shellResult, commandRiskSummary);
         return shellResult.Succeeded
             ? ToolExecutionResult.Success(
                 summary,
@@ -85,6 +88,7 @@ public sealed class WorkspaceShellTool : ITool
                 structuredPayload: CreateShellPayload(
                     request,
                     approval.Status,
+                    commandRiskSummary,
                     shellResult,
                     matchedRule: matchedRule))
             : ToolExecutionResult.Failure(
@@ -94,16 +98,18 @@ public sealed class WorkspaceShellTool : ITool
                 structuredPayload: CreateShellPayload(
                     request,
                     approval.Status,
+                    commandRiskSummary,
                     shellResult,
                     shellResult.ErrorCode ?? ToolErrorCode.ShellCommandFailed,
                     matchedRule));
     }
 
-    private static string FormatSummary(ShellCommandResult result)
+    private static string FormatSummary(ShellCommandResult result, string commandRiskSummary)
     {
         List<string> lines =
         [
-            result.Summary
+            result.Summary,
+            $"commandRisk: {commandRiskSummary}"
         ];
 
         if (result.ExitCode is not null)
@@ -127,6 +133,23 @@ public sealed class WorkspaceShellTool : ITool
         }
 
         return string.Join(Environment.NewLine, lines);
+    }
+
+    private static string AppendCommandRiskSummary(string summary, string commandRiskSummary)
+    {
+        return string.Join(Environment.NewLine, summary, $"commandRisk: {commandRiskSummary}");
+    }
+
+    private static string FormatCommandRiskSummary(DangerousCommandDetection detection)
+    {
+        if (!detection.IsDangerous)
+        {
+            return "normal shell risk: no dangerous shell pattern matched; approval may still be required.";
+        }
+
+        return string.IsNullOrWhiteSpace(detection.MatchedRule)
+            ? $"dangerous shell risk: {detection.Reason}"
+            : $"dangerous shell risk: {detection.Reason} Matched rule: {detection.MatchedRule}.";
     }
 
     private static bool TryReadRequest(
@@ -238,6 +261,7 @@ public sealed class WorkspaceShellTool : ITool
     private static IReadOnlyDictionary<string, JsonElement> CreateShellPayload(
         ShellCommandRequest request,
         string approvalStatus,
+        string commandRiskSummary,
         ShellCommandResult? result = null,
         string? errorCode = null,
         string? matchedRule = null)
@@ -246,6 +270,7 @@ public sealed class WorkspaceShellTool : ITool
         [
             ("command", request.Command),
             ("cwd", request.WorkingDirectory),
+            ("commandRiskSummary", commandRiskSummary),
             ("exitCode", result?.ExitCode),
             ("timedOut", result?.TimedOut ?? false),
             ("stdoutTruncated", result?.StdoutTruncated ?? false),
