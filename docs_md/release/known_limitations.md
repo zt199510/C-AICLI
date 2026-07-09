@@ -20,7 +20,8 @@
 ## MCP And Project Packs
 
 - MCP config/list/doctor are available.
-- Real MCP protocol handshake and dynamic tool discovery are Deferred.
+- Stdio MCP v1 is available for configured stdio servers, including the real initialize handshake, MVP tool discovery, and the MVP tool call path.
+- Remote/http MCP transport remains Deferred.
 - The Gerber/TIFF project pack records status/profile behavior, but real Gerber/TIFF conversion execution is Deferred.
 
 ## Safety Boundaries
