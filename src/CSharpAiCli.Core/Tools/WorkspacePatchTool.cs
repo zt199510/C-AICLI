@@ -162,18 +162,44 @@ public sealed class WorkspacePatchTool : ITool
         string? errorCode = null)
     {
         bool hasDiff = !string.IsNullOrWhiteSpace(diff ?? preview.Diff);
+        object dryRunPreview = CreateDryRunPreviewPayload(preview, hasDiff);
         return errorCode is null
             ? ToolStructuredPayload.Create(
                 ("path", preview.Operation.Path),
                 ("approvalStatus", approvalStatus),
                 ("replacements", preview.Replacements),
-                ("hasDiff", hasDiff))
+                ("hasDiff", hasDiff),
+                ("dryRunPreview", dryRunPreview))
             : ToolStructuredPayload.Create(
                 ("path", preview.Operation.Path),
                 ("approvalStatus", approvalStatus),
                 ("replacements", preview.Replacements),
                 ("hasDiff", hasDiff),
+                ("dryRunPreview", dryRunPreview),
                 ("errorCode", errorCode));
+    }
+
+    private static object CreateDryRunPreviewPayload(PatchPreview preview, bool hasDiff)
+    {
+        string path = preview.Operation.Path;
+        return new
+        {
+            type = "patch.dry_run_preview",
+            paths = new[] { path },
+            files = new[]
+            {
+                new
+                {
+                    path,
+                    replacements = preview.Replacements,
+                    hasDiff
+                }
+            },
+            totalReplacements = preview.Replacements,
+            hasDiff,
+            isDirtyWorkspace = preview.DirtyWorkspace.IsDirty,
+            dirtyWorkspaceSummary = preview.DirtyWorkspace.Summary ?? string.Empty
+        };
     }
 
     private static ToolExecutionResult CreateInvalidArgumentsFailure(string argument)

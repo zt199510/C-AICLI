@@ -25,6 +25,12 @@ public sealed class WorkspacePatchToolTests
         Assert.Equal("approved", payload["approvalStatus"].GetString());
         Assert.Equal(1, payload["replacements"].GetInt32());
         Assert.True(payload["hasDiff"].GetBoolean());
+        AssertDryRunPreview(
+            payload,
+            expectedPath: "notes.txt",
+            expectedReplacements: 1,
+            expectedIsDirtyWorkspace: false,
+            expectedDirtyWorkspaceSummary: "clean");
     }
 
     [Fact]
@@ -48,6 +54,12 @@ public sealed class WorkspacePatchToolTests
         Assert.Equal("denied", payload["approvalStatus"].GetString());
         Assert.Equal(1, payload["replacements"].GetInt32());
         Assert.True(payload["hasDiff"].GetBoolean());
+        AssertDryRunPreview(
+            payload,
+            expectedPath: "notes.txt",
+            expectedReplacements: 1,
+            expectedIsDirtyWorkspace: false,
+            expectedDirtyWorkspaceSummary: "clean");
     }
 
     [Fact]
@@ -207,6 +219,32 @@ public sealed class WorkspacePatchToolTests
     private static IReadOnlyDictionary<string, JsonElement> AssertPayload(ToolExecutionResult result)
     {
         return result.StructuredPayload ?? throw new InvalidOperationException("Structured payload was not set.");
+    }
+
+    private static void AssertDryRunPreview(
+        IReadOnlyDictionary<string, JsonElement> payload,
+        string expectedPath,
+        int expectedReplacements,
+        bool expectedIsDirtyWorkspace,
+        string expectedDirtyWorkspaceSummary)
+    {
+        JsonElement preview = payload["dryRunPreview"];
+        Assert.Equal("patch.dry_run_preview", preview.GetProperty("type").GetString());
+        Assert.Equal(expectedReplacements, preview.GetProperty("totalReplacements").GetInt32());
+        Assert.True(preview.GetProperty("hasDiff").GetBoolean());
+        Assert.Equal(expectedIsDirtyWorkspace, preview.GetProperty("isDirtyWorkspace").GetBoolean());
+        Assert.Equal(expectedDirtyWorkspaceSummary, preview.GetProperty("dirtyWorkspaceSummary").GetString());
+
+        JsonElement paths = preview.GetProperty("paths");
+        Assert.Equal(JsonValueKind.Array, paths.ValueKind);
+        Assert.Equal(expectedPath, Assert.Single(paths.EnumerateArray()).GetString());
+
+        JsonElement files = preview.GetProperty("files");
+        Assert.Equal(JsonValueKind.Array, files.ValueKind);
+        JsonElement file = Assert.Single(files.EnumerateArray());
+        Assert.Equal(expectedPath, file.GetProperty("path").GetString());
+        Assert.Equal(expectedReplacements, file.GetProperty("replacements").GetInt32());
+        Assert.True(file.GetProperty("hasDiff").GetBoolean());
     }
 
     private sealed class StaticDirtyWorkspaceDetector(DirtyWorkspaceStatus status) : IDirtyWorkspaceDetector
