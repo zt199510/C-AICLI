@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using System.Text.Json;
 using CSharpAiCli.Core;
 
@@ -119,6 +120,110 @@ public sealed class McpStdioTransportTests
         Assert.True(result.TimedOut);
         Assert.Equal(McpErrorCode.Timeout, result.ErrorCode);
         Assert.Contains("timed out", result.SafeMessage, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void Send_times_out_large_request_when_server_does_not_read_stdin()
+    {
+        using TempDirectory temp = TempDirectory.Create();
+        string scriptPath = WritePowerShellScript(
+            temp.Path,
+            """
+            Start-Sleep -Seconds 5
+            """);
+        using JsonDocument parameters = JsonDocument.Parse(
+            $$"""
+            {
+              "payload": "{{new string('x', 8 * 1024 * 1024)}}"
+            }
+            """);
+        McpStdioTransport transport = new(new WorkspaceGuard());
+        Stopwatch stopwatch = Stopwatch.StartNew();
+
+        McpStdioTransportResult result = transport.Send(
+            WorkspaceContext.Detect(temp.Path, temp.Path),
+            CreateOptions(scriptPath, timeoutMilliseconds: 300),
+            new McpJsonRpcRequest(
+                JsonSerializer.SerializeToElement("large-write"),
+                "initialize",
+                parameters.RootElement.Clone()));
+
+        stopwatch.Stop();
+        Assert.False(result.Succeeded);
+        Assert.True(result.TimedOut);
+        Assert.Equal(McpErrorCode.Timeout, result.ErrorCode);
+        Assert.True(stopwatch.Elapsed < TimeSpan.FromSeconds(2), $"Elapsed: {stopwatch.Elapsed}");
+    }
+
+    [Fact]
+    public void Send_truncates_large_stderr_diagnostics()
+    {
+        using TempDirectory temp = TempDirectory.Create();
+        string scriptPath = WritePowerShellScript(
+            temp.Path,
+            """
+            [Console]::Error.WriteLine(('e' * 12000))
+            $request = [Console]::In.ReadLine() | ConvertFrom-Json
+            $response = [ordered]@{
+                jsonrpc = '2.0'
+                id = $request.id
+                result = [ordered]@{ ok = $true }
+            } | ConvertTo-Json -Compress -Depth 5
+            [Console]::Out.WriteLine($response)
+            """);
+        McpStdioTransport transport = new(new WorkspaceGuard());
+
+        McpStdioTransportResult result = transport.Send(
+            WorkspaceContext.Detect(temp.Path, temp.Path),
+            CreateOptions(scriptPath),
+            new McpJsonRpcRequest(JsonSerializer.SerializeToElement("large-stderr"), "initialize"));
+
+        Assert.True(result.Succeeded, result.SafeMessage);
+        Assert.True(result.StderrTruncated);
+        Assert.True(result.StderrSnippet.Length <= 4096);
+    }
+
+    [Fact]
+    public void Session_sends_two_requests_to_same_child_process()
+    {
+        using TempDirectory temp = TempDirectory.Create();
+        string scriptPath = WritePowerShellScript(
+            temp.Path,
+            """
+            $count = 0
+            while (($line = [Console]::In.ReadLine()) -ne $null) {
+                $count += 1
+                $request = $line | ConvertFrom-Json
+                $response = [ordered]@{
+                    jsonrpc = '2.0'
+                    id = $request.id
+                    result = [ordered]@{
+                        method = $request.method
+                        count = $count
+                    }
+                } | ConvertTo-Json -Compress -Depth 5
+                [Console]::Out.WriteLine($response)
+            }
+            """);
+        McpStdioTransport transport = new(new WorkspaceGuard());
+
+        McpStdioSessionOpenResult openResult = transport.OpenSession(
+            WorkspaceContext.Detect(temp.Path, temp.Path),
+            CreateOptions(scriptPath));
+
+        Assert.True(openResult.Succeeded, openResult.SafeMessage);
+        using McpStdioSession session = openResult.Session!;
+        McpStdioTransportResult first = session.Send(
+            new McpJsonRpcRequest(JsonSerializer.SerializeToElement("one"), "initialize"));
+        McpStdioTransportResult second = session.Send(
+            new McpJsonRpcRequest(JsonSerializer.SerializeToElement("two"), "tools/list"));
+
+        Assert.True(first.Succeeded, first.SafeMessage);
+        Assert.True(second.Succeeded, second.SafeMessage);
+        Assert.Equal("one", first.Response!.Id.GetString());
+        Assert.Equal("two", second.Response!.Id.GetString());
+        Assert.Equal(1, AssertJsonElement(first.Response.Result).GetProperty("count").GetInt32());
+        Assert.Equal(2, AssertJsonElement(second.Response.Result).GetProperty("count").GetInt32());
     }
 
     [Fact]
