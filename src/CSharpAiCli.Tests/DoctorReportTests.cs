@@ -111,6 +111,41 @@ public sealed class DoctorReportTests
     }
 
     [Fact]
+    public void Create_separates_configured_stdio_counts_from_trusted_execution_eligible_servers()
+    {
+        CliConfigFile userConfig = new()
+        {
+            McpServers = new Dictionary<string, McpServerConfig>
+            {
+                ["user-stdio"] = new() { Enabled = true, Transport = "stdio", Command = "user-command" }
+            }
+        };
+        CliConfigFile workspaceConfig = new()
+        {
+            McpServers = new Dictionary<string, McpServerConfig>
+            {
+                ["workspace-stdio"] = new() { Enabled = true, Transport = "stdio", Command = "workspace-command" }
+            }
+        };
+        CliEnvironmentSnapshot snapshot = CreateSnapshot(
+            apiKey: null,
+            apiKeySource: "missing",
+            configSources:
+            [
+                new CliConfigFileSource("user config", "user-config.json", userConfig),
+                new CliConfigFileSource("workspace config", "workspace-config.json", workspaceConfig)
+            ]);
+
+        string text = DoctorReport.Create(snapshot).ToDisplayText();
+
+        Assert.Contains("mcp execution policy servers: 2 configured, 2 enabled", text);
+        Assert.Contains("mcp execution policy stdio servers: 2 configured, 2 enabled", text);
+        Assert.Contains("mcp execution policy trusted stdio servers: 1 user-config enabled", text);
+        Assert.Contains("mcp execution policy registry source: user config only", text);
+        Assert.DoesNotContain("mcp execution policy trusted stdio servers: 2", text, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void Create_explains_framework_backend_unavailable()
     {
         CliEnvironmentSnapshot snapshot = CreateSnapshot(

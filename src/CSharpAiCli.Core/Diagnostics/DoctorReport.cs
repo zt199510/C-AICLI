@@ -6,6 +6,7 @@ namespace CSharpAiCli.Core;
 public sealed record DoctorReport(IReadOnlyList<string> Lines)
 {
     private const string WorkspaceApplyPatchToolName = "workspace.apply_patch";
+    private const string TrustedMcpRegistrySource = "user config";
 
     public static DoctorReport Create(CliEnvironmentSnapshot snapshot)
     {
@@ -119,15 +120,26 @@ public sealed record DoctorReport(IReadOnlyList<string> Lines)
         int enabledServerCount = mcp.Servers.Count(server => server.Enabled);
         int stdioServerCount = mcp.Servers.Count(IsStdioServer);
         int enabledStdioServerCount = mcp.Servers.Count(server => server.Enabled && IsStdioServer(server));
+        int trustedStdioServerCount = mcp.Servers.Count(IsTrustedStdioServer);
 
         lines.Add("mcp execution policy startup risk check: enabled for stdio commands");
         lines.Add($"mcp execution policy servers: {serverCount.ToString(CultureInfo.InvariantCulture)} configured, {enabledServerCount.ToString(CultureInfo.InvariantCulture)} enabled");
         lines.Add($"mcp execution policy stdio servers: {stdioServerCount.ToString(CultureInfo.InvariantCulture)} configured, {enabledStdioServerCount.ToString(CultureInfo.InvariantCulture)} enabled");
+        lines.Add($"mcp execution policy trusted stdio servers: {trustedStdioServerCount.ToString(CultureInfo.InvariantCulture)} user-config enabled");
+        lines.Add("mcp execution policy registry source: user config only");
     }
 
     private static bool IsStdioServer(McpServerDefinition server)
     {
         return string.Equals(server.Transport, "stdio", StringComparison.Ordinal);
+    }
+
+    private static bool IsTrustedStdioServer(McpServerDefinition server)
+    {
+        return server.Enabled &&
+            string.Equals(server.Status, "configured", StringComparison.Ordinal) &&
+            IsStdioServer(server) &&
+            string.Equals(server.Source, TrustedMcpRegistrySource, StringComparison.Ordinal);
     }
 
     private static string FormatShellPolicyCommands(IReadOnlyList<string> commands)
