@@ -29,7 +29,7 @@ public sealed record McpJsonRpcRequest
 public sealed record McpJsonRpcResponse
 {
     [JsonPropertyName("jsonrpc")]
-    public string JsonRpc { get; init; } = string.Empty;
+    public string JsonRpc { get; init; } = "2.0";
 
     [JsonPropertyName("id")]
     public JsonElement Id { get; init; }

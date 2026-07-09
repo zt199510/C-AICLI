@@ -53,6 +53,32 @@ public sealed class McpJsonRpcDtoTests
     }
 
     [Fact]
+    public void Response_serializes_jsonrpc_id_and_result()
+    {
+        using JsonDocument resultPayload = JsonDocument.Parse(
+            """
+            {
+              "protocolVersion": "2025-03-26"
+            }
+            """);
+        McpJsonRpcResponse response = new()
+        {
+            Id = JsonSerializer.SerializeToElement(1),
+            Result = resultPayload.RootElement.Clone()
+        };
+
+        string json = JsonSerializer.Serialize(response);
+
+        using JsonDocument document = JsonDocument.Parse(json);
+        JsonElement root = document.RootElement;
+        Assert.Equal("2.0", root.GetProperty("jsonrpc").GetString());
+        Assert.Equal(1, root.GetProperty("id").GetInt32());
+        Assert.Equal("2025-03-26", root.GetProperty("result").GetProperty("protocolVersion").GetString());
+        Assert.False(root.TryGetProperty("error", out _));
+        Assert.False(root.TryGetProperty("jsonRpc", out _));
+    }
+
+    [Fact]
     public void Response_deserializes_result_payload()
     {
         const string json = """
@@ -108,6 +134,32 @@ public sealed class McpJsonRpcDtoTests
         Assert.Equal("Method not found", response.Error.Message);
         JsonElement data = AssertJsonElement(response.Error.Data);
         Assert.Equal("missing/method", data.GetProperty("method").GetString());
+    }
+
+    [Fact]
+    public void Response_deserializes_error_payload_without_data()
+    {
+        const string json = """
+            {
+              "jsonrpc": "2.0",
+              "id": "call-2",
+              "error": {
+                "code": -32602,
+                "message": "Invalid params"
+              }
+            }
+            """;
+
+        McpJsonRpcResponse? response = JsonSerializer.Deserialize<McpJsonRpcResponse>(json);
+
+        Assert.NotNull(response);
+        Assert.Equal("2.0", response.JsonRpc);
+        Assert.Equal("call-2", response.Id.GetString());
+        Assert.Null(response.Result);
+        Assert.NotNull(response.Error);
+        Assert.Equal(-32602, response.Error.Code);
+        Assert.Equal("Invalid params", response.Error.Message);
+        Assert.Null(response.Error.Data);
     }
 
     private static JsonElement AssertJsonElement(JsonElement? element)
