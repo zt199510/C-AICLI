@@ -322,6 +322,58 @@ public sealed class McpStdioTransportTests
     }
 
     [Fact]
+    public void Send_rejects_oversized_stdout_response_line_without_echoing_payload()
+    {
+        using TempDirectory temp = TempDirectory.Create();
+        string scriptPath = WritePowerShellScript(
+            temp.Path,
+            """
+            $null = [Console]::In.ReadLine()
+            [Console]::Out.WriteLine(('X' * (1024 * 1024 + 2048)))
+            """);
+        McpStdioTransport transport = new(new WorkspaceGuard());
+
+        McpStdioTransportResult result = transport.Send(
+            WorkspaceContext.Detect(temp.Path, temp.Path),
+            CreateOptions(scriptPath, timeoutMilliseconds: 2_000),
+            new McpJsonRpcRequest(JsonSerializer.SerializeToElement("oversized"), "initialize"));
+
+        Assert.False(result.Succeeded);
+        Assert.False(result.TimedOut);
+        Assert.Equal(McpErrorCode.InvalidResponse, result.ErrorCode);
+        Assert.Contains("too large", result.SafeMessage, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("XXXXX", result.SafeMessage, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Send_rejects_oversized_unterminated_stdout_line_quickly()
+    {
+        using TempDirectory temp = TempDirectory.Create();
+        string scriptPath = WritePowerShellScript(
+            temp.Path,
+            """
+            $null = [Console]::In.ReadLine()
+            [Console]::Out.Write(('Y' * (1024 * 1024 + 2048)))
+            Start-Sleep -Seconds 5
+            """);
+        McpStdioTransport transport = new(new WorkspaceGuard());
+        Stopwatch stopwatch = Stopwatch.StartNew();
+
+        McpStdioTransportResult result = transport.Send(
+            WorkspaceContext.Detect(temp.Path, temp.Path),
+            CreateOptions(scriptPath, timeoutMilliseconds: 2_000),
+            new McpJsonRpcRequest(JsonSerializer.SerializeToElement("unterminated"), "initialize"));
+
+        stopwatch.Stop();
+        Assert.False(result.Succeeded);
+        Assert.False(result.TimedOut);
+        Assert.Equal(McpErrorCode.InvalidResponse, result.ErrorCode);
+        Assert.Contains("too large", result.SafeMessage, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("YYYYY", result.SafeMessage, StringComparison.Ordinal);
+        Assert.True(stopwatch.Elapsed < TimeSpan.FromSeconds(2), $"Elapsed: {stopwatch.Elapsed}");
+    }
+
+    [Fact]
     public void Send_denies_cwd_outside_workspace_before_starting_process()
     {
         using TempDirectory temp = TempDirectory.Create();

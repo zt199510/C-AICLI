@@ -11,6 +11,7 @@ public sealed class McpStdioSession : IDisposable
     private const int DefaultTimeoutMilliseconds = 30_000;
     private const int CleanupWaitMilliseconds = 1000;
     private const int StderrSnippetMaxBytes = 4096;
+    private const int MaxStdoutLineBytes = 1024 * 1024;
 
     private static readonly Regex AuthorizationHeaderPattern = new(
         @"\b(authorization)\b\s*([:=])\s*(?:(Bearer)\s+)?(""[^""]*""|'[^']*'|[^\s]+)",
@@ -31,6 +32,7 @@ public sealed class McpStdioSession : IDisposable
     private readonly Process process;
     private readonly BoundedStderrCapture stderrCapture;
     private readonly int timeoutMilliseconds;
+    private readonly Queue<byte> stdoutCarryover = new();
     private readonly object sendGate = new();
 
     private bool disposed;
@@ -208,8 +210,7 @@ public sealed class McpStdioSession : IDisposable
             bool sawMismatchedResponse = false;
             while (true)
             {
-                DeadlineValueOutcome<string?> readOutcome = await WaitForDeadlineAsync(
-                    process.StandardOutput.ReadLineAsync(),
+                DeadlineValueOutcome<BoundedLineReadResult> readOutcome = await ReadBoundedStdoutLineAsync(
                     deadline,
                     cancellationToken).ConfigureAwait(false);
                 if (readOutcome.Outcome != DeadlineOutcome.Completed)
@@ -219,9 +220,19 @@ public sealed class McpStdioSession : IDisposable
                         : DeadlineFailure(readOutcome.Outcome);
                 }
 
-                string? responseLine = readOutcome.Value;
+                BoundedLineReadResult lineResult = readOutcome.Value;
                 StderrCapture stderr = stderrCapture.Snapshot();
-                if (responseLine is null)
+                if (lineResult.ExceededLimit)
+                {
+                    CleanupProcess(process);
+                    return McpStdioTransportResult.Failure(
+                        McpErrorCode.InvalidResponse,
+                        $"MCP stdio server response line is too large; maximum is {MaxStdoutLineBytes} bytes.",
+                        stderrSnippet: stderr.Text,
+                        stderrTruncated: stderr.Truncated);
+                }
+
+                if (lineResult.Line is null)
                 {
                     CleanupProcess(process);
                     return sawMismatchedResponse
@@ -233,7 +244,7 @@ public sealed class McpStdioSession : IDisposable
                             stderrTruncated: stderr.Truncated);
                 }
 
-                JsonRpcLineKind lineKind = ClassifyJsonRpcLine(responseLine, out McpJsonRpcResponse? response);
+                JsonRpcLineKind lineKind = ClassifyJsonRpcLine(lineResult.Line, out McpJsonRpcResponse? response);
                 if (lineKind == JsonRpcLineKind.Notification)
                 {
                     continue;
@@ -340,6 +351,110 @@ public sealed class McpStdioSession : IDisposable
             process.StandardInput.BaseStream.FlushAsync(),
             deadline,
             cancellationToken).ConfigureAwait(false);
+    }
+
+    private async Task<DeadlineValueOutcome<BoundedLineReadResult>> ReadBoundedStdoutLineAsync(
+        long deadline,
+        CancellationToken cancellationToken)
+    {
+        MemoryStream buffer = new();
+        byte[] readBuffer = new byte[4096];
+
+        while (true)
+        {
+            if (TryAppendCarryoverLineByte(buffer, out BoundedLineReadResult carryoverResult))
+            {
+                return new DeadlineValueOutcome<BoundedLineReadResult>(
+                    DeadlineOutcome.Completed,
+                    carryoverResult);
+            }
+
+            DeadlineValueOutcome<int> readOutcome = await WaitForDeadlineAsync(
+                process.StandardOutput.BaseStream.ReadAsync(readBuffer, 0, readBuffer.Length),
+                deadline,
+                cancellationToken).ConfigureAwait(false);
+            if (readOutcome.Outcome != DeadlineOutcome.Completed)
+            {
+                return new DeadlineValueOutcome<BoundedLineReadResult>(
+                    readOutcome.Outcome,
+                    default);
+            }
+
+            int bytesRead = readOutcome.Value;
+            if (bytesRead == 0)
+            {
+                string? line = buffer.Length == 0 ? null : DecodeLine(buffer);
+                return new DeadlineValueOutcome<BoundedLineReadResult>(
+                    DeadlineOutcome.Completed,
+                    new BoundedLineReadResult(line, ExceededLimit: false));
+            }
+
+            for (int index = 0; index < bytesRead; index++)
+            {
+                byte value = readBuffer[index];
+                if (value == (byte)'\n')
+                {
+                    EnqueueCarryover(readBuffer, index + 1, bytesRead);
+                    return new DeadlineValueOutcome<BoundedLineReadResult>(
+                        DeadlineOutcome.Completed,
+                        new BoundedLineReadResult(DecodeLine(buffer), ExceededLimit: false));
+                }
+
+                if (buffer.Length >= MaxStdoutLineBytes)
+                {
+                    return new DeadlineValueOutcome<BoundedLineReadResult>(
+                        DeadlineOutcome.Completed,
+                        new BoundedLineReadResult(Line: null, ExceededLimit: true));
+                }
+
+                buffer.WriteByte(value);
+            }
+        }
+    }
+
+    private bool TryAppendCarryoverLineByte(
+        MemoryStream buffer,
+        out BoundedLineReadResult result)
+    {
+        while (stdoutCarryover.Count > 0)
+        {
+            byte value = stdoutCarryover.Dequeue();
+            if (value == (byte)'\n')
+            {
+                result = new BoundedLineReadResult(DecodeLine(buffer), ExceededLimit: false);
+                return true;
+            }
+
+            if (buffer.Length >= MaxStdoutLineBytes)
+            {
+                result = new BoundedLineReadResult(Line: null, ExceededLimit: true);
+                return true;
+            }
+
+            buffer.WriteByte(value);
+        }
+
+        result = default;
+        return false;
+    }
+
+    private void EnqueueCarryover(byte[] buffer, int startIndex, int endIndex)
+    {
+        for (int index = startIndex; index < endIndex; index++)
+        {
+            stdoutCarryover.Enqueue(buffer[index]);
+        }
+    }
+
+    private static string DecodeLine(MemoryStream buffer)
+    {
+        byte[] lineBytes = buffer.ToArray();
+        if (lineBytes.Length > 0 && lineBytes[^1] == (byte)'\r')
+        {
+            Array.Resize(ref lineBytes, lineBytes.Length - 1);
+        }
+
+        return Encoding.UTF8.GetString(lineBytes);
     }
 
     private McpStdioTransportResult DeadlineFailure(DeadlineOutcome outcome)
@@ -767,6 +882,8 @@ public sealed class McpStdioSession : IDisposable
     }
 
     private readonly record struct DeadlineValueOutcome<T>(DeadlineOutcome Outcome, T? Value);
+
+    private readonly record struct BoundedLineReadResult(string? Line, bool ExceededLimit);
 
     private readonly record struct StderrCapture(string Text, bool Truncated);
 }
