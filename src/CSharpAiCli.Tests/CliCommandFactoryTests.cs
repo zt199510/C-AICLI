@@ -2041,7 +2041,9 @@ public sealed class CliCommandFactoryTests
 
         string text = output.ToString();
         Assert.Equal(1, exitCode);
-        Assert.Contains("errorCode: unknown-tool", text, StringComparison.Ordinal);
+        Assert.Contains("errorCode: mcp-start-failed", text, StringComparison.Ordinal);
+        Assert.Contains("blocked by shell policy", text, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("errorCode: unknown-tool", text, StringComparison.Ordinal);
         Assert.DoesNotContain("echo: hello", text, StringComparison.Ordinal);
         Assert.False(File.Exists(markerPath));
     }

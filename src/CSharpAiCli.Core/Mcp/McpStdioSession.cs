@@ -86,7 +86,7 @@ public sealed class McpStdioSession : IMcpJsonRpcSession, IDisposable
         ShellPolicyDecision startupPolicyDecision = ShellCommandPolicy.Evaluate(
             shellPolicy,
             new ShellCommandRequest(
-                startupCommandRiskInput.DetectorCommand,
+                startupCommandRiskInput.PolicyCommand,
                 options.WorkingDirectory ?? ".",
                 options.TimeoutMilliseconds,
                 MaxStdoutBytes: 4096,

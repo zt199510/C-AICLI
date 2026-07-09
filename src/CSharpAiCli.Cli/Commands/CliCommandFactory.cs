@@ -1,6 +1,7 @@
 using System.CommandLine;
 using System.CommandLine.Parsing;
 using System.Globalization;
+using System.Text;
 using System.Text.Json;
 using System.Text.Json.Nodes;
 using CSharpAiCli.Core;
@@ -14,6 +15,8 @@ public static class CliCommandFactory
 
     private const string SessionStoreErrorSummary =
         "Conversation session store operation failed.";
+
+    private const string TrustedMcpRegistrySource = "user config";
 
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web);
 
@@ -584,6 +587,7 @@ public static class CliCommandFactory
             ToolExecutionResult result = executor.Execute(
                 toolName,
                 new ToolExecutionContext("cli_tool_call", snapshot.Workspace, argumentsJson));
+            result = ReplaceUnknownMcpToolWithDiscoveryFailure(result, toolName, snapshot);
 
             WriteToolResult(output, result);
             return result.Succeeded ? 0 : 1;
@@ -1183,6 +1187,105 @@ public static class CliCommandFactory
                 result.AddError("Invalid value for --approval. Allowed values are never, on-request, on-failure, and always.");
             }
         });
+    }
+
+    private static ToolExecutionResult ReplaceUnknownMcpToolWithDiscoveryFailure(
+        ToolExecutionResult result,
+        string toolName,
+        CliEnvironmentSnapshot snapshot)
+    {
+        if (!string.Equals(result.ErrorCode, ToolErrorCode.UnknownTool, StringComparison.Ordinal) ||
+            snapshot.Configuration.DisabledTools.Contains(toolName) ||
+            !TryGetMcpToolServerSegment(toolName, out string serverSegment))
+        {
+            return result;
+        }
+
+        McpServerDefinition? server = McpConfigurationLoader
+            .Load(snapshot.Configuration)
+            .Servers
+            .FirstOrDefault(candidate =>
+                ShouldDiscoverForMcpToolCallDiagnostic(candidate) &&
+                string.Equals(
+                    NormalizeMcpNameSegment(candidate.Name, "server"),
+                    serverSegment,
+                    StringComparison.Ordinal));
+        if (server is null)
+        {
+            return result;
+        }
+
+        WorkspaceGuard workspaceGuard = new();
+        McpStdioClientSessionFactory sessionFactory = new(new McpStdioTransport(
+            workspaceGuard,
+            snapshot.Configuration.ShellPolicy));
+        McpStdioToolDiscoverer discoverer = new(sessionFactory);
+        McpToolsListResult discovery = discoverer.DiscoverTools(server, snapshot.Workspace);
+        return discovery.Succeeded
+            ? result
+            : ToolExecutionResult.Failure(
+                discovery.ErrorCode ?? McpErrorCode.ClientFailed,
+                discovery.SafeMessage);
+    }
+
+    private static bool TryGetMcpToolServerSegment(string toolName, out string serverSegment)
+    {
+        string[] parts = toolName.Split('.', StringSplitOptions.None);
+        if (parts.Length != 3 ||
+            !string.Equals(parts[0], "mcp", StringComparison.Ordinal) ||
+            string.IsNullOrWhiteSpace(parts[1]) ||
+            string.IsNullOrWhiteSpace(parts[2]))
+        {
+            serverSegment = string.Empty;
+            return false;
+        }
+
+        serverSegment = parts[1];
+        return true;
+    }
+
+    private static bool ShouldDiscoverForMcpToolCallDiagnostic(McpServerDefinition server)
+    {
+        return server.Enabled &&
+            string.Equals(server.Status, "configured", StringComparison.Ordinal) &&
+            string.Equals(server.Transport, "stdio", StringComparison.Ordinal) &&
+            string.Equals(server.Source, TrustedMcpRegistrySource, StringComparison.Ordinal);
+    }
+
+    private static string NormalizeMcpNameSegment(string value, string fallback)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+        {
+            return fallback;
+        }
+
+        StringBuilder builder = new(value.Length);
+        bool lastWasSeparator = false;
+        foreach (char character in value.Trim().ToLowerInvariant())
+        {
+            if (character is >= 'a' and <= 'z' or >= '0' and <= '9')
+            {
+                builder.Append(character);
+                lastWasSeparator = false;
+                continue;
+            }
+
+            if (character is '_' or '-')
+            {
+                builder.Append(character);
+                lastWasSeparator = false;
+                continue;
+            }
+
+            if (!lastWasSeparator)
+            {
+                builder.Append('_');
+                lastWasSeparator = true;
+            }
+        }
+
+        string normalized = builder.ToString().Trim('_', '-');
+        return string.IsNullOrWhiteSpace(normalized) ? fallback : normalized;
     }
 
     private static IAgentRunner CreateDefaultExecAgentRunner(

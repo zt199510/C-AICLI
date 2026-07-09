@@ -635,6 +635,118 @@ public sealed class McpStdioTransportTests
     }
 
     [Fact]
+    public void OpenSession_denies_shell_policy_denylisted_direct_executable_argument_before_starting_process()
+    {
+        using TempDirectory temp = TempDirectory.Create();
+        string markerPath = Path.Combine(temp.Path, "policy-denylist-direct-startup-ran.txt");
+        string scriptPath = Path.Combine(temp.Path, "bad-server.js");
+        File.WriteAllText(
+            scriptPath,
+            $$"""
+            require('fs').writeFileSync({{JsonSerializer.Serialize(markerPath)}}, 'started');
+            setTimeout(() => {}, 5000);
+            """);
+        McpStdioTransport transport = new(
+            new WorkspaceGuard(),
+            CreateShellPolicy(deniedCommands: ["bad-server.js"]));
+
+        McpStdioSessionOpenResult result = transport.OpenSession(
+            WorkspaceContext.Detect(temp.Path, temp.Path),
+            new McpStdioServerOptions(
+                serverName: "fixture",
+                command: "node",
+                arguments: ["bad-server.js"],
+                workingDirectory: null,
+                timeoutMilliseconds: 10_000));
+
+        try
+        {
+            Assert.False(result.Succeeded);
+            Assert.Null(result.Session);
+            Assert.Equal(McpErrorCode.StartFailed, result.ErrorCode);
+            Assert.Contains("shell policy", result.SafeMessage, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains("bad-server.js", result.SafeMessage, StringComparison.Ordinal);
+            Assert.False(WaitForFile(markerPath, TimeSpan.FromMilliseconds(300)));
+        }
+        finally
+        {
+            result.Session?.Dispose();
+        }
+    }
+
+    [Fact]
+    public void OpenSession_allows_shell_policy_allowlisted_direct_executable_arguments_before_cwd_check()
+    {
+        using TempDirectory temp = TempDirectory.Create();
+        string workspaceRoot = Path.Combine(temp.Path, "workspace");
+        string outsideRoot = Path.Combine(temp.Path, "outside");
+        Directory.CreateDirectory(workspaceRoot);
+        Directory.CreateDirectory(outsideRoot);
+        McpStdioTransport transport = new(
+            new WorkspaceGuard(),
+            CreateShellPolicy(
+                allowedCommands: ["node server.js"],
+                allowedCommandsConfigured: true,
+                allowedCommandsSource: "workspace config"));
+
+        McpStdioSessionOpenResult result = transport.OpenSession(
+            WorkspaceContext.Detect(workspaceRoot, temp.Path),
+            new McpStdioServerOptions(
+                serverName: "fixture",
+                command: "node",
+                arguments: ["server.js"],
+                workingDirectory: outsideRoot,
+                timeoutMilliseconds: 10_000));
+
+        try
+        {
+            Assert.False(result.Succeeded);
+            Assert.Null(result.Session);
+            Assert.Equal(McpErrorCode.CwdDenied, result.ErrorCode);
+            Assert.DoesNotContain("shell policy", result.SafeMessage, StringComparison.OrdinalIgnoreCase);
+        }
+        finally
+        {
+            result.Session?.Dispose();
+        }
+    }
+
+    [Fact]
+    public void OpenSession_denies_shell_policy_direct_executable_argument_allowlist_mismatch_before_starting_process()
+    {
+        using TempDirectory temp = TempDirectory.Create();
+        McpStdioTransport transport = new(
+            new WorkspaceGuard(),
+            CreateShellPolicy(
+                allowedCommands: ["node server.js"],
+                allowedCommandsConfigured: true,
+                allowedCommandsSource: "workspace config"));
+
+        McpStdioSessionOpenResult result = transport.OpenSession(
+            WorkspaceContext.Detect(temp.Path, temp.Path),
+            new McpStdioServerOptions(
+                serverName: "fixture",
+                command: "node",
+                arguments: ["other.js"],
+                workingDirectory: null,
+                timeoutMilliseconds: 10_000));
+
+        try
+        {
+            Assert.False(result.Succeeded);
+            Assert.Null(result.Session);
+            Assert.Equal(McpErrorCode.StartFailed, result.ErrorCode);
+            Assert.Contains("shell policy", result.SafeMessage, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains("allowlist", result.SafeMessage, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains("workspace config", result.SafeMessage, StringComparison.Ordinal);
+        }
+        finally
+        {
+            result.Session?.Dispose();
+        }
+    }
+
+    [Fact]
     public void OpenSession_denies_shell_policy_timeout_above_max_before_starting_process()
     {
         using TempDirectory temp = TempDirectory.Create();

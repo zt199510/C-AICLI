@@ -43,6 +43,22 @@ public sealed class McpStdioStartupCommandRiskInputTests
     }
 
     [Fact]
+    public void Create_includes_direct_executable_arguments_in_policy_command_without_changing_detector_command()
+    {
+        McpStdioStartupCommandRiskInput riskInput = McpStdioStartupCommandRiskInput.Create(
+            "node",
+            [
+                "server.js",
+                "--port",
+                "3000"
+            ]);
+
+        Assert.Equal(McpStdioStartupCommandRiskInputKind.DirectExecutable, riskInput.Kind);
+        Assert.Equal("node", riskInput.DetectorCommand);
+        Assert.Equal("node server.js --port 3000", riskInput.PolicyCommand);
+    }
+
+    [Fact]
     public void Create_treats_posix_shell_arguments_after_command_text_as_data()
     {
         McpStdioStartupCommandRiskInput riskInput = McpStdioStartupCommandRiskInput.Create(
@@ -134,6 +150,8 @@ public sealed class McpStdioStartupCommandRiskInputTests
 
         Assert.Equal(McpStdioStartupCommandRiskInputKind.ShellCommandText, riskInput.Kind);
         Assert.DoesNotContain(encodedPayload, riskInput.DetectorCommand, StringComparison.Ordinal);
+        Assert.DoesNotContain(encodedPayload, riskInput.PolicyCommand, StringComparison.Ordinal);
+        Assert.Equal("pwsh -EncodedCommand", riskInput.PolicyCommand);
         Assert.True(detection.IsDangerous);
         Assert.Equal("encoded powershell command", detection.MatchedRule);
     }
@@ -166,7 +184,9 @@ public sealed class McpStdioStartupCommandRiskInputTests
 
         Assert.Equal(McpStdioStartupCommandRiskInputKind.ShellCommandText, riskInput.Kind);
         Assert.Equal($"{Path.GetFileNameWithoutExtension(executable)} -EncodedCommand", riskInput.DetectorCommand);
+        Assert.Equal($"{Path.GetFileNameWithoutExtension(executable)} -EncodedCommand", riskInput.PolicyCommand);
         Assert.DoesNotContain(encodedPayload, riskInput.DetectorCommand, StringComparison.Ordinal);
+        Assert.DoesNotContain(encodedPayload, riskInput.PolicyCommand, StringComparison.Ordinal);
         Assert.True(detection.IsDangerous);
         Assert.Equal("encoded powershell command", detection.MatchedRule);
     }

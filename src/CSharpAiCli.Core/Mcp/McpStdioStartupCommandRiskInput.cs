@@ -4,7 +4,8 @@ public sealed record McpStdioStartupCommandRiskInput(
     string Executable,
     IReadOnlyList<string> Arguments,
     McpStdioStartupCommandRiskInputKind Kind,
-    string DetectorCommand)
+    string DetectorCommand,
+    string PolicyCommand)
 {
     public static McpStdioStartupCommandRiskInput Create(McpStdioServerOptions options)
     {
@@ -18,18 +19,21 @@ public sealed record McpStdioStartupCommandRiskInput(
         string[] argumentArray = arguments?.ToArray() ?? [];
         if (TryExtractShellCommandText(executable, argumentArray, out string shellCommandText))
         {
+            string sanitizedShellCommandText = FormatShellCommandRiskText(shellCommandText);
             return new McpStdioStartupCommandRiskInput(
                 executable,
                 argumentArray,
                 McpStdioStartupCommandRiskInputKind.ShellCommandText,
-                FormatShellCommandRiskText(shellCommandText));
+                sanitizedShellCommandText,
+                sanitizedShellCommandText);
         }
 
         return new McpStdioStartupCommandRiskInput(
             executable,
             argumentArray,
             McpStdioStartupCommandRiskInputKind.DirectExecutable,
-            FormatDirectExecutableRiskText(executable, argumentArray));
+            FormatDirectExecutableRiskText(executable, argumentArray),
+            FormatDirectExecutablePolicyText(executable, argumentArray));
     }
 
     private static bool TryExtractShellCommandText(
@@ -156,6 +160,22 @@ public sealed record McpStdioStartupCommandRiskInput(
     private static string FormatDirectExecutableRiskText(string executable, IReadOnlyList<string> arguments)
     {
         if (!DirectExecutableNeedsArguments(executable))
+        {
+            return NormalizeLineBreaks(executable);
+        }
+
+        List<string> parts = [FormatPart(executable)];
+        foreach (string argument in arguments)
+        {
+            parts.Add(FormatPart(argument));
+        }
+
+        return NormalizeLineBreaks(string.Join(" ", parts));
+    }
+
+    private static string FormatDirectExecutablePolicyText(string executable, IReadOnlyList<string> arguments)
+    {
+        if (arguments.Count == 0)
         {
             return NormalizeLineBreaks(executable);
         }
