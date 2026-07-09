@@ -71,6 +71,15 @@ public sealed class McpStdioSession : IMcpJsonRpcSession, IDisposable
                 "MCP stdio command is not configured.");
         }
 
+        DangerousCommandDetection startupCommandDetection = DangerousCommandDetector.Detect(
+            McpStdioStartupCommandFormatter.FormatForRiskDetection(options));
+        if (startupCommandDetection.IsDangerous)
+        {
+            return McpStdioSessionOpenResult.Failure(
+                McpErrorCode.StartFailed,
+                FormatDangerousStartupCommandMessage(startupCommandDetection));
+        }
+
         WorkspaceGuardResult cwdResult = ResolveWorkingDirectory(
             workspaceGuard,
             workspace,
@@ -584,6 +593,13 @@ public sealed class McpStdioSession : IMcpJsonRpcSession, IDisposable
         }
 
         return startInfo;
+    }
+
+    private static string FormatDangerousStartupCommandMessage(DangerousCommandDetection detection)
+    {
+        return string.IsNullOrWhiteSpace(detection.MatchedRule)
+            ? $"MCP stdio server startup command was blocked. {detection.Reason}"
+            : $"MCP stdio server startup command was blocked. {detection.Reason} Matched rule: {detection.MatchedRule}.";
     }
 
     private static JsonRpcLineKind ClassifyJsonRpcLine(
