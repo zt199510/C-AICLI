@@ -31,6 +31,86 @@ public sealed class DoctorReportTests
     }
 
     [Fact]
+    public void Create_includes_default_shell_patch_and_mcp_policy_diagnostics()
+    {
+        CliEnvironmentSnapshot snapshot = CreateSnapshot(apiKey: null, apiKeySource: "missing");
+
+        string text = DoctorReport.Create(snapshot).ToDisplayText();
+
+        Assert.Contains("shell policy allowed commands configured: false (default)", text);
+        Assert.Contains("shell policy allowed commands: []", text);
+        Assert.Contains("shell policy denied commands: []", text);
+        Assert.Contains("shell policy max timeout milliseconds: none (default)", text);
+        Assert.Contains("shell policy dangerous command detector: enabled", text);
+        Assert.Contains("patch policy tool status: enabled", text);
+        Assert.Contains("patch policy approval: required for write operations", text);
+        Assert.Contains("patch policy dry-run preview: enabled", text);
+        Assert.Contains("patch policy dirty workspace reporting: enabled", text);
+        Assert.Contains("mcp execution policy startup risk check: enabled for stdio commands", text);
+        Assert.Contains("mcp execution policy servers: 0 configured, 0 enabled", text);
+        Assert.Contains("mcp execution policy stdio servers: 0 configured, 0 enabled", text);
+    }
+
+    [Fact]
+    public void Create_prints_configured_shell_policy_with_json_escaped_command_lists()
+    {
+        CliEnvironmentSnapshot snapshot = CreateSnapshot(
+            apiKey: null,
+            apiKeySource: "missing",
+            shellPolicy: new ShellPolicyConfiguration(
+                AllowedCommands: ["git status", "line-one\nshell policy denied commands: injected"],
+                AllowedCommandsConfigured: true,
+                AllowedCommandsSource: "workspace config",
+                DeniedCommands: ["rm -rf", "powershell,encoded"],
+                MaxTimeoutMilliseconds: 1234,
+                MaxTimeoutMillisecondsSource: "user config"));
+
+        string text = DoctorReport.Create(snapshot).ToDisplayText();
+
+        Assert.Contains("shell policy allowed commands configured: true (workspace config)", text);
+        Assert.Contains("""shell policy allowed commands: ["git status","line-one\nshell policy denied commands: injected"]""", text);
+        Assert.Contains("""shell policy denied commands: ["rm -rf","powershell,encoded"]""", text);
+        Assert.Contains("shell policy max timeout milliseconds: 1234 (user config)", text);
+        Assert.DoesNotContain($"{Environment.NewLine}shell policy denied commands: injected", text, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Create_marks_patch_policy_tool_status_disabled_when_apply_patch_tool_is_disabled()
+    {
+        CliEnvironmentSnapshot snapshot = CreateSnapshot(
+            apiKey: null,
+            apiKeySource: "missing",
+            disabledTools: new HashSet<string>(["workspace.apply_patch"], StringComparer.Ordinal));
+
+        string text = DoctorReport.Create(snapshot).ToDisplayText();
+
+        Assert.Contains("patch policy tool status: disabled", text);
+    }
+
+    [Fact]
+    public void Create_prints_mcp_execution_policy_server_counts()
+    {
+        CliConfigFile config = new()
+        {
+            McpServers = new Dictionary<string, McpServerConfig>
+            {
+                ["stdio-active"] = new() { Enabled = true, Transport = "stdio", Command = "active-command" },
+                ["stdio-disabled"] = new() { Enabled = false, Transport = "stdio", Command = "disabled-command" },
+                ["http-active"] = new() { Enabled = true, Transport = "http", Url = "https://mcp.example.test" }
+            }
+        };
+        CliEnvironmentSnapshot snapshot = CreateSnapshot(
+            apiKey: null,
+            apiKeySource: "missing",
+            configSources: [new CliConfigFileSource("workspace config", "workspace-config.json", config)]);
+
+        string text = DoctorReport.Create(snapshot).ToDisplayText();
+
+        Assert.Contains("mcp execution policy servers: 3 configured, 2 enabled", text);
+        Assert.Contains("mcp execution policy stdio servers: 2 configured, 1 enabled", text);
+    }
+
+    [Fact]
     public void Create_explains_framework_backend_unavailable()
     {
         CliEnvironmentSnapshot snapshot = CreateSnapshot(
@@ -144,7 +224,10 @@ public sealed class DoctorReportTests
         string baseUrl = "https://api.openai.com/v1",
         string baseUrlSource = "default",
         string agentBackend = "direct",
-        string agentBackendSource = "default")
+        string agentBackendSource = "default",
+        IReadOnlySet<string>? disabledTools = null,
+        ShellPolicyConfiguration? shellPolicy = null,
+        IReadOnlyList<CliConfigFileSource>? configSources = null)
     {
         WorkspaceContext workspace = new(
             RootPath: "workspace-root",
@@ -159,15 +242,16 @@ public sealed class DoctorReportTests
             ModelSource: modelSource,
             AgentBackend: agentBackend,
             AgentBackendSource: agentBackendSource,
-            DisabledTools: new HashSet<string>(StringComparer.Ordinal),
+            DisabledTools: disabledTools ?? new HashSet<string>(StringComparer.Ordinal),
             ApiKey: SecretValue.From(apiKey),
             ApiKeySource: apiKeySource,
             LoadedConfigPaths: [],
             Warnings: warnings ?? [],
-            ConfigSources: [])
+            ConfigSources: configSources ?? [])
         {
             BaseUrl = baseUrl,
-            BaseUrlSource = baseUrlSource
+            BaseUrlSource = baseUrlSource,
+            ShellPolicy = shellPolicy ?? ShellPolicyConfiguration.Default
         };
 
         return new CliEnvironmentSnapshot(
