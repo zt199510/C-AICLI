@@ -40,7 +40,7 @@ public sealed record McpStdioStartupCommandRiskInput(
         string executableName = GetExecutableName(executable);
         if (executableName is "powershell" or "pwsh")
         {
-            return TryGetCommandAfterSwitch(
+            return TryGetJoinedCommandAfterSwitch(
                 arguments,
                 static argument => IsPowerShellCommandSwitch(argument),
                 out shellCommandText);
@@ -48,7 +48,7 @@ public sealed record McpStdioStartupCommandRiskInput(
 
         if (executableName is "cmd")
         {
-            return TryGetCommandAfterSwitch(
+            return TryGetJoinedCommandAfterSwitch(
                 arguments,
                 static argument => argument.Equals("/c", StringComparison.OrdinalIgnoreCase) ||
                     argument.Equals("/k", StringComparison.OrdinalIgnoreCase),
@@ -57,7 +57,7 @@ public sealed record McpStdioStartupCommandRiskInput(
 
         if (executableName is "sh" or "bash" or "zsh")
         {
-            return TryGetCommandAfterSwitch(
+            return TryGetSingleCommandAfterSwitch(
                 arguments,
                 static argument => IsPosixShellCommandSwitch(argument),
                 out shellCommandText);
@@ -67,7 +67,7 @@ public sealed record McpStdioStartupCommandRiskInput(
         return false;
     }
 
-    private static bool TryGetCommandAfterSwitch(
+    private static bool TryGetJoinedCommandAfterSwitch(
         IReadOnlyList<string> arguments,
         Func<string, bool> isCommandSwitch,
         out string commandText)
@@ -80,6 +80,26 @@ public sealed record McpStdioStartupCommandRiskInput(
             }
 
             commandText = string.Join(" ", arguments.Skip(index + 1));
+            return true;
+        }
+
+        commandText = string.Empty;
+        return false;
+    }
+
+    private static bool TryGetSingleCommandAfterSwitch(
+        IReadOnlyList<string> arguments,
+        Func<string, bool> isCommandSwitch,
+        out string commandText)
+    {
+        for (int index = 0; index < arguments.Count; index++)
+        {
+            if (!isCommandSwitch(arguments[index]))
+            {
+                continue;
+            }
+
+            commandText = index + 1 < arguments.Count ? arguments[index + 1] : string.Empty;
             return true;
         }
 
