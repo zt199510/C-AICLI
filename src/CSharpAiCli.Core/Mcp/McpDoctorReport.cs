@@ -23,7 +23,7 @@ public sealed record McpDoctorReport(IReadOnlyList<string> Lines)
 
         foreach (McpServerDefinition server in configuration.Servers)
         {
-            McpConnectionStatus status = connectionManager.Check(server);
+            McpConnectionStatus status = connectionManager.Check(server, snapshot.Workspace);
             lines.Add($"server: {server.Name}");
             lines.Add($"  configStatus: {server.Status}");
             lines.Add($"  connectionStatus: {status.Status}");
