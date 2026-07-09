@@ -28,21 +28,21 @@ public sealed class SingleFilePatchApplier : IPatchApplier
         if (!guardResult.IsAllowed || guardResult.FullPath is null)
         {
             throw new ToolSecurityException(
-                guardResult.ErrorCode ?? "workspace-boundary-denied",
+                guardResult.ErrorCode ?? ToolErrorCode.WorkspaceBoundaryDenied,
                 guardResult.SafeMessage);
         }
 
         if (!File.Exists(guardResult.FullPath))
         {
             throw new ToolExecutionException(
-                "file-not-found",
+                ToolErrorCode.FileNotFound,
                 "Patch target file was not found.");
         }
 
         if (string.IsNullOrEmpty(operation.Find))
         {
             throw new ToolExecutionException(
-                "invalid-patch",
+                ToolErrorCode.InvalidPatch,
                 "Patch find text must not be empty.");
         }
 
@@ -51,7 +51,7 @@ public sealed class SingleFilePatchApplier : IPatchApplier
         if (replacements == 0)
         {
             throw new ToolExecutionException(
-                "patch-context-not-found",
+                ToolErrorCode.PatchContextNotFound,
                 "Patch context was not found in the target file.");
         }
 
@@ -77,7 +77,7 @@ public sealed class SingleFilePatchApplier : IPatchApplier
         if (!File.Exists(preview.FullPath))
         {
             return PatchApplyResult.Failure(
-                "file-not-found",
+                ToolErrorCode.FileNotFound,
                 "Patch target file was not found.",
                 diff: preview.Diff);
         }
@@ -86,7 +86,7 @@ public sealed class SingleFilePatchApplier : IPatchApplier
         if (!guardResult.IsAllowed)
         {
             return PatchApplyResult.Failure(
-                guardResult.ErrorCode ?? "workspace-boundary-denied",
+                guardResult.ErrorCode ?? ToolErrorCode.WorkspaceBoundaryDenied,
                 guardResult.SafeMessage,
                 diff: preview.Diff);
         }
@@ -95,7 +95,7 @@ public sealed class SingleFilePatchApplier : IPatchApplier
         if (!string.Equals(ComputeHash(currentContent), preview.OriginalContentHash, StringComparison.Ordinal))
         {
             return PatchApplyResult.Failure(
-                "patch-target-changed",
+                ToolErrorCode.PatchTargetChanged,
                 "Patch target changed after preview; refusing to apply.",
                 diff: preview.Diff);
         }
@@ -103,7 +103,7 @@ public sealed class SingleFilePatchApplier : IPatchApplier
         if (!currentContent.Contains(preview.Operation.Find, StringComparison.Ordinal))
         {
             return PatchApplyResult.Failure(
-                "patch-context-not-found",
+                ToolErrorCode.PatchContextNotFound,
                 "Patch context was not found in the target file.",
                 diff: preview.Diff);
         }

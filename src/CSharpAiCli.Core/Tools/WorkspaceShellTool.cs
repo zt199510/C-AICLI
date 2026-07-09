@@ -4,6 +4,8 @@ namespace CSharpAiCli.Core;
 
 public sealed class WorkspaceShellTool : ITool
 {
+    private const string ToolName = "workspace.run_shell";
+
     public const int DefaultTimeoutMilliseconds = 30_000;
     public const int DefaultMaxOutputBytes = 32 * 1024;
 
@@ -20,7 +22,7 @@ public sealed class WorkspaceShellTool : ITool
     }
 
     public ToolDefinition Definition { get; } = new(
-        "workspace.run_shell",
+        ToolName,
         "Run an approved shell command inside the current workspace.",
         """{"type":"object","properties":{"command":{"type":"string"},"cwd":{"type":"string"},"timeoutMilliseconds":{"type":"integer"},"maxStdoutBytes":{"type":"integer"},"maxStderrBytes":{"type":"integer"}},"required":["command"]}""",
         ToolRiskLevel.Shell);
@@ -58,19 +60,28 @@ public sealed class WorkspaceShellTool : ITool
         if (!approval.Approved)
         {
             return ToolExecutionResult.Failure(
-                "approval-denied",
+                ToolErrorCode.ApprovalDenied,
                 approval.SafeMessage,
-                approvalStatus: approval.Status);
+                approvalStatus: approval.Status,
+                structuredPayload: CreateShellPayload(request, approval.Status, errorCode: ToolErrorCode.ApprovalDenied));
         }
 
         ShellCommandResult shellResult = shellRunner.Run(context.Workspace, request, cancellationToken);
         string summary = FormatSummary(shellResult);
         return shellResult.Succeeded
-            ? ToolExecutionResult.Success(summary, approval.Status)
-            : ToolExecutionResult.Failure(
-                shellResult.ErrorCode ?? "shell-command-failed",
+            ? ToolExecutionResult.Success(
                 summary,
-                approvalStatus: approval.Status);
+                approval.Status,
+                structuredPayload: CreateShellPayload(request, approval.Status, shellResult))
+            : ToolExecutionResult.Failure(
+                shellResult.ErrorCode ?? ToolErrorCode.ShellCommandFailed,
+                summary,
+                approvalStatus: approval.Status,
+                structuredPayload: CreateShellPayload(
+                    request,
+                    approval.Status,
+                    shellResult,
+                    shellResult.ErrorCode ?? ToolErrorCode.ShellCommandFailed));
     }
 
     private static string FormatSummary(ShellCommandResult result)
@@ -115,11 +126,21 @@ public sealed class WorkspaceShellTool : ITool
         {
             using JsonDocument document = JsonDocument.Parse(argumentsJson);
             JsonElement root = document.RootElement;
+            if (root.ValueKind != JsonValueKind.Object)
+            {
+                failure = ToolExecutionResult.Failure(
+                    ToolErrorCode.InvalidToolArguments,
+                    "Tool arguments must be a JSON object.",
+                    structuredPayload: ToolStructuredPayload.InvalidArguments(ToolName, "arguments"));
+                return false;
+            }
+
             if (!TryReadRequiredString(root, "command", out string command))
             {
                 failure = ToolExecutionResult.Failure(
-                    "invalid-tool-arguments",
-                    "Shell arguments must include a non-empty command.");
+                    ToolErrorCode.InvalidToolArguments,
+                    "Shell arguments must include a non-empty command.",
+                    structuredPayload: ToolStructuredPayload.InvalidArguments(ToolName, "command"));
                 return false;
             }
 
@@ -129,8 +150,9 @@ public sealed class WorkspaceShellTool : ITool
                 if (cwdElement.ValueKind != JsonValueKind.String || string.IsNullOrWhiteSpace(cwdElement.GetString()))
                 {
                     failure = ToolExecutionResult.Failure(
-                        "invalid-tool-arguments",
-                        "Shell cwd must be a non-empty string.");
+                        ToolErrorCode.InvalidToolArguments,
+                        "Shell cwd must be a non-empty string.",
+                        structuredPayload: ToolStructuredPayload.InvalidArguments(ToolName, "cwd"));
                     return false;
                 }
 
@@ -150,8 +172,9 @@ public sealed class WorkspaceShellTool : ITool
         catch (JsonException)
         {
             failure = ToolExecutionResult.Failure(
-                "invalid-tool-arguments",
-                "Tool arguments must be valid JSON.");
+                ToolErrorCode.InvalidToolArguments,
+                "Tool arguments must be valid JSON.",
+                structuredPayload: ToolStructuredPayload.InvalidArguments(ToolName, "arguments"));
             return false;
         }
     }
@@ -188,11 +211,38 @@ public sealed class WorkspaceShellTool : ITool
         if (element.ValueKind != JsonValueKind.Number || !element.TryGetInt32(out value) || value <= 0)
         {
             failure = ToolExecutionResult.Failure(
-                "invalid-tool-arguments",
-                $"{propertyName} must be a positive integer.");
+                ToolErrorCode.InvalidToolArguments,
+                $"{propertyName} must be a positive integer.",
+                structuredPayload: ToolStructuredPayload.InvalidArguments(ToolName, propertyName));
             return false;
         }
 
         return true;
+    }
+
+    private static IReadOnlyDictionary<string, JsonElement> CreateShellPayload(
+        ShellCommandRequest request,
+        string approvalStatus,
+        ShellCommandResult? result = null,
+        string? errorCode = null)
+    {
+        return errorCode is null
+            ? ToolStructuredPayload.Create(
+                ("command", request.Command),
+                ("cwd", request.WorkingDirectory),
+                ("exitCode", result?.ExitCode),
+                ("timedOut", result?.TimedOut ?? false),
+                ("stdoutTruncated", result?.StdoutTruncated ?? false),
+                ("stderrTruncated", result?.StderrTruncated ?? false),
+                ("approvalStatus", approvalStatus))
+            : ToolStructuredPayload.Create(
+                ("command", request.Command),
+                ("cwd", request.WorkingDirectory),
+                ("exitCode", result?.ExitCode),
+                ("timedOut", result?.TimedOut ?? false),
+                ("stdoutTruncated", result?.StdoutTruncated ?? false),
+                ("stderrTruncated", result?.StderrTruncated ?? false),
+                ("approvalStatus", approvalStatus),
+                ("errorCode", errorCode));
     }
 }

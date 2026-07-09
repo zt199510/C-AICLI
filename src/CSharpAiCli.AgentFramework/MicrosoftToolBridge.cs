@@ -32,7 +32,7 @@ public sealed class MicrosoftToolBridge
             .Select(definition => new MicrosoftFrameworkToolDefinition(
                 Name: definition.Name,
                 Description: definition.Description,
-                ParametersSchema: definition.ParametersSchema))
+                ParametersSchema: ToolSchemaRenderer.RenderParametersSchemaString(definition)))
             .ToArray();
     }
 

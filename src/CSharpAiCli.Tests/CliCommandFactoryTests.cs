@@ -1721,6 +1721,122 @@ public sealed class CliCommandFactoryTests
     }
 
     [Fact]
+    public void Tools_list_json_writes_stable_parseable_tool_metadata()
+    {
+        using StringWriter output = new();
+        CliEnvironmentSnapshot snapshot = CreateSnapshot(
+            workspacePath: null,
+            apiKey: null,
+            apiKeySource: "missing",
+            model: "not configured",
+            disabledTools: new HashSet<string>(StringComparer.Ordinal)
+            {
+                "workspace.search_text",
+                "workspace.run_shell"
+            });
+
+        int exitCode = CliCommandFactory
+            .Create(output, _ => snapshot)
+            .Parse(["tools", "list", "--json"])
+            .Invoke();
+
+        Assert.Equal(0, exitCode);
+        JsonObject json = Assert.IsType<JsonObject>(JsonNode.Parse(output.ToString()));
+        Assert.Equal("tools.list", json["type"]?.GetValue<string>());
+
+        JsonArray tools = Assert.IsType<JsonArray>(json["tools"]);
+        List<JsonObject> toolObjects = tools.Select(tool => Assert.IsType<JsonObject>(tool)).ToList();
+        string[] toolNames = toolObjects
+            .Select(tool => tool["name"]?.GetValue<string>() ?? string.Empty)
+            .ToArray();
+        Assert.Equal(toolNames.OrderBy(name => name, StringComparer.Ordinal), toolNames);
+        Assert.DoesNotContain("workspace.search_text", toolNames);
+        Assert.DoesNotContain("workspace.run_shell", toolNames);
+
+        JsonObject readTool = Assert.Single(
+            toolObjects,
+            tool => tool["name"]?.GetValue<string>() == "workspace.read_text");
+        Assert.Equal("Read a UTF-8 text file from the current workspace.", readTool["description"]?.GetValue<string>());
+        Assert.Equal("read", readTool["riskLevel"]?.GetValue<string>());
+        JsonObject parameters = Assert.IsType<JsonObject>(readTool["parameters"]);
+        Assert.Equal("object", parameters["type"]?.GetValue<string>());
+        JsonObject properties = Assert.IsType<JsonObject>(parameters["properties"]);
+        Assert.True(properties.ContainsKey("path"));
+
+        JsonArray disabledTools = Assert.IsType<JsonArray>(json["disabledTools"]);
+        string[] disabledToolNames = disabledTools
+            .Select(tool => tool?.GetValue<string>() ?? string.Empty)
+            .ToArray();
+        Assert.Equal(["workspace.run_shell", "workspace.search_text"], disabledToolNames);
+    }
+
+    [Fact]
+    public void Tools_list_json_omits_disabled_mcp_tools_and_reports_disabled_names()
+    {
+        using StringWriter output = new();
+        CliEnvironmentSnapshot snapshot = CreateSnapshot(
+            workspacePath: null,
+            apiKey: null,
+            apiKeySource: "missing",
+            model: "not configured",
+            configSources:
+            [
+                new CliConfigFileSource(
+                    "workspace config",
+                    "workspace-config.json",
+                    new CliConfigFile
+                    {
+                        McpServers = new Dictionary<string, McpServerConfig>
+                        {
+                            ["active"] = new()
+                            {
+                                Enabled = true,
+                                Transport = "stdio",
+                                Command = "mcp-active"
+                            },
+                            ["disabled"] = new()
+                            {
+                                Enabled = true,
+                                Transport = "stdio",
+                                Command = "mcp-disabled"
+                            }
+                        }
+                    })
+            ],
+            disabledTools: new HashSet<string>(StringComparer.Ordinal)
+            {
+                "mcp.disabled.call"
+            });
+
+        int exitCode = CliCommandFactory
+            .Create(output, _ => snapshot)
+            .Parse(["tools", "list", "--json"])
+            .Invoke();
+
+        Assert.Equal(0, exitCode);
+        JsonObject json = Assert.IsType<JsonObject>(JsonNode.Parse(output.ToString()));
+        JsonArray tools = Assert.IsType<JsonArray>(json["tools"]);
+        List<JsonObject> toolObjects = tools.Select(tool => Assert.IsType<JsonObject>(tool)).ToList();
+        string[] toolNames = toolObjects
+            .Select(tool => tool["name"]?.GetValue<string>() ?? string.Empty)
+            .ToArray();
+        Assert.Contains("mcp.active.call", toolNames);
+        Assert.DoesNotContain("mcp.disabled.call", toolNames);
+
+        JsonObject activeMcpTool = Assert.Single(
+            toolObjects,
+            tool => tool["name"]?.GetValue<string>() == "mcp.active.call");
+        Assert.Equal("Call MCP server 'active' through stdio command: mcp-active.", activeMcpTool["description"]?.GetValue<string>());
+        Assert.Equal("shell", activeMcpTool["riskLevel"]?.GetValue<string>());
+        JsonObject parameters = Assert.IsType<JsonObject>(activeMcpTool["parameters"]);
+        Assert.Equal("object", parameters["type"]?.GetValue<string>());
+
+        JsonArray disabledTools = Assert.IsType<JsonArray>(json["disabledTools"]);
+        string disabledToolName = Assert.Single(disabledTools.Select(tool => tool?.GetValue<string>() ?? string.Empty));
+        Assert.Equal("mcp.disabled.call", disabledToolName);
+    }
+
+    [Fact]
     public void Tools_list_prints_enabled_tools_and_disabled_tools()
     {
         using StringWriter output = new();
@@ -1810,6 +1926,130 @@ public sealed class CliCommandFactoryTests
 
         Assert.Equal(1, exitCode);
         Assert.Contains("errorCode: unknown-tool", output.ToString());
+    }
+
+    [Fact]
+    public void Tools_call_stdin_reads_arguments_from_injected_reader()
+    {
+        using TempDirectory temp = TempDirectory.Create();
+        File.WriteAllText(Path.Combine(temp.Path, "note.txt"), "hello from stdin");
+        using StringWriter output = new();
+        using StringReader input = new("""{"path":"note.txt"}""");
+
+        int exitCode = CliCommandFactory
+            .Create(output, workspacePath => CreateSnapshot(workspacePath), input)
+            .Parse(["tools", "call", "--workspace", temp.Path, "workspace.read_text", "--stdin"])
+            .Invoke();
+
+        string text = output.ToString();
+        Assert.Equal(0, exitCode);
+        Assert.Contains("status: succeeded", text);
+        Assert.Contains("hello from stdin", text);
+    }
+
+    [Fact]
+    public void Tools_call_stdin_and_arguments_file_conflict_before_logging()
+    {
+        using TempDirectory temp = TempDirectory.Create();
+        string argumentsPath = Path.Combine(temp.Path, "arguments.json");
+        File.WriteAllText(argumentsPath, """{"path":"note.txt"}""");
+        using StringWriter output = new();
+        List<string> loggedCommands = [];
+        RootCommand command = CliCommandFactory.Create(
+            output,
+            workspacePath => CreateSnapshot(workspacePath),
+            (commandName, _) => loggedCommands.Add(commandName));
+
+        int exitCode = CliCommandFactory.Invoke(
+            command,
+            ["tools", "call", "--workspace", temp.Path, "workspace.read_text", "--stdin", "--arguments-file", argumentsPath],
+            output);
+
+        string text = output.ToString();
+        Assert.Equal(2, exitCode);
+        Assert.Empty(loggedCommands);
+        Assert.Contains("--stdin cannot be used with --arguments-file.", text);
+        Assert.DoesNotContain("status:", text, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Tools_call_stdin_and_positional_arguments_conflict_before_logging()
+    {
+        using TempDirectory temp = TempDirectory.Create();
+        using StringWriter output = new();
+        List<string> loggedCommands = [];
+        RootCommand command = CliCommandFactory.Create(
+            output,
+            workspacePath => CreateSnapshot(workspacePath),
+            (commandName, _) => loggedCommands.Add(commandName));
+
+        int exitCode = CliCommandFactory.Invoke(
+            command,
+            ["tools", "call", "--workspace", temp.Path, "workspace.read_text", """{"path":"note.txt"}""", "--stdin"],
+            output);
+
+        string text = output.ToString();
+        Assert.Equal(2, exitCode);
+        Assert.Empty(loggedCommands);
+        Assert.Contains("--stdin cannot be used with positional arguments.", text);
+        Assert.DoesNotContain("status:", text, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Tools_call_invalid_stdin_json_reports_invalid_tool_arguments()
+    {
+        using TempDirectory temp = TempDirectory.Create();
+        using StringWriter output = new();
+        using StringReader input = new("{");
+
+        int exitCode = CliCommandFactory
+            .Create(output, workspacePath => CreateSnapshot(workspacePath), input)
+            .Parse(["tools", "call", "--workspace", temp.Path, "workspace.read_text", "--stdin"])
+            .Invoke();
+
+        string text = output.ToString();
+        Assert.Equal(1, exitCode);
+        Assert.Contains("status: failed", text);
+        Assert.Contains("errorCode: invalid-tool-arguments", text);
+        Assert.Contains("Tool arguments must be valid JSON.", text);
+    }
+
+    [Fact]
+    public void Tools_call_arguments_file_still_reads_arguments()
+    {
+        using TempDirectory temp = TempDirectory.Create();
+        File.WriteAllText(Path.Combine(temp.Path, "note.txt"), "hello from arguments file");
+        string argumentsPath = Path.Combine(temp.Path, "arguments.json");
+        File.WriteAllText(argumentsPath, """{"path":"note.txt"}""");
+        using StringWriter output = new();
+
+        int exitCode = CliCommandFactory
+            .Create(output, workspacePath => CreateSnapshot(workspacePath))
+            .Parse(["tools", "call", "--workspace", temp.Path, "workspace.read_text", "--arguments-file", argumentsPath])
+            .Invoke();
+
+        string text = output.ToString();
+        Assert.Equal(0, exitCode);
+        Assert.Contains("status: succeeded", text);
+        Assert.Contains("hello from arguments file", text);
+    }
+
+    [Fact]
+    public void Tools_call_inline_arguments_still_work()
+    {
+        using TempDirectory temp = TempDirectory.Create();
+        File.WriteAllText(Path.Combine(temp.Path, "note.txt"), "hello from inline arguments");
+        using StringWriter output = new();
+
+        int exitCode = CliCommandFactory
+            .Create(output, workspacePath => CreateSnapshot(workspacePath))
+            .Parse(["tools", "call", "--workspace", temp.Path, "workspace.read_text", """{"path":"note.txt"}"""])
+            .Invoke();
+
+        string text = output.ToString();
+        Assert.Equal(0, exitCode);
+        Assert.Contains("status: succeeded", text);
+        Assert.Contains("hello from inline arguments", text);
     }
 
     [Fact]

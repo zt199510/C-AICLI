@@ -34,7 +34,7 @@ public sealed class ToolExecutorTests
         ToolExecutionResult result = executor.Execute("missing.tool", CreateContext("{}"));
 
         Assert.False(result.Succeeded);
-        Assert.Equal("unknown-tool", result.ErrorCode);
+        Assert.Equal(ToolErrorCode.UnknownTool, result.ErrorCode);
         Assert.Contains("missing.tool", result.Summary, StringComparison.Ordinal);
     }
 
@@ -51,7 +51,20 @@ public sealed class ToolExecutorTests
         ToolExecutionResult result = executor.Execute("test.echo", CreateContext(argumentsJson));
 
         Assert.False(result.Succeeded);
-        Assert.Equal("invalid-tool-arguments", result.ErrorCode);
+        Assert.Equal(ToolErrorCode.InvalidToolArguments, result.ErrorCode);
+    }
+
+    [Fact]
+    public void Execute_returns_canonical_failure_when_tool_returns_null()
+    {
+        ToolRegistry registry = new();
+        registry.Register(new NullTool());
+        ToolExecutor executor = new(registry);
+
+        ToolExecutionResult result = executor.Execute("test.null", CreateContext("{}"));
+
+        Assert.False(result.Succeeded);
+        Assert.Equal(ToolErrorCode.ToolReturnedNull, result.ErrorCode);
     }
 
     [Fact]
@@ -81,7 +94,7 @@ public sealed class ToolExecutorTests
         ToolExecutionResult result = executor.Execute("test.throw", CreateContext("{}"));
 
         Assert.False(result.Succeeded);
-        Assert.Equal("tool-execution-failed", result.ErrorCode);
+        Assert.Equal(ToolErrorCode.ToolExecutionFailed, result.ErrorCode);
         Assert.Equal("Tool 'test.throw' failed during execution.", result.Summary);
         Assert.DoesNotContain("sk-hidden", result.Summary, StringComparison.Ordinal);
     }
@@ -130,6 +143,21 @@ public sealed class ToolExecutorTests
             CancellationToken cancellationToken = default)
         {
             throw exception;
+        }
+    }
+
+    private sealed class NullTool : ITool
+    {
+        public ToolDefinition Definition { get; } = new(
+            "test.null",
+            "Returns null.",
+            """{"type":"object"}""");
+
+        public ToolExecutionResult Execute(
+            ToolExecutionContext context,
+            CancellationToken cancellationToken = default)
+        {
+            return null!;
         }
     }
 }

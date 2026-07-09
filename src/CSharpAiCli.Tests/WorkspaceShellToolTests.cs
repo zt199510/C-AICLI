@@ -1,4 +1,5 @@
 using CSharpAiCli.Core;
+using System.Text.Json;
 
 namespace CSharpAiCli.Tests;
 
@@ -20,6 +21,16 @@ public sealed class WorkspaceShellToolTests
         Assert.Equal("approved", result.ApprovalStatus);
         Assert.Contains("exitCode: 0", result.Summary, StringComparison.Ordinal);
         Assert.Contains("stdout:", result.Summary, StringComparison.Ordinal);
+        IReadOnlyDictionary<string, JsonElement> payload = AssertPayload(result);
+        Assert.Equal("dotnet --version", payload["command"].GetString());
+        Assert.Equal(".", payload["cwd"].GetString());
+        Assert.Equal(0, payload["exitCode"].GetInt32());
+        Assert.False(payload["timedOut"].GetBoolean());
+        Assert.False(payload["stdoutTruncated"].GetBoolean());
+        Assert.False(payload["stderrTruncated"].GetBoolean());
+        Assert.Equal("approved", payload["approvalStatus"].GetString());
+        Assert.False(payload.ContainsKey("stdout"));
+        Assert.False(payload.ContainsKey("stderr"));
     }
 
     [Fact]
@@ -35,8 +46,12 @@ public sealed class WorkspaceShellToolTests
             """{"command":"dotnet --version"}"""));
 
         Assert.False(result.Succeeded);
-        Assert.Equal("approval-denied", result.ErrorCode);
+        Assert.Equal(ToolErrorCode.ApprovalDenied, result.ErrorCode);
         Assert.Equal("denied", result.ApprovalStatus);
+        IReadOnlyDictionary<string, JsonElement> payload = AssertPayload(result);
+        Assert.Equal("dotnet --version", payload["command"].GetString());
+        Assert.Equal(".", payload["cwd"].GetString());
+        Assert.Equal("denied", payload["approvalStatus"].GetString());
     }
 
     [Fact]
@@ -120,6 +135,53 @@ public sealed class WorkspaceShellToolTests
         Assert.False(result.Succeeded);
         Assert.Equal("dangerous-command-denied", result.ErrorCode);
         Assert.Equal("approved", result.ApprovalStatus);
+        IReadOnlyDictionary<string, JsonElement> payload = AssertPayload(result);
+        Assert.Equal("rm -rf .", payload["command"].GetString());
+        Assert.Equal(".", payload["cwd"].GetString());
+        Assert.Equal(JsonValueKind.Null, payload["exitCode"].ValueKind);
+        Assert.False(payload["timedOut"].GetBoolean());
+        Assert.False(payload["stdoutTruncated"].GetBoolean());
+        Assert.False(payload["stderrTruncated"].GetBoolean());
+        Assert.Equal("approved", payload["approvalStatus"].GetString());
+    }
+
+    [Fact]
+    public void Execute_returns_payload_for_invalid_arguments()
+    {
+        using TempDirectory temp = TempDirectory.Create();
+        WorkspaceShellTool tool = new(
+            new RestrictedShellRunner(new WorkspaceGuard()),
+            new AlwaysApproveApprovalPolicy());
+
+        ToolExecutionResult result = tool.Execute(CreateContext(temp.Path, "{}"));
+
+        Assert.False(result.Succeeded);
+        Assert.Equal(ToolErrorCode.InvalidToolArguments, result.ErrorCode);
+        IReadOnlyDictionary<string, JsonElement> payload = AssertPayload(result);
+        Assert.Equal(ToolErrorCode.InvalidToolArguments, payload["errorCode"].GetString());
+        Assert.Equal("workspace.run_shell", payload["toolName"].GetString());
+        Assert.Equal("command", payload["argument"].GetString());
+    }
+
+    [Theory]
+    [InlineData("[]")]
+    [InlineData("\"text\"")]
+    public void Execute_returns_argument_failure_for_non_object_root(string argumentsJson)
+    {
+        using TempDirectory temp = TempDirectory.Create();
+        WorkspaceShellTool tool = new(
+            new RestrictedShellRunner(new WorkspaceGuard()),
+            new AlwaysApproveApprovalPolicy());
+
+        ToolExecutionResult result = tool.Execute(CreateContext(temp.Path, argumentsJson));
+
+        Assert.False(result.Succeeded);
+        Assert.Equal(ToolErrorCode.InvalidToolArguments, result.ErrorCode);
+        Assert.Equal("Tool arguments must be a JSON object.", result.Summary);
+        IReadOnlyDictionary<string, JsonElement> payload = AssertPayload(result);
+        Assert.Equal(ToolErrorCode.InvalidToolArguments, payload["errorCode"].GetString());
+        Assert.Equal("workspace.run_shell", payload["toolName"].GetString());
+        Assert.Equal("arguments", payload["argument"].GetString());
     }
 
     [Fact]
@@ -174,6 +236,11 @@ public sealed class WorkspaceShellToolTests
             "call_shell",
             WorkspaceContext.Detect(workspaceRoot, workspaceRoot),
             argumentsJson);
+    }
+
+    private static IReadOnlyDictionary<string, JsonElement> AssertPayload(ToolExecutionResult result)
+    {
+        return result.StructuredPayload ?? throw new InvalidOperationException("Structured payload was not set.");
     }
 
     private static string CreateSleepCommand()

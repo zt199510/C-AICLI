@@ -144,7 +144,7 @@ internal sealed class GitCommandRunner : IGitCommandRunner
                 Stderr: timedOutTruncatedStderr.Text,
                 StdoutTruncated: timedOutTruncatedStdout.Truncated,
                 StderrTruncated: timedOutTruncatedStderr.Truncated,
-                ErrorCode: "git-timeout",
+                ErrorCode: ToolErrorCode.GitTimeout,
                 Summary: "Git command timed out.");
         }
 
@@ -158,7 +158,7 @@ internal sealed class GitCommandRunner : IGitCommandRunner
             Stderr: stderr.Text,
             StdoutTruncated: stdout.Truncated,
             StderrTruncated: stderr.Truncated,
-            ErrorCode: succeeded ? null : "git-command-failed",
+            ErrorCode: succeeded ? null : ToolErrorCode.GitCommandFailed,
             Summary: succeeded
                 ? $"Git command completed with exit code {process.ExitCode}."
                 : $"Git command failed with exit code {process.ExitCode}.");
@@ -191,7 +191,7 @@ internal sealed class GitCommandRunner : IGitCommandRunner
                 Stderr: timedOutTruncatedStderr.Text,
                 StdoutTruncated: false,
                 StderrTruncated: timedOutTruncatedStderr.Truncated,
-                ErrorCode: "git-timeout",
+                ErrorCode: ToolErrorCode.GitTimeout,
                 Summary: "Git command timed out.");
         }
 
@@ -205,7 +205,7 @@ internal sealed class GitCommandRunner : IGitCommandRunner
             Stderr: stderr.Text,
             StdoutTruncated: false,
             StderrTruncated: stderr.Truncated,
-            ErrorCode: succeeded ? null : "git-command-failed",
+            ErrorCode: succeeded ? null : ToolErrorCode.GitCommandFailed,
             Summary: succeeded
                 ? $"Git command completed with exit code {process.ExitCode}."
                 : $"Git command failed with exit code {process.ExitCode}.");
@@ -220,7 +220,7 @@ internal sealed class GitCommandRunner : IGitCommandRunner
             Stderr: string.Empty,
             StdoutTruncated: false,
             StderrTruncated: false,
-            ErrorCode: "git-unavailable",
+            ErrorCode: ToolErrorCode.GitUnavailable,
             Summary: "Git command could not be started.");
     }
 

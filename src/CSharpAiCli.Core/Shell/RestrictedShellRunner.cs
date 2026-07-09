@@ -28,13 +28,13 @@ public sealed class RestrictedShellRunner : IShellRunner
         if (!cwdResult.IsAllowed || cwdResult.FullPath is null || !Directory.Exists(cwdResult.FullPath))
         {
             return ShellCommandResult.Failure(
-                cwdResult.ErrorCode ?? "shell-cwd-denied",
+                cwdResult.ErrorCode ?? ToolErrorCode.ShellCwdDenied,
                 cwdResult.SafeMessage.Length == 0 ? "Shell cwd must be inside the workspace." : cwdResult.SafeMessage);
         }
 
         if (DangerousCommandDetector.IsDangerous(request.Command, out string dangerReason))
         {
-            return ShellCommandResult.Failure("dangerous-command-denied", dangerReason);
+            return ShellCommandResult.Failure(ToolErrorCode.DangerousCommandDenied, dangerReason);
         }
 
         int timeoutMilliseconds = request.TimeoutMilliseconds > 0 ? request.TimeoutMilliseconds : 30_000;
@@ -70,7 +70,7 @@ public sealed class RestrictedShellRunner : IShellRunner
                     TimedOut: true,
                     StdoutTruncated: stdout.Truncated,
                     StderrTruncated: stderr.Truncated,
-                    ErrorCode: "shell-timeout",
+                    ErrorCode: ToolErrorCode.ShellTimeout,
                     Summary: $"Shell command timed out after {timeoutMilliseconds} ms.");
             }
 
@@ -87,7 +87,7 @@ public sealed class RestrictedShellRunner : IShellRunner
                 TimedOut: false,
                 StdoutTruncated: truncatedStdout.Truncated,
                 StderrTruncated: truncatedStderr.Truncated,
-                ErrorCode: succeeded ? null : "shell-exit-code",
+                ErrorCode: succeeded ? null : ToolErrorCode.ShellExitCode,
                 Summary: succeeded
                     ? $"Shell command completed with exit code {process.ExitCode}."
                     : $"Shell command failed with exit code {process.ExitCode}.");
@@ -98,7 +98,7 @@ public sealed class RestrictedShellRunner : IShellRunner
             or System.ComponentModel.Win32Exception)
         {
             return ShellCommandResult.Failure(
-                "shell-execution-failed",
+                ToolErrorCode.ShellExecutionFailed,
                 "Shell command could not be started safely.");
         }
     }

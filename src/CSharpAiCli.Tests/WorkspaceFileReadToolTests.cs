@@ -1,4 +1,6 @@
 using CSharpAiCli.Core;
+using System.Text;
+using System.Text.Json;
 
 namespace CSharpAiCli.Tests;
 
@@ -15,6 +17,11 @@ public sealed class WorkspaceFileReadToolTests
 
         Assert.True(result.Succeeded);
         Assert.Equal("hello workspace", result.Summary);
+        IReadOnlyDictionary<string, JsonElement> payload = AssertPayload(result);
+        Assert.Equal("notes.txt", payload["path"].GetString());
+        Assert.Equal(Encoding.UTF8.GetByteCount("hello workspace"), payload["byteCount"].GetInt64());
+        Assert.Equal("hello workspace".Length, payload["characterCount"].GetInt32());
+        Assert.False(payload.ContainsKey("content"));
     }
 
     [Fact]
@@ -41,7 +48,9 @@ public sealed class WorkspaceFileReadToolTests
         ToolExecutionResult result = tool.Execute(CreateContext(temp.Path, """{"path":"missing.txt"}"""));
 
         Assert.False(result.Succeeded);
-        Assert.Equal("file-not-found", result.ErrorCode);
+        Assert.Equal(ToolErrorCode.FileNotFound, result.ErrorCode);
+        IReadOnlyDictionary<string, JsonElement> payload = AssertPayload(result);
+        Assert.Equal("missing.txt", payload["path"].GetString());
     }
 
     [Fact]
@@ -54,8 +63,12 @@ public sealed class WorkspaceFileReadToolTests
         ToolExecutionResult result = tool.Execute(CreateContext(temp.Path, """{"path":"large.txt"}"""));
 
         Assert.False(result.Succeeded);
-        Assert.Equal("file-too-large", result.ErrorCode);
+        Assert.Equal(ToolErrorCode.FileTooLarge, result.ErrorCode);
         Assert.DoesNotContain("sk-secret", result.Summary, StringComparison.Ordinal);
+        IReadOnlyDictionary<string, JsonElement> payload = AssertPayload(result);
+        Assert.Equal("large.txt", payload["path"].GetString());
+        Assert.Equal(23, payload["byteCount"].GetInt64());
+        Assert.Equal(4, payload["maxFileBytes"].GetInt64());
     }
 
     [Fact]
@@ -68,7 +81,10 @@ public sealed class WorkspaceFileReadToolTests
         ToolExecutionResult result = tool.Execute(CreateContext(temp.Path, """{"path":"binary.bin"}"""));
 
         Assert.False(result.Succeeded);
-        Assert.Equal("binary-file-not-supported", result.ErrorCode);
+        Assert.Equal(ToolErrorCode.BinaryFileNotSupported, result.ErrorCode);
+        IReadOnlyDictionary<string, JsonElement> payload = AssertPayload(result);
+        Assert.Equal("binary.bin", payload["path"].GetString());
+        Assert.Equal(3, payload["byteCount"].GetInt64());
     }
 
     [Fact]
@@ -80,13 +96,41 @@ public sealed class WorkspaceFileReadToolTests
         ToolExecutionResult result = tool.Execute(CreateContext(temp.Path, "{}"));
 
         Assert.False(result.Succeeded);
-        Assert.Equal("invalid-tool-arguments", result.ErrorCode);
+        Assert.Equal(ToolErrorCode.InvalidToolArguments, result.ErrorCode);
+        IReadOnlyDictionary<string, JsonElement> payload = AssertPayload(result);
+        Assert.Equal(ToolErrorCode.InvalidToolArguments, payload["errorCode"].GetString());
+        Assert.Equal("workspace.read_text", payload["toolName"].GetString());
+        Assert.Equal("path", payload["argument"].GetString());
+    }
+
+    [Theory]
+    [InlineData("[]")]
+    [InlineData("\"text\"")]
+    public void Execute_returns_argument_failure_for_non_object_root(string argumentsJson)
+    {
+        using TempDirectory temp = TempDirectory.Create();
+        WorkspaceFileReadTool tool = new(new WorkspaceGuard());
+
+        ToolExecutionResult result = tool.Execute(CreateContext(temp.Path, argumentsJson));
+
+        Assert.False(result.Succeeded);
+        Assert.Equal(ToolErrorCode.InvalidToolArguments, result.ErrorCode);
+        Assert.Equal("Tool arguments must be a JSON object.", result.Summary);
+        IReadOnlyDictionary<string, JsonElement> payload = AssertPayload(result);
+        Assert.Equal(ToolErrorCode.InvalidToolArguments, payload["errorCode"].GetString());
+        Assert.Equal("workspace.read_text", payload["toolName"].GetString());
+        Assert.Equal("arguments", payload["argument"].GetString());
     }
 
     private static ToolExecutionContext CreateContext(string workspaceRoot, string argumentsJson)
     {
         WorkspaceContext workspace = WorkspaceContext.Detect(workspaceRoot, workspaceRoot);
         return new ToolExecutionContext("call_read", workspace, argumentsJson);
+    }
+
+    private static IReadOnlyDictionary<string, JsonElement> AssertPayload(ToolExecutionResult result)
+    {
+        return result.StructuredPayload ?? throw new InvalidOperationException("Structured payload was not set.");
     }
 
     private sealed class TempDirectory : IDisposable

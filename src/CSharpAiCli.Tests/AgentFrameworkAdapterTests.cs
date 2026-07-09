@@ -50,6 +50,18 @@ public sealed class AgentFrameworkAdapterTests
     }
 
     [Fact]
+    public void Tool_bridge_normalizes_framework_tool_parameter_schemas()
+    {
+        ToolRegistry registry = new();
+        registry.Register(new NonObjectSchemaTool());
+        MicrosoftToolBridge bridge = new(registry);
+
+        MicrosoftFrameworkToolDefinition definition = Assert.Single(bridge.ListFrameworkToolDefinitions());
+
+        Assert.Equal("""{"type":"object"}""", definition.ParametersSchema);
+    }
+
+    [Fact]
     public void Tool_bridge_invokes_read_and_search_tools_through_core_executor()
     {
         using TempDirectory temp = TempDirectory.Create();
@@ -136,6 +148,21 @@ public sealed class AgentFrameworkAdapterTests
             "test.echo",
             "Echo tool.",
             """{"type":"object"}""");
+
+        public ToolExecutionResult Execute(
+            ToolExecutionContext context,
+            CancellationToken cancellationToken = default)
+        {
+            return ToolExecutionResult.Success(context.ArgumentsJson);
+        }
+    }
+
+    private sealed class NonObjectSchemaTool : ITool
+    {
+        public ToolDefinition Definition { get; } = new(
+            "test.non_object_schema",
+            "Tool with a non-object schema.",
+            "[]");
 
         public ToolExecutionResult Execute(
             ToolExecutionContext context,

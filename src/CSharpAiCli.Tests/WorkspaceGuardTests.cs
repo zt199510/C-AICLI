@@ -35,7 +35,7 @@ public sealed class WorkspaceGuardTests
         WorkspaceGuardResult result = guard.ResolvePath(workspace, "..\\outside.txt");
 
         Assert.False(result.IsAllowed);
-        Assert.Equal("workspace-boundary-denied", result.ErrorCode);
+        Assert.Equal(ToolErrorCode.WorkspaceBoundaryDenied, result.ErrorCode);
     }
 
     [Fact]
@@ -52,7 +52,7 @@ public sealed class WorkspaceGuardTests
         WorkspaceGuardResult result = guard.ResolvePath(workspace, outside);
 
         Assert.False(result.IsAllowed);
-        Assert.Equal("workspace-boundary-denied", result.ErrorCode);
+        Assert.Equal(ToolErrorCode.WorkspaceBoundaryDenied, result.ErrorCode);
     }
 
     [Fact]
@@ -69,7 +69,7 @@ public sealed class WorkspaceGuardTests
         WorkspaceGuardResult result = guard.ResolvePath(workspace, siblingRoot);
 
         Assert.False(result.IsAllowed);
-        Assert.Equal("workspace-boundary-denied", result.ErrorCode);
+        Assert.Equal(ToolErrorCode.WorkspaceBoundaryDenied, result.ErrorCode);
     }
 
     [Fact]
@@ -83,7 +83,7 @@ public sealed class WorkspaceGuardTests
         WorkspaceGuardResult result = guard.ResolvePath(workspace, "notes.txt");
 
         Assert.False(result.IsAllowed);
-        Assert.Equal("workspace-unavailable", result.ErrorCode);
+        Assert.Equal(ToolErrorCode.WorkspaceUnavailable, result.ErrorCode);
     }
 
     [Fact]
@@ -115,7 +115,7 @@ public sealed class WorkspaceGuardTests
         WorkspaceGuardResult result = guard.ResolvePath(workspace, Path.Combine("linked", "secret.txt"));
 
         Assert.False(result.IsAllowed);
-        Assert.Equal("workspace-boundary-denied", result.ErrorCode);
+        Assert.Equal(ToolErrorCode.WorkspaceBoundaryDenied, result.ErrorCode);
     }
 
     private sealed class TempDirectory : IDisposable

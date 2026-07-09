@@ -172,7 +172,22 @@ This deterministic smoke task creates or updates `caicli-smoke.txt` in the works
 artifacts\release\caicli-0.1.0-win-x64\caicli.exe tools list --workspace .
 ```
 
-For JSON-heavy tool calls on Windows PowerShell, prefer an argument file:
+Text `tools list` continues to print the enabled tools. For automation, use `--json`; the output is a stable object with `type: "tools.list"`, sorted `tools[]` entries, and sorted `disabledTools[]`. Each tool entry includes `name`, `description`, `riskLevel`, and normalized `parameters` schema metadata.
+
+```powershell
+$toolList = artifacts\release\caicli-0.1.0-win-x64\caicli.exe tools list --workspace . --json | ConvertFrom-Json
+$toolList.type
+$toolList.tools | Select-Object name, riskLevel
+$toolList.disabledTools
+```
+
+`tools call` accepts inline JSON, an argument file, or JSON from stdin. Use `--stdin` for pipeline-friendly calls:
+
+```powershell
+@{ path = "README.md" } | ConvertTo-Json -Compress | artifacts\release\caicli-0.1.0-win-x64\caicli.exe tools call --workspace . workspace.read_text --stdin
+```
+
+`--stdin` cannot be combined with `--arguments-file` or positional inline JSON. For JSON-heavy tool calls on Windows PowerShell, an argument file remains a good option:
 
 ```powershell
 Set-Content -Path args.json -Value '{"path":"README.md"}'
@@ -187,6 +202,8 @@ artifacts\release\caicli-0.1.0-win-x64\caicli.exe tools call --workspace . --app
 ```
 
 The legacy `--approve` option remains supported for compatibility. Dangerous shell commands are denied with `errorCode` `approval-denied` and `approvalStatus` `dangerous-shell-denied`, even under `--approval always` or legacy `--approve`.
+
+Tool failures use stable centralized `errorCode` values, so scripts and agent/runtime consumers should key off `errorCode` and `approvalStatus` instead of parsing human-readable summaries. Tool results may also carry structured payloads internally for agent/runtime consumption; the CLI text output keeps the compatible `status`, `approvalStatus`, optional `errorCode`, and `summary` shape.
 
 ## 12. Manage Sessions
 

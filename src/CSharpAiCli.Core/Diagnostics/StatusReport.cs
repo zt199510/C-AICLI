@@ -93,9 +93,9 @@ public sealed record StatusReport(IReadOnlyList<string> Lines)
     {
         return gitStatus.ErrorCode switch
         {
-            "git-not-repository" => "not a git repository",
-            "workspace-unavailable" => "unavailable (workspace unavailable)",
-            "invalid-workspace-path" => "unavailable (invalid workspace path)",
+            ToolErrorCode.GitNotRepository => "not a git repository",
+            ToolErrorCode.WorkspaceUnavailable => "unavailable (workspace unavailable)",
+            ToolErrorCode.InvalidWorkspacePath => "unavailable (invalid workspace path)",
             null or "" => "unavailable",
             _ => $"unavailable ({gitStatus.ErrorCode})"
         };

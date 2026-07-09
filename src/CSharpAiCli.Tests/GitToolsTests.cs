@@ -1,5 +1,6 @@
 using System.Diagnostics;
 using System.Text;
+using System.Text.Json;
 using CSharpAiCli.Core;
 
 namespace CSharpAiCli.Tests;
@@ -17,6 +18,10 @@ public sealed class GitToolsTests
 
         Assert.True(result.Succeeded);
         Assert.Equal("working tree clean", result.Summary);
+        IReadOnlyDictionary<string, JsonElement> payload = AssertPayload(result);
+        Assert.Equal("git status --short", payload["command"].GetString());
+        Assert.Equal(0, payload["exitCode"].GetInt32());
+        Assert.Equal("working tree clean".Length, payload["statusTextLength"].GetInt32());
     }
 
     [Fact]
@@ -46,6 +51,22 @@ public sealed class GitToolsTests
         Assert.True(result.Succeeded);
         Assert.Contains("diff --git", result.Summary, StringComparison.Ordinal);
         Assert.Contains("+changed", result.Summary, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Git_diff_returns_payload_for_invalid_arguments()
+    {
+        using TempDirectory temp = TempDirectory.Create();
+        GitDiffTool tool = new(new WorkspaceGuard());
+
+        ToolExecutionResult result = tool.Execute(CreateContext(temp.Path, """{"stat":"yes"}"""));
+
+        Assert.False(result.Succeeded);
+        Assert.Equal(ToolErrorCode.InvalidToolArguments, result.ErrorCode);
+        IReadOnlyDictionary<string, JsonElement> payload = AssertPayload(result);
+        Assert.Equal(ToolErrorCode.InvalidToolArguments, payload["errorCode"].GetString());
+        Assert.Equal("git.diff", payload["toolName"].GetString());
+        Assert.Equal("stat", payload["argument"].GetString());
     }
 
     [Fact]
@@ -82,6 +103,11 @@ public sealed class GitToolsTests
         DateTime indexAfter = File.GetLastWriteTimeUtc(indexPath);
         Assert.True(result.Succeeded);
         Assert.Equal("no diff", result.Summary);
+        IReadOnlyDictionary<string, JsonElement> payload = AssertPayload(result);
+        Assert.False(payload["stat"].GetBoolean());
+        Assert.False(payload["truncated"].GetBoolean());
+        Assert.Equal("no diff".Length, payload["outputCharacterCount"].GetInt32());
+        Assert.Equal(Encoding.UTF8.GetByteCount("no diff"), payload["outputByteCount"].GetInt32());
         Assert.Equal(indexBefore, indexAfter);
     }
 
@@ -1119,8 +1145,13 @@ public sealed class GitToolsTests
         ToolExecutionResult result = tool.Execute(CreateContext(temp.Path));
 
         Assert.False(result.Succeeded);
-        Assert.Equal("git-diff-failed", result.ErrorCode);
+        Assert.Equal(ToolErrorCode.GitDiffFailed, result.ErrorCode);
         Assert.Contains("Could not access", result.Summary, StringComparison.Ordinal);
+        IReadOnlyDictionary<string, JsonElement> payload = AssertPayload(result);
+        Assert.False(payload["stat"].GetBoolean());
+        Assert.False(payload["truncated"].GetBoolean());
+        Assert.Equal(ToolErrorCode.GitDiffFailed, payload["errorCode"].GetString());
+        Assert.Equal(1, payload["exitCode"].GetInt32());
     }
 
     [Fact]
@@ -1134,9 +1165,15 @@ public sealed class GitToolsTests
         ToolExecutionResult diff = diffTool.Execute(CreateContext(temp.Path));
 
         Assert.False(status.Succeeded);
-        Assert.Equal("git-not-repository", status.ErrorCode);
+        Assert.Equal(ToolErrorCode.GitNotRepository, status.ErrorCode);
+        IReadOnlyDictionary<string, JsonElement> statusPayload = AssertPayload(status);
+        Assert.Equal("git status --short", statusPayload["command"].GetString());
+        Assert.Equal(ToolErrorCode.GitNotRepository, statusPayload["errorCode"].GetString());
         Assert.False(diff.Succeeded);
-        Assert.Equal("git-not-repository", diff.ErrorCode);
+        Assert.Equal(ToolErrorCode.GitNotRepository, diff.ErrorCode);
+        IReadOnlyDictionary<string, JsonElement> diffPayload = AssertPayload(diff);
+        Assert.False(diffPayload["stat"].GetBoolean());
+        Assert.Equal(ToolErrorCode.GitNotRepository, diffPayload["errorCode"].GetString());
     }
 
     [Fact]
@@ -1157,6 +1194,11 @@ public sealed class GitToolsTests
             "call_git",
             WorkspaceContext.Detect(workspaceRoot, workspaceRoot),
             argumentsJson);
+    }
+
+    private static IReadOnlyDictionary<string, JsonElement> AssertPayload(ToolExecutionResult result)
+    {
+        return result.StructuredPayload ?? throw new InvalidOperationException("Structured payload was not set.");
     }
 
     private static void InitializeNoHeadGitRepository(string root)

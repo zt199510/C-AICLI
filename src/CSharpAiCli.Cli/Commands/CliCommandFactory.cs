@@ -2,6 +2,7 @@ using System.CommandLine;
 using System.CommandLine.Parsing;
 using System.Globalization;
 using System.Text.Json;
+using System.Text.Json.Nodes;
 using CSharpAiCli.Core;
 
 namespace CSharpAiCli.Cli;
@@ -13,6 +14,8 @@ public static class CliCommandFactory
 
     private const string SessionStoreErrorSummary =
         "Conversation session store operation failed.";
+
+    private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web);
 
     public static RootCommand Create(TextWriter output)
     {
@@ -34,6 +37,17 @@ public static class CliCommandFactory
             (_, _) => { },
             snapshot => OpenAiResponsesModelClient.Create(snapshot),
             writer => new TerminalChatStreamingRenderer(writer));
+    }
+
+    public static RootCommand Create(TextWriter output, Func<string?, CliEnvironmentSnapshot> snapshotProvider, TextReader input)
+    {
+        return Create(
+            output,
+            snapshotProvider,
+            (_, _) => { },
+            snapshot => OpenAiResponsesModelClient.Create(snapshot),
+            writer => new TerminalChatStreamingRenderer(writer),
+            input);
     }
 
     public static RootCommand Create(
@@ -79,6 +93,26 @@ public static class CliCommandFactory
             snapshot => FileConversationStore.Create(snapshot),
             () => DateTimeOffset.UtcNow,
             CreateDefaultExecAgentRunner);
+    }
+
+    private static RootCommand Create(
+        TextWriter output,
+        Func<string?, CliEnvironmentSnapshot> snapshotProvider,
+        Action<string, CliEnvironmentSnapshot> commandLogger,
+        Func<CliEnvironmentSnapshot, IChatModelClient> chatModelClientFactory,
+        Func<TextWriter, IChatStreamingRenderer> streamingRendererFactory,
+        TextReader input)
+    {
+        return Create(
+            output,
+            (workspacePath, _) => snapshotProvider(workspacePath),
+            commandLogger,
+            chatModelClientFactory,
+            streamingRendererFactory,
+            snapshot => FileConversationStore.Create(snapshot),
+            () => DateTimeOffset.UtcNow,
+            CreateDefaultExecAgentRunner,
+            input);
     }
 
     public static RootCommand Create(
@@ -152,6 +186,29 @@ public static class CliCommandFactory
         Func<DateTimeOffset> utcNowProvider,
         Func<CliEnvironmentSnapshot, ToolRegistry, IToolExecutor, IAgentRunner> execAgentRunnerFactory)
     {
+        return Create(
+            output,
+            snapshotProvider,
+            commandLogger,
+            chatModelClientFactory,
+            streamingRendererFactory,
+            conversationStoreFactory,
+            utcNowProvider,
+            execAgentRunnerFactory,
+            Console.In);
+    }
+
+    private static RootCommand Create(
+        TextWriter output,
+        Func<string?, string?, CliEnvironmentSnapshot> snapshotProvider,
+        Action<string, CliEnvironmentSnapshot> commandLogger,
+        Func<CliEnvironmentSnapshot, IChatModelClient> chatModelClientFactory,
+        Func<TextWriter, IChatStreamingRenderer> streamingRendererFactory,
+        Func<CliEnvironmentSnapshot, IConversationStore> conversationStoreFactory,
+        Func<DateTimeOffset> utcNowProvider,
+        Func<CliEnvironmentSnapshot, ToolRegistry, IToolExecutor, IAgentRunner> execAgentRunnerFactory,
+        TextReader input)
+    {
         ArgumentNullException.ThrowIfNull(output);
         ArgumentNullException.ThrowIfNull(snapshotProvider);
         ArgumentNullException.ThrowIfNull(commandLogger);
@@ -160,6 +217,7 @@ public static class CliCommandFactory
         ArgumentNullException.ThrowIfNull(conversationStoreFactory);
         ArgumentNullException.ThrowIfNull(utcNowProvider);
         ArgumentNullException.ThrowIfNull(execAgentRunnerFactory);
+        ArgumentNullException.ThrowIfNull(input);
 
         Func<string?, CliEnvironmentSnapshot> workspaceSnapshotProvider =
             workspacePath => snapshotProvider(workspacePath, null);
@@ -419,12 +477,23 @@ public static class CliCommandFactory
 
         Command toolsCommand = new("tools", "Inspect and invoke local workspace tools.");
         Command toolsListCommand = new("list", "List enabled local tools.");
+        Option<bool> toolsListJsonOption = new("--json")
+        {
+            Description = "Write the tool list as JSON.",
+        };
+        toolsListCommand.Options.Add(toolsListJsonOption);
         toolsListCommand.SetAction(parseResult =>
         {
             string? workspacePath = parseResult.GetValue(workspaceOption);
             CliEnvironmentSnapshot snapshot = workspaceSnapshotProvider(workspacePath);
             TryWriteCommandLog(commandLogger, "tools list", snapshot);
             ToolRegistry registry = CliToolFactory.CreateRegistry(snapshot, new DefaultDenyApprovalPolicy());
+            if (parseResult.GetValue(toolsListJsonOption))
+            {
+                output.WriteLine(JsonSerializer.Serialize(CreateToolsListJson(registry, snapshot.Configuration.DisabledTools), JsonOptions));
+                return 0;
+            }
+
             foreach (ToolDefinition definition in registry.List().OrderBy(definition => definition.Name, StringComparer.Ordinal))
             {
                 output.WriteLine($"{definition.Name}: {definition.Description}");
@@ -461,18 +530,44 @@ public static class CliCommandFactory
         {
             Description = "Read JSON object arguments from a file.",
         };
+        Option<bool> toolStdinOption = new("--stdin")
+        {
+            Description = "Read JSON object arguments from stdin.",
+        };
         toolsCallCommand.Arguments.Add(toolNameArgument);
         toolsCallCommand.Arguments.Add(toolArgumentsArgument);
         toolsCallCommand.Options.Add(toolsApproveOption);
         toolsCallCommand.Options.Add(toolsApprovalOption);
         toolsCallCommand.Options.Add(toolArgumentsFileOption);
+        toolsCallCommand.Options.Add(toolStdinOption);
+        toolsCallCommand.Validators.Add(result =>
+        {
+            if (!result.GetValue(toolStdinOption))
+            {
+                return;
+            }
+
+            if (result.GetResult(toolArgumentsFileOption) is OptionResult { Implicit: false })
+            {
+                result.AddError("--stdin cannot be used with --arguments-file.");
+            }
+
+            if ((result.GetResult(toolArgumentsArgument)?.Tokens.Count ?? 0) > 0)
+            {
+                result.AddError("--stdin cannot be used with positional arguments.");
+            }
+        });
         toolsCallCommand.SetAction(parseResult =>
         {
             string? workspacePath = parseResult.GetValue(workspaceOption);
             string toolName = parseResult.GetValue(toolNameArgument) ?? string.Empty;
             string argumentsJson = parseResult.GetValue(toolArgumentsArgument) ?? "{}";
             string? argumentsFile = parseResult.GetValue(toolArgumentsFileOption);
-            if (!string.IsNullOrWhiteSpace(argumentsFile))
+            if (parseResult.GetValue(toolStdinOption))
+            {
+                argumentsJson = input.ReadToEnd();
+            }
+            else if (!string.IsNullOrWhiteSpace(argumentsFile))
             {
                 argumentsJson = File.ReadAllText(argumentsFile);
             }
@@ -1172,6 +1267,35 @@ public static class CliCommandFactory
         }
 
         renderer.WriteResult(result);
+    }
+
+    private static JsonObject CreateToolsListJson(ToolRegistry registry, IReadOnlySet<string> disabledTools)
+    {
+        JsonArray tools = [];
+        foreach (ToolDefinition definition in registry.List().OrderBy(definition => definition.Name, StringComparer.Ordinal))
+        {
+            RenderedToolDefinition rendered = ToolSchemaRenderer.Render(definition);
+            tools.Add(new JsonObject
+            {
+                ["name"] = rendered.Name,
+                ["description"] = rendered.Description,
+                ["riskLevel"] = rendered.RiskLevel,
+                ["parameters"] = ToolSchemaRenderer.RenderParametersSchemaObject(definition)
+            });
+        }
+
+        JsonArray disabledToolNames = [];
+        foreach (string toolName in disabledTools.OrderBy(toolName => toolName, StringComparer.Ordinal))
+        {
+            disabledToolNames.Add(toolName);
+        }
+
+        return new JsonObject
+        {
+            ["type"] = "tools.list",
+            ["tools"] = tools,
+            ["disabledTools"] = disabledToolNames
+        };
     }
 
     private static void WriteToolResult(TextWriter output, ToolExecutionResult result)

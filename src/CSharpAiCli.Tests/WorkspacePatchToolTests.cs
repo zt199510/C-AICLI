@@ -1,4 +1,5 @@
 using CSharpAiCli.Core;
+using System.Text.Json;
 
 namespace CSharpAiCli.Tests;
 
@@ -19,6 +20,11 @@ public sealed class WorkspacePatchToolTests
         Assert.True(result.Succeeded);
         Assert.Equal("approved", result.ApprovalStatus);
         Assert.Equal("hi world", File.ReadAllText(filePath));
+        IReadOnlyDictionary<string, JsonElement> payload = AssertPayload(result);
+        Assert.Equal("notes.txt", payload["path"].GetString());
+        Assert.Equal("approved", payload["approvalStatus"].GetString());
+        Assert.Equal(1, payload["replacements"].GetInt32());
+        Assert.True(payload["hasDiff"].GetBoolean());
     }
 
     [Fact]
@@ -34,9 +40,14 @@ public sealed class WorkspacePatchToolTests
             """{"path":"notes.txt","find":"hello","replace":"hi"}"""));
 
         Assert.False(result.Succeeded);
-        Assert.Equal("approval-denied", result.ErrorCode);
+        Assert.Equal(ToolErrorCode.ApprovalDenied, result.ErrorCode);
         Assert.Equal("denied", result.ApprovalStatus);
         Assert.Equal("hello world", File.ReadAllText(filePath));
+        IReadOnlyDictionary<string, JsonElement> payload = AssertPayload(result);
+        Assert.Equal("notes.txt", payload["path"].GetString());
+        Assert.Equal("denied", payload["approvalStatus"].GetString());
+        Assert.Equal(1, payload["replacements"].GetInt32());
+        Assert.True(payload["hasDiff"].GetBoolean());
     }
 
     [Fact]
@@ -79,7 +90,30 @@ public sealed class WorkspacePatchToolTests
         ToolExecutionResult result = tool.Execute(CreateContext(temp.Path, """{"path":"notes.txt"}"""));
 
         Assert.False(result.Succeeded);
-        Assert.Equal("invalid-tool-arguments", result.ErrorCode);
+        Assert.Equal(ToolErrorCode.InvalidToolArguments, result.ErrorCode);
+        IReadOnlyDictionary<string, JsonElement> payload = AssertPayload(result);
+        Assert.Equal(ToolErrorCode.InvalidToolArguments, payload["errorCode"].GetString());
+        Assert.Equal("workspace.apply_patch", payload["toolName"].GetString());
+        Assert.Equal("find", payload["argument"].GetString());
+    }
+
+    [Theory]
+    [InlineData("[]")]
+    [InlineData("\"text\"")]
+    public void Execute_returns_argument_failure_for_non_object_root(string argumentsJson)
+    {
+        using TempDirectory temp = TempDirectory.Create();
+        WorkspacePatchTool tool = CreateTool(new AlwaysApproveApprovalPolicy());
+
+        ToolExecutionResult result = tool.Execute(CreateContext(temp.Path, argumentsJson));
+
+        Assert.False(result.Succeeded);
+        Assert.Equal(ToolErrorCode.InvalidToolArguments, result.ErrorCode);
+        Assert.Equal("Tool arguments must be a JSON object.", result.Summary);
+        IReadOnlyDictionary<string, JsonElement> payload = AssertPayload(result);
+        Assert.Equal(ToolErrorCode.InvalidToolArguments, payload["errorCode"].GetString());
+        Assert.Equal("workspace.apply_patch", payload["toolName"].GetString());
+        Assert.Equal("arguments", payload["argument"].GetString());
     }
 
     [Fact]
@@ -96,7 +130,11 @@ public sealed class WorkspacePatchToolTests
             CreateContext(temp.Path, """{"path":"notes.txt","find":"missing","replace":"hi"}"""));
 
         Assert.False(result.Succeeded);
-        Assert.Equal("patch-context-not-found", result.ErrorCode);
+        Assert.Equal(ToolErrorCode.PatchContextNotFound, result.ErrorCode);
+        IReadOnlyDictionary<string, JsonElement> payload = AssertPayload(result);
+        Assert.Equal("notes.txt", payload["path"].GetString());
+        Assert.Equal(ToolErrorCode.PatchContextNotFound, payload["errorCode"].GetString());
+        Assert.False(payload.ContainsKey("hasDiff"));
     }
 
     [Fact]
@@ -112,8 +150,13 @@ public sealed class WorkspacePatchToolTests
             """{"path":"notes.txt","find":"before","replace":"after"}"""));
 
         Assert.False(result.Succeeded);
-        Assert.Equal("patch-apply-failed", result.ErrorCode);
+        Assert.Equal(ToolErrorCode.PatchApplyFailed, result.ErrorCode);
         Assert.Equal("approved", result.ApprovalStatus);
+        IReadOnlyDictionary<string, JsonElement> payload = AssertPayload(result);
+        Assert.Equal("notes.txt", payload["path"].GetString());
+        Assert.Equal("approved", payload["approvalStatus"].GetString());
+        Assert.Equal(1, payload["replacements"].GetInt32());
+        Assert.True(payload["hasDiff"].GetBoolean());
     }
 
     [Fact]
@@ -159,6 +202,11 @@ public sealed class WorkspacePatchToolTests
             "call_patch",
             WorkspaceContext.Detect(workspaceRoot, workspaceRoot),
             argumentsJson);
+    }
+
+    private static IReadOnlyDictionary<string, JsonElement> AssertPayload(ToolExecutionResult result)
+    {
+        return result.StructuredPayload ?? throw new InvalidOperationException("Structured payload was not set.");
     }
 
     private sealed class StaticDirtyWorkspaceDetector(DirtyWorkspaceStatus status) : IDirtyWorkspaceDetector

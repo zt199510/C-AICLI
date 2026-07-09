@@ -5,6 +5,8 @@ namespace CSharpAiCli.Core;
 
 public sealed class GitDiffTool : ITool
 {
+    private const string ToolName = "git.diff";
+
     public const string TruncationWarning = "WARNING: git output was truncated; diff is incomplete.";
     private const int MaxAggregateOutputBytes = 64 * 1024;
     private const string EmptyTreeHash = "4b825dc642cb6eb9a060e54bf8d69288fbee4904";
@@ -32,7 +34,7 @@ public sealed class GitDiffTool : ITool
     }
 
     public ToolDefinition Definition { get; } = new(
-        "git.diff",
+        ToolName,
         "Show git diff for the current workspace.",
         """{"type":"object","properties":{"stat":{"type":"boolean"}}}""",
         ToolRiskLevel.Read);
@@ -52,7 +54,11 @@ public sealed class GitDiffTool : ITool
         WorkspaceGuardResult guardResult = workspaceGuard.ResolvePath(context.Workspace, ".");
         if (!guardResult.IsAllowed || guardResult.FullPath is null)
         {
-            return guardResult.ToFailure();
+            string errorCode = guardResult.ErrorCode ?? ToolErrorCode.WorkspaceBoundaryDenied;
+            return ToolExecutionResult.Failure(
+                errorCode,
+                guardResult.SafeMessage,
+                structuredPayload: CreateGitDiffFailurePayload(stat, truncated: false, exitCode: null, errorCode: errorCode));
         }
 
         GitDiffReadResult diffResult = ReadCurrentDiff(guardResult.FullPath, stat);
@@ -69,7 +75,9 @@ public sealed class GitDiffTool : ITool
             output = AppendTruncationWarning(output);
         }
 
-        return ToolExecutionResult.Success(output);
+        return ToolExecutionResult.Success(
+            output,
+            structuredPayload: CreateGitDiffSuccessPayload(stat, diffResult.Truncated, output));
     }
 
     private GitDiffReadResult ReadCurrentDiff(string workspaceRoot, bool stat)
@@ -83,7 +91,7 @@ public sealed class GitDiffTool : ITool
             ["rev-parse", "--verify", "HEAD"]);
         if (!head.Succeeded && !IsMissingHead(head))
         {
-            return GitDiffReadResult.Failed(ToGitFailure(head));
+            return GitDiffReadResult.Failed(ToGitFailure(head, stat));
         }
 
         truncated |= IsTruncated(head);
@@ -93,7 +101,7 @@ public sealed class GitDiffTool : ITool
             CreateStagedDiffArguments(stat, hasHead));
         if (!stagedDiff.Succeeded)
         {
-            return GitDiffReadResult.Failed(ToGitFailure(stagedDiff));
+            return GitDiffReadResult.Failed(ToGitFailure(stagedDiff, stat));
         }
 
         truncated |= IsTruncated(stagedDiff);
@@ -104,7 +112,7 @@ public sealed class GitDiffTool : ITool
             ["diff-files", "--raw", "--no-ext-diff", "--no-textconv", "-z", "--", CliCommandLogPathspec]);
         if (!trackedFiles.Succeeded)
         {
-            return GitDiffReadResult.Failed(ToGitFailure(trackedFiles));
+            return GitDiffReadResult.Failed(ToGitFailure(trackedFiles, stat));
         }
 
         truncated |= IsTruncated(trackedFiles);
@@ -123,7 +131,7 @@ public sealed class GitDiffTool : ITool
                 stat);
             if (!IsSuccessfulNoIndexDiff(unstagedDiff))
             {
-                return GitDiffReadResult.Failed(ToGitFailure(unstagedDiff));
+                return GitDiffReadResult.Failed(ToGitFailure(unstagedDiff, stat));
             }
 
             truncated |= IsTruncated(unstagedDiff);
@@ -137,7 +145,7 @@ public sealed class GitDiffTool : ITool
             ["ls-files", "--others", "--exclude-standard", "-z"]);
         if (!untrackedFiles.Succeeded)
         {
-            return GitDiffReadResult.Failed(ToGitFailure(untrackedFiles));
+            return GitDiffReadResult.Failed(ToGitFailure(untrackedFiles, stat));
         }
 
         truncated |= IsTruncated(untrackedFiles);
@@ -161,7 +169,7 @@ public sealed class GitDiffTool : ITool
                 stat);
             if (!IsSuccessfulNoIndexDiff(untrackedDiff))
             {
-                return GitDiffReadResult.Failed(ToGitFailure(untrackedDiff));
+                return GitDiffReadResult.Failed(ToGitFailure(untrackedDiff, stat));
             }
 
             truncated |= IsTruncated(untrackedDiff);
@@ -634,11 +642,46 @@ public sealed class GitDiffTool : ITool
             : output.TrimEnd() + Environment.NewLine + Environment.NewLine + TruncationWarning;
     }
 
-    private static ToolExecutionResult ToGitFailure(GitCommandResult result)
+    private static IReadOnlyDictionary<string, JsonElement> CreateGitDiffSuccessPayload(
+        bool stat,
+        bool truncated,
+        string output)
     {
+        return ToolStructuredPayload.Create(
+            ("stat", stat),
+            ("truncated", truncated),
+            ("outputCharacterCount", output.Length),
+            ("outputByteCount", Encoding.UTF8.GetByteCount(output)));
+    }
+
+    private static IReadOnlyDictionary<string, JsonElement> CreateGitDiffFailurePayload(
+        bool stat,
+        bool truncated,
+        int? exitCode,
+        string errorCode,
+        string output = "")
+    {
+        return ToolStructuredPayload.Create(
+            ("stat", stat),
+            ("truncated", truncated),
+            ("outputCharacterCount", output.Length),
+            ("outputByteCount", Encoding.UTF8.GetByteCount(output)),
+            ("exitCode", exitCode),
+            ("errorCode", errorCode));
+    }
+
+    private static ToolExecutionResult ToGitFailure(GitCommandResult result, bool stat)
+    {
+        string errorCode = NormalizeGitError(result);
         return ToolExecutionResult.Failure(
-            NormalizeGitError(result),
-            string.IsNullOrWhiteSpace(result.Stderr) ? result.Summary : result.Stderr.Trim());
+            errorCode,
+            string.IsNullOrWhiteSpace(result.Stderr) ? result.Summary : result.Stderr.Trim(),
+            structuredPayload: CreateGitDiffFailurePayload(
+                stat,
+                IsTruncated(result),
+                result.ExitCode,
+                errorCode,
+                result.Stdout));
     }
 
     private static GitCommandResult GitDiffFailure(string summary)
@@ -650,7 +693,7 @@ public sealed class GitDiffTool : ITool
             Stderr: summary,
             StdoutTruncated: false,
             StderrTruncated: false,
-            ErrorCode: "git-diff-failed",
+            ErrorCode: ToolErrorCode.GitDiffFailed,
             Summary: summary);
     }
 
@@ -682,8 +725,9 @@ public sealed class GitDiffTool : ITool
             if (root.ValueKind != JsonValueKind.Object)
             {
                 failure = ToolExecutionResult.Failure(
-                    "invalid-tool-arguments",
-                    "Tool arguments must be a JSON object.");
+                    ToolErrorCode.InvalidToolArguments,
+                    "Tool arguments must be a JSON object.",
+                    structuredPayload: ToolStructuredPayload.InvalidArguments(ToolName, "arguments"));
                 return false;
             }
 
@@ -692,8 +736,9 @@ public sealed class GitDiffTool : ITool
                 if (statElement.ValueKind is not JsonValueKind.True and not JsonValueKind.False)
                 {
                     failure = ToolExecutionResult.Failure(
-                        "invalid-tool-arguments",
-                        "stat must be a boolean.");
+                        ToolErrorCode.InvalidToolArguments,
+                        "stat must be a boolean.",
+                        structuredPayload: ToolStructuredPayload.InvalidArguments(ToolName, "stat"));
                     return false;
                 }
 
@@ -705,8 +750,9 @@ public sealed class GitDiffTool : ITool
         catch (JsonException)
         {
             failure = ToolExecutionResult.Failure(
-                "invalid-tool-arguments",
-                "Tool arguments must be valid JSON.");
+                ToolErrorCode.InvalidToolArguments,
+                "Tool arguments must be valid JSON.",
+                structuredPayload: ToolStructuredPayload.InvalidArguments(ToolName, "arguments"));
             return false;
         }
     }
@@ -714,8 +760,8 @@ public sealed class GitDiffTool : ITool
     private static string NormalizeGitError(GitCommandResult result)
     {
         return result.Stderr.Contains("not a git repository", StringComparison.OrdinalIgnoreCase)
-            ? "git-not-repository"
-            : result.ErrorCode ?? "git-diff-failed";
+            ? ToolErrorCode.GitNotRepository
+            : result.ErrorCode ?? ToolErrorCode.GitDiffFailed;
     }
 
     private sealed record GitDiffReadResult(

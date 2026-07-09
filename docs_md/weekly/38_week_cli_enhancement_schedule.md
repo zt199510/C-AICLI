@@ -1,6 +1,6 @@
 # C# AI CLI Week 27-38 CLI 增强排期
 
-更新时间：2026-07-07
+更新时间：2026-07-09
 
 ## 目标
 
@@ -13,7 +13,10 @@
 - 第 28 周 `caicli exec`/NDJSON 事件流已验收，`exec` 与旧 `run` 兼容路径已进入 capability status。
 - 第 29 周 agent run loop v1 已稳固，fake/offline model 可驱动工具调用、结果回写和 transcript 事件。
 - 第 30 周审批与权限 profile 已验收，`approvalMode`、tool risk metadata、统一 approval resolver、`--approval`/`--approve` 兼容和 approvalStatus 事件已进入 release docs。
-- 已具备 `version`、`doctor`、`config get/list/set/unset`、`chat`、`chat --session`、`session export/clear`、`exec`、`run`、`tools list/call`、workspace read/search、patch、shell、git status/diff 和 Windows release package。
+- 第 31 周 session resume 与管理命令已完成文档和验证，`session list/show/rename/delete`、`chat/exec --resume` 和 markdown export 已进入 release docs。
+- 第 32 周项目指令与 `AGENTS.md` 兼容已验收，root-to-leaf 层级加载、`AICLI.md` fallback、`--cwd` instruction target 和 doctor/config source reporting 已固化。
+- 第 33 周 `status/diff/review/models` 已验收，diff/review 只读收集、truncation warning、local-only `models` 和离线 smoke 覆盖已进入 release docs。
+- 已具备 `version`、`doctor`、`config get/list/set/unset`、`chat`、`chat --session/--resume`、`session list/show/rename/delete/export/clear`、`exec`、`exec --resume`、`run`、`status`、`diff`、`review`、`models`、`tools list/call`、workspace read/search、patch、shell、git status/diff 和 Windows release package。
 - 已知 Deferred 能力包括真实 Microsoft Agent Framework backend、真实 MCP 协议执行、Gerber/TIFF 真实工作流和 dotnet tool package。
 - 本排期优先完善 direct CLI，不做 TUI。
 
@@ -27,6 +30,13 @@
 | Phase 10 | 34-36 | 工具、MCP、安全边界 | 统一工具系统，启用 MCP stdio v1，强化 shell/patch/MCP 安全策略。 |
 | Phase 11 | 37-38 | 可观测性与 0.2.0 发布 | 增加 trace/logs，完成 0.2.0 验收和发布包。 |
 
+## 状态说明
+
+- `已验收` 表示已有对应 `NN_week_review.md` 并记录 build/test、docs 或 smoke 证据，可进入 Week 38 release baseline。
+- `已稳固` 表示功能契约和测试已稳定，但仍需要在后续 release acceptance 中回归。
+- `计划中` 表示已有 `.plan.md`，尚未创建对应 review。
+- Week 33 review 中 packaged runtime smoke 未执行，因为当时 release executable 不存在；该项并入 Week 38 `Build-Release.ps1` 和 `Invoke-SmokeTests.ps1` 验收。
+
 ## 逐周计划
 
 | 周 | 计划文档 | 状态 | 主要目标 | 周末验收 |
@@ -35,9 +45,9 @@
 | 28 | `28_week_exec_json_events.plan.md` | 已验收 | 新增 `caicli exec` 和 `--json` NDJSON 事件流。 | exec 可用于脚本/CI；旧 `run` smoke 路径保持兼容。 |
 | 29 | `29_week_agent_run_loop_v1.plan.md` | 已稳固 | `exec` 进入 agentic v1：模型事件、工具调用、结果回写、最终回答。 | fake model 可驱动工具调用；loop limits 和 `exec --session` transcript 生效。 |
 | 30 | `30_week_approval_permission_profiles.plan.md` | 已验收 | 新增 `approvalMode`、工具风险等级和统一 approval policy resolver。 | 默认不静默写文件/跑 shell；危险 shell 明确拒绝；patch/shell/MCP approvalStatus 进入 text/JSON event。 |
-| 31 | `31_week_session_resume_management.plan.md` | 计划中 | 增强 session 管理和 `chat/exec --resume`。 | session 可 list/show/rename/delete/export markdown。 |
-| 32 | `32_week_project_instructions_agents_md.plan.md` | 计划中 | 支持 `AGENTS.md` 和层级项目指令。 | chat/exec 使用 workspace 指令，doctor 显示来源。 |
-| 33 | `33_week_diff_review_status_models.plan.md` | 计划中 | 新增 `status`、`diff`、`review`、`models`。 | review 默认只读；models 不需要 API key。 |
+| 31 | `31_week_session_resume_management.plan.md` | 已验收 | 会话可 list/show/rename/delete/export，`chat/exec --resume` 复用 transcript。 | build/test 通过；resume context 边界和 markdown secret redaction 已验证。 |
+| 32 | `32_week_project_instructions_agents_md.plan.md` | 已验收 | 支持 `AGENTS.md`、`AICLI.md` fallback 与 root-to-leaf 层级项目指令。 | `chat/exec --cwd` 使用目标路径指令；doctor/config 显示 source/order。 |
+| 33 | `33_week_diff_review_status_models.plan.md` | 已验收 | 新增 `status`、`diff`、`review`、`models`，并加固 diff/review 只读收集。 | `review` 默认只读；`models` 不需要 API key；离线 smoke 覆盖 status/models/diff。 |
 | 34 | `34_week_tool_system_hardening.plan.md` | 计划中 | 工具 schema、stdin、JSON list、错误码和 structured result 统一。 | `tools list --json` 稳定可解析；工具错误码稳定。 |
 | 35 | `35_week_mcp_real_stdio_v1.plan.md` | 计划中 | 启用 MCP stdio 真连接 v1。 | fake MCP server 可 handshake/list/call；remote MCP 仍 Deferred。 |
 | 36 | `36_week_security_sandbox_boundaries.plan.md` | 计划中 | 强化 shell policy、patch preview、MCP 启动安全策略。 | denylist/timeout/risk summary 生效。 |
@@ -59,9 +69,9 @@
 - 已验收：可用 `caicli exec` 进行非交互任务执行，并支持 text/NDJSON 输出。
 - fake/offline agent loop v1 与 `exec` 事件/限制/会话契约已固化；direct OpenAI SDK 真实工具调用 continuation 仍 Deferred。
 - 已验收：审批和权限 profile 可配置、可诊断；读/写/shell/dangerous-shell 风险层级和 approvalStatus 事件稳定可见。
-- session 可恢复、可管理、可导出。
-- `AGENTS.md` 项目指令兼容。
-- `status/diff/review/models` 开发命令可用。
+- 已验收：session 可恢复、可管理、可导出，`session clear` 保持兼容但文档推荐 `delete`。
+- 已验收：`AGENTS.md` 项目指令兼容，并保留 `AICLI.md` legacy fallback。
+- 已验收：`status/diff/review/models` 开发命令可用，其中 `review` 为只读入口，`models` 不调用模型列表 API。
 - 工具系统输出稳定 JSON 和结构化错误。
 - stdio MCP server 可真实 handshake/list/call。
 - 日志和 trace 可定位一次任务的完整执行链。

@@ -18,7 +18,8 @@
 | `caicli diff` / `diff --stat` | Accepted | Prints the current git diff or stat summary for the selected workspace. |
 | `caicli review` | Accepted | Sends the current git diff to the configured model for workspace-read-only review; supports text, `--json`, and `--output json`; does not write workspace files, logs, transcripts, patches, or run shell/patch tools. Diff collection may use cleaned-up temp files outside the workspace. |
 | `caicli run` | Solidified | Deterministic direct-tool release smoke tasks: create smoke note, read file, run approved shell command. |
-| `tools list/call` | Solidified | Lists enabled tools and invokes one tool with JSON or `--arguments-file`. |
+| `tools list/call` | Solidified | Text `tools list` is preserved; `tools list --json` emits a stable `tools.list` object with sorted `tools[]` metadata and sorted `disabledTools[]`; `tools call` accepts inline JSON, `--arguments-file`, or `--stdin` JSON. |
+| Tool schema/result contracts | Solidified | `ToolSchemaRenderer` normalizes parameter schemas for OpenAI mapping, the Agent Framework bridge, and `tools list --json`; tool failures use centralized `ToolErrorCode` values; tool results can carry optional structured payloads for agent/runtime consumers while keeping CLI text output compatible. |
 | Workspace read/search tools | Accepted | Enforced by workspace guard. |
 | Patch tool | Accepted | Single-file exact-text patch with approval and dirty-workspace awareness. |
 | Shell tool | Accepted | Workspace cwd guard, approval, dangerous command detection, timeout, and truncation. |

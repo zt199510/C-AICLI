@@ -40,7 +40,9 @@ public sealed class OpenAiToolDefinitionMapperTests
     [InlineData("")]
     [InlineData("   ")]
     [InlineData("{not json")]
-    public void From_definitions_falls_back_to_object_schema_for_blank_or_invalid_schema(
+    [InlineData("[]")]
+    [InlineData("\"string schema\"")]
+    public void From_definitions_falls_back_to_object_schema_for_blank_invalid_or_non_object_schema(
         string parametersSchema)
     {
         ToolDefinition registryDefinition = new(

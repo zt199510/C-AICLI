@@ -1,4 +1,5 @@
 using CSharpAiCli.Core;
+using System.Text.Json;
 
 namespace CSharpAiCli.Tests;
 
@@ -31,6 +32,11 @@ public sealed class WorkspaceSearchToolTests
 
         Assert.True(result.Succeeded);
         Assert.Equal(2, result.Summary.Split(Environment.NewLine).Length);
+        IReadOnlyDictionary<string, JsonElement> payload = AssertPayload(result);
+        Assert.Equal("needle", payload["query"].GetString());
+        Assert.Equal(".", payload["path"].GetString());
+        Assert.Equal(2, payload["matchCount"].GetInt32());
+        Assert.Equal(2, payload["maxResults"].GetInt32());
     }
 
     [Fact]
@@ -46,6 +52,25 @@ public sealed class WorkspaceSearchToolTests
 
         Assert.False(result.Succeeded);
         Assert.Equal("workspace-boundary-denied", result.ErrorCode);
+    }
+
+    [Fact]
+    public void Execute_returns_payload_for_search_path_that_is_not_directory()
+    {
+        using TempDirectory temp = TempDirectory.Create();
+        File.WriteAllText(Path.Combine(temp.Path, "notes.txt"), "needle");
+        WorkspaceSearchTool tool = new(new WorkspaceGuard());
+
+        ToolExecutionResult result = tool.Execute(CreateContext(
+            temp.Path,
+            """{"query":"needle","path":"notes.txt","maxResults":7}"""));
+
+        Assert.False(result.Succeeded);
+        Assert.Equal(ToolErrorCode.SearchPathNotDirectory, result.ErrorCode);
+        IReadOnlyDictionary<string, JsonElement> payload = AssertPayload(result);
+        Assert.Equal("needle", payload["query"].GetString());
+        Assert.Equal("notes.txt", payload["path"].GetString());
+        Assert.Equal(7, payload["maxResults"].GetInt32());
     }
 
     [Fact]
@@ -87,7 +112,30 @@ public sealed class WorkspaceSearchToolTests
         ToolExecutionResult result = tool.Execute(CreateContext(temp.Path, "{}"));
 
         Assert.False(result.Succeeded);
-        Assert.Equal("invalid-tool-arguments", result.ErrorCode);
+        Assert.Equal(ToolErrorCode.InvalidToolArguments, result.ErrorCode);
+        IReadOnlyDictionary<string, JsonElement> payload = AssertPayload(result);
+        Assert.Equal(ToolErrorCode.InvalidToolArguments, payload["errorCode"].GetString());
+        Assert.Equal("workspace.search_text", payload["toolName"].GetString());
+        Assert.Equal("query", payload["argument"].GetString());
+    }
+
+    [Theory]
+    [InlineData("[]")]
+    [InlineData("\"text\"")]
+    public void Execute_returns_argument_failure_for_non_object_root(string argumentsJson)
+    {
+        using TempDirectory temp = TempDirectory.Create();
+        WorkspaceSearchTool tool = new(new WorkspaceGuard());
+
+        ToolExecutionResult result = tool.Execute(CreateContext(temp.Path, argumentsJson));
+
+        Assert.False(result.Succeeded);
+        Assert.Equal(ToolErrorCode.InvalidToolArguments, result.ErrorCode);
+        Assert.Equal("Tool arguments must be a JSON object.", result.Summary);
+        IReadOnlyDictionary<string, JsonElement> payload = AssertPayload(result);
+        Assert.Equal(ToolErrorCode.InvalidToolArguments, payload["errorCode"].GetString());
+        Assert.Equal("workspace.search_text", payload["toolName"].GetString());
+        Assert.Equal("arguments", payload["argument"].GetString());
     }
 
     [Fact]
@@ -119,6 +167,11 @@ public sealed class WorkspaceSearchToolTests
     {
         WorkspaceContext workspace = WorkspaceContext.Detect(workspaceRoot, workspaceRoot);
         return new ToolExecutionContext("call_search", workspace, argumentsJson);
+    }
+
+    private static IReadOnlyDictionary<string, JsonElement> AssertPayload(ToolExecutionResult result)
+    {
+        return result.StructuredPayload ?? throw new InvalidOperationException("Structured payload was not set.");
     }
 
     private sealed class FakeToolCallingModel : IToolCallingModel

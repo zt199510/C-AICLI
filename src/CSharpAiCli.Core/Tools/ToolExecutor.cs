@@ -22,7 +22,7 @@ public sealed class ToolExecutor : IToolExecutor
         if (!registry.TryGet(toolName, out ITool? tool) || tool is null)
         {
             return ToolExecutionResult.Failure(
-                "unknown-tool",
+                ToolErrorCode.UnknownTool,
                 $"Tool '{toolName}' is not registered.");
         }
 
@@ -38,7 +38,9 @@ public sealed class ToolExecutor : IToolExecutor
         {
             cancellationToken.ThrowIfCancellationRequested();
             return executableTool.Execute(normalizedContext, cancellationToken)
-                ?? ToolExecutionResult.Failure("tool-returned-null", "Tool returned no execution result.");
+                ?? ToolExecutionResult.Failure(
+                    ToolErrorCode.ToolReturnedNull,
+                    "Tool returned no execution result.");
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
         {
@@ -54,19 +56,19 @@ public sealed class ToolExecutor : IToolExecutor
         catch (JsonException)
         {
             return ToolExecutionResult.Failure(
-                "invalid-tool-arguments",
+                ToolErrorCode.InvalidToolArguments,
                 "Tool arguments were invalid.");
         }
         catch (ArgumentException)
         {
             return ToolExecutionResult.Failure(
-                "invalid-tool-arguments",
+                ToolErrorCode.InvalidToolArguments,
                 "Tool arguments were invalid.");
         }
         catch
         {
             return ToolExecutionResult.Failure(
-                "tool-execution-failed",
+                ToolErrorCode.ToolExecutionFailed,
                 $"Tool '{executableTool.Definition.Name}' failed during execution.");
         }
     }
@@ -85,7 +87,7 @@ public sealed class ToolExecutor : IToolExecutor
             if (document.RootElement.ValueKind != JsonValueKind.Object)
             {
                 failure = ToolExecutionResult.Failure(
-                    "invalid-tool-arguments",
+                    ToolErrorCode.InvalidToolArguments,
                     "Tool arguments must be a JSON object.");
                 return false;
             }
@@ -96,7 +98,7 @@ public sealed class ToolExecutor : IToolExecutor
         catch (JsonException)
         {
             failure = ToolExecutionResult.Failure(
-                "invalid-tool-arguments",
+                ToolErrorCode.InvalidToolArguments,
                 "Tool arguments must be valid JSON.");
             return false;
         }

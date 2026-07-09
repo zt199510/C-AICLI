@@ -1,7 +1,11 @@
+using System.Text.Json;
+
 namespace CSharpAiCli.Core;
 
 public sealed class GitStatusTool : ITool
 {
+    private const string StatusCommand = "git status --short";
+
     private readonly IWorkspaceGuard workspaceGuard;
     private readonly GitCommandRunner gitCommandRunner = new();
 
@@ -27,27 +31,49 @@ public sealed class GitStatusTool : ITool
         WorkspaceGuardResult guardResult = workspaceGuard.ResolvePath(context.Workspace, ".");
         if (!guardResult.IsAllowed || guardResult.FullPath is null)
         {
-            return guardResult.ToFailure();
+            return ToolExecutionResult.Failure(
+                guardResult.ErrorCode ?? ToolErrorCode.WorkspaceBoundaryDenied,
+                guardResult.SafeMessage,
+                structuredPayload: ToolStructuredPayload.Create(
+                    ("command", StatusCommand),
+                    ("errorCode", guardResult.ErrorCode ?? ToolErrorCode.WorkspaceBoundaryDenied)));
         }
 
         GitCommandResult result = gitCommandRunner.Run(guardResult.FullPath, "status --short");
         if (!result.Succeeded)
         {
+            string errorCode = NormalizeGitError(result);
             return ToolExecutionResult.Failure(
-                NormalizeGitError(result),
-                string.IsNullOrWhiteSpace(result.Stderr) ? result.Summary : result.Stderr.Trim());
+                errorCode,
+                string.IsNullOrWhiteSpace(result.Stderr) ? result.Summary : result.Stderr.Trim(),
+                structuredPayload: CreateFailurePayload(result, errorCode));
         }
 
         string output = string.IsNullOrWhiteSpace(result.Stdout)
             ? "working tree clean"
             : result.Stdout.Trim();
-        return ToolExecutionResult.Success(output);
+        return ToolExecutionResult.Success(
+            output,
+            structuredPayload: ToolStructuredPayload.Create(
+                ("command", StatusCommand),
+                ("exitCode", result.ExitCode),
+                ("statusTextLength", output.Length)));
     }
 
     private static string NormalizeGitError(GitCommandResult result)
     {
         return result.Stderr.Contains("not a git repository", StringComparison.OrdinalIgnoreCase)
-            ? "git-not-repository"
-            : result.ErrorCode ?? "git-status-failed";
+            ? ToolErrorCode.GitNotRepository
+            : result.ErrorCode ?? ToolErrorCode.GitStatusFailed;
+    }
+
+    private static IReadOnlyDictionary<string, JsonElement> CreateFailurePayload(
+        GitCommandResult result,
+        string errorCode)
+    {
+        return ToolStructuredPayload.Create(
+            ("command", StatusCommand),
+            ("exitCode", result.ExitCode),
+            ("errorCode", errorCode));
     }
 }

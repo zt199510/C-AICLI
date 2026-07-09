@@ -5,6 +5,8 @@ namespace CSharpAiCli.Core;
 
 public sealed class WorkspaceSearchTool : ITool
 {
+    private const string ToolName = "workspace.search_text";
+
     public const int DefaultMaxResults = 20;
 
     private const int MaximumMaxResults = 100;
@@ -28,7 +30,7 @@ public sealed class WorkspaceSearchTool : ITool
     }
 
     public ToolDefinition Definition { get; } = new(
-        "workspace.search_text",
+        ToolName,
         "Search text files inside the current workspace.",
         """{"type":"object","properties":{"query":{"type":"string"},"path":{"type":"string"},"maxResults":{"type":"integer"}},"required":["query"]}""",
         ToolRiskLevel.Read);
@@ -47,15 +49,19 @@ public sealed class WorkspaceSearchTool : ITool
         WorkspaceGuardResult guardResult = workspaceGuard.ResolvePath(context.Workspace, arguments.Path);
         if (!guardResult.IsAllowed)
         {
-            return guardResult.ToFailure();
+            return ToolExecutionResult.Failure(
+                guardResult.ErrorCode ?? ToolErrorCode.WorkspaceBoundaryDenied,
+                guardResult.SafeMessage,
+                structuredPayload: CreateSearchPayload(arguments));
         }
 
         string rootPath = guardResult.FullPath!;
         if (!Directory.Exists(rootPath))
         {
             return ToolExecutionResult.Failure(
-                "search-path-not-directory",
-                "Search path must be a workspace directory.");
+                ToolErrorCode.SearchPathNotDirectory,
+                "Search path must be a workspace directory.",
+                structuredPayload: CreateSearchPayload(arguments));
         }
 
         List<string> matches = [];
@@ -72,7 +78,9 @@ public sealed class WorkspaceSearchTool : ITool
         string summary = matches.Count == 0
             ? "No matches found."
             : string.Join(Environment.NewLine, matches);
-        return ToolExecutionResult.Success(summary);
+        return ToolExecutionResult.Success(
+            summary,
+            structuredPayload: CreateSearchPayload(arguments, matches.Count));
     }
 
     private void SearchDirectory(
@@ -215,13 +223,23 @@ public sealed class WorkspaceSearchTool : ITool
         {
             using JsonDocument document = JsonDocument.Parse(argumentsJson);
             JsonElement root = document.RootElement;
+            if (root.ValueKind != JsonValueKind.Object)
+            {
+                failure = ToolExecutionResult.Failure(
+                    ToolErrorCode.InvalidToolArguments,
+                    "Tool arguments must be a JSON object.",
+                    structuredPayload: ToolStructuredPayload.InvalidArguments(ToolName, "arguments"));
+                return false;
+            }
+
             if (!root.TryGetProperty("query", out JsonElement queryElement) ||
                 queryElement.ValueKind != JsonValueKind.String ||
                 string.IsNullOrWhiteSpace(queryElement.GetString()))
             {
                 failure = ToolExecutionResult.Failure(
-                    "invalid-tool-arguments",
-                    "Tool arguments must include a non-empty query.");
+                    ToolErrorCode.InvalidToolArguments,
+                    "Tool arguments must include a non-empty query.",
+                    structuredPayload: ToolStructuredPayload.InvalidArguments(ToolName, "query"));
                 return false;
             }
 
@@ -232,8 +250,9 @@ public sealed class WorkspaceSearchTool : ITool
                 if (pathElement.ValueKind != JsonValueKind.String || string.IsNullOrWhiteSpace(pathElement.GetString()))
                 {
                     failure = ToolExecutionResult.Failure(
-                        "invalid-tool-arguments",
-                        "Search path must be a non-empty string.");
+                        ToolErrorCode.InvalidToolArguments,
+                        "Search path must be a non-empty string.",
+                        structuredPayload: ToolStructuredPayload.InvalidArguments(ToolName, "path"));
                     return false;
                 }
 
@@ -248,8 +267,9 @@ public sealed class WorkspaceSearchTool : ITool
                     maxResults <= 0)
                 {
                     failure = ToolExecutionResult.Failure(
-                        "invalid-tool-arguments",
-                        "maxResults must be a positive integer.");
+                        ToolErrorCode.InvalidToolArguments,
+                        "maxResults must be a positive integer.",
+                        structuredPayload: ToolStructuredPayload.InvalidArguments(ToolName, "maxResults"));
                     return false;
                 }
 
@@ -262,10 +282,27 @@ public sealed class WorkspaceSearchTool : ITool
         catch (JsonException)
         {
             failure = ToolExecutionResult.Failure(
-                "invalid-tool-arguments",
-                "Tool arguments must be valid JSON.");
+                ToolErrorCode.InvalidToolArguments,
+                "Tool arguments must be valid JSON.",
+                structuredPayload: ToolStructuredPayload.InvalidArguments(ToolName, "arguments"));
             return false;
         }
+    }
+
+    private static IReadOnlyDictionary<string, JsonElement> CreateSearchPayload(
+        SearchArguments arguments,
+        int? matchCount = null)
+    {
+        return matchCount is null
+            ? ToolStructuredPayload.Create(
+                ("query", arguments.Query),
+                ("path", arguments.Path),
+                ("maxResults", arguments.MaxResults))
+            : ToolStructuredPayload.Create(
+                ("query", arguments.Query),
+                ("path", arguments.Path),
+                ("matchCount", matchCount.Value),
+                ("maxResults", arguments.MaxResults));
     }
 
     private readonly record struct SearchArguments(string Query, string Path, int MaxResults);

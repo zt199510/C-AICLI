@@ -9,14 +9,14 @@ public sealed class WorkspaceGuard : IWorkspaceGuard
         if (!workspace.IsUsable)
         {
             return WorkspaceGuardResult.Deny(
-                "workspace-unavailable",
+                ToolErrorCode.WorkspaceUnavailable,
                 "Workspace is not available.");
         }
 
         if (string.IsNullOrWhiteSpace(requestedPath))
         {
             return WorkspaceGuardResult.Deny(
-                "invalid-workspace-path",
+                ToolErrorCode.InvalidWorkspacePath,
                 "A workspace path is required.");
         }
 
@@ -29,7 +29,7 @@ public sealed class WorkspaceGuard : IWorkspaceGuard
             if (!IsInsideOrEqual(workspaceRoot, resolvedPath))
             {
                 return WorkspaceGuardResult.Deny(
-                    "workspace-boundary-denied",
+                    ToolErrorCode.WorkspaceBoundaryDenied,
                     "Path must remain inside the workspace.");
             }
 
@@ -42,7 +42,7 @@ public sealed class WorkspaceGuard : IWorkspaceGuard
             or UnauthorizedAccessException)
         {
             return WorkspaceGuardResult.Deny(
-                "invalid-workspace-path",
+                ToolErrorCode.InvalidWorkspacePath,
                 "Workspace path could not be resolved safely.");
         }
     }

@@ -127,6 +127,41 @@ public sealed class OfflineAgentRunnerTests
     }
 
     [Fact]
+    public void Run_exposes_structured_tool_payload_to_model_continue()
+    {
+        ToolRegistry registry = new();
+        registry.Register(new StructuredPayloadTool());
+        ToolExecutor executor = new(registry);
+        FakeToolCallingModel model = new(
+            startTurn: AgentModelTurn.RequestTools(new AgentToolCallRequest(
+                CallId: "call_structured_1",
+                ToolName: "test.structured",
+                ArgumentsJson: "{}")),
+            continueFactory: results =>
+            {
+                AgentToolCallResult result = Assert.Single(results);
+                Assert.True(result.Result.Succeeded);
+                Assert.Equal("Read notes.txt.", result.Result.Summary);
+                IReadOnlyDictionary<string, JsonElement> structuredPayload =
+                    result.Result.StructuredPayload ?? throw new InvalidOperationException("Structured payload was not set.");
+                Assert.Equal("notes.txt", structuredPayload["path"].GetString());
+                Assert.Equal(3, structuredPayload["lineCount"].GetInt32());
+
+                return AgentModelTurn.Final("read " + structuredPayload["path"].GetString());
+            });
+        OfflineAgentRunner runner = new(model, executor, () => DateTimeOffset.Parse("2024-01-01T00:00:05Z"));
+
+        AgentRunResult result = runner.Run(CreateRequest());
+
+        Assert.True(result.IsSuccess);
+        Assert.Equal("read notes.txt", result.Text);
+        AgentRunEvent toolResultEvent = Assert.Single(result.Events, agentEvent => agentEvent.Type == "tool.result");
+        Assert.Equal("Read notes.txt.", toolResultEvent.Summary);
+        Assert.Equal("test.structured", toolResultEvent.Payload?["toolName"]);
+        Assert.Equal("true", toolResultEvent.Payload?["succeeded"]);
+    }
+
+    [Fact]
     public void Run_records_tool_failure_and_continues_model_loop()
     {
         ToolExecutor executor = new(new ToolRegistry());
@@ -619,6 +654,33 @@ public sealed class OfflineAgentRunnerTests
             using JsonDocument document = JsonDocument.Parse(context.ArgumentsJson);
             string text = document.RootElement.GetProperty("text").GetString() ?? string.Empty;
             return ToolExecutionResult.Success(text);
+        }
+    }
+
+    private sealed class StructuredPayloadTool : ITool
+    {
+        public ToolDefinition Definition { get; } = new(
+            "test.structured",
+            "Returns a structured payload.",
+            """{"type":"object"}""");
+
+        public ToolExecutionResult Execute(
+            ToolExecutionContext context,
+            CancellationToken cancellationToken = default)
+        {
+            using JsonDocument document = JsonDocument.Parse("""
+            {
+              "path": "notes.txt",
+              "lineCount": 3
+            }
+            """);
+            Dictionary<string, JsonElement> payload = document.RootElement
+                .EnumerateObject()
+                .ToDictionary(property => property.Name, property => property.Value);
+
+            return ToolExecutionResult.Success(
+                "Read notes.txt.",
+                structuredPayload: payload);
         }
     }
 
