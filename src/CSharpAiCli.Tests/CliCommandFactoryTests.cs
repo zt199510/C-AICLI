@@ -5926,7 +5926,7 @@ public sealed class CliCommandFactoryTests
     }
 
     [Fact]
-    public void Logs_show_tail_reads_command_and_trace_logs_in_chronological_order()
+    public void Logs_show_tail_reads_command_and_trace_logs_in_filename_order()
     {
         using TempDirectory temp = TempDirectory.Create();
         using StringWriter output = new();
@@ -5955,6 +5955,33 @@ public sealed class CliCommandFactoryTests
         Assert.Equal(0, exitCode);
         Assert.Equal(expected, output.ToString());
         Assert.Empty(loggedCommands);
+    }
+
+    [Fact]
+    public void Logs_show_skips_locked_log_files_and_returns_readable_lines()
+    {
+        using TempDirectory temp = TempDirectory.Create();
+        using StringWriter output = new();
+        CliEnvironmentSnapshot snapshot = CreateSnapshot(temp.Path);
+        string logDirectory = LogPathResolver.ResolveLogDirectory(snapshot);
+        Directory.CreateDirectory(logDirectory);
+        File.WriteAllLines(
+            Path.Combine(logDirectory, "2026-07-08.log"),
+            ["readable 1", "readable 2"]);
+        string lockedLogPath = Path.Combine(logDirectory, "2026-07-09.log");
+        File.WriteAllLines(lockedLogPath, ["locked line"]);
+        using FileStream lockedLog = File.Open(lockedLogPath, FileMode.Open, FileAccess.ReadWrite, FileShare.None);
+
+        int exitCode = CliCommandFactory
+            .Create(output, _ => snapshot)
+            .Parse(["logs", "show", "--tail", "10"])
+            .Invoke();
+
+        string expected = string.Join(
+            Environment.NewLine,
+            ["readable 1", "readable 2"]) + Environment.NewLine;
+        Assert.Equal(0, exitCode);
+        Assert.Equal(expected, output.ToString());
     }
 
     [Fact]

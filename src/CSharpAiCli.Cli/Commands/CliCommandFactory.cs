@@ -813,16 +813,9 @@ public static class CliCommandFactory
             }
 
             Queue<string> tailLines = new();
-            foreach (string logPath in Directory.EnumerateFiles(logDirectory, "*.log").Order(StringComparer.Ordinal))
+            foreach (string logPath in EnumerateLogFilesBestEffort(logDirectory))
             {
-                foreach (string line in File.ReadLines(logPath))
-                {
-                    tailLines.Enqueue(line);
-                    while (tailLines.Count > tailCount)
-                    {
-                        tailLines.Dequeue();
-                    }
-                }
+                AddLogFileTailLinesBestEffort(tailLines, logPath, tailCount);
             }
 
             foreach (string line in tailLines)
@@ -1425,6 +1418,75 @@ public static class CliCommandFactory
             EnableDefaultExceptionHandler = !IsExecCommand(parseResult),
             Error = error,
         });
+    }
+
+    private static IReadOnlyList<string> EnumerateLogFilesBestEffort(string logDirectory)
+    {
+        List<string> logPaths = [];
+        IEnumerator<string>? enumerator = null;
+        try
+        {
+            enumerator = Directory.EnumerateFiles(logDirectory, "*.log").GetEnumerator();
+            while (true)
+            {
+                try
+                {
+                    if (!enumerator.MoveNext())
+                    {
+                        break;
+                    }
+                }
+                catch (Exception exception) when (IsBestEffortLogReadException(exception))
+                {
+                    break;
+                }
+
+                logPaths.Add(enumerator.Current);
+            }
+        }
+        catch (Exception exception) when (IsBestEffortLogReadException(exception))
+        {
+        }
+        finally
+        {
+            enumerator?.Dispose();
+        }
+
+        logPaths.Sort(StringComparer.Ordinal);
+        return logPaths;
+    }
+
+    private static void AddLogFileTailLinesBestEffort(Queue<string> tailLines, string logPath, int tailCount)
+    {
+        try
+        {
+            foreach (string line in File.ReadLines(logPath))
+            {
+                tailLines.Enqueue(line);
+                while (tailLines.Count > tailCount)
+                {
+                    tailLines.Dequeue();
+                }
+            }
+        }
+        catch (Exception exception) when (IsBestEffortLogReadException(exception))
+        {
+        }
+    }
+
+    private static bool IsBestEffortLogReadException(Exception exception)
+    {
+        if (exception is FileNotFoundException)
+        {
+            return true;
+        }
+
+        if (exception is DirectoryNotFoundException)
+        {
+            return true;
+        }
+
+        return exception is IOException or UnauthorizedAccessException;
     }
 
     private static void TryWriteCommandLog(
