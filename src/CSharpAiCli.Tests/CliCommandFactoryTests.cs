@@ -5823,6 +5823,88 @@ public sealed class CliCommandFactoryTests
     }
 
     [Fact]
+    public void Logs_path_prints_resolved_cli_log_directory_without_creating_it()
+    {
+        using TempDirectory temp = TempDirectory.Create();
+        using StringWriter output = new();
+        string expectedPath = Path.Combine(temp.Path, ".caicli", "logs");
+
+        int exitCode = CliCommandFactory
+            .Create(output, _ => CreateSnapshot(temp.Path))
+            .Parse(["logs", "path"])
+            .Invoke();
+
+        Assert.Equal(0, exitCode);
+        Assert.Equal(expectedPath + Environment.NewLine, output.ToString());
+        Assert.False(Directory.Exists(expectedPath));
+    }
+
+    [Fact]
+    public void Logs_path_honors_workspace_option()
+    {
+        using StringWriter output = new();
+        string? receivedWorkspace = null;
+
+        int exitCode = CliCommandFactory
+            .Create(output, workspacePath =>
+            {
+                receivedWorkspace = workspacePath;
+                return CreateSnapshot(workspacePath);
+            })
+            .Parse(["logs", "path", "--workspace", "custom-root"])
+            .Invoke();
+
+        Assert.Equal(0, exitCode);
+        Assert.Equal("custom-root", receivedWorkspace);
+        Assert.Equal(Path.Combine("custom-root", ".caicli", "logs") + Environment.NewLine, output.ToString());
+    }
+
+    [Fact]
+    public void Logs_path_writes_command_log_through_delegate()
+    {
+        using StringWriter output = new();
+        List<string> loggedCommands = [];
+
+        int exitCode = CliCommandFactory
+            .Create(
+                output,
+                CreateSnapshot,
+                (commandName, _) => loggedCommands.Add(commandName))
+            .Parse(["logs", "path"])
+            .Invoke();
+
+        Assert.Equal(0, exitCode);
+        Assert.Equal(["logs path"], loggedCommands);
+    }
+
+    [Fact]
+    public void Logs_path_verbose_writes_diagnostics_before_path()
+    {
+        using TempDirectory temp = TempDirectory.Create();
+        using StringWriter output = new();
+        string expectedPath = Path.Combine(temp.Path, ".caicli", "logs");
+        CliEnvironmentSnapshot snapshot = CreateSnapshot(
+            workspacePath: temp.Path,
+            apiKey: "sk-secret",
+            apiKeySource: "OPENAI_API_KEY",
+            model: "gpt-test");
+
+        int exitCode = CliCommandFactory
+            .Create(output, _ => snapshot)
+            .Parse(["logs", "path", "--verbose"])
+            .Invoke();
+
+        string text = output.ToString();
+        int diagnosticsIndex = text.IndexOf("C# AI CLI verbose diagnostics", StringComparison.Ordinal);
+        int pathIndex = text.LastIndexOf(expectedPath, StringComparison.Ordinal);
+        Assert.Equal(0, exitCode);
+        Assert.True(diagnosticsIndex >= 0, text);
+        Assert.True(pathIndex > diagnosticsIndex, text);
+        Assert.True(text.EndsWith(expectedPath + Environment.NewLine, StringComparison.Ordinal), text);
+        Assert.DoesNotContain("sk-secret", text, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void Doctor_command_writes_command_log_through_delegate()
     {
         using StringWriter output = new();

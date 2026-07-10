@@ -773,6 +773,19 @@ public static class CliCommandFactory
         toolsCommand.Subcommands.Add(toolsListCommand);
         toolsCommand.Subcommands.Add(toolsCallCommand);
 
+        Command logsCommand = new("logs", "Inspect CLI log files.");
+        Command logsPathCommand = new("path", "Print the resolved CLI log directory.");
+        logsPathCommand.SetAction(parseResult =>
+        {
+            string? workspacePath = parseResult.GetValue(workspaceOption);
+            CliEnvironmentSnapshot snapshot = workspaceSnapshotProvider(workspacePath);
+            TryWriteCommandLog(commandLogger, "logs path", snapshot);
+            WriteVerboseDiagnostics(parseResult, "logs path", snapshot);
+            output.WriteLine(LogPathResolver.ResolveLogDirectory(snapshot));
+            return 0;
+        });
+        logsCommand.Subcommands.Add(logsPathCommand);
+
         Command execCommand = new("exec", "Run an agentic local workspace task and emit exec events.");
         Argument<string> execTaskArgument = new("task")
         {
@@ -1333,6 +1346,7 @@ public static class CliCommandFactory
         rootCommand.Subcommands.Add(mcpCommand);
         rootCommand.Subcommands.Add(workflowCommand);
         rootCommand.Subcommands.Add(toolsCommand);
+        rootCommand.Subcommands.Add(logsCommand);
         rootCommand.Subcommands.Add(execCommand);
         rootCommand.Subcommands.Add(runCommand);
         rootCommand.Subcommands.Add(sessionCommand);
