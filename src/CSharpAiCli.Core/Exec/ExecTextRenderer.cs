@@ -25,7 +25,7 @@ public sealed class ExecTextRenderer
 
         string status = result.IsSuccess ? "success" : "failure";
         writer.WriteLine(
-            $"result: {status} exitCode={result.ExitCode}{FormatOptional("summary", result.Summary)}{FormatOptional("errorCode", result.ErrorCode)}{FormatOptional("approvalStatus", result.ApprovalStatus)} events={result.Events.Count}");
+            $"result: {status} exitCode={result.ExitCode}{FormatOptional("summary", result.Summary, redact: true)}{FormatOptional("errorCode", result.ErrorCode)}{FormatOptional("approvalStatus", result.ApprovalStatus)} events={result.Events.Count}");
     }
 
     private static string FormatEvent(ExecEvent execEvent)
@@ -49,12 +49,12 @@ public sealed class ExecTextRenderer
 
         if (!string.IsNullOrEmpty(execEvent.Message))
         {
-            parts.Add($"message={execEvent.Message}");
+            parts.Add($"message={ExecOutputRedactor.Redact(execEvent.Message)}");
         }
 
         if (!string.IsNullOrEmpty(execEvent.Summary))
         {
-            parts.Add($"summary={execEvent.Summary}");
+            parts.Add($"summary={ExecOutputRedactor.Redact(execEvent.Summary)}");
         }
 
         if (!string.IsNullOrEmpty(execEvent.ErrorCode))
@@ -74,7 +74,7 @@ public sealed class ExecTextRenderer
 
         if (execEvent.Payload is not null)
         {
-            foreach (KeyValuePair<string, string> pair in execEvent.Payload.OrderBy(entry => entry.Key, StringComparer.Ordinal))
+            foreach (KeyValuePair<string, string> pair in ExecOutputRedactor.RedactPayload(execEvent.Payload))
             {
                 parts.Add($"payload.{pair.Key}={pair.Value}");
             }
@@ -83,8 +83,14 @@ public sealed class ExecTextRenderer
         return string.Join(' ', parts);
     }
 
-    private static string FormatOptional(string name, string? value)
+    private static string FormatOptional(string name, string? value, bool redact = false)
     {
-        return string.IsNullOrEmpty(value) ? string.Empty : $" {name}={value}";
+        if (string.IsNullOrEmpty(value))
+        {
+            return string.Empty;
+        }
+
+        string safeValue = redact ? ExecOutputRedactor.Redact(value) : value;
+        return $" {name}={safeValue}";
     }
 }

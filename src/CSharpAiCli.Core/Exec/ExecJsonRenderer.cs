@@ -37,7 +37,7 @@ public sealed class ExecJsonRenderer
 
         if (!string.IsNullOrEmpty(result.Summary))
         {
-            envelope["summary"] = result.Summary;
+            envelope["summary"] = ExecOutputRedactor.Redact(result.Summary);
         }
 
         if (!string.IsNullOrEmpty(result.ErrorCode))
@@ -71,12 +71,12 @@ public sealed class ExecJsonRenderer
 
         if (!string.IsNullOrEmpty(execEvent.Message))
         {
-            envelope["message"] = execEvent.Message;
+            envelope["message"] = ExecOutputRedactor.Redact(execEvent.Message);
         }
 
         if (!string.IsNullOrEmpty(execEvent.Summary))
         {
-            envelope["summary"] = execEvent.Summary;
+            envelope["summary"] = ExecOutputRedactor.Redact(execEvent.Summary);
         }
 
         if (!string.IsNullOrEmpty(execEvent.Status))
@@ -91,8 +91,7 @@ public sealed class ExecJsonRenderer
 
         if (execEvent.Payload is not null)
         {
-            envelope["payload"] = execEvent.Payload.OrderBy(pair => pair.Key, StringComparer.Ordinal)
-                .ToDictionary(pair => pair.Key, pair => pair.Value, StringComparer.Ordinal);
+            envelope["payload"] = ExecOutputRedactor.RedactPayload(execEvent.Payload);
         }
 
         if (!string.IsNullOrEmpty(execEvent.ErrorCode))
@@ -111,5 +110,49 @@ public sealed class ExecJsonRenderer
         }
 
         return envelope;
+    }
+}
+
+internal static class ExecOutputRedactor
+{
+    public static string Redact(string value)
+    {
+        return DiagnosticSecretRedactor.Redact(value);
+    }
+
+    public static Dictionary<string, string> RedactPayload(IReadOnlyDictionary<string, string> payload)
+    {
+        Dictionary<string, string> redacted = new(StringComparer.Ordinal);
+        foreach (KeyValuePair<string, string> pair in payload.OrderBy(entry => entry.Key, StringComparer.Ordinal))
+        {
+            string safeKey = Redact(pair.Key);
+            string safeValue = DiagnosticSecretRedactor.IsSecretName(pair.Key) ||
+                DiagnosticSecretRedactor.IsSecretName(safeKey)
+                    ? "[redacted]"
+                    : Redact(pair.Value);
+
+            AddCollisionSafe(redacted, safeKey, safeValue);
+        }
+
+        return redacted;
+    }
+
+    private static void AddCollisionSafe(Dictionary<string, string> payload, string key, string value)
+    {
+        if (!payload.ContainsKey(key))
+        {
+            payload[key] = value;
+            return;
+        }
+
+        for (int suffix = 2; ; suffix++)
+        {
+            string candidate = key + "#" + suffix.ToString(System.Globalization.CultureInfo.InvariantCulture);
+            if (!payload.ContainsKey(candidate))
+            {
+                payload[candidate] = value;
+                return;
+            }
+        }
     }
 }

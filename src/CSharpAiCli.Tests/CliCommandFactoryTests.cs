@@ -3040,6 +3040,99 @@ public sealed class CliCommandFactoryTests
     }
 
     [Fact]
+    public void Exec_json_output_redacts_secret_bearing_stdout_events()
+    {
+        using TempDirectory temp = TempDirectory.Create();
+        using StringWriter output = new();
+        FakeAgentRunner agentRunner = new(CreateSecretBearingExecAgentResult("json"));
+
+        int exitCode = CliCommandFactory
+            .Create(
+                output,
+                workspacePath => CreateSnapshot(
+                    workspacePath,
+                    apiKey: "sk-test-secret",
+                    apiKeySource: "OPENAI_API_KEY",
+                    model: "gpt-test"),
+                (_, _) => { },
+                _ => new FakeChatModelClient(ChatModelResult.Success(new ChatResponse("openai", "gpt-test", "resp", ""))),
+                writer => new TerminalChatStreamingRenderer(writer),
+                _ => new FakeConversationStore(),
+                () => DateTimeOffset.Parse("2024-01-01T00:00:00Z"),
+                (_, _, _) => agentRunner)
+            .Parse(["exec", "--json", "--workspace", temp.Path, "summarize workspace"])
+            .Invoke();
+
+        string text = output.ToString();
+        string[] lines = text.TrimEnd().Split(Environment.NewLine, StringSplitOptions.RemoveEmptyEntries);
+
+        Assert.Equal(0, exitCode);
+        Assert.Equal(2, lines.Length);
+        foreach (string line in lines)
+        {
+            JsonNode? node = JsonNode.Parse(line);
+            Assert.NotNull(node);
+        }
+
+        JsonObject toolCall = Assert.IsType<JsonObject>(JsonNode.Parse(lines[0]));
+        JsonObject payload = Assert.IsType<JsonObject>(toolCall["payload"]);
+        JsonObject result = Assert.IsType<JsonObject>(JsonNode.Parse(lines[^1]));
+        Assert.Equal("tool.call", toolCall["type"]?.GetValue<string>());
+        Assert.Contains("[redacted]", toolCall["message"]?.GetValue<string>(), StringComparison.Ordinal);
+        Assert.Contains("[redacted]", toolCall["summary"]?.GetValue<string>(), StringComparison.Ordinal);
+        Assert.Equal("workspace.search", payload["toolName"]?.GetValue<string>());
+        Assert.Equal("note.txt", payload["path"]?.GetValue<string>());
+        Assert.Contains("[redacted]", payload["argumentsJson"]?.GetValue<string>(), StringComparison.Ordinal);
+        Assert.Equal("[redacted]", payload["apiKey"]?.GetValue<string>());
+        Assert.Equal("[redacted]", payload["password"]?.GetValue<string>());
+        Assert.Equal("[redacted]", payload["authorization"]?.GetValue<string>());
+        Assert.Equal("[redacted]", payload["secretKey"]?.GetValue<string>());
+        Assert.Equal("[redacted]", payload["privateKey"]?.GetValue<string>());
+        Assert.Equal("exec.result", result["type"]?.GetValue<string>());
+        Assert.Contains("[redacted]", result["summary"]?.GetValue<string>(), StringComparison.Ordinal);
+        Assert.Equal("success", result["payload"]?["status"]?.GetValue<string>());
+        AssertDoesNotContainSecrets(text, CreateExecStdoutRawSecrets("json"));
+    }
+
+    [Fact]
+    public void Exec_text_output_redacts_secret_bearing_stdout_events()
+    {
+        using TempDirectory temp = TempDirectory.Create();
+        using StringWriter output = new();
+        FakeAgentRunner agentRunner = new(CreateSecretBearingExecAgentResult("text"));
+
+        int exitCode = CliCommandFactory
+            .Create(
+                output,
+                workspacePath => CreateSnapshot(
+                    workspacePath,
+                    apiKey: "sk-test-secret",
+                    apiKeySource: "OPENAI_API_KEY",
+                    model: "gpt-test"),
+                (_, _) => { },
+                _ => new FakeChatModelClient(ChatModelResult.Success(new ChatResponse("openai", "gpt-test", "resp", ""))),
+                writer => new TerminalChatStreamingRenderer(writer),
+                _ => new FakeConversationStore(),
+                () => DateTimeOffset.Parse("2024-01-01T00:00:00Z"),
+                (_, _, _) => agentRunner)
+            .Parse(["exec", "--workspace", temp.Path, "summarize workspace"])
+            .Invoke();
+
+        string text = output.ToString();
+
+        Assert.Equal(0, exitCode);
+        Assert.Contains("event: tool.call", text, StringComparison.Ordinal);
+        Assert.Contains("message=message password=[redacted] authorization=Bearer [redacted]", text, StringComparison.Ordinal);
+        Assert.Contains("summary=summary apiKey=[redacted]", text, StringComparison.Ordinal);
+        Assert.Contains("payload.toolName=workspace.search", text, StringComparison.Ordinal);
+        Assert.Contains("payload.path=note.txt", text, StringComparison.Ordinal);
+        Assert.Contains("payload.argumentsJson=", text, StringComparison.Ordinal);
+        Assert.Contains("[redacted]", text, StringComparison.Ordinal);
+        Assert.Contains("result: success exitCode=0 summary=result apiKey=[redacted]", text, StringComparison.Ordinal);
+        AssertDoesNotContainSecrets(text, CreateExecStdoutRawSecrets("text"));
+    }
+
+    [Fact]
     public void Exec_output_json_with_verbose_remains_valid_ndjson_without_verbose_text()
     {
         using TempDirectory temp = TempDirectory.Create();
@@ -7258,6 +7351,74 @@ public sealed class CliCommandFactoryTests
             DotnetRuntime: ".NET 9.0.0",
             TargetFramework: "net9.0",
             HasGlobalJson: false);
+    }
+
+    private static AgentRunResult CreateSecretBearingExecAgentResult(string prefix)
+    {
+        AgentRunEvent secretEvent = new(
+            Type: "tool.call",
+            Sequence: 0,
+            Timestamp: DateTimeOffset.Parse("2024-01-01T00:00:00Z"),
+            Message: $"message password={prefix}-message-password authorization=Bearer {prefix}-message-auth-secret",
+            Summary: $"summary apiKey={prefix}-summary-secret",
+            Payload: new Dictionary<string, string>
+            {
+                ["argumentsJson"] = $$"""
+                {"apiKey":"sk-{{prefix}}-argument-api-secret","nested":{"password":"{{prefix}}-argument-password-secret","authorization":"Bearer {{prefix}}-argument-bearer-secret","Authorization":"Basic {{prefix}}-argument-basic-secret","secretKey":"{{prefix}}-argument-secret-key-secret","privateKey":"{{prefix}}-argument-private-key-secret","github":"ghp_{{prefix}}argumentsecret1234567890","githubPat":"github_pat_{{prefix}}_argument_secret_1234567890","escaped":"{\"secretKey\":\"{{prefix}}-escaped-secret-key-secret\",\"authorization\":\"Bearer {{prefix}}-escaped-auth-secret\"}"},"path":"note.txt"}
+                """,
+                ["toolName"] = "workspace.search",
+                ["path"] = "note.txt",
+                ["apiKey"] = $"{prefix}-payload-api-key-secret",
+                ["password"] = $"{prefix}-payload-password-secret",
+                ["authorization"] = $"Bearer {prefix}-payload-authorization-secret",
+                ["secretKey"] = $"{prefix}-payload-secret-key-secret",
+                ["privateKey"] = $"{prefix}-payload-private-key-secret",
+                [$"sk-{prefix}-payload-key-one"] = "first key should keep its value",
+                [$"sk-{prefix}-payload-key-two"] = "second key should keep its value"
+            },
+            ApprovalStatus: "approved",
+            Status: "started",
+            DurationMs: 42,
+            ApprovalDurationMs: 5);
+
+        return AgentRunResult.Success($"result apiKey={prefix}-result-secret", [], [secretEvent]);
+    }
+
+    private static string[] CreateExecStdoutRawSecrets(string prefix)
+    {
+        return
+        [
+            "sk-test-secret",
+            $"{prefix}-message-password",
+            $"{prefix}-message-auth-secret",
+            $"{prefix}-summary-secret",
+            $"{prefix}-result-secret",
+            $"sk-{prefix}-argument-api-secret",
+            $"{prefix}-argument-password-secret",
+            $"{prefix}-argument-bearer-secret",
+            $"{prefix}-argument-basic-secret",
+            $"{prefix}-argument-secret-key-secret",
+            $"{prefix}-argument-private-key-secret",
+            $"{prefix}-escaped-secret-key-secret",
+            $"{prefix}-escaped-auth-secret",
+            $"ghp_{prefix}argumentsecret1234567890",
+            $"github_pat_{prefix}_argument_secret_1234567890",
+            $"{prefix}-payload-api-key-secret",
+            $"{prefix}-payload-password-secret",
+            $"{prefix}-payload-authorization-secret",
+            $"{prefix}-payload-secret-key-secret",
+            $"{prefix}-payload-private-key-secret",
+            $"sk-{prefix}-payload-key-one",
+            $"sk-{prefix}-payload-key-two"
+        ];
+    }
+
+    private static void AssertDoesNotContainSecrets(string text, IEnumerable<string> rawSecrets)
+    {
+        foreach (string rawSecret in rawSecrets)
+        {
+            Assert.DoesNotContain(rawSecret, text, StringComparison.Ordinal);
+        }
     }
 
     private static CliEnvironmentSnapshot CreateSnapshotWithShellPolicy(

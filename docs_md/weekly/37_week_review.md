@@ -1,6 +1,6 @@
 ## Week 37 review
 
-Status: accepted
+Status: accepted after final-review follow-up
 
 Completed:
 - Step 1: Added `DiagnosticContext` coverage for command id, session id, workspace, workspace status, command name, and UTC timestamp context shared by diagnostics and trace logging.
@@ -13,6 +13,7 @@ Completed:
 - Step 8: Audited and extended regression coverage for log path resolution, tail behavior, clear behavior, redaction, trace disabled by default, and trace enablement through both flag and environment variable.
 - Step 9: Updated the runtime logging diagnostics spec and release docs for verbose diagnostics, trace logs, log commands, redaction guarantees, and accepted residual limitations.
 - Step 10: Ran final build/test verification and created this weekly review.
+- Final-review follow-up: hardened public `exec` text and NDJSON stdout rendering so event messages, summaries, payload keys/values, nested or escaped `argumentsJson`, secret-named payload values, and result summaries are redacted before terminal/CI output.
 
 Verification:
 - Environment: set `$env:DOTNET_ROOT='D:\AI\C-AICLI\.worktrees\.dotnet-sdk'` and prepended it to `$env:PATH` for all .NET commands.
@@ -20,13 +21,16 @@ Verification:
 - Result: passed; SDK `9.0.308`.
 - Command: `dotnet build src\CSharpAiCli.sln --no-restore`
 - Result: passed; 0 warnings, 0 errors.
+- Command: `dotnet test src\CSharpAiCli.Tests\CSharpAiCli.Tests.csproj --no-restore --filter "ExecRendererTests|CliCommandFactoryTests"`
+- Result: passed; 247 passed, 0 failed, 0 skipped.
 - Command: `dotnet test src\CSharpAiCli.sln --no-restore`
-- Result: passed; 966 passed, 0 failed, 0 skipped; duration 43 s for `CSharpAiCli.Tests.dll`.
+- Result: passed; 970 passed, 0 failed, 0 skipped; duration 44 s for `CSharpAiCli.Tests.dll`.
 - Command: `git diff --check`
-- Result: passed with exit code 0; no whitespace errors. Git emitted an LF-to-CRLF normalization notice for this new markdown file.
+- Result: passed with exit code 0; no whitespace errors. Git emitted LF-to-CRLF normalization notices for modified files.
 
 Runtime notes:
 - Verbose diagnostics are safe, human-readable command diagnostics for text output and are intentionally omitted from JSON output streams.
+- Public `exec` text and NDJSON stdout now redact common secret forms in event messages, event summaries, event payload keys/values, nested or escaped `argumentsJson`, secret-named payload values such as `apiKey`, `authorization`, `secretKey`, `privateKey`, and `password`, and result summaries.
 - Trace logging writes local JSONL files named `yyyy-MM-dd.trace.log` under the resolved CLI log directory when `--trace` or `CAICLI_TRACE=1` is enabled.
 - Trace records include shared command/session/workspace context plus ordered exec event/result details such as status, duration, approval status/duration, error code, sequence, and redacted payload data when available.
 - Command logs continue to use `yyyy-MM-dd.log`; trace logs use `yyyy-MM-dd.trace.log`.
