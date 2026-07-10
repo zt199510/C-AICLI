@@ -44,7 +44,13 @@
 - `baseUrl` can come from `OPENAI_BASE_URL`, user config, or workspace config, but it must be an absolute `http` or `https` URL without user info, query, or fragment components.
 - `config get`, `config list`, `doctor`, and logs record key presence and source, not key value.
 - Logs include configured model, base URL, and backend source/status for diagnostics.
+- Trace logs redact common key, token, password, authorization, `secretKey`, `privateKey`, nested/escaped argument, OpenAI key, and GitHub token formats, but users should still treat local logs as sensitive diagnostic artifacts.
 - Release artifacts do not include user config, workspace config, keys, logs, or transcripts.
+
+## Logging And Diagnostics
+
+- Parse-time `System.CommandLine` validation errors can return before trace context creation, so they may not appear in trace logs. No model or tool flow has begun in this path.
+- `logs clear` refuses to clear when the resolved log directory or an ancestor is a symlink/reparse point. This is an intentional local-file safety boundary.
 
 ## Platform
 

@@ -29,7 +29,33 @@ approval mode: on-request (default)
 agent backend status: available
 ```
 
-## 3. Configure Chat
+## 3. Inspect Diagnostics And Logs
+
+Global `--verbose` works on subcommands and prints safe human-readable diagnostics for text output. Commands that emit JSON keep stdout JSON-clean.
+
+```powershell
+artifacts\release\caicli-0.1.0-win-x64\caicli.exe doctor --verbose
+artifacts\release\caicli-0.1.0-win-x64\caicli.exe logs path
+artifacts\release\caicli-0.1.0-win-x64\caicli.exe logs show --tail 20
+```
+
+`logs path` prints the resolved CLI log directory without creating it. `logs show` reads existing command logs (`yyyy-MM-dd.log`) and trace logs (`yyyy-MM-dd.trace.log`); a missing log directory succeeds with no output. To remove local CLI logs, `logs clear` deletes only direct `*.log` files in that resolved log directory.
+
+```powershell
+artifacts\release\caicli-0.1.0-win-x64\caicli.exe logs clear
+```
+
+For trace-level local JSONL diagnostics, pass `--trace` or set `CAICLI_TRACE=1`:
+
+```powershell
+artifacts\release\caicli-0.1.0-win-x64\caicli.exe exec --trace --workspace . "read README.md"
+$env:CAICLI_TRACE = "1"
+artifacts\release\caicli-0.1.0-win-x64\caicli.exe exec --workspace . "read README.md"
+```
+
+Trace logs are redacted and record key presence/source, not raw key values.
+
+## 4. Configure Chat
 
 For a one-session environment setup:
 
@@ -51,7 +77,7 @@ Or create `%USERPROFILE%\.caicli\config.json`:
 
 `approvalMode` can be `never`, `on-request`, `on-failure`, or `always`. User config takes priority over workspace config, and the default is `on-request`. There is no environment variable for approval mode. `config set approvalMode` is not implemented; edit the JSON file directly.
 
-## 4. Send A Chat Prompt
+## 5. Send A Chat Prompt
 
 ```powershell
 artifacts\release\caicli-0.1.0-win-x64\caicli.exe chat "Say hello in one sentence."
@@ -60,7 +86,7 @@ artifacts\release\caicli-0.1.0-win-x64\caicli.exe chat "Say hello in one sentenc
 With no model configured, the command returns non-zero and prints `localErrorCode: missing-model`.
 After setting `OPENAI_MODEL` but leaving the key unset, it returns non-zero and prints `localErrorCode: missing-openai-api-key`.
 
-## 5. Use A Session
+## 6. Use A Session
 
 ```powershell
 artifacts\release\caicli-0.1.0-win-x64\caicli.exe chat --session smoke "Remember this short note."
@@ -70,7 +96,7 @@ artifacts\release\caicli-0.1.0-win-x64\caicli.exe chat --resume smoke "What note
 `--session` creates or appends a transcript under `%USERPROFILE%\.caicli\sessions`.
 `--resume` requires an existing transcript and sends normalized prior transcript context with the new prompt. Missing sessions fail safely with `errorCode: session-not-found`.
 
-## 6. Use Project Instructions
+## 7. Use Project Instructions
 
 Project instruction files are optional. In each directory, `AGENTS.md` is preferred when present; legacy `AICLI.md` is used only when `AGENTS.md` is absent. `chat` and agentic `exec` load instruction files from the workspace root to the selected target path, merge them root-to-leaf, and send the merged instructions with the model request.
 
@@ -92,7 +118,7 @@ artifacts\release\caicli-0.1.0-win-x64\caicli.exe exec --workspace . --cwd src\a
 
 If both `AGENTS.md` and `AICLI.md` exist in the same directory, only `AGENTS.md` is considered for that directory. There is no same-directory fallback to `AICLI.md` when `AGENTS.md` exists but is empty, invalid, or oversized. `doctor`, `config get`, and `config list` report instruction source paths and order without printing instruction contents.
 
-## 7. Inspect Development Commands
+## 8. Inspect Development Commands
 
 ```powershell
 artifacts\release\caicli-0.1.0-win-x64\caicli.exe status --workspace .
@@ -113,7 +139,7 @@ artifacts\release\caicli-0.1.0-win-x64\caicli.exe review --output json --workspa
 
 `review` is read-only for the workspace. It does not execute patch or shell tools and does not write workspace files, logs, transcripts, or patches. Diff collection may create transient temp files/directories outside the workspace and clean them up. It does send the current git diff to the configured model, so real use needs configured model credentials.
 
-## 8. Inspect Optional Features
+## 9. Inspect Optional Features
 
 ```powershell
 artifacts\release\caicli-0.1.0-win-x64\caicli.exe mcp list
@@ -123,7 +149,7 @@ artifacts\release\caicli-0.1.0-win-x64\caicli.exe workflow list
 
 MCP config/list/doctor are available. User-configured stdio MCP servers can be discovered and called through ordinary registry/tool paths, while workspace-configured MCP servers are not auto-started by `tools list`, `tools call`, `exec`, or `run`. `mcp doctor` can explicitly diagnose configured stdio servers. Remote/http MCP and Gerber/TIFF workflow execution remain enhanced Deferred capabilities.
 
-## 9. Run An Agentic Exec Task
+## 10. Run An Agentic Exec Task
 
 `exec` is the agentic v1 surface and contract. It is routed through `IAgentRunner`, emits model/tool/final/error events in the newline-delimited `--json` stream, supports loop limits and session transcripts, and returns exit code `0` on success, `1` on task failure, and `2` on argument error.
 
@@ -157,7 +183,7 @@ Without an approving mode, approval-gated write and shell actions are denied. In
 
 Text output and `exec --json` events/results include `approvalStatus` for approval-gated tool activity.
 
-## 10. Run A Local Smoke Task
+## 11. Run A Local Smoke Task
 
 ```powershell
 artifacts\release\caicli-0.1.0-win-x64\caicli.exe run --workspace . --approve "create smoke note"
@@ -166,7 +192,7 @@ artifacts\release\caicli-0.1.0-win-x64\caicli.exe run --workspace . --approve "c
 This deterministic smoke task creates or updates `caicli-smoke.txt` in the workspace. Under the default `on-request` approval mode, the write is denied without `--approve`.
 `run` remains the deterministic direct-tool compatibility path for release smoke checks. It does not support `--approval`; configured `approvalMode` applies when `--approve` is not supplied, and the existing `--approve` option remains for compatibility.
 
-## 11. Inspect And Call Tools
+## 12. Inspect And Call Tools
 
 ```powershell
 artifacts\release\caicli-0.1.0-win-x64\caicli.exe tools list --workspace .
@@ -205,7 +231,7 @@ The legacy `--approve` option remains supported for compatibility. Dangerous she
 
 Tool failures use stable centralized `errorCode` values, so scripts and agent/runtime consumers should key off `errorCode` and `approvalStatus` instead of parsing human-readable summaries. Tool results may also carry structured payloads internally for agent/runtime consumption; the CLI text output keeps the compatible `status`, `approvalStatus`, optional `errorCode`, and `summary` shape.
 
-## 12. Manage Sessions
+## 13. Manage Sessions
 
 ```powershell
 artifacts\release\caicli-0.1.0-win-x64\caicli.exe session list

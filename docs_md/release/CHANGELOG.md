@@ -3,6 +3,9 @@
 ## Unreleased
 
 Added:
+- Global recursive `--verbose` diagnostics for safe human-readable command context without polluting JSON output streams.
+- Global recursive `--trace` and `CAICLI_TRACE=1` for redacted trace-level local JSONL logs.
+- `logs path`, `logs show --tail <n>`, and `logs clear` for inspecting and cleaning CLI log files.
 - `session list`, `session show <name>`, `session rename <old> <new>`, and `session delete <name>` for local transcript management.
 - `chat --resume <session>` and `exec --resume <session>` require an existing transcript and pass normalized prior transcript context to the model or agent request.
 - `session export --format json|markdown <name>` supports raw JSON transcript export and readable markdown export.
@@ -10,6 +13,7 @@ Added:
 - `review --json` and `review --output json` for machine-readable review results.
 
 Changed:
+- Command logs continue to use `yyyy-MM-dd.log`; trace logs use `yyyy-MM-dd.trace.log`, and diagnostics record key presence/source instead of raw key values.
 - `session clear <name>` remains supported for compatibility, but `session delete <name>` is the recommended delete command.
 - Markdown session export omits raw tool arguments, fences transcript-controlled bodies, escapes metadata, and redacts common secret values.
 - Release smoke coverage now exercises offline `status`, `models`, and git `diff` paths without model credentials.

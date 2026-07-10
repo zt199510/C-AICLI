@@ -6,6 +6,8 @@
 |---|---|---|
 | `caicli version` | Accepted | Reports version, target framework, and release runtime. |
 | `caicli doctor` | Accepted | Diagnoses runtime, workspace, model/source, base URL/source, key presence/source, logs, and backend source/status. |
+| Global diagnostics | Accepted | Recursive `--verbose` prints safe human-readable diagnostics for text output; recursive `--trace` or `CAICLI_TRACE=1` writes redacted trace JSONL without polluting JSON command output. |
+| `caicli logs path/show/clear` | Accepted | Prints the resolved log directory, tails existing command and trace logs, and clears only direct `*.log` files with best-effort raced/locked-file handling and symlink/reparse safety checks. |
 | `caicli status` | Accepted | Reports workspace, git, and effective configuration state without requiring model credentials. |
 | `caicli models` | Accepted | Prints local current model/base URL/source and static examples only; does not call a model list API or require an API key. |
 | `caicli config get/list/set/unset` | Accepted | Reports effective config and writes user scalar config without printing secret values. |

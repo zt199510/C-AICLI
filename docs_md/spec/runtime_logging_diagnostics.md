@@ -73,6 +73,44 @@ yyyy-MM-dd.log
 
 日志不记录 `SecretValue.Value`。
 
+## Week 37 Diagnostics And Trace Logs
+
+Global `--verbose` is recursive and may be used on subcommands. It prints safe, human-readable diagnostics for text output, including command name, command/session ids, timestamp, workspace, log directory, config sources, warning counts, model/base URL/backend status, and API key presence/source. Commands that emit JSON (`--json` or `--output json`) must keep stdout JSON-clean and must not append verbose diagnostics to the JSON stream.
+
+Global `--trace` is recursive. `CAICLI_TRACE=1` enables the same trace behavior without passing the flag. Trace logs are local JSONL files under `LogPathResolver.ResolveLogDirectory(snapshot)` and use this UTC date file name:
+
+```text
+yyyy-MM-dd.trace.log
+```
+
+Command logs continue to use:
+
+```text
+yyyy-MM-dd.log
+```
+
+Trace records share these core fields:
+
+- `timestampUtc`
+- `command`
+- `commandId`
+- `sessionId`
+- `workspace`
+- `type`
+- `sequence`
+
+Exec trace event/result records include `status`, `durationMs`, `approvalDurationMs`, `errorCode`, `approvalStatus`, and `payload` when available. Payload keys are stable enough for diagnostics but must be treated as diagnostic data, not a public API contract.
+
+Trace and verbose diagnostics must redact secrets before writing output. Redaction covers API keys, access/refresh tokens, passwords, `Authorization` headers and common variants, `secretKey`, `privateKey`, nested or escaped `argumentsJson`, OpenAI `sk-...` keys, and GitHub token formats such as `ghp_...` and `github_pat_...`. Diagnostics may record key presence and source, but never raw key values.
+
+`logs path` prints the resolved CLI log directory. It must not create the directory just to print the path.
+
+`logs show --tail <n>` reads existing direct `*.log` files in the resolved log directory, including command logs and `*.trace.log` trace files. The default tail is `20`; `n` must be positive. A missing log directory is an empty success. Locked, deleted, unreadable, or raced files are skipped best-effort. `logs show` must not mutate command logs for itself.
+
+`logs clear` deletes only direct `*.log` files in the resolved log directory. It does not recurse and must preserve non-log files, subdirectories, workspace files, and other `.caicli` content. Locked, deleted, or unreadable files are skipped best-effort. It refuses to clear if the resolved log directory or any ancestor is a symlink/reparse point. `logs clear` must not mutate command logs for itself.
+
+Known residual risk: parse-time `System.CommandLine` validation errors can return before trace context creation. This is accepted because no model/tool flow has begun.
+
 ## Chat 边界
 
 第 4 周只添加 `chat` 的 Phase 02 边界提示。该命令用于告诉用户模型客户端和流式渲染器属于第 5-6 周，不执行模型调用。
