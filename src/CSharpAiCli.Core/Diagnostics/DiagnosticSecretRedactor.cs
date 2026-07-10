@@ -8,6 +8,7 @@ internal static class DiagnosticSecretRedactor
     private const string BearerSecretValuePattern = @"Bearer\s+(?:\[redacted\]|[A-Za-z0-9._~+/=-]+)";
     private const string AuthorizationSchemeSecretValuePattern =
         @"[A-Za-z][A-Za-z0-9._~-]*\s+(?:\[redacted\]|[^\r\n}\]]+)";
+    private const string AuthorizationKeyNamePattern = @"(?:[A-Za-z0-9]+[_-]+)*authorization";
     private const string PlainSecretValuePattern = @"[^\s,;}\]]+";
     private const string SecretKeyNamePattern =
         @"(?:[A-Za-z0-9]+[_-]+)*(?:api[_-]?key|access[_-]?token|refresh[_-]?token|token|client[_-]?secret|secret[_-]?access[_-]?key|password|secret|authorization|private[_-]?key|secret[_-]?key)" +
@@ -18,7 +19,7 @@ internal static class DiagnosticSecretRedactor
         RegexOptions.CultureInvariant | RegexOptions.IgnoreCase);
 
     private static readonly Regex KeyValueSecretPattern = new(
-        $$"""(?<![A-Za-z0-9_-])(?<prefix>(?:\\?["'](?i:authorization)\\?["']|(?i:authorization))(?![A-Za-z0-9_-])\s*[:=]\s*)(?<value>{{QuotedSecretValuePattern}}|{{BearerSecretValuePattern}}|{{AuthorizationSchemeSecretValuePattern}}|{{PlainSecretValuePattern}})|(?<![A-Za-z0-9_-])(?<prefix>(?:\\?["'](?i:{{SecretKeyNamePattern}})\\?["']|(?i:{{SecretKeyNamePattern}}))(?![A-Za-z0-9_-])\s*[:=]\s*)(?<value>{{QuotedSecretValuePattern}}|{{BearerSecretValuePattern}}|{{PlainSecretValuePattern}})""",
+        $$"""(?<![A-Za-z0-9_-])(?<prefix>(?:\\?["'](?i:{{AuthorizationKeyNamePattern}})\\?["']|(?i:{{AuthorizationKeyNamePattern}}))(?![A-Za-z0-9_-])\s*[:=]\s*)(?<value>{{QuotedSecretValuePattern}}|{{BearerSecretValuePattern}}|{{AuthorizationSchemeSecretValuePattern}}|{{PlainSecretValuePattern}})|(?<![A-Za-z0-9_-])(?<prefix>(?:\\?["'](?i:{{SecretKeyNamePattern}})\\?["']|(?i:{{SecretKeyNamePattern}}))(?![A-Za-z0-9_-])\s*[:=]\s*)(?<value>{{QuotedSecretValuePattern}}|{{BearerSecretValuePattern}}|{{PlainSecretValuePattern}})""",
         RegexOptions.CultureInvariant | RegexOptions.IgnoreCase);
 
     private static readonly Regex AuthorizationSchemeSecretPattern = new(
