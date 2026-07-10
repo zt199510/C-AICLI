@@ -258,8 +258,11 @@ public static class CliCommandFactory
         }
 
         Command versionCommand = new("version", "Print product version metadata.");
-        versionCommand.SetAction(_ =>
+        versionCommand.SetAction(parseResult =>
         {
+            string? workspacePath = parseResult.GetValue(workspaceOption);
+            CliEnvironmentSnapshot snapshot = workspaceSnapshotProvider(workspacePath);
+            WriteVerboseDiagnostics(parseResult, "version", snapshot);
             output.WriteLine($"{ProductInfo.CommandName} {ProductInfo.Version}");
             output.WriteLine($"target framework: {ProductInfo.TargetFramework}");
             output.WriteLine($"release runtime: {ProductInfo.ReleaseRuntime}");

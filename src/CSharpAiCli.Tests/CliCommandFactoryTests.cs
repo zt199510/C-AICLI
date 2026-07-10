@@ -1679,6 +1679,59 @@ public sealed class CliCommandFactoryTests
     }
 
     [Fact]
+    public void Version_command_accepts_verbose_and_writes_safe_diagnostics()
+    {
+        using TempDirectory temp = TempDirectory.Create();
+        using StringWriter output = new();
+        string? receivedWorkspace = null;
+        CliEnvironmentSnapshot snapshot = CreateSnapshot(
+            workspacePath: temp.Path,
+            apiKey: "sk-version-secret",
+            apiKeySource: "OPENAI_API_KEY",
+            model: "gpt-version",
+            baseUrl: "https://gateway.example.test/v1",
+            baseUrlSource: "workspace config");
+
+        int exitCode = CliCommandFactory
+            .Create(
+                output,
+                workspacePath =>
+                {
+                    receivedWorkspace = workspacePath;
+                    return snapshot;
+                },
+                (_, _) => { },
+                _ => new FakeChatModelClient(ChatModelResult.Success(new ChatResponse("openai", "gpt-test", "resp", ""))),
+                writer => new TerminalChatStreamingRenderer(writer),
+                _ => new FakeConversationStore(),
+                () => DateTimeOffset.Parse("2024-01-01T00:00:00Z"),
+                (_, _, _) => throw new InvalidOperationException("version must not create an exec runner"))
+            .Parse(["version", "--workspace", temp.Path, "--verbose"])
+            .Invoke();
+
+        string text = output.ToString();
+        string[] lines = text.Split(Environment.NewLine, StringSplitOptions.RemoveEmptyEntries);
+        Assert.Equal(0, exitCode);
+        Assert.Equal(temp.Path, receivedWorkspace);
+        Assert.Contains("C# AI CLI verbose diagnostics", text);
+        Assert.Contains("commandName: version", text);
+        Assert.Contains(lines, line => line.StartsWith("commandId: ", StringComparison.Ordinal) && line.Length > "commandId: ".Length);
+        Assert.Contains(lines, line => line.StartsWith("sessionId: ", StringComparison.Ordinal) && line.Length > "sessionId: ".Length);
+        Assert.Contains("timestampUtc: 2024-01-01T00:00:00.0000000Z", text);
+        Assert.Contains($"workspace: {temp.Path}", text);
+        Assert.Contains("workspaceStatus: ready", text);
+        Assert.Contains("logDirectory: ", text);
+        Assert.Contains("userConfigPath: ", text);
+        Assert.Contains("workspaceConfigPath: ", text);
+        Assert.Contains("apiKey: present", text);
+        Assert.Contains("apiKeySource: OPENAI_API_KEY", text);
+        Assert.Contains("caicli ", text);
+        Assert.Contains("target framework: net9.0", text);
+        Assert.Contains("release runtime: win-x64", text);
+        Assert.DoesNotContain("sk-version-secret", text, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void Mcp_list_command_writes_mcp_server_report()
     {
         using StringWriter output = new();
