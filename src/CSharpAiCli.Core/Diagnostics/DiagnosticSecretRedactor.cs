@@ -4,6 +4,10 @@ namespace CSharpAiCli.Core;
 
 internal static class DiagnosticSecretRedactor
 {
+    private const string QuotedSecretValuePattern = """\\?["'](?:\\\\.|\\.|[^"'\\])*\\?["']""";
+    private const string BearerSecretValuePattern = @"Bearer\s+(?:\[redacted\]|[A-Za-z0-9._~+/=-]+)";
+    private const string AuthorizationSchemeSecretValuePattern = @"[A-Za-z][A-Za-z0-9._~-]*\s+(?:\[redacted\]|[^\s,;}\]]+)";
+    private const string PlainSecretValuePattern = @"[^\s,;}\]]+";
     private const string SecretKeyNamePattern =
         @"(?:[A-Za-z0-9]+[_-]+)*(?:api[_-]?key|access[_-]?token|refresh[_-]?token|token|client[_-]?secret|secret[_-]?access[_-]?key|password|secret|authorization|private[_-]?key|secret[_-]?key)" +
         "|apiKey|accessToken|refreshToken|clientSecret|awsSecretAccessKey|privateKey|secretKey";
@@ -13,7 +17,11 @@ internal static class DiagnosticSecretRedactor
         RegexOptions.CultureInvariant | RegexOptions.IgnoreCase);
 
     private static readonly Regex KeyValueSecretPattern = new(
-        $$"""(?<![A-Za-z0-9_-])(?<prefix>(?:\\?["'](?i:{{SecretKeyNamePattern}})\\?["']|(?i:{{SecretKeyNamePattern}}))(?![A-Za-z0-9_-])\s*[:=]\s*)(?<value>\\?["'](?:\\\\.|\\.|[^"'\\])*\\?["']|Bearer\s+[A-Za-z0-9._~+/=-]+|[^\s,;}\]]+)""",
+        $$"""(?<![A-Za-z0-9_-])(?<prefix>(?:\\?["'](?i:authorization)\\?["']|(?i:authorization))(?![A-Za-z0-9_-])\s*[:=]\s*)(?<value>{{QuotedSecretValuePattern}}|{{BearerSecretValuePattern}}|{{AuthorizationSchemeSecretValuePattern}}|{{PlainSecretValuePattern}})|(?<![A-Za-z0-9_-])(?<prefix>(?:\\?["'](?i:{{SecretKeyNamePattern}})\\?["']|(?i:{{SecretKeyNamePattern}}))(?![A-Za-z0-9_-])\s*[:=]\s*)(?<value>{{QuotedSecretValuePattern}}|{{BearerSecretValuePattern}}|{{PlainSecretValuePattern}})""",
+        RegexOptions.CultureInvariant | RegexOptions.IgnoreCase);
+
+    private static readonly Regex AuthorizationSchemeSecretPattern = new(
+        @"^(?<scheme>[A-Za-z][A-Za-z0-9._~-]*)\s+(?:\[redacted\]|[^\s,;}\]]+)$",
         RegexOptions.CultureInvariant | RegexOptions.IgnoreCase);
 
     private static readonly Regex BearerTokenPattern = new(
@@ -84,6 +92,12 @@ internal static class DiagnosticSecretRedactor
         if (value.StartsWith("Bearer ", StringComparison.OrdinalIgnoreCase))
         {
             return "Bearer [redacted]";
+        }
+
+        Match authorizationScheme = AuthorizationSchemeSecretPattern.Match(value);
+        if (authorizationScheme.Success)
+        {
+            return authorizationScheme.Groups["scheme"].Value + " [redacted]";
         }
 
         return "[redacted]";
