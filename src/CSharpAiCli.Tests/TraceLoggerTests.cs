@@ -75,7 +75,7 @@ public sealed class TraceLoggerTests
             Assert.Equal("success", first["status"]?.GetValue<string>());
             Assert.Equal(37, first["durationMs"]?.GetValue<long>());
             Assert.Equal("planned with apiKey=[redacted]", first["summary"]?.GetValue<string>());
-            Assert.Equal("Bearer [redacted]", first["payload"]?["authorization"]?.GetValue<string>());
+            Assert.Equal("[redacted]", first["payload"]?["authorization"]?.GetValue<string>());
             Assert.Equal("gpt-test", first["payload"]?["model"]?.GetValue<string>());
             Assert.Equal("tool.completed", second["type"]?.GetValue<string>());
             Assert.Equal("approved", second["approvalStatus"]?.GetValue<string>());
@@ -120,8 +120,11 @@ public sealed class TraceLoggerTests
                 Summary: """model returned {\"password\":\"escaped-summary-secret\"} and apiKey: plain-summary-secret""",
                 Payload: new Dictionary<string, string>
                 {
-                    ["argumentsJson"] = """{"apiKey":"plain-argument-secret","nested":{"password":"nested-argument-secret"},"authorization":"Bearer nestedbearer123","github":"ghp_abcdefghijklmnopqrstuvwxyz"}""",
-                    ["escapedJson"] = """{\"password\":\"escaped-payload-secret\",\"apiKey\":\"plain-escaped-payload-secret\"}""",
+                    ["argumentsJson"] = """{"apiKey":"plain-argument-secret","nested":{"password":"nested-argument-secret"},"authorization":"Basic basic-argument-secret","secretKey":"secret-key-argument-secret","privateKey":"private-key-argument-secret","github":"ghp_abcdefghijklmnopqrstuvwxyz"}""",
+                    ["authorization"] = "Basic direct-basic-secret",
+                    ["privateKey"] = "direct-private-key-secret",
+                    ["secretKey"] = "direct-secret-key-secret",
+                    ["escapedJson"] = """{\"password\":\"escaped-payload-secret\",\"apiKey\":\"plain-escaped-payload-secret\",\"authorization\":\"Digest digest-escaped-secret\",\"secretKey\":\"escaped-secret-key-secret\",\"privateKey\":\"escaped-private-key-secret\"}""",
                     ["escapedKeyValue"] = """password:\"escaped-kv-secret\" apiKey=plain-kv-secret"""
                 },
                 Status: "success");
@@ -141,10 +144,18 @@ public sealed class TraceLoggerTests
             Assert.DoesNotContain("plain-summary-secret", trace, StringComparison.Ordinal);
             Assert.DoesNotContain("plain-argument-secret", trace, StringComparison.Ordinal);
             Assert.DoesNotContain("nested-argument-secret", trace, StringComparison.Ordinal);
-            Assert.DoesNotContain("nestedbearer123", trace, StringComparison.Ordinal);
+            Assert.DoesNotContain("basic-argument-secret", trace, StringComparison.Ordinal);
+            Assert.DoesNotContain("secret-key-argument-secret", trace, StringComparison.Ordinal);
+            Assert.DoesNotContain("private-key-argument-secret", trace, StringComparison.Ordinal);
+            Assert.DoesNotContain("direct-basic-secret", trace, StringComparison.Ordinal);
+            Assert.DoesNotContain("direct-private-key-secret", trace, StringComparison.Ordinal);
+            Assert.DoesNotContain("direct-secret-key-secret", trace, StringComparison.Ordinal);
             Assert.DoesNotContain("abcdefghijklmnopqrstuvwxyz", trace, StringComparison.Ordinal);
             Assert.DoesNotContain("escaped-payload-secret", trace, StringComparison.Ordinal);
             Assert.DoesNotContain("plain-escaped-payload-secret", trace, StringComparison.Ordinal);
+            Assert.DoesNotContain("digest-escaped-secret", trace, StringComparison.Ordinal);
+            Assert.DoesNotContain("escaped-secret-key-secret", trace, StringComparison.Ordinal);
+            Assert.DoesNotContain("escaped-private-key-secret", trace, StringComparison.Ordinal);
             Assert.DoesNotContain("escaped-kv-secret", trace, StringComparison.Ordinal);
             Assert.DoesNotContain("plain-kv-secret", trace, StringComparison.Ordinal);
             Assert.DoesNotContain("plain-result-secret", trace, StringComparison.Ordinal);

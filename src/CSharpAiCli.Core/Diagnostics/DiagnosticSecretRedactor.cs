@@ -5,8 +5,8 @@ namespace CSharpAiCli.Core;
 internal static class DiagnosticSecretRedactor
 {
     private const string SecretKeyNamePattern =
-        @"(?:[A-Za-z0-9]+[_-]+)*(?:api[_-]?key|access[_-]?token|refresh[_-]?token|token|client[_-]?secret|secret[_-]?access[_-]?key|password|secret)" +
-        "|apiKey|accessToken|refreshToken|clientSecret|awsSecretAccessKey";
+        @"(?:[A-Za-z0-9]+[_-]+)*(?:api[_-]?key|access[_-]?token|refresh[_-]?token|token|client[_-]?secret|secret[_-]?access[_-]?key|password|secret|authorization|private[_-]?key|secret[_-]?key)" +
+        "|apiKey|accessToken|refreshToken|clientSecret|awsSecretAccessKey|privateKey|secretKey";
 
     private static readonly Regex SecretKeyNameRegex = new(
         "^(?:" + SecretKeyNamePattern + ")$",
