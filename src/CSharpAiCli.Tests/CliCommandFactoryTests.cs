@@ -3248,6 +3248,151 @@ public sealed class CliCommandFactoryTests
     }
 
     [Fact]
+    public void Exec_trace_session_and_resume_conflict_writes_trace_failure_without_polluting_json_output()
+    {
+        using TempDirectory temp = TempDirectory.Create();
+        using StringWriter output = new();
+        FakeAgentRunner agentRunner = new(AgentRunResult.Success("agent completed task", [], []));
+
+        int exitCode = CliCommandFactory
+            .Create(
+                output,
+                workspacePath => CreateSnapshot(
+                    workspacePath,
+                    apiKey: "sk-test-secret",
+                    apiKeySource: "OPENAI_API_KEY",
+                    model: "gpt-test"),
+                (_, _) => { },
+                _ => new FakeChatModelClient(ChatModelResult.Success(new ChatResponse("openai", "gpt-test", "resp", ""))),
+                writer => new TerminalChatStreamingRenderer(writer),
+                _ => new FakeConversationStore(),
+                () => DateTimeOffset.Parse("2024-01-01T00:00:00Z"),
+                (_, _, _) => agentRunner)
+            .Parse(["exec", "--trace", "--output", "json", "--workspace", temp.Path, "--session", "smoke", "--resume", "smoke", "summarize workspace"])
+            .Invoke();
+
+        JsonObject outputResult = AssertSingleExecJsonResult(output);
+        string[] traceLines = File.ReadAllLines(Path.Combine(temp.Path, ".caicli", "logs", "2024-01-01.trace.log"));
+        JsonObject traceResult = Assert.IsType<JsonObject>(JsonNode.Parse(Assert.Single(traceLines)));
+
+        Assert.Equal(1, exitCode);
+        Assert.Equal("session-option-conflict", outputResult["errorCode"]?.GetValue<string>());
+        Assert.DoesNotContain("commandId", output.ToString(), StringComparison.Ordinal);
+        Assert.Equal("exec.result", traceResult["type"]?.GetValue<string>());
+        Assert.Equal("failure", traceResult["status"]?.GetValue<string>());
+        Assert.Equal("session-option-conflict", traceResult["errorCode"]?.GetValue<string>());
+        Assert.Equal(0, traceResult["payload"]?["eventCount"]?.GetValue<int>());
+        Assert.Null(agentRunner.LastRequest);
+    }
+
+    [Fact]
+    public void Exec_trace_resume_missing_writes_trace_failure_without_running_agent()
+    {
+        using TempDirectory temp = TempDirectory.Create();
+        using StringWriter output = new();
+        FakeAgentRunner agentRunner = new(AgentRunResult.Success("agent completed task", [], []));
+        FakeConversationStore store = new()
+        {
+            TryLoadResult = false
+        };
+
+        int exitCode = CliCommandFactory
+            .Create(
+                output,
+                workspacePath => CreateSnapshot(
+                    workspacePath,
+                    apiKey: "sk-test-secret",
+                    apiKeySource: "OPENAI_API_KEY",
+                    model: "gpt-test"),
+                (_, _) => { },
+                _ => new FakeChatModelClient(ChatModelResult.Success(new ChatResponse("openai", "gpt-test", "resp", ""))),
+                writer => new TerminalChatStreamingRenderer(writer),
+                _ => store,
+                () => DateTimeOffset.Parse("2024-01-01T00:00:00Z"),
+                (_, _, _) => agentRunner)
+            .Parse(["exec", "--trace", "--output", "json", "--workspace", temp.Path, "--resume", "missing", "summarize workspace"])
+            .Invoke();
+
+        JsonObject outputResult = AssertSingleExecJsonResult(output);
+        string[] traceLines = File.ReadAllLines(Path.Combine(temp.Path, ".caicli", "logs", "2024-01-01.trace.log"));
+        JsonObject traceResult = Assert.IsType<JsonObject>(JsonNode.Parse(Assert.Single(traceLines)));
+
+        Assert.Equal(1, exitCode);
+        Assert.Equal("session-not-found", outputResult["errorCode"]?.GetValue<string>());
+        Assert.Equal("missing", store.TryLoadedSessionName?.Value);
+        Assert.Null(agentRunner.LastRequest);
+        Assert.Equal("exec.result", traceResult["type"]?.GetValue<string>());
+        Assert.Equal("failure", traceResult["status"]?.GetValue<string>());
+        Assert.Equal("session-not-found", traceResult["errorCode"]?.GetValue<string>());
+        Assert.Equal("Session transcript was not found.", traceResult["summary"]?.GetValue<string>());
+    }
+
+    [Fact]
+    public void Exec_trace_session_save_exception_preserves_agent_events_in_output_and_trace()
+    {
+        using TempDirectory temp = TempDirectory.Create();
+        using StringWriter output = new();
+        FakeAgentRunner agentRunner = new(AgentRunResult.Success(
+            "agent completed task",
+            [],
+            [
+                new AgentRunEvent(
+                    Type: "model.turn",
+                    Sequence: 0,
+                    Timestamp: DateTimeOffset.Parse("2024-01-01T00:00:01Z"),
+                    Summary: "model planned",
+                    Status: "success",
+                    DurationMs: 13)
+            ]));
+        FakeConversationStore store = new()
+        {
+            SaveException = new IOException("cannot write C:\\secret\\smoke.transcript.json")
+        };
+
+        int exitCode = CliCommandFactory
+            .Create(
+                output,
+                workspacePath => CreateSnapshot(
+                    workspacePath,
+                    apiKey: "sk-test-secret",
+                    apiKeySource: "OPENAI_API_KEY",
+                    model: "gpt-test"),
+                (_, _) => { },
+                _ => new FakeChatModelClient(ChatModelResult.Success(new ChatResponse("openai", "gpt-test", "resp", ""))),
+                writer => new TerminalChatStreamingRenderer(writer),
+                _ => store,
+                () => DateTimeOffset.Parse("2024-01-01T00:00:00Z"),
+                (_, _, _) => agentRunner)
+            .Parse(["exec", "--trace", "--output", "json", "--workspace", temp.Path, "--session", "smoke", "summarize workspace"])
+            .Invoke();
+
+        string[] outputLines = output.ToString().TrimEnd().Split(Environment.NewLine, StringSplitOptions.RemoveEmptyEntries);
+        JsonObject outputEvent = Assert.IsType<JsonObject>(JsonNode.Parse(outputLines[0]));
+        JsonObject outputResult = Assert.IsType<JsonObject>(JsonNode.Parse(outputLines[1]));
+        string[] traceLines = File.ReadAllLines(Path.Combine(temp.Path, ".caicli", "logs", "2024-01-01.trace.log"));
+        JsonObject traceEvent = Assert.IsType<JsonObject>(JsonNode.Parse(traceLines[0]));
+        JsonObject traceResult = Assert.IsType<JsonObject>(JsonNode.Parse(traceLines[1]));
+
+        Assert.Equal(1, exitCode);
+        Assert.Equal(2, outputLines.Length);
+        Assert.Equal("model.turn", outputEvent["type"]?.GetValue<string>());
+        Assert.Equal("exec.result", outputResult["type"]?.GetValue<string>());
+        Assert.Equal("session-store-error", outputResult["errorCode"]?.GetValue<string>());
+        Assert.Equal("failure", outputResult["payload"]?["status"]?.GetValue<string>());
+        Assert.Equal(1, outputResult["payload"]?["eventCount"]?.GetValue<int>());
+        Assert.Equal(2, traceLines.Length);
+        Assert.Equal("model.turn", traceEvent["type"]?.GetValue<string>());
+        Assert.Equal("exec.result", traceResult["type"]?.GetValue<string>());
+        Assert.Equal("failure", traceResult["status"]?.GetValue<string>());
+        Assert.Equal("session-store-error", traceResult["errorCode"]?.GetValue<string>());
+        Assert.Equal(1, traceResult["payload"]?["eventCount"]?.GetValue<int>());
+        Assert.Equal("smoke", store.SavedSessionName?.Value);
+        Assert.NotNull(agentRunner.LastRequest);
+        Assert.DoesNotContain("C:\\secret", output.ToString(), StringComparison.Ordinal);
+        Assert.DoesNotContain("C:\\secret", File.ReadAllText(Path.Combine(temp.Path, ".caicli", "logs", "2024-01-01.trace.log")), StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void Exec_json_output_includes_approval_status_for_tool_event_and_result()
     {
         using TempDirectory temp = TempDirectory.Create();

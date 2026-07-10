@@ -340,7 +340,8 @@ public static class CliCommandFactory
             long sequence,
             string status,
             string? summary = null,
-            string? errorCode = null)
+            string? errorCode = null,
+            DateTimeOffset? timestampUtc = null)
         {
             if (context is null)
             {
@@ -349,7 +350,7 @@ public static class CliCommandFactory
 
             try
             {
-                TraceLogger.AppendCommandEvent(commandName, snapshot, context, type, sequence, status, summary, errorCode);
+                TraceLogger.AppendCommandEvent(commandName, snapshot, context, type, sequence, status, summary, errorCode, timestampUtc);
             }
             catch
             {
@@ -398,11 +399,11 @@ public static class CliCommandFactory
             string? workspacePath = parseResult.GetValue(workspaceOption);
             CliEnvironmentSnapshot snapshot = workspaceSnapshotProvider(workspacePath);
             DiagnosticContext? traceContext = CreateTraceContext(parseResult, snapshot);
-            TryWriteTraceCommandEvent("doctor", snapshot, traceContext, "command.start", 0, "started");
+            TryWriteTraceCommandEvent("doctor", snapshot, traceContext, "command.start", 0, "started", timestampUtc: utcNowProvider());
             TryWriteCommandLog(commandLogger, "doctor", snapshot);
             WriteVerboseDiagnostics(parseResult, "doctor", snapshot);
             output.WriteLine(DoctorReport.Create(snapshot).ToDisplayText());
-            TryWriteTraceCommandEvent("doctor", snapshot, traceContext, "command.complete", 1, "success");
+            TryWriteTraceCommandEvent("doctor", snapshot, traceContext, "command.complete", 1, "success", timestampUtc: utcNowProvider());
             return 0;
         });
 
@@ -868,14 +869,62 @@ public static class CliCommandFactory
                 snapshot,
                 humanReadableOutput: !IsJsonOutputRequested(jsonRequested, outputMode));
 
+            int WriteExecResultWithTrace(ExecResult result)
+            {
+                TryWriteTraceExecResult("exec", snapshot, traceContext, result);
+
+                if (IsJsonOutputRequested(jsonRequested, outputMode))
+                {
+                    ExecJsonRenderer renderer = new(output);
+                    WriteExecOutput(renderer, result);
+                }
+                else
+                {
+                    ExecTextRenderer renderer = new(output);
+                    WriteExecOutput(renderer, result);
+                }
+
+                return result.ExitCode;
+            }
+
+            int WriteExecFailureWithTrace(
+                string errorCode,
+                string summary,
+                IReadOnlyList<ExecEvent>? events = null,
+                string? approvalStatus = null)
+            {
+                ExecResult failure = ExecResult.Failure(
+                    ExitCode: 1,
+                    Summary: summary,
+                    ErrorCode: errorCode,
+                    Events: events ?? [],
+                    ApprovalStatus: approvalStatus);
+
+                if (IsJsonOutputRequested(jsonRequested, outputMode) || failure.Events.Count > 0)
+                {
+                    return WriteExecResultWithTrace(failure);
+                }
+
+                TryWriteTraceExecResult("exec", snapshot, traceContext, failure);
+                WriteSafeFailure(output, errorCode, summary);
+                return failure.ExitCode;
+            }
+
+            int WriteExecConversationStoreFailureWithTrace(
+                Exception exception,
+                IReadOnlyList<ExecEvent>? events = null,
+                string? approvalStatus = null)
+            {
+                (string errorCode, string summary) = GetConversationStoreFailure(exception);
+                return WriteExecFailureWithTrace(errorCode, summary, events, approvalStatus);
+            }
+
             if (sessionSupplied && resumeSupplied)
             {
-                return WriteExecLocalValidationFailure(
-                    output,
+                return WriteExecFailureWithTrace(
                     "session-option-conflict",
                     "Use either --session or --resume, not both.",
-                    jsonRequested,
-                    outputMode);
+                    []);
             }
 
             IApprovalPolicy approvalPolicy = ApprovalPolicyResolver.Resolve(snapshot.Configuration.ApprovalMode, cliApprovalMode);
@@ -894,12 +943,10 @@ public static class CliCommandFactory
                 }
                 catch (ArgumentException exception)
                 {
-                    return WriteExecLocalValidationFailure(
-                        output,
+                    return WriteExecFailureWithTrace(
                         "invalid-session-name",
                         GetSafeSessionNameParseMessage(exception),
-                        jsonRequested,
-                        outputMode);
+                        []);
                 }
 
                 try
@@ -909,12 +956,10 @@ public static class CliCommandFactory
                     {
                         if (!conversationStore.TryLoad(sessionName, out transcript) || transcript is null)
                         {
-                            return WriteExecLocalValidationFailure(
-                                output,
+                            return WriteExecFailureWithTrace(
                                 "session-not-found",
                                 "Session transcript was not found.",
-                                jsonRequested,
-                                outputMode);
+                                []);
                         }
 
                         transcriptContext = transcript;
@@ -926,7 +971,7 @@ public static class CliCommandFactory
                 }
                 catch (Exception exception) when (IsConversationStoreException(exception))
                 {
-                    return WriteExecConversationStoreFailure(output, exception, jsonRequested, outputMode);
+                    return WriteExecConversationStoreFailureWithTrace(exception);
                 }
             }
 
@@ -944,6 +989,7 @@ public static class CliCommandFactory
 
             IAgentRunner runner = execAgentRunnerFactory(snapshot, registry, executor);
             AgentRunResult agentResult = runner.Run(request, transcript);
+            ExecResult execResult = AgentExecResultAdapter.FromAgentResult(agentResult);
             if (sessionName is not null && transcript is not null && conversationStore is not null)
             {
                 try
@@ -952,25 +998,14 @@ public static class CliCommandFactory
                 }
                 catch (Exception exception) when (IsConversationStoreException(exception))
                 {
-                    return WriteExecConversationStoreFailure(output, exception, jsonRequested, outputMode);
+                    return WriteExecConversationStoreFailureWithTrace(
+                        exception,
+                        execResult.Events,
+                        execResult.ApprovalStatus);
                 }
             }
 
-            ExecResult execResult = AgentExecResultAdapter.FromAgentResult(agentResult);
-            TryWriteTraceExecResult("exec", snapshot, traceContext, execResult);
-
-            if (IsJsonOutputRequested(jsonRequested, outputMode))
-            {
-                ExecJsonRenderer renderer = new(output);
-                WriteExecOutput(renderer, execResult);
-            }
-            else
-            {
-                ExecTextRenderer renderer = new(output);
-                WriteExecOutput(renderer, execResult);
-            }
-
-            return execResult.ExitCode;
+            return WriteExecResultWithTrace(execResult);
         });
 
         Command runCommand = new("run", "Run a deterministic local workspace task through the direct tool layer.");
@@ -1659,39 +1694,6 @@ public static class CliCommandFactory
 
         output.WriteLine("summary:");
         output.WriteLine(result.Summary);
-    }
-
-    private static int WriteExecLocalValidationFailure(
-        TextWriter output,
-        string errorCode,
-        string summary,
-        bool jsonRequested,
-        string outputMode)
-    {
-        if (IsJsonOutputRequested(jsonRequested, outputMode))
-        {
-            ExecResult result = ExecResult.Failure(
-                ExitCode: 1,
-                Summary: summary,
-                ErrorCode: errorCode,
-                Events: []);
-            ExecJsonRenderer renderer = new(output);
-            WriteExecOutput(renderer, result);
-            return result.ExitCode;
-        }
-
-        WriteSafeFailure(output, errorCode, summary);
-        return 1;
-    }
-
-    private static int WriteExecConversationStoreFailure(
-        TextWriter output,
-        Exception exception,
-        bool jsonRequested,
-        string outputMode)
-    {
-        (string errorCode, string summary) = GetConversationStoreFailure(exception);
-        return WriteExecLocalValidationFailure(output, errorCode, summary, jsonRequested, outputMode);
     }
 
     private static int WriteChatConversationStoreFailure(TextWriter output, Exception exception)

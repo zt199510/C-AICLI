@@ -97,6 +97,110 @@ public sealed class TraceLoggerTests
     }
 
     [Fact]
+    public void AppendExecResult_redacts_escaped_json_and_nested_arguments_json_secrets()
+    {
+        string tempRoot = CreateTempDirectory();
+
+        try
+        {
+            string workspaceRoot = Path.Combine(tempRoot, "workspace");
+            Directory.CreateDirectory(workspaceRoot);
+            CliEnvironmentSnapshot snapshot = CreateSnapshot(
+                workspaceRoot: workspaceRoot,
+                userProfile: Path.Combine(tempRoot, "home"));
+            DiagnosticContext context = new(
+                CommandId: "cmd-escaped",
+                SessionId: "session-escaped",
+                Workspace: workspaceRoot,
+                TimestampUtc: DateTimeOffset.Parse("2026-07-10T10:00:00Z"));
+            ExecEvent execEvent = new(
+                Type: "tool.completed",
+                Sequence: 0,
+                Timestamp: DateTimeOffset.Parse("2026-07-10T10:00:01Z"),
+                Summary: """model returned {\"password\":\"escaped-summary-secret\"} and apiKey: plain-summary-secret""",
+                Payload: new Dictionary<string, string>
+                {
+                    ["argumentsJson"] = """{"apiKey":"plain-argument-secret","nested":{"password":"nested-argument-secret"},"authorization":"Bearer nestedbearer123","github":"ghp_abcdefghijklmnopqrstuvwxyz"}""",
+                    ["escapedJson"] = """{\"password\":\"escaped-payload-secret\",\"apiKey\":\"plain-escaped-payload-secret\"}""",
+                    ["escapedKeyValue"] = """password:\"escaped-kv-secret\" apiKey=plain-kv-secret"""
+                },
+                Status: "success");
+            ExecResult result = ExecResult.Success("finished with password: plain-result-secret", [execEvent]);
+
+            TraceLogger.AppendExecResult("exec", snapshot, context, result);
+
+            string tracePath = Path.Combine(workspaceRoot, ".caicli", "logs", "2026-07-10.trace.log");
+            string trace = File.ReadAllText(tracePath);
+            JsonObject first = Assert.IsType<JsonObject>(JsonNode.Parse(File.ReadAllLines(tracePath)[0]));
+
+            Assert.Contains("[redacted]", first["summary"]?.GetValue<string>(), StringComparison.Ordinal);
+            Assert.Contains("[redacted]", first["payload"]?["argumentsJson"]?.GetValue<string>(), StringComparison.Ordinal);
+            Assert.Contains("[redacted]", first["payload"]?["escapedJson"]?.GetValue<string>(), StringComparison.Ordinal);
+            Assert.Contains("[redacted]", first["payload"]?["escapedKeyValue"]?.GetValue<string>(), StringComparison.Ordinal);
+            Assert.DoesNotContain("escaped-summary-secret", trace, StringComparison.Ordinal);
+            Assert.DoesNotContain("plain-summary-secret", trace, StringComparison.Ordinal);
+            Assert.DoesNotContain("plain-argument-secret", trace, StringComparison.Ordinal);
+            Assert.DoesNotContain("nested-argument-secret", trace, StringComparison.Ordinal);
+            Assert.DoesNotContain("nestedbearer123", trace, StringComparison.Ordinal);
+            Assert.DoesNotContain("abcdefghijklmnopqrstuvwxyz", trace, StringComparison.Ordinal);
+            Assert.DoesNotContain("escaped-payload-secret", trace, StringComparison.Ordinal);
+            Assert.DoesNotContain("plain-escaped-payload-secret", trace, StringComparison.Ordinal);
+            Assert.DoesNotContain("escaped-kv-secret", trace, StringComparison.Ordinal);
+            Assert.DoesNotContain("plain-kv-secret", trace, StringComparison.Ordinal);
+            Assert.DoesNotContain("plain-result-secret", trace, StringComparison.Ordinal);
+        }
+        finally
+        {
+            Directory.Delete(tempRoot, recursive: true);
+        }
+    }
+
+    [Fact]
+    public void AppendExecResult_handles_payload_key_redaction_collisions_without_dropping_trace()
+    {
+        string tempRoot = CreateTempDirectory();
+
+        try
+        {
+            string workspaceRoot = Path.Combine(tempRoot, "workspace");
+            Directory.CreateDirectory(workspaceRoot);
+            CliEnvironmentSnapshot snapshot = CreateSnapshot(
+                workspaceRoot: workspaceRoot,
+                userProfile: Path.Combine(tempRoot, "home"));
+            DiagnosticContext context = new(
+                CommandId: "cmd-collision",
+                SessionId: "session-collision",
+                Workspace: workspaceRoot,
+                TimestampUtc: DateTimeOffset.Parse("2026-07-10T11:00:00Z"));
+            ExecEvent execEvent = new(
+                Type: "tool.completed",
+                Sequence: 0,
+                Timestamp: DateTimeOffset.Parse("2026-07-10T11:00:01Z"),
+                Payload: new Dictionary<string, string>
+                {
+                    ["apiKey=first-secret"] = "first value",
+                    ["apiKey=second-secret"] = "second value"
+                });
+            ExecResult result = ExecResult.Success("done", [execEvent]);
+
+            TraceLogger.AppendExecResult("exec", snapshot, context, result);
+
+            string tracePath = Path.Combine(workspaceRoot, ".caicli", "logs", "2026-07-10.trace.log");
+            JsonObject first = Assert.IsType<JsonObject>(JsonNode.Parse(File.ReadAllLines(tracePath)[0]));
+            JsonObject payload = Assert.IsType<JsonObject>(first["payload"]);
+
+            Assert.Equal("first value", payload["apiKey=[redacted]"]?.GetValue<string>());
+            Assert.Equal("second value", payload["apiKey=[redacted]_2"]?.GetValue<string>());
+            Assert.DoesNotContain("first-secret", File.ReadAllText(tracePath), StringComparison.Ordinal);
+            Assert.DoesNotContain("second-secret", File.ReadAllText(tracePath), StringComparison.Ordinal);
+        }
+        finally
+        {
+            Directory.Delete(tempRoot, recursive: true);
+        }
+    }
+
+    [Fact]
     public void AppendCommandEvent_writes_start_and_complete_records()
     {
         string tempRoot = CreateTempDirectory();
@@ -129,6 +233,44 @@ public sealed class TraceLoggerTests
             Assert.Equal("command.complete", second["type"]?.GetValue<string>());
             Assert.Equal("success", second["status"]?.GetValue<string>());
             Assert.Equal("doctor complete", second["summary"]?.GetValue<string>());
+        }
+        finally
+        {
+            Directory.Delete(tempRoot, recursive: true);
+        }
+    }
+
+    [Fact]
+    public void AppendCommandEvent_uses_event_specific_timestamp_when_provided()
+    {
+        string tempRoot = CreateTempDirectory();
+
+        try
+        {
+            string workspaceRoot = Path.Combine(tempRoot, "workspace");
+            Directory.CreateDirectory(workspaceRoot);
+            CliEnvironmentSnapshot snapshot = CreateSnapshot(
+                workspaceRoot: workspaceRoot,
+                userProfile: Path.Combine(tempRoot, "home"));
+            DiagnosticContext context = new(
+                CommandId: "cmd-003",
+                SessionId: "session-ghi",
+                Workspace: workspaceRoot,
+                TimestampUtc: DateTimeOffset.Parse("2026-07-10T09:00:00Z"));
+
+            TraceLogger.AppendCommandEvent(
+                "doctor",
+                snapshot,
+                context,
+                "command.complete",
+                1,
+                "success",
+                timestampUtc: DateTimeOffset.Parse("2026-07-10T09:00:03Z"));
+
+            string tracePath = Path.Combine(workspaceRoot, ".caicli", "logs", "2026-07-10.trace.log");
+            JsonObject record = Assert.IsType<JsonObject>(JsonNode.Parse(File.ReadAllLines(tracePath)[0]));
+
+            Assert.Equal("2026-07-10T09:00:03.0000000Z", record["timestampUtc"]?.GetValue<string>());
         }
         finally
         {

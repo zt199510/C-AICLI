@@ -1,31 +1,11 @@
 using System.Globalization;
 using System.Text.Json;
-using System.Text.RegularExpressions;
 
 namespace CSharpAiCli.Core;
 
 public static class TraceLogger
 {
-    private const string SecretKeyNamePattern =
-        @"(?:[A-Za-z0-9]+[_-]+)*(?:api[_-]?key|access[_-]?token|refresh[_-]?token|token|client[_-]?secret|secret[_-]?access[_-]?key|password|secret)" +
-        "|apiKey|accessToken|refreshToken|clientSecret|awsSecretAccessKey";
-
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web);
-    private static readonly Regex SecretKeyNameRegex = new(
-        "^(?:" + SecretKeyNamePattern + ")$",
-        RegexOptions.CultureInvariant | RegexOptions.IgnoreCase);
-    private static readonly Regex KeyValueSecretPattern = new(
-        $$"""(?<![A-Za-z0-9_-])(?:"(?i:{{SecretKeyNamePattern}})"|'(?i:{{SecretKeyNamePattern}})'|(?i:{{SecretKeyNamePattern}}))(?![A-Za-z0-9_-])(\s*[:=]\s*)(?:"(?:\\.|[^"\\])*"|'(?:\\.|[^'\\])*'|Bearer\s+[A-Za-z0-9._~+/=-]+|[^\s,;}]+)""",
-        RegexOptions.CultureInvariant | RegexOptions.IgnoreCase);
-    private static readonly Regex BearerTokenPattern = new(
-        @"\bBearer\s+[A-Za-z0-9._~+/=-]+",
-        RegexOptions.CultureInvariant | RegexOptions.IgnoreCase);
-    private static readonly Regex OpenAiKeyPattern = new(
-        @"\bsk-[A-Za-z0-9._-]+",
-        RegexOptions.CultureInvariant);
-    private static readonly Regex GitHubTokenPattern = new(
-        @"\b(?:gh[pousr]|github_pat)_[A-Za-z0-9_]+",
-        RegexOptions.CultureInvariant);
 
     public static void AppendCommandEvent(
         string commandName,
@@ -35,7 +15,8 @@ public static class TraceLogger
         long sequence,
         string status,
         string? summary = null,
-        string? errorCode = null)
+        string? errorCode = null,
+        DateTimeOffset? timestampUtc = null)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(commandName);
         ArgumentNullException.ThrowIfNull(snapshot);
@@ -43,17 +24,18 @@ public static class TraceLogger
         ArgumentException.ThrowIfNullOrWhiteSpace(type);
         ArgumentException.ThrowIfNullOrWhiteSpace(status);
 
+        DateTimeOffset timestamp = timestampUtc ?? context.TimestampUtc;
         Dictionary<string, object?> record = CreateBaseRecord(
             commandName,
             context,
-            context.TimestampUtc,
+            timestamp,
             type,
             sequence);
         record["status"] = Sanitize(status);
         AddIfPresent(record, "summary", summary);
         AddIfPresent(record, "errorCode", errorCode);
 
-        AppendRecords(snapshot, context.TimestampUtc, [record]);
+        AppendRecords(snapshot, timestamp, [record]);
     }
 
     public static void AppendExecResult(
@@ -161,12 +143,31 @@ public static class TraceLogger
 
     private static Dictionary<string, string> CreateSafePayload(IReadOnlyDictionary<string, string> payload)
     {
-        return payload
-            .OrderBy(pair => pair.Key, StringComparer.Ordinal)
-            .ToDictionary(
-                pair => Sanitize(pair.Key),
-                pair => IsSecretName(pair.Key) ? "[redacted]" : Sanitize(pair.Value),
-                StringComparer.Ordinal);
+        Dictionary<string, string> safePayload = new(StringComparer.Ordinal);
+        foreach ((string key, string value) in payload.OrderBy(pair => pair.Key, StringComparer.Ordinal))
+        {
+            string safeKey = MakeUniqueKey(safePayload, Sanitize(key));
+            safePayload[safeKey] = DiagnosticSecretRedactor.IsSecretName(key) ? "[redacted]" : Sanitize(value);
+        }
+
+        return safePayload;
+    }
+
+    private static string MakeUniqueKey(IReadOnlyDictionary<string, string> payload, string key)
+    {
+        if (!payload.ContainsKey(key))
+        {
+            return key;
+        }
+
+        for (int suffix = 2; ; suffix++)
+        {
+            string candidate = key + "_" + suffix.ToString(CultureInfo.InvariantCulture);
+            if (!payload.ContainsKey(candidate))
+            {
+                return candidate;
+            }
+        }
     }
 
     private static void AddIfPresent(Dictionary<string, object?> record, string name, string? value)
@@ -200,35 +201,6 @@ public static class TraceLogger
 
     private static string Sanitize(string value)
     {
-        return RedactSecrets(value);
-    }
-
-    private static string RedactSecrets(string value)
-    {
-        string redacted = RedactKeyValueSecrets(value);
-        redacted = BearerTokenPattern.Replace(redacted, "Bearer [redacted]");
-        redacted = OpenAiKeyPattern.Replace(redacted, "[redacted]");
-        redacted = GitHubTokenPattern.Replace(redacted, "[redacted]");
-        return redacted;
-    }
-
-    private static string RedactKeyValueSecrets(string value)
-    {
-        return KeyValueSecretPattern.Replace(value, match =>
-        {
-            Group separator = match.Groups[1];
-            if (!separator.Success)
-            {
-                return match.Value;
-            }
-
-            int prefixLength = separator.Index - match.Index;
-            return match.Value[..prefixLength] + separator.Value + "[redacted]";
-        });
-    }
-
-    private static bool IsSecretName(string value)
-    {
-        return SecretKeyNameRegex.IsMatch(value);
+        return DiagnosticSecretRedactor.Redact(value);
     }
 }

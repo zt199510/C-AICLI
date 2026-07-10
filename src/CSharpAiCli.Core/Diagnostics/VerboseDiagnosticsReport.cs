@@ -1,31 +1,10 @@
 using System.Globalization;
 using System.Text;
-using System.Text.RegularExpressions;
 
 namespace CSharpAiCli.Core;
 
 public sealed record VerboseDiagnosticsReport(IReadOnlyList<string> Lines)
 {
-    private const string SecretKeyNamePattern =
-        @"(?:[A-Za-z0-9]+[_-]+)*(?:api[_-]?key|access[_-]?token|refresh[_-]?token|token|client[_-]?secret|secret[_-]?access[_-]?key|password|secret)" +
-        "|apiKey|accessToken|refreshToken|clientSecret|awsSecretAccessKey";
-
-    private static readonly Regex KeyValueSecretPattern = new(
-        $$"""(?<![A-Za-z0-9_-])(?:"(?i:{{SecretKeyNamePattern}})"|'(?i:{{SecretKeyNamePattern}})'|(?i:{{SecretKeyNamePattern}}))(?![A-Za-z0-9_-])(\s*[:=]\s*)(?:"(?:\\.|[^"\\])*"|'(?:\\.|[^'\\])*'|Bearer\s+[A-Za-z0-9._~+/=-]+|[^\s,;}]+)""",
-        RegexOptions.CultureInvariant | RegexOptions.IgnoreCase);
-    private static readonly Regex WhitespacePattern = new(
-        @"\s+",
-        RegexOptions.CultureInvariant);
-    private static readonly Regex BearerTokenPattern = new(
-        @"\bBearer\s+[A-Za-z0-9._~+/=-]+",
-        RegexOptions.CultureInvariant | RegexOptions.IgnoreCase);
-    private static readonly Regex OpenAiKeyPattern = new(
-        @"\bsk-[A-Za-z0-9._-]+",
-        RegexOptions.CultureInvariant);
-    private static readonly Regex GitHubTokenPattern = new(
-        @"\b(?:gh[pousr]|github_pat)_[A-Za-z0-9_]+",
-        RegexOptions.CultureInvariant);
-
     public static VerboseDiagnosticsReport Create(
         string commandName,
         CliEnvironmentSnapshot snapshot,
@@ -84,32 +63,12 @@ public sealed record VerboseDiagnosticsReport(IReadOnlyList<string> Lines)
             });
         }
 
-        string singleLine = WhitespacePattern.Replace(builder.ToString(), " ").Trim();
-        return RedactSecrets(singleLine);
-    }
-
-    private static string RedactSecrets(string value)
-    {
-        string redacted = RedactKeyValueSecrets(value);
-        redacted = BearerTokenPattern.Replace(redacted, "Bearer [redacted]");
-        redacted = OpenAiKeyPattern.Replace(redacted, "[redacted]");
-        redacted = GitHubTokenPattern.Replace(redacted, "[redacted]");
-        return redacted;
-    }
-
-    private static string RedactKeyValueSecrets(string value)
-    {
-        return KeyValueSecretPattern.Replace(value, match =>
-        {
-            Group separator = match.Groups[1];
-            if (!separator.Success)
-            {
-                return match.Value;
-            }
-
-            int prefixLength = separator.Index - match.Index;
-            return match.Value[..prefixLength] + separator.Value + "[redacted]";
-        });
+        string singleLine = string.Join(
+            " ",
+            builder.ToString().Split(
+                (char[]?)null,
+                StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries));
+        return DiagnosticSecretRedactor.Redact(singleLine);
     }
 
     private static string FormatWorkspaceStatus(WorkspaceStatus status)
