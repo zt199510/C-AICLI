@@ -310,6 +310,79 @@ public sealed class TraceLoggerTests
     }
 
     [Fact]
+    public void AppendExecResult_redacts_aws_sigv4_authorization_tail_in_text_and_payload_values()
+    {
+        string tempRoot = CreateTempDirectory();
+
+        try
+        {
+            string workspaceRoot = Path.Combine(tempRoot, "workspace");
+            Directory.CreateDirectory(workspaceRoot);
+            CliEnvironmentSnapshot snapshot = CreateSnapshot(
+                workspaceRoot: workspaceRoot,
+                userProfile: Path.Combine(tempRoot, "home"));
+            DiagnosticContext context = new(
+                CommandId: "cmd-auth-aws",
+                SessionId: "session-auth-aws",
+                Workspace: workspaceRoot,
+                TimestampUtc: DateTimeOffset.Parse("2026-07-10T12:45:00Z"));
+            ExecEvent execEvent = new(
+                Type: "tool.completed",
+                Sequence: 0,
+                Timestamp: DateTimeOffset.Parse("2026-07-10T12:45:01Z"),
+                Message: "stderr included Authorization: AWS4-HMAC-SHA256 Credential=AKIAIOSFODNN7EXAMPLE/20260710/us-east-1/service/aws4_request, SignedHeaders=host;x-amz-date, Signature=secret-message-signature",
+                Summary: "request used Authorization: AWS4-HMAC-SHA256 Credential=AKIASUMMARYSECRET/20260710/us-east-1/service/aws4_request, SignedHeaders=host;x-amz-content-sha256;x-amz-date, Signature=secret-summary-signature",
+                Payload: new Dictionary<string, string>
+                {
+                    ["diagnosticText"] = "payload included authorization=AWS4-HMAC-SHA256 Credential=AKIAPAYLOADSECRET/20260710/us-east-1/service/aws4_request, SignedHeaders=host;x-amz-date, Signature=secret-payload-signature"
+                },
+                Status: "success");
+            ExecResult result = ExecResult.Success(
+                "finished after Authorization: AWS4-HMAC-SHA256 Credential=AKIARESULTSECRET/20260710/us-east-1/service/aws4_request, SignedHeaders=host;x-amz-date, Signature=secret-result-signature",
+                [execEvent]);
+
+            TraceLogger.AppendExecResult("exec", snapshot, context, result);
+
+            string tracePath = Path.Combine(workspaceRoot, ".caicli", "logs", "2026-07-10.trace.log");
+            string trace = File.ReadAllText(tracePath);
+            string[] lines = File.ReadAllLines(tracePath);
+            JsonObject first = Assert.IsType<JsonObject>(JsonNode.Parse(lines[0]));
+            JsonObject final = Assert.IsType<JsonObject>(JsonNode.Parse(lines[1]));
+
+            Assert.Contains(
+                "Authorization: AWS4-HMAC-SHA256 [redacted]",
+                first["message"]?.GetValue<string>(),
+                StringComparison.Ordinal);
+            Assert.Contains(
+                "Authorization: AWS4-HMAC-SHA256 [redacted]",
+                first["summary"]?.GetValue<string>(),
+                StringComparison.Ordinal);
+            Assert.Contains(
+                "authorization=AWS4-HMAC-SHA256 [redacted]",
+                first["payload"]?["diagnosticText"]?.GetValue<string>(),
+                StringComparison.Ordinal);
+            Assert.Contains(
+                "Authorization: AWS4-HMAC-SHA256 [redacted]",
+                final["summary"]?.GetValue<string>(),
+                StringComparison.Ordinal);
+            Assert.DoesNotContain("Credential", trace, StringComparison.Ordinal);
+            Assert.DoesNotContain("AKIA", trace, StringComparison.Ordinal);
+            Assert.DoesNotContain("SignedHeaders", trace, StringComparison.Ordinal);
+            Assert.DoesNotContain("x-amz-date", trace, StringComparison.Ordinal);
+            Assert.DoesNotContain("x-amz-content-sha256", trace, StringComparison.Ordinal);
+            Assert.DoesNotContain("Signature", trace, StringComparison.Ordinal);
+            Assert.DoesNotContain("secret-message-signature", trace, StringComparison.Ordinal);
+            Assert.DoesNotContain("secret-summary-signature", trace, StringComparison.Ordinal);
+            Assert.DoesNotContain("secret-payload-signature", trace, StringComparison.Ordinal);
+            Assert.DoesNotContain("secret-result-signature", trace, StringComparison.Ordinal);
+        }
+        finally
+        {
+            Directory.Delete(tempRoot, recursive: true);
+        }
+    }
+
+    [Fact]
     public void AppendExecResult_handles_payload_key_redaction_collisions_without_dropping_trace()
     {
         string tempRoot = CreateTempDirectory();

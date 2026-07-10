@@ -6,14 +6,8 @@ internal static class DiagnosticSecretRedactor
 {
     private const string QuotedSecretValuePattern = """\\?["'](?:\\\\.|\\.|[^"'\\])*\\?["']""";
     private const string BearerSecretValuePattern = @"Bearer\s+(?:\[redacted\]|[A-Za-z0-9._~+/=-]+)";
-    private const string AuthorizationParameterPattern =
-        @"[A-Za-z][A-Za-z0-9._~-]*\s*=\s*(?:" + QuotedSecretValuePattern + @"|[^\s,;}\]]+)";
     private const string AuthorizationSchemeSecretValuePattern =
-        @"[A-Za-z][A-Za-z0-9._~-]*\s+(?:\[redacted\]|" +
-        AuthorizationParameterPattern +
-        @"(?:\s*,\s*" +
-        AuthorizationParameterPattern +
-        @")*|[^\s,;}\]]+)";
+        @"[A-Za-z][A-Za-z0-9._~-]*\s+(?:\[redacted\]|[^\r\n}\]]+)";
     private const string PlainSecretValuePattern = @"[^\s,;}\]]+";
     private const string SecretKeyNamePattern =
         @"(?:[A-Za-z0-9]+[_-]+)*(?:api[_-]?key|access[_-]?token|refresh[_-]?token|token|client[_-]?secret|secret[_-]?access[_-]?key|password|secret|authorization|private[_-]?key|secret[_-]?key)" +
@@ -28,11 +22,7 @@ internal static class DiagnosticSecretRedactor
         RegexOptions.CultureInvariant | RegexOptions.IgnoreCase);
 
     private static readonly Regex AuthorizationSchemeSecretPattern = new(
-        @"^(?<scheme>[A-Za-z][A-Za-z0-9._~-]*)\s+(?:\[redacted\]|" +
-        AuthorizationParameterPattern +
-        @"(?:\s*,\s*" +
-        AuthorizationParameterPattern +
-        @")*|[^\s,;}\]]+)$",
+        @"^(?<scheme>[A-Za-z][A-Za-z0-9._~-]*)\s+(?:\[redacted\]|[^\r\n}\]]+)$",
         RegexOptions.CultureInvariant | RegexOptions.IgnoreCase);
 
     private static readonly Regex BearerTokenPattern = new(
