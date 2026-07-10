@@ -1996,6 +1996,59 @@ public sealed class CliCommandFactoryTests
     }
 
     [Fact]
+    public void Tools_call_mcp_startup_enforces_configured_shell_policy_from_snapshot()
+    {
+        using StringWriter output = new();
+        using TempDirectory temp = TempDirectory.Create();
+        string markerPath = Path.Combine(temp.Path, "mcp-policy-startup-ran.txt");
+        string scriptPath = WriteMcpEchoServerScript(temp.Path, markerPath);
+        CliEnvironmentSnapshot baseSnapshot = CreateSnapshot(
+            workspacePath: temp.Path,
+            apiKey: null,
+            apiKeySource: "missing",
+            model: "not configured",
+            configSources:
+            [
+                new CliConfigFileSource(
+                    "user config",
+                    "user-config.json",
+                    new CliConfigFile
+                    {
+                        McpServers = new Dictionary<string, McpServerConfig>
+                        {
+                            ["active"] = CreateMcpEchoServerConfig(scriptPath)
+                        }
+                    })
+            ]);
+        CliEnvironmentSnapshot snapshot = baseSnapshot with
+        {
+            Configuration = baseSnapshot.Configuration with
+            {
+                ShellPolicy = new ShellPolicyConfiguration(
+                    AllowedCommands: [],
+                    AllowedCommandsConfigured: false,
+                    AllowedCommandsSource: "default",
+                    DeniedCommands: [PowerShellPolicyCommandName],
+                    MaxTimeoutMilliseconds: null,
+                    MaxTimeoutMillisecondsSource: "default")
+            }
+        };
+
+        int exitCode = CliCommandFactory
+            .Create(output, _ => snapshot)
+            .Parse(["tools", "call", "--approve", "mcp.active.echo", """{"text":"hello"}"""])
+            .Invoke();
+
+        string text = output.ToString();
+        Assert.Equal(1, exitCode);
+        Assert.Contains("errorCode: mcp-start-failed", text, StringComparison.Ordinal);
+        Assert.Contains("blocked by shell policy", text, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("errorCode: unknown-tool", text, StringComparison.Ordinal);
+        Assert.DoesNotContain("echo: hello", text, StringComparison.Ordinal);
+        Assert.False(File.Exists(markerPath));
+    }
+
+    [Fact]
     public void Tools_call_stdin_reads_arguments_from_injected_reader()
     {
         using TempDirectory temp = TempDirectory.Create();
@@ -2259,6 +2312,126 @@ public sealed class CliCommandFactoryTests
         Assert.Contains("errorCode: approval-denied", text);
         Assert.Contains("approvalStatus: dangerous-shell-denied", text);
         Assert.DoesNotContain("approvalStatus: approved", text, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Tools_call_shell_enforces_configured_allowlist_from_snapshot()
+    {
+        using TempDirectory temp = TempDirectory.Create();
+        using StringWriter output = new();
+        string argumentsPath = Path.Combine(temp.Path, "arguments.json");
+        string markerPath = Path.Combine(temp.Path, "blocked-by-allowlist.txt");
+        File.WriteAllText(argumentsPath, """{"command":"dotnet --version > blocked-by-allowlist.txt","timeoutMilliseconds":10000}""");
+        ShellPolicyConfiguration shellPolicy = new(
+            AllowedCommands: ["dotnet test"],
+            AllowedCommandsConfigured: true,
+            AllowedCommandsSource: "workspace config",
+            DeniedCommands: [],
+            MaxTimeoutMilliseconds: null,
+            MaxTimeoutMillisecondsSource: "default");
+        CliEnvironmentSnapshot snapshot = CreateSnapshotWithShellPolicy(temp.Path, shellPolicy);
+
+        int exitCode = CliCommandFactory
+            .Create(output, _ => snapshot)
+            .Parse([
+                "tools",
+                "call",
+                "--workspace",
+                temp.Path,
+                "--approval",
+                "always",
+                "workspace.run_shell",
+                "--arguments-file",
+                argumentsPath
+            ])
+            .Invoke();
+
+        string text = output.ToString();
+        Assert.Equal(1, exitCode);
+        Assert.Contains("errorCode: shell-policy-denied", text, StringComparison.Ordinal);
+        Assert.Contains("approvalStatus: shell-policy-denied", text, StringComparison.Ordinal);
+        Assert.Contains("workspace config", text, StringComparison.Ordinal);
+        Assert.False(File.Exists(markerPath));
+    }
+
+    [Fact]
+    public void Tools_call_shell_enforces_configured_denylist_from_snapshot()
+    {
+        using TempDirectory temp = TempDirectory.Create();
+        using StringWriter output = new();
+        string argumentsPath = Path.Combine(temp.Path, "arguments.json");
+        string markerPath = Path.Combine(temp.Path, "blocked-by-denylist.txt");
+        File.WriteAllText(argumentsPath, """{"command":"dotnet --version > blocked-by-denylist.txt","timeoutMilliseconds":10000}""");
+        ShellPolicyConfiguration shellPolicy = new(
+            AllowedCommands: ["dotnet"],
+            AllowedCommandsConfigured: true,
+            AllowedCommandsSource: "workspace config",
+            DeniedCommands: ["--version"],
+            MaxTimeoutMilliseconds: null,
+            MaxTimeoutMillisecondsSource: "default");
+        CliEnvironmentSnapshot snapshot = CreateSnapshotWithShellPolicy(temp.Path, shellPolicy);
+
+        int exitCode = CliCommandFactory
+            .Create(output, _ => snapshot)
+            .Parse([
+                "tools",
+                "call",
+                "--workspace",
+                temp.Path,
+                "--approval",
+                "always",
+                "workspace.run_shell",
+                "--arguments-file",
+                argumentsPath
+            ])
+            .Invoke();
+
+        string text = output.ToString();
+        Assert.Equal(1, exitCode);
+        Assert.Contains("errorCode: shell-policy-denied", text, StringComparison.Ordinal);
+        Assert.Contains("approvalStatus: shell-policy-denied", text, StringComparison.Ordinal);
+        Assert.Contains("--version", text, StringComparison.Ordinal);
+        Assert.False(File.Exists(markerPath));
+    }
+
+    [Fact]
+    public void Tools_call_shell_enforces_configured_timeout_max_from_snapshot()
+    {
+        using TempDirectory temp = TempDirectory.Create();
+        using StringWriter output = new();
+        string argumentsPath = Path.Combine(temp.Path, "arguments.json");
+        File.WriteAllText(argumentsPath, """{"command":"dotnet --version","timeoutMilliseconds":5000}""");
+        ShellPolicyConfiguration shellPolicy = new(
+            AllowedCommands: [],
+            AllowedCommandsConfigured: false,
+            AllowedCommandsSource: "default",
+            DeniedCommands: [],
+            MaxTimeoutMilliseconds: 1000,
+            MaxTimeoutMillisecondsSource: "user config");
+        CliEnvironmentSnapshot snapshot = CreateSnapshotWithShellPolicy(temp.Path, shellPolicy);
+
+        int exitCode = CliCommandFactory
+            .Create(output, _ => snapshot)
+            .Parse([
+                "tools",
+                "call",
+                "--workspace",
+                temp.Path,
+                "--approval",
+                "always",
+                "workspace.run_shell",
+                "--arguments-file",
+                argumentsPath
+            ])
+            .Invoke();
+
+        string text = output.ToString();
+        Assert.Equal(1, exitCode);
+        Assert.Contains("errorCode: shell-policy-denied", text, StringComparison.Ordinal);
+        Assert.Contains("timeout", text, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("5000", text, StringComparison.Ordinal);
+        Assert.Contains("1000", text, StringComparison.Ordinal);
+        Assert.Contains("user config", text, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -5917,6 +6090,25 @@ public sealed class CliCommandFactoryTests
             HasGlobalJson: false);
     }
 
+    private static CliEnvironmentSnapshot CreateSnapshotWithShellPolicy(
+        string workspacePath,
+        ShellPolicyConfiguration shellPolicy)
+    {
+        CliEnvironmentSnapshot snapshot = CreateSnapshot(
+            workspacePath,
+            apiKey: null,
+            apiKeySource: "missing",
+            model: "not configured");
+
+        return snapshot with
+        {
+            Configuration = snapshot.Configuration with
+            {
+                ShellPolicy = shellPolicy
+            }
+        };
+    }
+
     private static JsonObject ReadJsonObject(string path)
     {
         JsonNode? node = JsonNode.Parse(File.ReadAllText(path));
@@ -5984,11 +6176,15 @@ public sealed class CliCommandFactoryTests
         };
     }
 
-    private static string WriteMcpEchoServerScript(string directory)
+    private static string WriteMcpEchoServerScript(string directory, string? startupMarkerPath = null)
     {
         string scriptPath = Path.Combine(directory, "mcp-echo-fixture-" + Guid.NewGuid().ToString("N") + ".ps1");
+        string startupMarkerScript = string.IsNullOrWhiteSpace(startupMarkerPath)
+            ? string.Empty
+            : $"[System.IO.File]::WriteAllText('{startupMarkerPath.Replace("'", "''", StringComparison.Ordinal)}', 'started'){Environment.NewLine}";
         File.WriteAllText(
             scriptPath,
+            startupMarkerScript +
             """
             while (($line = [Console]::In.ReadLine()) -ne $null) {
                 $request = $line | ConvertFrom-Json
@@ -6073,6 +6269,8 @@ public sealed class CliCommandFactoryTests
     }
 
     private static string PowerShellExecutable => OperatingSystem.IsWindows() ? "powershell.exe" : "pwsh";
+
+    private static string PowerShellPolicyCommandName => OperatingSystem.IsWindows() ? "powershell" : "pwsh";
 
     private static void InitializeNoHeadGitRepository(string root)
     {

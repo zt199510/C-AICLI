@@ -23,6 +23,7 @@ public static class ToolErrorCode
     public const string GitCommandFailed = "git-command-failed";
     public const string GitUnavailable = "git-unavailable";
     public const string ShellCwdDenied = "shell-cwd-denied";
+    public const string ShellPolicyDenied = "shell-policy-denied";
     public const string DangerousCommandDenied = "dangerous-command-denied";
     public const string ShellTimeout = "shell-timeout";
     public const string ShellExitCode = "shell-exit-code";

@@ -33,6 +33,7 @@ public sealed class ToolErrorCodeTests
         Assert.Equal("git-command-failed", ToolErrorCode.GitCommandFailed);
         Assert.Equal("git-unavailable", ToolErrorCode.GitUnavailable);
         Assert.Equal("shell-cwd-denied", ToolErrorCode.ShellCwdDenied);
+        Assert.Equal("shell-policy-denied", ToolErrorCode.ShellPolicyDenied);
         Assert.Equal("dangerous-command-denied", ToolErrorCode.DangerousCommandDenied);
         Assert.Equal("shell-timeout", ToolErrorCode.ShellTimeout);
         Assert.Equal("shell-exit-code", ToolErrorCode.ShellExitCode);

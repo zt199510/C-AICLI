@@ -7,7 +7,7 @@ public sealed record McpDoctorReport(IReadOnlyList<string> Lines)
         IMcpConnectionManager? connectionManager = null)
     {
         ArgumentNullException.ThrowIfNull(snapshot);
-        connectionManager ??= new DefaultMcpConnectionManager();
+        connectionManager ??= new DefaultMcpConnectionManager(snapshot.Configuration.ShellPolicy);
 
         McpConfiguration configuration = McpConfigurationLoader.Load(snapshot.Configuration);
         List<string> lines =

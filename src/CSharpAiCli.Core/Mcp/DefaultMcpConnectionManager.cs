@@ -5,7 +5,12 @@ public sealed class DefaultMcpConnectionManager : IMcpConnectionManager
     private readonly IMcpClientSessionFactory stdioSessionFactory;
 
     public DefaultMcpConnectionManager()
-        : this(new McpStdioClientSessionFactory(new McpStdioTransport(new WorkspaceGuard())))
+        : this(ShellPolicyConfiguration.Default)
+    {
+    }
+
+    public DefaultMcpConnectionManager(ShellPolicyConfiguration shellPolicy)
+        : this(CreateDefaultStdioSessionFactory(shellPolicy))
     {
     }
 
@@ -13,6 +18,12 @@ public sealed class DefaultMcpConnectionManager : IMcpConnectionManager
     {
         ArgumentNullException.ThrowIfNull(stdioSessionFactory);
         this.stdioSessionFactory = stdioSessionFactory;
+    }
+
+    private static IMcpClientSessionFactory CreateDefaultStdioSessionFactory(ShellPolicyConfiguration shellPolicy)
+    {
+        ArgumentNullException.ThrowIfNull(shellPolicy);
+        return new McpStdioClientSessionFactory(new McpStdioTransport(new WorkspaceGuard(), shellPolicy));
     }
 
     public McpConnectionStatus Check(

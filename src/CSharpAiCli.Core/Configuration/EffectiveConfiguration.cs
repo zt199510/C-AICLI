@@ -23,5 +23,7 @@ public sealed record EffectiveConfiguration(
 
     public string ApprovalModeSource { get; init; } = "default";
 
+    public ShellPolicyConfiguration ShellPolicy { get; init; } = ShellPolicyConfiguration.Default;
+
     public bool HasApiKey => ApiKey is not null;
 }

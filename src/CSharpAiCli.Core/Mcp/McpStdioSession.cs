@@ -8,7 +8,6 @@ namespace CSharpAiCli.Core;
 
 public sealed class McpStdioSession : IMcpJsonRpcSession, IDisposable
 {
-    private const int DefaultTimeoutMilliseconds = 30_000;
     private const int CleanupWaitMilliseconds = 1000;
     private const int StderrSnippetMaxBytes = 4096;
     private const int MaxStdoutLineBytes = 1024 * 1024;
@@ -51,11 +50,13 @@ public sealed class McpStdioSession : IMcpJsonRpcSession, IDisposable
         WorkspaceContext workspace,
         McpStdioServerOptions options,
         IWorkspaceGuard workspaceGuard,
+        ShellPolicyConfiguration shellPolicy,
         CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(workspace);
         ArgumentNullException.ThrowIfNull(options);
         ArgumentNullException.ThrowIfNull(workspaceGuard);
+        ArgumentNullException.ThrowIfNull(shellPolicy);
 
         if (cancellationToken.IsCancellationRequested)
         {
@@ -69,6 +70,31 @@ public sealed class McpStdioSession : IMcpJsonRpcSession, IDisposable
             return McpStdioSessionOpenResult.Failure(
                 McpErrorCode.StartFailed,
                 "MCP stdio command is not configured.");
+        }
+
+        McpStdioStartupCommandRiskInput startupCommandRiskInput = McpStdioStartupCommandRiskInput.Create(options);
+        DangerousCommandDetection startupCommandDetection = DangerousCommandDetector.Detect(
+            startupCommandRiskInput.DetectorCommand);
+        if (startupCommandDetection.IsDangerous)
+        {
+            return McpStdioSessionOpenResult.Failure(
+                McpErrorCode.StartFailed,
+                FormatDangerousStartupCommandMessage(startupCommandDetection));
+        }
+
+        ShellPolicyDecision startupPolicyDecision = ShellCommandPolicy.Evaluate(
+            shellPolicy,
+            new ShellCommandRequest(
+                startupCommandRiskInput.PolicyCommand,
+                options.WorkingDirectory ?? ".",
+                options.TimeoutMilliseconds,
+                MaxStdoutBytes: 4096,
+                MaxStderrBytes: 4096));
+        if (!startupPolicyDecision.Allowed)
+        {
+            return McpStdioSessionOpenResult.Failure(
+                McpErrorCode.StartFailed,
+                FormatShellPolicyStartupCommandMessage(startupPolicyDecision));
         }
 
         WorkspaceGuardResult cwdResult = ResolveWorkingDirectory(
@@ -117,9 +143,7 @@ public sealed class McpStdioSession : IMcpJsonRpcSession, IDisposable
                 "MCP stdio server could not be started safely.");
         }
 
-        int timeout = options.TimeoutMilliseconds > 0
-            ? options.TimeoutMilliseconds
-            : DefaultTimeoutMilliseconds;
+        int timeout = options.TimeoutMilliseconds;
         BoundedStderrCapture stderrCapture = BoundedStderrCapture.Start(
             process.StandardError.BaseStream,
             StderrSnippetMaxBytes);
@@ -584,6 +608,18 @@ public sealed class McpStdioSession : IMcpJsonRpcSession, IDisposable
         }
 
         return startInfo;
+    }
+
+    private static string FormatDangerousStartupCommandMessage(DangerousCommandDetection detection)
+    {
+        return string.IsNullOrWhiteSpace(detection.MatchedRule)
+            ? $"MCP stdio server startup command was blocked. {detection.Reason}"
+            : $"MCP stdio server startup command was blocked. {detection.Reason} Matched rule: {detection.MatchedRule}.";
+    }
+
+    private static string FormatShellPolicyStartupCommandMessage(ShellPolicyDecision decision)
+    {
+        return $"MCP stdio server startup command was blocked by shell policy. {decision.SafeMessage}";
     }
 
     private static JsonRpcLineKind ClassifyJsonRpcLine(

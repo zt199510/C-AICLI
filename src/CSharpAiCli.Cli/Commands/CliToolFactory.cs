@@ -20,11 +20,14 @@ internal static class CliToolFactory
             approvalPolicy));
         RegisterIfEnabled(registry, snapshot, new WorkspaceShellTool(
             new RestrictedShellRunner(workspaceGuard),
-            approvalPolicy));
+            approvalPolicy,
+            snapshot.Configuration.ShellPolicy));
         RegisterIfEnabled(registry, snapshot, new GitStatusTool(workspaceGuard));
         RegisterIfEnabled(registry, snapshot, new GitDiffTool(workspaceGuard));
 
-        McpStdioClientSessionFactory mcpSessionFactory = new(new McpStdioTransport(workspaceGuard));
+        McpStdioClientSessionFactory mcpSessionFactory = new(new McpStdioTransport(
+            workspaceGuard,
+            snapshot.Configuration.ShellPolicy));
         McpToolBridge mcpToolBridge = new(
             new McpStdioToolDiscoverer(mcpSessionFactory),
             new McpStdioToolInvoker(mcpSessionFactory),

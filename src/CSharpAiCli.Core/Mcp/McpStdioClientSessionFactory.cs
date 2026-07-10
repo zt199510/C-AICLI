@@ -2,8 +2,6 @@ namespace CSharpAiCli.Core;
 
 public sealed class McpStdioClientSessionFactory : IMcpClientSessionFactory
 {
-    private const int DefaultTimeoutMilliseconds = 30_000;
-
     private readonly McpStdioTransport transport;
 
     public McpStdioClientSessionFactory(McpStdioTransport transport)
@@ -41,7 +39,7 @@ public sealed class McpStdioClientSessionFactory : IMcpClientSessionFactory
                 server.Command,
                 server.Args,
                 server.Cwd,
-                server.TimeoutMilliseconds ?? DefaultTimeoutMilliseconds),
+                server.TimeoutMilliseconds ?? McpStdioServerOptions.DefaultTimeoutMilliseconds),
             cancellationToken);
 
         if (!openResult.Succeeded || openResult.Session is null)

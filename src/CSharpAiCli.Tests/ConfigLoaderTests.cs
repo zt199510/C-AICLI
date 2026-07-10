@@ -66,6 +66,295 @@ public sealed class ConfigLoaderTests
         Assert.Equal("on-request", config.ApprovalMode);
     }
 
+    [Fact]
+    public void CliConfigFile_deserializes_shell_policy_from_camel_case_json()
+    {
+        CliConfigFile? config = JsonSerializer.Deserialize<CliConfigFile>(
+            """
+            {
+              "shellPolicy": {
+                "allowedCommands": [ "dotnet test" ],
+                "deniedCommands": [ "rm -rf ." ],
+                "maxTimeoutMilliseconds": 5000
+              }
+            }
+            """,
+            new JsonSerializerOptions(JsonSerializerDefaults.Web));
+
+        Assert.NotNull(config);
+        ShellPolicyConfig policy = Assert.IsType<ShellPolicyConfig>(config.ShellPolicy);
+        string[] allowedCommands = Assert.IsType<string[]>(policy.AllowedCommands);
+        string[] deniedCommands = Assert.IsType<string[]>(policy.DeniedCommands);
+        Assert.Equal(["dotnet test"], allowedCommands);
+        Assert.Equal(["rm -rf ."], deniedCommands);
+        Assert.Equal(5000, policy.MaxTimeoutMilliseconds);
+    }
+
+    [Fact]
+    public void Load_uses_default_empty_shell_policy_when_missing()
+    {
+        string root = CreateTempDirectory();
+
+        try
+        {
+            string userProfile = Path.Combine(root, "home");
+            string workspaceRoot = Path.Combine(root, "workspace");
+            Directory.CreateDirectory(userProfile);
+            Directory.CreateDirectory(workspaceRoot);
+
+            WorkspaceContext workspace = WorkspaceContext.Detect(workspaceRoot, root);
+            EffectiveConfiguration configuration = ConfigLoader.Load(
+                workspace,
+                userProfile: userProfile,
+                openAiApiKey: "");
+
+            Assert.Empty(configuration.ShellPolicy.AllowedCommands);
+            Assert.False(configuration.ShellPolicy.AllowedCommandsConfigured);
+            Assert.Equal("default", configuration.ShellPolicy.AllowedCommandsSource);
+            Assert.Empty(configuration.ShellPolicy.DeniedCommands);
+            Assert.Null(configuration.ShellPolicy.MaxTimeoutMilliseconds);
+            Assert.Equal("default", configuration.ShellPolicy.MaxTimeoutMillisecondsSource);
+        }
+        finally
+        {
+            Directory.Delete(root, recursive: true);
+        }
+    }
+
+    [Fact]
+    public void Load_marks_single_source_allowed_commands_as_configured()
+    {
+        string root = CreateTempDirectory();
+
+        try
+        {
+            string userProfile = Path.Combine(root, "home");
+            string workspaceRoot = Path.Combine(root, "workspace");
+            Directory.CreateDirectory(userProfile);
+            Directory.CreateDirectory(workspaceRoot);
+
+            string workspaceConfigPath = Path.Combine(workspaceRoot, ".caicli", "config.json");
+            Directory.CreateDirectory(Path.GetDirectoryName(workspaceConfigPath)!);
+            File.WriteAllText(workspaceConfigPath, """
+            {
+              "shellPolicy": {
+                "allowedCommands": [ "dotnet test" ]
+              }
+            }
+            """);
+
+            WorkspaceContext workspace = WorkspaceContext.Detect(workspaceRoot, root);
+            EffectiveConfiguration configuration = ConfigLoader.Load(
+                workspace,
+                userProfile: userProfile,
+                openAiApiKey: "");
+
+            Assert.True(configuration.ShellPolicy.AllowedCommandsConfigured);
+            Assert.Equal("workspace config", configuration.ShellPolicy.AllowedCommandsSource);
+            Assert.Equal(["dotnet test"], configuration.ShellPolicy.AllowedCommands);
+            Assert.Contains(workspaceConfigPath, configuration.LoadedConfigPaths);
+        }
+        finally
+        {
+            Directory.Delete(root, recursive: true);
+        }
+    }
+
+    [Fact]
+    public void Load_marks_disjoint_allowed_commands_as_configured_empty_allowlist()
+    {
+        string root = CreateTempDirectory();
+
+        try
+        {
+            string userProfile = Path.Combine(root, "home");
+            string workspaceRoot = Path.Combine(root, "workspace");
+            Directory.CreateDirectory(userProfile);
+            Directory.CreateDirectory(workspaceRoot);
+
+            string userConfigPath = Path.Combine(userProfile, ".caicli", "config.json");
+            Directory.CreateDirectory(Path.GetDirectoryName(userConfigPath)!);
+            File.WriteAllText(userConfigPath, """
+            {
+              "shellPolicy": {
+                "allowedCommands": [ "dotnet test" ]
+              }
+            }
+            """);
+            string workspaceConfigPath = Path.Combine(workspaceRoot, ".caicli", "config.json");
+            Directory.CreateDirectory(Path.GetDirectoryName(workspaceConfigPath)!);
+            File.WriteAllText(workspaceConfigPath, """
+            {
+              "shellPolicy": {
+                "allowedCommands": [ "npm test" ]
+              }
+            }
+            """);
+
+            WorkspaceContext workspace = WorkspaceContext.Detect(workspaceRoot, root);
+            EffectiveConfiguration configuration = ConfigLoader.Load(
+                workspace,
+                userProfile: userProfile,
+                openAiApiKey: "");
+
+            Assert.True(configuration.ShellPolicy.AllowedCommandsConfigured);
+            Assert.Equal("user config, workspace config", configuration.ShellPolicy.AllowedCommandsSource);
+            Assert.Empty(configuration.ShellPolicy.AllowedCommands);
+            Assert.Contains(userConfigPath, configuration.LoadedConfigPaths);
+            Assert.Contains(workspaceConfigPath, configuration.LoadedConfigPaths);
+        }
+        finally
+        {
+            Directory.Delete(root, recursive: true);
+        }
+    }
+
+    [Fact]
+    public void Load_marks_explicit_empty_allowed_commands_as_configured()
+    {
+        string root = CreateTempDirectory();
+
+        try
+        {
+            string userProfile = Path.Combine(root, "home");
+            string workspaceRoot = Path.Combine(root, "workspace");
+            Directory.CreateDirectory(userProfile);
+            Directory.CreateDirectory(workspaceRoot);
+
+            string userConfigPath = Path.Combine(userProfile, ".caicli", "config.json");
+            Directory.CreateDirectory(Path.GetDirectoryName(userConfigPath)!);
+            File.WriteAllText(userConfigPath, """
+            {
+              "shellPolicy": {
+                "allowedCommands": []
+              }
+            }
+            """);
+
+            WorkspaceContext workspace = WorkspaceContext.Detect(workspaceRoot, root);
+            EffectiveConfiguration configuration = ConfigLoader.Load(
+                workspace,
+                userProfile: userProfile,
+                openAiApiKey: "");
+
+            Assert.True(configuration.ShellPolicy.AllowedCommandsConfigured);
+            Assert.Equal("user config", configuration.ShellPolicy.AllowedCommandsSource);
+            Assert.Empty(configuration.ShellPolicy.AllowedCommands);
+            Assert.Contains(userConfigPath, configuration.LoadedConfigPaths);
+            Assert.DoesNotContain(configuration.Warnings, warning =>
+                warning.Contains("ignored invalid config", StringComparison.Ordinal));
+        }
+        finally
+        {
+            Directory.Delete(root, recursive: true);
+        }
+    }
+
+    [Fact]
+    public void Load_combines_shell_policy_with_conservative_allowlist_denies_and_timeout()
+    {
+        string root = CreateTempDirectory();
+
+        try
+        {
+            string userProfile = Path.Combine(root, "home");
+            string workspaceRoot = Path.Combine(root, "workspace");
+            Directory.CreateDirectory(userProfile);
+            Directory.CreateDirectory(workspaceRoot);
+
+            string userConfigPath = Path.Combine(userProfile, ".caicli", "config.json");
+            Directory.CreateDirectory(Path.GetDirectoryName(userConfigPath)!);
+            File.WriteAllText(userConfigPath, """
+            {
+              "shellPolicy": {
+                "allowedCommands": [ "dotnet test", "git status", " " ],
+                "deniedCommands": [ "Remove-Item -Recurse" ],
+                "maxTimeoutMilliseconds": 5000
+              }
+            }
+            """);
+            string workspaceConfigPath = Path.Combine(workspaceRoot, ".caicli", "config.json");
+            Directory.CreateDirectory(Path.GetDirectoryName(workspaceConfigPath)!);
+            File.WriteAllText(workspaceConfigPath, """
+            {
+              "shellPolicy": {
+                "allowedCommands": [ "dotnet test", "npm test" ],
+                "deniedCommands": [ "rm -rf ." ],
+                "maxTimeoutMilliseconds": 1000
+              }
+            }
+            """);
+
+            WorkspaceContext workspace = WorkspaceContext.Detect(workspaceRoot, root);
+            EffectiveConfiguration configuration = ConfigLoader.Load(
+                workspace,
+                userProfile: userProfile,
+                openAiApiKey: "");
+
+            Assert.Equal(["dotnet test"], configuration.ShellPolicy.AllowedCommands);
+            Assert.True(configuration.ShellPolicy.AllowedCommandsConfigured);
+            Assert.Equal("user config, workspace config", configuration.ShellPolicy.AllowedCommandsSource);
+            Assert.Equal(["Remove-Item -Recurse", "rm -rf ."], configuration.ShellPolicy.DeniedCommands);
+            Assert.Equal(1000, configuration.ShellPolicy.MaxTimeoutMilliseconds);
+            Assert.Equal("workspace config", configuration.ShellPolicy.MaxTimeoutMillisecondsSource);
+            Assert.Contains(userConfigPath, configuration.LoadedConfigPaths);
+            Assert.Contains(workspaceConfigPath, configuration.LoadedConfigPaths);
+        }
+        finally
+        {
+            Directory.Delete(root, recursive: true);
+        }
+    }
+
+    [Fact]
+    public void Load_warns_for_invalid_shell_policy_timeout_and_falls_back_to_workspace_config()
+    {
+        string root = CreateTempDirectory();
+
+        try
+        {
+            string userProfile = Path.Combine(root, "home");
+            string workspaceRoot = Path.Combine(root, "workspace");
+            Directory.CreateDirectory(userProfile);
+            Directory.CreateDirectory(workspaceRoot);
+
+            string userConfigPath = Path.Combine(userProfile, ".caicli", "config.json");
+            Directory.CreateDirectory(Path.GetDirectoryName(userConfigPath)!);
+            File.WriteAllText(userConfigPath, """
+            {
+              "shellPolicy": {
+                "maxTimeoutMilliseconds": 0
+              }
+            }
+            """);
+            string workspaceConfigPath = Path.Combine(workspaceRoot, ".caicli", "config.json");
+            Directory.CreateDirectory(Path.GetDirectoryName(workspaceConfigPath)!);
+            File.WriteAllText(workspaceConfigPath, """
+            {
+              "shellPolicy": {
+                "maxTimeoutMilliseconds": 2000
+              }
+            }
+            """);
+
+            WorkspaceContext workspace = WorkspaceContext.Detect(workspaceRoot, root);
+            EffectiveConfiguration configuration = ConfigLoader.Load(
+                workspace,
+                userProfile: userProfile,
+                openAiApiKey: "");
+
+            Assert.Equal(2000, configuration.ShellPolicy.MaxTimeoutMilliseconds);
+            Assert.Equal("workspace config", configuration.ShellPolicy.MaxTimeoutMillisecondsSource);
+            Assert.Contains(configuration.Warnings, warning =>
+                warning.Contains("ignored invalid shellPolicy.maxTimeoutMilliseconds", StringComparison.Ordinal)
+                && warning.Contains("user config", StringComparison.Ordinal));
+        }
+        finally
+        {
+            Directory.Delete(root, recursive: true);
+        }
+    }
+
     [Theory]
     [InlineData("never", ApprovalMode.Never)]
     [InlineData("on-request", ApprovalMode.OnRequest)]
