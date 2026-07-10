@@ -45,15 +45,7 @@ artifacts\release\caicli-0.1.0-win-x64\caicli.exe logs show --tail 20
 artifacts\release\caicli-0.1.0-win-x64\caicli.exe logs clear
 ```
 
-For trace-level local JSONL diagnostics, pass `--trace` or set `CAICLI_TRACE=1`:
-
-```powershell
-artifacts\release\caicli-0.1.0-win-x64\caicli.exe exec --trace --workspace . "read README.md"
-$env:CAICLI_TRACE = "1"
-artifacts\release\caicli-0.1.0-win-x64\caicli.exe exec --workspace . "read README.md"
-```
-
-Trace logs are redacted and record key presence/source, not raw key values.
+Trace-level `exec` diagnostics are shown later, after model access is configured. Trace logs are redacted and record key presence/source, not raw key values.
 
 ## 4. Configure Chat
 
@@ -160,6 +152,14 @@ artifacts\release\caicli-0.1.0-win-x64\caicli.exe exec --workspace . "read READM
 artifacts\release\caicli-0.1.0-win-x64\caicli.exe exec --json --workspace . "read README.md"
 artifacts\release\caicli-0.1.0-win-x64\caicli.exe exec --output json --workspace . "read README.md"
 artifacts\release\caicli-0.1.0-win-x64\caicli.exe exec --output text --workspace . "read README.md"
+```
+
+After model access is configured, pass `--trace` or set `CAICLI_TRACE=1` to write trace-level local JSONL diagnostics for `exec`:
+
+```powershell
+artifacts\release\caicli-0.1.0-win-x64\caicli.exe exec --trace --workspace . "read README.md"
+$env:CAICLI_TRACE = "1"
+artifacts\release\caicli-0.1.0-win-x64\caicli.exe exec --workspace . "read README.md"
 ```
 
 Agent loop limits are available for non-interactive runs:

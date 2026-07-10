@@ -66,6 +66,11 @@ yyyy-MM-dd.log
 - `workspaceStatus`
 - `model`
 - `modelSource`
+- `baseUrl`
+- `baseUrlSource`
+- `agentBackend`
+- `agentBackendSource`
+- `agentBackendStatus`
 - `apiKey`
 - `apiKeySource`
 - `warnings`
