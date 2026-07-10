@@ -827,6 +827,33 @@ public static class CliCommandFactory
         });
         logsCommand.Subcommands.Add(logsShowCommand);
 
+        Command logsClearCommand = new("clear", "Delete CLI log files.");
+        logsClearCommand.SetAction(parseResult =>
+        {
+            string? workspacePath = parseResult.GetValue(workspaceOption);
+            CliEnvironmentSnapshot snapshot = workspaceSnapshotProvider(workspacePath);
+            WriteVerboseDiagnostics(parseResult, "logs clear", snapshot);
+
+            string logDirectory = LogPathResolver.ResolveLogDirectory(snapshot);
+            if (!Directory.Exists(logDirectory))
+            {
+                return 0;
+            }
+
+            int clearedCount = 0;
+            foreach (string logPath in EnumerateLogFilesBestEffort(logDirectory))
+            {
+                if (DeleteLogFileBestEffort(logPath))
+                {
+                    clearedCount++;
+                }
+            }
+
+            output.WriteLine($"Cleared {clearedCount} log file(s).");
+            return 0;
+        });
+        logsCommand.Subcommands.Add(logsClearCommand);
+
         Command execCommand = new("exec", "Run an agentic local workspace task and emit exec events.");
         Argument<string> execTaskArgument = new("task")
         {
@@ -1471,6 +1498,24 @@ public static class CliCommandFactory
         }
         catch (Exception exception) when (IsBestEffortLogReadException(exception))
         {
+        }
+    }
+
+    private static bool DeleteLogFileBestEffort(string logPath)
+    {
+        try
+        {
+            if (!File.Exists(logPath))
+            {
+                return false;
+            }
+
+            File.Delete(logPath);
+            return !File.Exists(logPath);
+        }
+        catch (Exception exception) when (IsBestEffortLogReadException(exception))
+        {
+            return false;
         }
     }
 

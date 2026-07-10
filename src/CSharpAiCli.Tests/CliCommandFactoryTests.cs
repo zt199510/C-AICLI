@@ -6104,6 +6104,205 @@ public sealed class CliCommandFactoryTests
     }
 
     [Fact]
+    public void Logs_clear_deletes_direct_log_files_and_reports_count()
+    {
+        using TempDirectory temp = TempDirectory.Create();
+        using StringWriter output = new();
+        CliEnvironmentSnapshot snapshot = CreateSnapshot(temp.Path);
+        string logDirectory = LogPathResolver.ResolveLogDirectory(snapshot);
+        Directory.CreateDirectory(logDirectory);
+        string commandLogPath = Path.Combine(logDirectory, "2026-07-09.log");
+        string traceLogPath = Path.Combine(logDirectory, "2026-07-09.trace.log");
+        File.WriteAllText(commandLogPath, "command");
+        File.WriteAllText(traceLogPath, "trace");
+
+        int exitCode = CliCommandFactory
+            .Create(output, _ => snapshot)
+            .Parse(["logs", "clear"])
+            .Invoke();
+
+        Assert.Equal(0, exitCode);
+        Assert.Equal("Cleared 2 log file(s)." + Environment.NewLine, output.ToString());
+        Assert.False(File.Exists(commandLogPath));
+        Assert.False(File.Exists(traceLogPath));
+    }
+
+    [Fact]
+    public void Logs_clear_keeps_non_log_files_subdirectories_workspace_files_and_other_caicli_files()
+    {
+        using TempDirectory temp = TempDirectory.Create();
+        using StringWriter output = new();
+        CliEnvironmentSnapshot snapshot = CreateSnapshot(temp.Path);
+        string caicliDirectory = Path.Combine(temp.Path, ".caicli");
+        string logDirectory = LogPathResolver.ResolveLogDirectory(snapshot);
+        Directory.CreateDirectory(logDirectory);
+        string directLogPath = Path.Combine(logDirectory, "2026-07-09.log");
+        string textPath = Path.Combine(logDirectory, "notes.txt");
+        string backupPath = Path.Combine(logDirectory, "2026-07-09.log.bak");
+        string archiveDirectory = Path.Combine(logDirectory, "archive");
+        Directory.CreateDirectory(archiveDirectory);
+        string nestedLogPath = Path.Combine(archiveDirectory, "2026-07-08.log");
+        string configPath = Path.Combine(caicliDirectory, "config.json");
+        string workspaceLogPath = Path.Combine(temp.Path, "workspace.log");
+        File.WriteAllText(directLogPath, "delete");
+        File.WriteAllText(textPath, "keep");
+        File.WriteAllText(backupPath, "keep");
+        File.WriteAllText(nestedLogPath, "keep");
+        File.WriteAllText(configPath, "{}");
+        File.WriteAllText(workspaceLogPath, "keep");
+
+        int exitCode = CliCommandFactory
+            .Create(output, _ => snapshot)
+            .Parse(["logs", "clear"])
+            .Invoke();
+
+        Assert.Equal(0, exitCode);
+        Assert.Equal("Cleared 1 log file(s)." + Environment.NewLine, output.ToString());
+        Assert.False(File.Exists(directLogPath));
+        Assert.True(File.Exists(textPath));
+        Assert.True(File.Exists(backupPath));
+        Assert.True(Directory.Exists(archiveDirectory));
+        Assert.True(File.Exists(nestedLogPath));
+        Assert.True(File.Exists(configPath));
+        Assert.True(File.Exists(workspaceLogPath));
+    }
+
+    [Fact]
+    public void Logs_clear_missing_log_directory_succeeds_without_output_or_creating_it()
+    {
+        using TempDirectory temp = TempDirectory.Create();
+        using StringWriter output = new();
+        CliEnvironmentSnapshot snapshot = CreateSnapshot(temp.Path);
+        string logDirectory = LogPathResolver.ResolveLogDirectory(snapshot);
+
+        int exitCode = CliCommandFactory
+            .Create(output, _ => snapshot)
+            .Parse(["logs", "clear"])
+            .Invoke();
+
+        Assert.Equal(0, exitCode);
+        Assert.Equal(string.Empty, output.ToString());
+        Assert.False(Directory.Exists(logDirectory));
+    }
+
+    [Fact]
+    public void Logs_clear_honors_workspace_option()
+    {
+        using TempDirectory temp = TempDirectory.Create();
+        using StringWriter output = new();
+        string workspaceRoot = Path.Combine(temp.Path, "custom-root");
+        string? receivedWorkspace = null;
+        CliEnvironmentSnapshot snapshot = CreateSnapshot(workspaceRoot);
+        string logDirectory = LogPathResolver.ResolveLogDirectory(snapshot);
+        Directory.CreateDirectory(logDirectory);
+        string logPath = Path.Combine(logDirectory, "2026-07-09.log");
+        File.WriteAllText(logPath, "workspace log");
+
+        int exitCode = CliCommandFactory
+            .Create(output, workspacePath =>
+            {
+                receivedWorkspace = workspacePath;
+                return CreateSnapshot(workspacePath);
+            })
+            .Parse(["logs", "clear", "--workspace", workspaceRoot])
+            .Invoke();
+
+        Assert.Equal(0, exitCode);
+        Assert.Equal(workspaceRoot, receivedWorkspace);
+        Assert.Equal("Cleared 1 log file(s)." + Environment.NewLine, output.ToString());
+        Assert.False(File.Exists(logPath));
+    }
+
+    [Fact]
+    public void Logs_clear_skips_locked_log_files_without_failing()
+    {
+        if (!OperatingSystem.IsWindows())
+        {
+            return;
+        }
+
+        using TempDirectory temp = TempDirectory.Create();
+        using StringWriter output = new();
+        CliEnvironmentSnapshot snapshot = CreateSnapshot(temp.Path);
+        string logDirectory = LogPathResolver.ResolveLogDirectory(snapshot);
+        Directory.CreateDirectory(logDirectory);
+        string readableLogPath = Path.Combine(logDirectory, "2026-07-08.log");
+        string lockedLogPath = Path.Combine(logDirectory, "2026-07-09.log");
+        File.WriteAllText(readableLogPath, "readable");
+        File.WriteAllText(lockedLogPath, "locked");
+        using FileStream lockedLog = File.Open(lockedLogPath, FileMode.Open, FileAccess.ReadWrite, FileShare.None);
+
+        int exitCode = CliCommandFactory
+            .Create(output, _ => snapshot)
+            .Parse(["logs", "clear"])
+            .Invoke();
+
+        Assert.Equal(0, exitCode);
+        Assert.Equal("Cleared 1 log file(s)." + Environment.NewLine, output.ToString());
+        Assert.False(File.Exists(readableLogPath));
+        Assert.True(File.Exists(lockedLogPath));
+    }
+
+    [Fact]
+    public void Logs_clear_does_not_call_command_logger_or_create_new_log_entry()
+    {
+        using TempDirectory temp = TempDirectory.Create();
+        using StringWriter output = new();
+        List<string> loggedCommands = [];
+        CliEnvironmentSnapshot snapshot = CreateSnapshot(temp.Path);
+        string logDirectory = LogPathResolver.ResolveLogDirectory(snapshot);
+        Directory.CreateDirectory(logDirectory);
+
+        int exitCode = CliCommandFactory
+            .Create(
+                output,
+                _ => snapshot,
+                (commandName, commandSnapshot) =>
+                {
+                    loggedCommands.Add(commandName);
+                    CommandLogger.Append(commandName, commandSnapshot);
+                })
+            .Parse(["logs", "clear"])
+            .Invoke();
+
+        Assert.Equal(0, exitCode);
+        Assert.Equal("Cleared 0 log file(s)." + Environment.NewLine, output.ToString());
+        Assert.Empty(loggedCommands);
+        Assert.Empty(Directory.GetFiles(logDirectory, "*.log"));
+    }
+
+    [Fact]
+    public void Logs_clear_verbose_writes_diagnostics_before_summary()
+    {
+        using TempDirectory temp = TempDirectory.Create();
+        using StringWriter output = new();
+        CliEnvironmentSnapshot snapshot = CreateSnapshot(
+            workspacePath: temp.Path,
+            apiKey: "sk-secret",
+            apiKeySource: "OPENAI_API_KEY",
+            model: "gpt-test");
+        string logDirectory = LogPathResolver.ResolveLogDirectory(snapshot);
+        Directory.CreateDirectory(logDirectory);
+        File.WriteAllText(Path.Combine(logDirectory, "2026-07-09.log"), "visible log");
+
+        int exitCode = CliCommandFactory
+            .Create(output, _ => snapshot)
+            .Parse(["logs", "clear", "--verbose"])
+            .Invoke();
+
+        string text = output.ToString();
+        int diagnosticsIndex = text.IndexOf("C# AI CLI verbose diagnostics", StringComparison.Ordinal);
+        int summaryIndex = text.LastIndexOf("Cleared 1 log file(s).", StringComparison.Ordinal);
+        Assert.Equal(0, exitCode);
+        Assert.True(diagnosticsIndex >= 0, text);
+        Assert.True(summaryIndex > diagnosticsIndex, text);
+        Assert.True(text.EndsWith("Cleared 1 log file(s)." + Environment.NewLine, StringComparison.Ordinal), text);
+        Assert.DoesNotContain("commandName: logs show", text, StringComparison.Ordinal);
+        Assert.Contains("commandName: logs clear", text, StringComparison.Ordinal);
+        Assert.DoesNotContain("sk-secret", text, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void Doctor_command_writes_command_log_through_delegate()
     {
         using StringWriter output = new();
