@@ -791,6 +791,49 @@ public static class CliCommandFactory
         });
         logsCommand.Subcommands.Add(logsPathCommand);
 
+        Command logsShowCommand = new("show", "Print CLI log lines.");
+        Option<int?> logsTailOption = new("--tail")
+        {
+            Description = "Print the last number of log lines.",
+        };
+        logsTailOption.DefaultValueFactory = _ => 20;
+        AddPositiveIntegerValidator(logsTailOption, "--tail");
+        logsShowCommand.Options.Add(logsTailOption);
+        logsShowCommand.SetAction(parseResult =>
+        {
+            string? workspacePath = parseResult.GetValue(workspaceOption);
+            int tailCount = parseResult.GetValue(logsTailOption) ?? 20;
+            CliEnvironmentSnapshot snapshot = workspaceSnapshotProvider(workspacePath);
+            WriteVerboseDiagnostics(parseResult, "logs show", snapshot);
+
+            string logDirectory = LogPathResolver.ResolveLogDirectory(snapshot);
+            if (!Directory.Exists(logDirectory))
+            {
+                return 0;
+            }
+
+            Queue<string> tailLines = new();
+            foreach (string logPath in Directory.EnumerateFiles(logDirectory, "*.log").Order(StringComparer.Ordinal))
+            {
+                foreach (string line in File.ReadLines(logPath))
+                {
+                    tailLines.Enqueue(line);
+                    while (tailLines.Count > tailCount)
+                    {
+                        tailLines.Dequeue();
+                    }
+                }
+            }
+
+            foreach (string line in tailLines)
+            {
+                output.WriteLine(line);
+            }
+
+            return 0;
+        });
+        logsCommand.Subcommands.Add(logsShowCommand);
+
         Command execCommand = new("exec", "Run an agentic local workspace task and emit exec events.");
         Argument<string> execTaskArgument = new("task")
         {

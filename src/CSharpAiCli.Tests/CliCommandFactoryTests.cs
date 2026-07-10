@@ -5926,6 +5926,157 @@ public sealed class CliCommandFactoryTests
     }
 
     [Fact]
+    public void Logs_show_tail_reads_command_and_trace_logs_in_chronological_order()
+    {
+        using TempDirectory temp = TempDirectory.Create();
+        using StringWriter output = new();
+        List<string> loggedCommands = [];
+        CliEnvironmentSnapshot snapshot = CreateSnapshot(temp.Path);
+        string logDirectory = LogPathResolver.ResolveLogDirectory(snapshot);
+        Directory.CreateDirectory(logDirectory);
+        File.WriteAllLines(
+            Path.Combine(logDirectory, "2026-07-08.log"),
+            ["old command 1", "old command 2"]);
+        File.WriteAllLines(
+            Path.Combine(logDirectory, "2026-07-08.trace.log"),
+            ["old trace 1"]);
+        File.WriteAllLines(
+            Path.Combine(logDirectory, "2026-07-09.log"),
+            ["new command 1", "new command 2"]);
+
+        int exitCode = CliCommandFactory
+            .Create(output, _ => snapshot, (commandName, _) => loggedCommands.Add(commandName))
+            .Parse(["logs", "show", "--tail", "3"])
+            .Invoke();
+
+        string expected = string.Join(
+            Environment.NewLine,
+            ["old trace 1", "new command 1", "new command 2"]) + Environment.NewLine;
+        Assert.Equal(0, exitCode);
+        Assert.Equal(expected, output.ToString());
+        Assert.Empty(loggedCommands);
+    }
+
+    [Fact]
+    public void Logs_show_defaults_to_tail_20()
+    {
+        using TempDirectory temp = TempDirectory.Create();
+        using StringWriter output = new();
+        CliEnvironmentSnapshot snapshot = CreateSnapshot(temp.Path);
+        string logDirectory = LogPathResolver.ResolveLogDirectory(snapshot);
+        Directory.CreateDirectory(logDirectory);
+        File.WriteAllLines(
+            Path.Combine(logDirectory, "2026-07-09.log"),
+            Enumerable.Range(1, 25).Select(index => $"line-{index:00}"));
+
+        int exitCode = CliCommandFactory
+            .Create(output, _ => snapshot)
+            .Parse(["logs", "show"])
+            .Invoke();
+
+        string expected = string.Join(
+            Environment.NewLine,
+            Enumerable.Range(6, 20).Select(index => $"line-{index:00}")) + Environment.NewLine;
+        Assert.Equal(0, exitCode);
+        Assert.Equal(expected, output.ToString());
+    }
+
+    [Fact]
+    public void Logs_show_missing_log_directory_succeeds_without_output_or_creating_it()
+    {
+        using TempDirectory temp = TempDirectory.Create();
+        using StringWriter output = new();
+        CliEnvironmentSnapshot snapshot = CreateSnapshot(temp.Path);
+        string logDirectory = LogPathResolver.ResolveLogDirectory(snapshot);
+
+        int exitCode = CliCommandFactory
+            .Create(output, _ => snapshot, (commandName, commandSnapshot) => CommandLogger.Append(commandName, commandSnapshot))
+            .Parse(["logs", "show"])
+            .Invoke();
+
+        Assert.Equal(0, exitCode);
+        Assert.Equal(string.Empty, output.ToString());
+        Assert.False(Directory.Exists(logDirectory));
+    }
+
+    [Fact]
+    public void Logs_show_honors_workspace_option()
+    {
+        using TempDirectory temp = TempDirectory.Create();
+        using StringWriter output = new();
+        string workspaceRoot = Path.Combine(temp.Path, "custom-root");
+        string? receivedWorkspace = null;
+        CliEnvironmentSnapshot snapshot = CreateSnapshot(workspaceRoot);
+        string logDirectory = LogPathResolver.ResolveLogDirectory(snapshot);
+        Directory.CreateDirectory(logDirectory);
+        File.WriteAllLines(Path.Combine(logDirectory, "2026-07-09.log"), ["workspace log"]);
+
+        int exitCode = CliCommandFactory
+            .Create(output, workspacePath =>
+            {
+                receivedWorkspace = workspacePath;
+                return CreateSnapshot(workspacePath);
+            })
+            .Parse(["logs", "show", "--workspace", workspaceRoot])
+            .Invoke();
+
+        Assert.Equal(0, exitCode);
+        Assert.Equal(workspaceRoot, receivedWorkspace);
+        Assert.Equal("workspace log" + Environment.NewLine, output.ToString());
+    }
+
+    [Fact]
+    public void Logs_show_tail_rejects_nonpositive_values_before_reading_logs()
+    {
+        using TempDirectory temp = TempDirectory.Create();
+        using StringWriter output = new();
+        List<string> loggedCommands = [];
+        CliEnvironmentSnapshot snapshot = CreateSnapshot(temp.Path);
+        string logDirectory = LogPathResolver.ResolveLogDirectory(snapshot);
+        Directory.CreateDirectory(logDirectory);
+        File.WriteAllLines(Path.Combine(logDirectory, "2026-07-09.log"), ["line"]);
+        RootCommand command = CliCommandFactory.Create(
+            output,
+            _ => snapshot,
+            (commandName, _) => loggedCommands.Add(commandName));
+
+        int exitCode = CliCommandFactory.Invoke(command, ["logs", "show", "--tail", "0"], output);
+
+        Assert.Equal(2, exitCode);
+        Assert.Contains("greater than zero", output.ToString(), StringComparison.Ordinal);
+        Assert.Empty(loggedCommands);
+    }
+
+    [Fact]
+    public void Logs_show_verbose_writes_diagnostics_before_log_lines()
+    {
+        using TempDirectory temp = TempDirectory.Create();
+        using StringWriter output = new();
+        CliEnvironmentSnapshot snapshot = CreateSnapshot(
+            workspacePath: temp.Path,
+            apiKey: "sk-secret",
+            apiKeySource: "OPENAI_API_KEY",
+            model: "gpt-test");
+        string logDirectory = LogPathResolver.ResolveLogDirectory(snapshot);
+        Directory.CreateDirectory(logDirectory);
+        File.WriteAllLines(Path.Combine(logDirectory, "2026-07-09.log"), ["visible log"]);
+
+        int exitCode = CliCommandFactory
+            .Create(output, _ => snapshot)
+            .Parse(["logs", "show", "--verbose"])
+            .Invoke();
+
+        string text = output.ToString();
+        int diagnosticsIndex = text.IndexOf("C# AI CLI verbose diagnostics", StringComparison.Ordinal);
+        int logLineIndex = text.LastIndexOf("visible log", StringComparison.Ordinal);
+        Assert.Equal(0, exitCode);
+        Assert.True(diagnosticsIndex >= 0, text);
+        Assert.True(logLineIndex > diagnosticsIndex, text);
+        Assert.True(text.EndsWith("visible log" + Environment.NewLine, StringComparison.Ordinal), text);
+        Assert.DoesNotContain("sk-secret", text, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void Doctor_command_writes_command_log_through_delegate()
     {
         using StringWriter output = new();
