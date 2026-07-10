@@ -240,6 +240,76 @@ public sealed class TraceLoggerTests
     }
 
     [Fact]
+    public void AppendExecResult_redacts_comma_separated_authorization_parameters_in_text_and_payload_values()
+    {
+        string tempRoot = CreateTempDirectory();
+
+        try
+        {
+            string workspaceRoot = Path.Combine(tempRoot, "workspace");
+            Directory.CreateDirectory(workspaceRoot);
+            CliEnvironmentSnapshot snapshot = CreateSnapshot(
+                workspaceRoot: workspaceRoot,
+                userProfile: Path.Combine(tempRoot, "home"));
+            DiagnosticContext context = new(
+                CommandId: "cmd-auth-params",
+                SessionId: "session-auth-params",
+                Workspace: workspaceRoot,
+                TimestampUtc: DateTimeOffset.Parse("2026-07-10T12:30:00Z"));
+            ExecEvent execEvent = new(
+                Type: "tool.completed",
+                Sequence: 0,
+                Timestamp: DateTimeOffset.Parse("2026-07-10T12:30:01Z"),
+                Message: "stderr included Authorization: Digest username=\"alice\", realm=\"secret-realm\", nonce=\"secret-nonce\", response=\"secret-response\"",
+                Payload: new Dictionary<string, string>
+                {
+                    ["diagnosticText"] = "payload included authorization=Digest username=\"bob\", realm=\"payload-realm\", nonce=\"payload-nonce\", response=\"payload-response\""
+                },
+                Status: "success");
+            ExecResult result = ExecResult.Success(
+                "finished after Authorization: Digest username=\"carol\", realm=\"result-realm\", nonce=\"result-nonce\", response=\"result-response\"",
+                [execEvent]);
+
+            TraceLogger.AppendExecResult("exec", snapshot, context, result);
+
+            string tracePath = Path.Combine(workspaceRoot, ".caicli", "logs", "2026-07-10.trace.log");
+            string trace = File.ReadAllText(tracePath);
+            string[] lines = File.ReadAllLines(tracePath);
+            JsonObject first = Assert.IsType<JsonObject>(JsonNode.Parse(lines[0]));
+            JsonObject final = Assert.IsType<JsonObject>(JsonNode.Parse(lines[1]));
+
+            Assert.Contains(
+                "Authorization: Digest [redacted]",
+                first["message"]?.GetValue<string>(),
+                StringComparison.Ordinal);
+            Assert.Contains(
+                "authorization=Digest [redacted]",
+                first["payload"]?["diagnosticText"]?.GetValue<string>(),
+                StringComparison.Ordinal);
+            Assert.Contains(
+                "Authorization: Digest [redacted]",
+                final["summary"]?.GetValue<string>(),
+                StringComparison.Ordinal);
+            Assert.DoesNotContain("alice", trace, StringComparison.Ordinal);
+            Assert.DoesNotContain("secret-realm", trace, StringComparison.Ordinal);
+            Assert.DoesNotContain("secret-nonce", trace, StringComparison.Ordinal);
+            Assert.DoesNotContain("secret-response", trace, StringComparison.Ordinal);
+            Assert.DoesNotContain("bob", trace, StringComparison.Ordinal);
+            Assert.DoesNotContain("payload-realm", trace, StringComparison.Ordinal);
+            Assert.DoesNotContain("payload-nonce", trace, StringComparison.Ordinal);
+            Assert.DoesNotContain("payload-response", trace, StringComparison.Ordinal);
+            Assert.DoesNotContain("carol", trace, StringComparison.Ordinal);
+            Assert.DoesNotContain("result-realm", trace, StringComparison.Ordinal);
+            Assert.DoesNotContain("result-nonce", trace, StringComparison.Ordinal);
+            Assert.DoesNotContain("result-response", trace, StringComparison.Ordinal);
+        }
+        finally
+        {
+            Directory.Delete(tempRoot, recursive: true);
+        }
+    }
+
+    [Fact]
     public void AppendExecResult_handles_payload_key_redaction_collisions_without_dropping_trace()
     {
         string tempRoot = CreateTempDirectory();
