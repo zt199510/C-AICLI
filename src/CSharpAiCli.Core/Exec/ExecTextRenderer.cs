@@ -25,7 +25,7 @@ public sealed class ExecTextRenderer
 
         string status = result.IsSuccess ? "success" : "failure";
         writer.WriteLine(
-            $"result: {status} exitCode={result.ExitCode}{FormatOptional("summary", result.Summary, redact: true)}{FormatOptional("errorCode", result.ErrorCode)}{FormatOptional("approvalStatus", result.ApprovalStatus)} events={result.Events.Count}");
+            $"result: {status} exitCode={result.ExitCode}{FormatOptional("summary", result.Summary, redact: true)}{FormatOptional("errorCode", result.ErrorCode)}{FormatOptional("approvalStatus", result.ApprovalStatus)}{FormatOptional("stopReason", result.StopReason)} events={result.Events.Count}");
     }
 
     private static string FormatEvent(ExecEvent execEvent)
@@ -40,6 +40,16 @@ public sealed class ExecTextRenderer
         if (!string.IsNullOrEmpty(execEvent.Status))
         {
             parts.Add($"status={execEvent.Status}");
+        }
+
+        if (execEvent.StepIndex.HasValue)
+        {
+            parts.Add($"stepIndex={execEvent.StepIndex.Value.ToString(CultureInfo.InvariantCulture)}");
+        }
+
+        if (!string.IsNullOrEmpty(execEvent.StopReason))
+        {
+            parts.Add($"stopReason={execEvent.StopReason}");
         }
 
         if (execEvent.DurationMs.HasValue)

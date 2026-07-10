@@ -2134,7 +2134,7 @@ public sealed class CliCommandFactoryTests
     }
 
     [Fact]
-    public void Tools_call_returns_unknown_tool_when_tool_is_disabled()
+    public void Tools_call_returns_tool_disabled_when_tool_is_disabled()
     {
         using StringWriter output = new();
         using TempDirectory temp = TempDirectory.Create();
@@ -2156,11 +2156,11 @@ public sealed class CliCommandFactoryTests
             .Invoke();
 
         Assert.Equal(1, exitCode);
-        Assert.Contains("errorCode: unknown-tool", output.ToString());
+        Assert.Contains("errorCode: tool-disabled", output.ToString());
     }
 
     [Fact]
-    public void Tools_call_returns_unknown_tool_when_mcp_tool_is_disabled()
+    public void Tools_call_returns_tool_disabled_when_mcp_tool_is_disabled()
     {
         using StringWriter output = new();
         using TempDirectory temp = TempDirectory.Create();
@@ -2194,7 +2194,7 @@ public sealed class CliCommandFactoryTests
             .Invoke();
 
         Assert.Equal(1, exitCode);
-        Assert.Contains("errorCode: unknown-tool", output.ToString());
+        Assert.Contains("errorCode: tool-disabled", output.ToString());
     }
 
     [Fact]
@@ -2798,7 +2798,7 @@ public sealed class CliCommandFactoryTests
             .Invoke();
 
         Assert.Equal(1, exitCode);
-        Assert.Contains("errorCode: unknown-tool", output.ToString());
+        Assert.Contains("errorCode: tool-disabled", output.ToString());
         Assert.False(File.Exists(Path.Combine(temp.Path, "caicli-smoke.txt")));
     }
 
@@ -2882,6 +2882,7 @@ public sealed class CliCommandFactoryTests
         Assert.Equal("summarize workspace", agentRunner.LastRequest?.Prompt);
         Assert.Same(snapshot.Workspace, agentRunner.LastRequest?.Workspace);
         Assert.Equal("Prefer concise answers.", agentRunner.LastRequest?.Instructions);
+        Assert.Equal(3, agentRunner.LastRequest?.Limits?.MaxSteps);
         Assert.Equal(3, agentRunner.LastRequest?.Limits?.MaxTurns);
         Assert.Equal(5, agentRunner.LastRequest?.Limits?.MaxToolCalls);
         Assert.Equal(TimeSpan.FromSeconds(7), agentRunner.LastRequest?.Limits?.OverallTimeout);
@@ -3741,6 +3742,11 @@ public sealed class CliCommandFactoryTests
         Assert.Equal("smoke", agentRunner.LastRequest?.SessionName);
         Assert.Same(existing, agentRunner.LastTranscript);
         Assert.Same(existing, store.SavedTranscript);
+        ConversationAgentRun run = Assert.Single(existing.AgentRuns);
+        Assert.Equal("success", run.Status);
+        Assert.Equal("completed", run.StopReason);
+        Assert.Equal("agent completed task", run.Summary);
+        Assert.Equal(0, run.EventCount);
     }
 
     [Fact]
@@ -4398,6 +4404,7 @@ public sealed class CliCommandFactoryTests
     }
 
     [Theory]
+    [InlineData("--max-steps", "0")]
     [InlineData("--max-turns", "0")]
     [InlineData("--max-tool-calls", "0")]
     [InlineData("--timeout-seconds", "0")]
@@ -4420,6 +4427,38 @@ public sealed class CliCommandFactoryTests
         Assert.Equal(2, exitCode);
         Assert.Empty(loggedCommands);
         Assert.DoesNotContain("hello exec", output.ToString(), StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Exec_rejects_conflicting_max_steps_and_max_turns_before_running_task()
+    {
+        using TempDirectory temp = TempDirectory.Create();
+        using StringWriter output = new();
+        List<string> loggedCommands = [];
+        FakeAgentRunner agentRunner = new(AgentRunResult.Success("should not run", [], []));
+        RootCommand command = CliCommandFactory.Create(
+            output,
+            workspacePath => CreateSnapshot(
+                workspacePath,
+                apiKey: "sk-test-secret",
+                apiKeySource: "OPENAI_API_KEY",
+                model: "gpt-test"),
+            (commandName, _) => loggedCommands.Add(commandName),
+            _ => new FakeChatModelClient(ChatModelResult.Success(new ChatResponse("openai", "gpt-test", "resp", ""))),
+            writer => new TerminalChatStreamingRenderer(writer),
+            _ => new FakeConversationStore(),
+            () => DateTimeOffset.Parse("2024-01-01T00:00:00Z"),
+            (_, _, _) => agentRunner);
+
+        int exitCode = CliCommandFactory.Invoke(
+            command,
+            ["exec", "--workspace", temp.Path, "--max-steps", "2", "--max-turns", "3", "read note.txt"],
+            output);
+
+        Assert.Equal(1, exitCode);
+        Assert.Contains("invalid-agent-limits", output.ToString(), StringComparison.Ordinal);
+        Assert.Equal(["exec"], loggedCommands);
+        Assert.Null(agentRunner.LastRequest);
     }
 
     [Fact]
@@ -4561,17 +4600,38 @@ public sealed class CliCommandFactoryTests
     }
 
     [Fact]
-    public void Exec_default_direct_backend_reports_unavailable_until_gateway_is_enabled()
+    public void Exec_direct_backend_failure_output_does_not_leak_api_key()
     {
         using TempDirectory temp = TempDirectory.Create();
         using StringWriter output = new();
+        FakeAgentRunner agentRunner = new(AgentRunResult.Failure(
+            new AgentError(
+                "openai-client-error",
+                "OpenAI agent model call failed before a response was completed.",
+                Retryable: true),
+            [],
+            [
+                new AgentRunEvent(
+                    Type: "agent.error",
+                    Sequence: 0,
+                    Timestamp: DateTimeOffset.Parse("2024-01-01T00:00:00Z"),
+                    Message: "OpenAI agent model call failed before a response was completed.",
+                    ErrorCode: "openai-client-error",
+                    Status: DiagnosticEventStatus.Failure)
+            ]));
         RootCommand command = CliCommandFactory.Create(
             output,
             workspacePath => CreateSnapshot(
                 workspacePath,
                 apiKey: "sk-test-secret",
                 apiKeySource: "OPENAI_API_KEY",
-                model: "gpt-test"));
+                model: "gpt-test"),
+            (_, _) => { },
+            _ => new FakeChatModelClient(ChatModelResult.Success(new ChatResponse("openai", "gpt-test", "resp", ""))),
+            writer => new TerminalChatStreamingRenderer(writer),
+            _ => new FakeConversationStore(),
+            () => DateTimeOffset.Parse("2024-01-01T00:00:00Z"),
+            (_, _, _) => agentRunner);
 
         int exitCode = CliCommandFactory.Invoke(command, ["exec", "--workspace", temp.Path, "summarize workspace"], output);
 
@@ -4579,8 +4639,94 @@ public sealed class CliCommandFactoryTests
         Assert.Equal(1, exitCode);
         Assert.Contains("event: agent.error", text);
         Assert.Contains("result: failure exitCode=1", text);
-        Assert.Contains("errorCode=agent-backend-unavailable", text);
+        Assert.Contains("errorCode=openai-client-error", text);
+        Assert.Contains("OpenAI agent model call failed before a response was completed.", text);
         Assert.DoesNotContain("sk-test-secret", text, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Exec_uses_configured_agent_limits_when_cli_limits_are_missing()
+    {
+        using TempDirectory temp = TempDirectory.Create();
+        using StringWriter output = new();
+        FakeAgentRunner agentRunner = new(AgentRunResult.Success("agent completed task", []));
+        CliEnvironmentSnapshot snapshot = CreateSnapshot(
+            workspacePath: temp.Path,
+            apiKey: "sk-test-secret",
+            apiKeySource: "OPENAI_API_KEY",
+            model: "gpt-test",
+            agentRunLimits: new AgentRunLimits(
+                MaxSteps: 4,
+                MaxToolCalls: 9,
+                ModelCallTimeout: TimeSpan.FromSeconds(11),
+                OverallTimeout: TimeSpan.FromSeconds(11)));
+
+        int exitCode = CliCommandFactory
+            .Create(
+                output,
+                _ => snapshot,
+                (_, _) => { },
+                _ => new FakeChatModelClient(ChatModelResult.Success(new ChatResponse("openai", "gpt-test", "resp", ""))),
+                writer => new TerminalChatStreamingRenderer(writer),
+                _ => new FakeConversationStore(),
+                () => DateTimeOffset.Parse("2024-01-01T00:00:00Z"),
+                (_, _, _) => agentRunner)
+            .Parse(["exec", "--workspace", temp.Path, "summarize workspace"])
+            .Invoke();
+
+        Assert.Equal(0, exitCode);
+        Assert.Equal(4, agentRunner.LastRequest?.Limits?.MaxSteps);
+        Assert.Equal(9, agentRunner.LastRequest?.Limits?.MaxToolCalls);
+        Assert.Equal(TimeSpan.FromSeconds(11), agentRunner.LastRequest?.Limits?.OverallTimeout);
+        Assert.Equal(TimeSpan.FromSeconds(11), agentRunner.LastRequest?.Limits?.ModelCallTimeout);
+    }
+
+    [Fact]
+    public void Exec_cli_agent_limits_override_configured_agent_limits()
+    {
+        using TempDirectory temp = TempDirectory.Create();
+        using StringWriter output = new();
+        FakeAgentRunner agentRunner = new(AgentRunResult.Success("agent completed task", []));
+        CliEnvironmentSnapshot snapshot = CreateSnapshot(
+            workspacePath: temp.Path,
+            apiKey: "sk-test-secret",
+            apiKeySource: "OPENAI_API_KEY",
+            model: "gpt-test",
+            agentRunLimits: new AgentRunLimits(
+                MaxSteps: 4,
+                MaxToolCalls: 9,
+                ModelCallTimeout: TimeSpan.FromSeconds(11),
+                OverallTimeout: TimeSpan.FromSeconds(11)));
+
+        int exitCode = CliCommandFactory
+            .Create(
+                output,
+                _ => snapshot,
+                (_, _) => { },
+                _ => new FakeChatModelClient(ChatModelResult.Success(new ChatResponse("openai", "gpt-test", "resp", ""))),
+                writer => new TerminalChatStreamingRenderer(writer),
+                _ => new FakeConversationStore(),
+                () => DateTimeOffset.Parse("2024-01-01T00:00:00Z"),
+                (_, _, _) => agentRunner)
+            .Parse([
+                "exec",
+                "--workspace",
+                temp.Path,
+                "--max-steps",
+                "2",
+                "--max-tool-calls",
+                "3",
+                "--timeout-seconds",
+                "5",
+                "summarize workspace"
+            ])
+            .Invoke();
+
+        Assert.Equal(0, exitCode);
+        Assert.Equal(2, agentRunner.LastRequest?.Limits?.MaxSteps);
+        Assert.Equal(3, agentRunner.LastRequest?.Limits?.MaxToolCalls);
+        Assert.Equal(TimeSpan.FromSeconds(5), agentRunner.LastRequest?.Limits?.OverallTimeout);
+        Assert.Equal(TimeSpan.FromSeconds(5), agentRunner.LastRequest?.Limits?.ModelCallTimeout);
     }
 
     [Fact]
@@ -7316,7 +7462,8 @@ public sealed class CliCommandFactoryTests
         IReadOnlySet<string>? disabledTools = null,
         string? userConfigPath = null,
         string baseUrl = "https://api.openai.com/v1",
-        string baseUrlSource = "default")
+        string baseUrlSource = "default",
+        AgentRunLimits? agentRunLimits = null)
     {
         string workspaceRoot = string.IsNullOrWhiteSpace(workspacePath) ? "workspace-root" : workspacePath;
 
@@ -7341,7 +7488,8 @@ public sealed class CliCommandFactoryTests
             ConfigSources: configSources ?? [])
         {
             BaseUrl = baseUrl,
-            BaseUrlSource = baseUrlSource
+            BaseUrlSource = baseUrlSource,
+            AgentRunLimits = agentRunLimits ?? AgentRunLimits.Default
         };
 
         return new CliEnvironmentSnapshot(

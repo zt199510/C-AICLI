@@ -2,9 +2,9 @@
 
 ## Release Scope
 
-- Version `0.2.0` is a local Windows release candidate.
+- Version `0.2.1` is a local Windows release candidate.
 - The primary supported package is `win-x64` self-contained single-file publish.
-- Dotnet tool packaging is not part of the `0.2.0` release package.
+- Dotnet tool packaging is not part of the `0.2.1` release package.
 
 ## Model And Agent Behavior
 
@@ -12,7 +12,7 @@
 - `exec` is routed through `IAgentRunner` for agentic v1 behavior. It emits agent model/tool/final/error events and enforces loop limits such as `--max-turns`, `--max-tool-calls`, and `--timeout-seconds`.
 - `run` remains the deterministic direct-tool compatibility and smoke entry.
 - The offline/fake model agent loop and OpenAI response parsing/writeback contracts are implemented and tested.
-- The default direct OpenAI SDK gateway path for agent tool-call continuation is not yet enabled; real direct SDK tool loops return `agent-backend-unavailable` until SDK tool calls and tool results are translated.
+- The default `exec` path reaches the direct OpenAI Responses SDK tool-call continuation when model and key are configured. Normal unit tests and default smoke tests still use fake/offline contracts or local-only checks; real model smoke is opt-in with `CAICLI_REAL_MODEL_SMOKE=1`.
 - `chat --resume` and `exec --resume` provide prior transcript context only for existing local sessions. The context is normalized before use to reduce transcript section-spoofing risk.
 - `review` is workspace-read-only and does not execute patch or shell tools or write workspace files, logs, transcripts, or patches. Diff collection may use cleaned-up temp files outside the workspace. It sends the current git diff to the configured model and requires configured model credentials for real use.
 - The Microsoft Agent Framework project is an adapter boundary and experimental stub; the real framework runtime backend is Deferred.

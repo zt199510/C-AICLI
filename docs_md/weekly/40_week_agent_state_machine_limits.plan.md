@@ -19,15 +19,15 @@
 
 ## 任务清单
 
-- [ ] Step 1: 定义 `AgentRunState`、`AgentStep`、`AgentStopReason` 和 `AgentLoopError`。
-- [ ] Step 2: 将现有 loop limit 逻辑迁移到 state machine。
-- [ ] Step 3: 增加配置与 CLI options：max steps、max tool calls、timeout。
-- [ ] Step 4: 统一 stop reason 到 text/JSON event、session transcript 和 trace。
-- [ ] Step 5: 覆盖 approval denied、tool disabled、tool timeout、model error、loop budget exceeded。
-- [ ] Step 6: 确保 cancel/timeout 后不会继续写文件或启动新工具。
-- [ ] Step 7: 增加 deterministic fake model 测试。
-- [ ] Step 8: 更新 runtime logging spec 和 capability status。
-- [ ] Step 9: 运行 build/test 并创建 `40_week_review.md`。
+- [x] Step 1: 定义 `AgentRunState`、`AgentStep`、`AgentStopReason` 和 `AgentLoopError`。
+- [x] Step 2: 将现有 loop limit 逻辑迁移到 state machine。
+- [x] Step 3: 增加配置与 CLI options：max steps、max tool calls、timeout。
+- [x] Step 4: 统一 stop reason 到 text/JSON event、session transcript 和 trace。
+- [x] Step 5: 覆盖 approval denied、tool disabled、tool timeout、model error、loop budget exceeded。
+- [x] Step 6: 确保 cancel/timeout 后不会继续写文件或启动新工具。
+- [x] Step 7: 增加 deterministic fake model 测试。
+- [x] Step 8: 更新 runtime logging spec 和 capability status。
+- [x] Step 9: 运行 build/test 并创建 `40_week_review.md`。
 
 ## 验收标准
 
@@ -59,4 +59,3 @@
 第 41 周输入：
 -
 ```
-

@@ -104,7 +104,11 @@ Trace records share these core fields:
 - `type`
 - `sequence`
 
-Exec trace event/result records include `status`, `durationMs`, `approvalDurationMs`, `errorCode`, `approvalStatus`, and `payload` when available. Payload keys are stable enough for diagnostics but must be treated as diagnostic data, not a public API contract.
+Exec trace event/result records include `status`, `stepIndex`, `stopReason`, `durationMs`, `approvalDurationMs`, `errorCode`, `approvalStatus`, and `payload` when available. Payload keys are stable enough for diagnostics but must be treated as diagnostic data, not a public API contract.
+
+For agentic `exec`, `status` is the coarse terminal outcome (`success`, `failure`, or `timeout`) and `stopReason` is the machine-readable terminal reason, such as `completed`, `max-steps-exceeded`, `max-tool-calls-exceeded`, `overall-timeout`, `model-timeout`, `tool-timeout`, `tool-disabled`, `approval-denied`, `tool-failure`, `model-error`, or `backend-unavailable`. `errorCode` remains the specific model/tool/runtime error code and is not interchangeable with `stopReason`.
+
+Agent event order is shared by text output, NDJSON output, and trace output. `model.turn`, `tool.call`, and `tool.result` events can include `stepIndex`; terminal `final.response` and `agent.error` events include `stopReason`. Session transcript v1 is not a full event log, but agentic exec sessions add `agentRuns[]` summaries with final `status`, `stopReason`, optional `errorCode`, summary, event count, and tool call count.
 
 Trace and verbose diagnostics must redact secrets before writing output. Redaction covers API keys, access/refresh tokens, passwords, `Authorization` headers and common variants, `secretKey`, `privateKey`, nested or escaped `argumentsJson`, OpenAI `sk-...` keys, and GitHub token formats such as `ghp_...` and `github_pat_...`. Diagnostics may record key presence and source, but never raw key values.
 

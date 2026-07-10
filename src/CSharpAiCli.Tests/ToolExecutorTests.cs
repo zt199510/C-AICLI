@@ -38,6 +38,23 @@ public sealed class ToolExecutorTests
         Assert.Contains("missing.tool", result.Summary, StringComparison.Ordinal);
     }
 
+    [Fact]
+    public void Execute_returns_disabled_failure_before_registry_lookup()
+    {
+        ToolExecutor executor = new(
+            new ToolRegistry(),
+            new HashSet<string>(StringComparer.Ordinal)
+            {
+                "missing.tool"
+            });
+
+        ToolExecutionResult result = executor.Execute("missing.tool", CreateContext("{}"));
+
+        Assert.False(result.Succeeded);
+        Assert.Equal(ToolErrorCode.ToolDisabled, result.ErrorCode);
+        Assert.Contains("disabled", result.Summary, StringComparison.Ordinal);
+    }
+
     [Theory]
     [InlineData("{")]
     [InlineData("[]")]

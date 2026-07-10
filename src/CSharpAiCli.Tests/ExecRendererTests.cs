@@ -107,7 +107,8 @@ public sealed class ExecRendererTests
             Summary: "Failed.",
             ErrorCode: "exec-failed",
             Events: new[] { eventWithPayload, plainEvent },
-            ApprovalStatus: "denied"));
+            ApprovalStatus: "denied",
+            StopReason: "approval-denied"));
 
         string[] lines = writer.ToString().TrimEnd().Split(Environment.NewLine);
         Assert.Equal(3, lines.Length);
@@ -135,6 +136,7 @@ public sealed class ExecRendererTests
         Assert.Equal("Failed.", result.GetProperty("summary").GetString());
         Assert.Equal("exec-failed", result.GetProperty("errorCode").GetString());
         Assert.Equal("denied", result.GetProperty("approvalStatus").GetString());
+        Assert.Equal("approval-denied", result.GetProperty("stopReason").GetString());
         Assert.Equal("failure", result.GetProperty("payload").GetProperty("status").GetString());
         Assert.Equal(1, result.GetProperty("payload").GetProperty("exitCode").GetInt32());
         Assert.Equal(2, result.GetProperty("payload").GetProperty("eventCount").GetInt32());

@@ -7,8 +7,9 @@ public sealed class SmokeTestScriptTests
     {
         string script = ReadRepositoryFile("tools", "Invoke-SmokeTests.ps1");
 
-        Assert.Contains("caicli-0.2.0-win-x64", script, StringComparison.Ordinal);
-        Assert.Contains("caicli 0.2.0", script, StringComparison.Ordinal);
+        Assert.Contains("Directory.Build.props", script, StringComparison.Ordinal);
+        Assert.Contains("caicli-$releaseVersion-win-x64", script, StringComparison.Ordinal);
+        Assert.Contains("caicli $releaseVersion", script, StringComparison.Ordinal);
         Assert.Contains("\"config\", \"get\", \"--workspace\", $workspace", script, StringComparison.Ordinal);
         Assert.Contains("\"config\", \"set\", \"baseUrl\"", script, StringComparison.Ordinal);
         Assert.Contains("\"config\", \"list\", \"--workspace\", $workspace", script, StringComparison.Ordinal);
@@ -28,7 +29,15 @@ public sealed class SmokeTestScriptTests
         Assert.Contains("--max-tool-calls", script, StringComparison.Ordinal);
         Assert.Contains("--timeout-seconds", script, StringComparison.Ordinal);
         Assert.Contains("--cwd", script, StringComparison.Ordinal);
-        Assert.Contains("agent-backend-unavailable", script, StringComparison.Ordinal);
+        Assert.Contains("CAICLI_REAL_MODEL_SMOKE", script, StringComparison.Ordinal);
+        Assert.Contains("real model smoke skipped: set CAICLI_REAL_MODEL_SMOKE=1", script, StringComparison.Ordinal);
+        Assert.Contains("requires caller $($missingRealModelSettings -join ' and ')", script, StringComparison.Ordinal);
+        Assert.Contains("\"--approval\", \"never\"", script, StringComparison.Ordinal);
+        Assert.Contains("Assert-ExitCode $realModelExec 0 \"real model read-only exec\"", script, StringComparison.Ordinal);
+        Assert.Contains("Assert-Contains $realModelExec.Output \"result: success\" \"real model read-only exec\"", script, StringComparison.Ordinal);
+        Assert.Contains("Assert-Contains $realModelExec.Output \"workspace.read_text\" \"real model read-only exec tool call\"", script, StringComparison.Ordinal);
+        Assert.DoesNotContain("sk-smoke-local", script, StringComparison.Ordinal);
+        Assert.DoesNotContain("agent-backend-unavailable", script, StringComparison.Ordinal);
         Assert.Contains("errorCode: approval-denied", script, StringComparison.Ordinal);
         Assert.Contains("approvalStatus: approval-required", script, StringComparison.Ordinal);
         Assert.Contains("errorCode: workspace-boundary-denied", script, StringComparison.Ordinal);

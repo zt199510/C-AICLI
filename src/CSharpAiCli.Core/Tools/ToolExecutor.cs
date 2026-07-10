@@ -5,11 +5,15 @@ namespace CSharpAiCli.Core;
 public sealed class ToolExecutor : IToolExecutor
 {
     private readonly IToolRegistry registry;
+    private readonly IReadOnlySet<string> disabledTools;
 
-    public ToolExecutor(IToolRegistry registry)
+    public ToolExecutor(
+        IToolRegistry registry,
+        IReadOnlySet<string>? disabledTools = null)
     {
         ArgumentNullException.ThrowIfNull(registry);
         this.registry = registry;
+        this.disabledTools = disabledTools ?? new HashSet<string>(StringComparer.Ordinal);
     }
 
     public ToolExecutionResult Execute(
@@ -18,6 +22,13 @@ public sealed class ToolExecutor : IToolExecutor
         CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(context);
+
+        if (disabledTools.Contains(toolName))
+        {
+            return ToolExecutionResult.Failure(
+                ToolErrorCode.ToolDisabled,
+                $"Tool '{toolName}' is disabled by configuration.");
+        }
 
         if (!registry.TryGet(toolName, out ITool? tool) || tool is null)
         {

@@ -25,5 +25,13 @@ public sealed record EffectiveConfiguration(
 
     public ShellPolicyConfiguration ShellPolicy { get; init; } = ShellPolicyConfiguration.Default;
 
+    public AgentRunLimits AgentRunLimits { get; init; } = AgentRunLimits.Default;
+
+    public string AgentRunMaxStepsSource { get; init; } = "default";
+
+    public string AgentRunMaxToolCallsSource { get; init; } = "default";
+
+    public string AgentRunTimeoutSource { get; init; } = "default";
+
     public bool HasApiKey => ApiKey is not null;
 }

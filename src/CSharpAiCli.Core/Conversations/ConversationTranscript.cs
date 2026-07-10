@@ -11,6 +11,7 @@ public sealed class ConversationTranscript
     public List<ConversationMessage> Messages { get; init; } = [];
     public List<ConversationToolCall> ToolCalls { get; init; } = [];
     public List<ConversationError> Errors { get; init; } = [];
+    public List<ConversationAgentRun> AgentRuns { get; init; } = [];
 
     public static ConversationTranscript Create(string sessionName, DateTimeOffset nowUtc)
     {
@@ -63,5 +64,13 @@ public sealed class ConversationTranscript
 
         ToolCalls.Add(toolCall);
         UpdatedAtUtc = toolCall.CompletedAtUtc;
+    }
+
+    public void AddAgentRun(ConversationAgentRun run)
+    {
+        ArgumentNullException.ThrowIfNull(run);
+
+        AgentRuns.Add(run);
+        UpdatedAtUtc = run.CompletedAtUtc;
     }
 }

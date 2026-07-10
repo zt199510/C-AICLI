@@ -31,6 +31,12 @@ public sealed class ConfigReportTests
         Assert.Contains("agentBackendSource: default", text);
         Assert.Contains("approvalMode: on-request", text);
         Assert.Contains("approvalModeSource: default", text);
+        Assert.Contains("agentRunMaxSteps: 8", text);
+        Assert.Contains("agentRunMaxStepsSource: default", text);
+        Assert.Contains("agentRunMaxToolCalls: 32", text);
+        Assert.Contains("agentRunMaxToolCallsSource: default", text);
+        Assert.Contains("agentRunTimeoutSeconds: 600", text);
+        Assert.Contains("agentRunTimeoutSource: default", text);
         Assert.Contains("shellPolicyAllowedCommandsConfigured: false", text);
         Assert.Contains("shellPolicyAllowedCommandsSource: default", text);
         Assert.Contains("shellPolicyAllowedCommands: []", text);

@@ -15,7 +15,9 @@ public sealed record AgentRunEvent
         string? ApprovalStatus = null,
         string? Status = null,
         long? DurationMs = null,
-        long? ApprovalDurationMs = null)
+        long? ApprovalDurationMs = null,
+        int? StepIndex = null,
+        string? StopReason = null)
     {
         if (string.IsNullOrWhiteSpace(Type))
         {
@@ -37,6 +39,11 @@ public sealed record AgentRunEvent
             throw new ArgumentOutOfRangeException(nameof(ApprovalDurationMs));
         }
 
+        if (StepIndex is < 0)
+        {
+            throw new ArgumentOutOfRangeException(nameof(StepIndex));
+        }
+
         this.Type = Type;
         this.Sequence = Sequence;
         this.Timestamp = Timestamp;
@@ -50,6 +57,8 @@ public sealed record AgentRunEvent
         this.Status = Status;
         this.DurationMs = DurationMs;
         this.ApprovalDurationMs = ApprovalDurationMs;
+        this.StepIndex = StepIndex;
+        this.StopReason = StopReason;
     }
 
     public string Type { get; }
@@ -73,4 +82,8 @@ public sealed record AgentRunEvent
     public long? DurationMs { get; }
 
     public long? ApprovalDurationMs { get; }
+
+    public int? StepIndex { get; }
+
+    public string? StopReason { get; }
 }

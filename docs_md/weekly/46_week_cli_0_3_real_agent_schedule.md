@@ -16,7 +16,7 @@
 
 ## 当前基础
 
-- 0.2.0 已完成 Week 34-38 验收，具备可信 CLI 底座。
+- 0.2.0 已完成 Week 34-38 验收，具备可信 CLI 底座；0.2.1 readiness patch 将默认 `exec` 接入 direct OpenAI agent abstraction，便于 Week 39 只聚焦 SDK tool-call/result translation。
 - 已具备 `exec`、NDJSON event stream、session resume、approval profile、workspace guard、patch、shell、git status/diff、MCP stdio v1、structured tool result、stable tool error code、trace/logs 和 release smoke。
 - 已具备 fake/offline agent loop，可以用于确定性测试。
 - direct OpenAI backend 仍是产品核心路径。
@@ -169,4 +169,3 @@ powershell -NoProfile -ExecutionPolicy Bypass -File tools/Invoke-SmokeTests.ps1
 第 N+1 周输入：
 - 
 ```
-

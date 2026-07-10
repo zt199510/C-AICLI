@@ -8,7 +8,10 @@ public sealed record AgentRunResult
         string? Text,
         IReadOnlyList<ConversationToolCall> ToolCalls,
         AgentError? Error,
-        IReadOnlyList<AgentRunEvent>? Events = null)
+        IReadOnlyList<AgentRunEvent>? Events = null,
+        string? Status = null,
+        string? StopReason = null,
+        IReadOnlyList<AgentStep>? Steps = null)
     {
         ArgumentNullException.ThrowIfNull(ToolCalls);
 
@@ -16,6 +19,13 @@ public sealed record AgentRunResult
         this.ToolCalls = new ReadOnlyCollection<ConversationToolCall>(ToolCalls.ToArray());
         this.Error = Error;
         this.Events = new ReadOnlyCollection<AgentRunEvent>((Events ?? []).ToArray());
+        this.Status = string.IsNullOrWhiteSpace(Status)
+            ? Error is null ? DiagnosticEventStatus.Success : DiagnosticEventStatus.Failure
+            : Status;
+        this.StopReason = string.IsNullOrWhiteSpace(StopReason)
+            ? Error is null ? AgentStopReason.Completed : AgentStopReason.FromErrorCode(Error.LocalErrorCode)
+            : StopReason;
+        this.Steps = new ReadOnlyCollection<AgentStep>((Steps ?? []).ToArray());
     }
 
     public string? Text { get; }
@@ -26,24 +36,49 @@ public sealed record AgentRunResult
 
     public IReadOnlyList<AgentRunEvent> Events { get; }
 
+    public string Status { get; }
+
+    public string StopReason { get; }
+
+    public IReadOnlyList<AgentStep> Steps { get; }
+
     public bool IsSuccess => Error is null;
 
     public static AgentRunResult Success(
         string text,
         IReadOnlyList<ConversationToolCall> toolCalls,
-        IReadOnlyList<AgentRunEvent>? events = null)
+        IReadOnlyList<AgentRunEvent>? events = null,
+        IReadOnlyList<AgentStep>? steps = null,
+        string stopReason = AgentStopReason.Completed)
     {
         events ??= [];
-        return new AgentRunResult(text, toolCalls, Error: null, Events: events);
+        return new AgentRunResult(
+            text,
+            toolCalls,
+            Error: null,
+            Events: events,
+            Status: DiagnosticEventStatus.Success,
+            StopReason: stopReason,
+            Steps: steps);
     }
 
     public static AgentRunResult Failure(
         AgentError error,
         IReadOnlyList<ConversationToolCall> toolCalls,
-        IReadOnlyList<AgentRunEvent>? events = null)
+        IReadOnlyList<AgentRunEvent>? events = null,
+        IReadOnlyList<AgentStep>? steps = null,
+        string? stopReason = null,
+        string status = DiagnosticEventStatus.Failure)
     {
         ArgumentNullException.ThrowIfNull(error);
         events ??= [];
-        return new AgentRunResult(Text: null, toolCalls, error, Events: events);
+        return new AgentRunResult(
+            Text: null,
+            toolCalls,
+            error,
+            Events: events,
+            Status: status,
+            StopReason: stopReason ?? AgentStopReason.FromErrorCode(error.LocalErrorCode),
+            Steps: steps);
     }
 }

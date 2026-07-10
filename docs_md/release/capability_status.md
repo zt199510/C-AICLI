@@ -1,6 +1,6 @@
 # C# AI CLI Capability Status
 
-## 0.2.0 Release Capabilities
+## 0.2.x Release Capabilities
 
 | Capability | Status | Notes |
 |---|---|---|
@@ -16,7 +16,7 @@
 | `chat --session` | Accepted | Saves transcript v1 in the user profile. |
 | `chat --resume` | Accepted | Requires an existing transcript and sends normalized prior transcript context with the current prompt. |
 | `session list/show/rename/delete/export/clear` | Accepted | Lists local transcript summaries, shows one summary, renames or deletes one transcript by validated session name, exports JSON or markdown, and keeps `clear` as a compatibility alias for delete. |
-| `caicli exec` | Solidified | Agentic v1 surface routed through `IAgentRunner`; emits model/tool/final/error events and supports `--cwd` instruction target selection, `--output text|json`, loop limits, approval-gated tool actions, session transcript, and `--resume` context. Real direct SDK tool-call continuation is deferred. |
+| `caicli exec` | Solidified | Agentic v1 surface routed through `IAgentRunner`; emits model/tool/final/error events with terminal `status`/`stopReason`, supports `--cwd` instruction target selection, `--output text|json`, `--max-steps`/`--max-turns`, `--max-tool-calls`, timeout budgets, approval-gated tool actions, session transcript run summaries, and `--resume` context. Configured direct OpenAI runs use real Responses SDK tool-call continuation through the same offline/fake agent contract. |
 | `caicli diff` / `diff --stat` | Accepted | Prints the current git diff or stat summary for the selected workspace. |
 | `caicli review` | Accepted | Sends the current git diff to the configured model for workspace-read-only review; supports text, `--json`, and `--output json`; does not write workspace files, logs, transcripts, patches, or run shell/patch tools. Diff collection may use cleaned-up temp files outside the workspace. |
 | `caicli run` | Solidified | Deterministic direct-tool release smoke tasks: create smoke note, read file, run approved shell command. |
@@ -38,8 +38,8 @@
 | MCP remote/http transport | Deferred | Stdio MCP v1 is available for user-configured stdio servers in registry/tool paths and for explicit `mcp doctor` diagnostics; remote/http transport is not enabled. |
 | Gerber/TIFF real workflow execution | Deferred | Project pack status/profile MVP exists; real toolchain execution is not enabled. |
 | Dotnet tool package | Deferred | Windows self-contained package is the current release artifact. |
-| Direct OpenAI SDK agent tool loop | Deferred | Offline/fake agent loop contracts are implemented and tested, but the default SDK gateway still returns `agent-backend-unavailable` for tool-call continuation until SDK tool calls/results are translated. |
+| Direct OpenAI SDK agent tool loop | Solidified | The SDK gateway translates unified tool schemas to Responses function tools, parses model function calls, writes structured tool results back as function-call outputs, and keeps real-network smoke opt-in so normal tests do not require credentials. |
 
 ## Release Decision
 
-The direct backend `0.2.0` release candidate is scoped to the accepted and solidified capabilities above. Deferred enhanced capabilities are documented and must not be presented as current release behavior.
+The direct backend `0.2.x` release line is scoped to the accepted and solidified capabilities above. Deferred enhanced capabilities are documented and must not be presented as current release behavior.

@@ -53,7 +53,8 @@ public sealed class TraceLoggerTests
             ExecResult result = ExecResult.Success(
                 Summary: "finished sk-test-secret",
                 Events: [modelTurn, toolCompleted],
-                ApprovalStatus: "approved");
+                ApprovalStatus: "approved",
+                StopReason: "completed");
 
             TraceLogger.AppendExecResult("exec", snapshot, context, result);
 
@@ -83,6 +84,7 @@ public sealed class TraceLoggerTests
             Assert.Equal("exec.result", final["type"]?.GetValue<string>());
             Assert.Equal(2, final["sequence"]?.GetValue<long>());
             Assert.Equal("success", final["status"]?.GetValue<string>());
+            Assert.Equal("completed", final["stopReason"]?.GetValue<string>());
             Assert.Equal("finished [redacted]", final["summary"]?.GetValue<string>());
             Assert.Equal("approved", final["approvalStatus"]?.GetValue<string>());
             Assert.Equal(0, final["payload"]?["exitCode"]?.GetValue<int>());

@@ -58,6 +58,27 @@ public static class ConversationTranscriptContextFormatter
             }
         }
 
+        if (transcript.AgentRuns.Count > 0)
+        {
+            builder.AppendLine("agent runs:");
+            foreach (ConversationAgentRun run in transcript.AgentRuns)
+            {
+                builder.Append(
+                    $"- status={NormalizeSingleLine(run.Status)} stopReason={NormalizeSingleLine(run.StopReason)}");
+                if (!string.IsNullOrWhiteSpace(run.ErrorCode))
+                {
+                    builder.Append($" errorCode={NormalizeSingleLine(run.ErrorCode)}");
+                }
+
+                if (!string.IsNullOrWhiteSpace(run.Summary))
+                {
+                    builder.Append($" summary={NormalizeSingleLine(run.Summary)}");
+                }
+
+                builder.AppendLine();
+            }
+        }
+
         return builder.ToString().TrimEnd();
     }
 

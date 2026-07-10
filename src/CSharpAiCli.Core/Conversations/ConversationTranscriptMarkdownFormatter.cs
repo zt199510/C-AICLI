@@ -94,6 +94,25 @@ public static class ConversationTranscriptMarkdownFormatter
             }
         }
 
+        if (transcript.AgentRuns.Count > 0)
+        {
+            builder.AppendLine();
+            builder.AppendLine("## Agent Runs");
+            builder.AppendLine();
+            foreach (ConversationAgentRun run in transcript.AgentRuns)
+            {
+                string errorCode = string.IsNullOrWhiteSpace(run.ErrorCode)
+                    ? string.Empty
+                    : $" errorCode={NormalizeMarkdownMetadata(run.ErrorCode)}";
+                builder.AppendLine(
+                    $"- {run.CompletedAtUtc.ToString("O", CultureInfo.InvariantCulture)} status={NormalizeMarkdownMetadata(run.Status)} stopReason={NormalizeMarkdownMetadata(run.StopReason)} events={run.EventCount.ToString(CultureInfo.InvariantCulture)} toolCalls={run.ToolCallCount.ToString(CultureInfo.InvariantCulture)}{errorCode}");
+                if (!string.IsNullOrWhiteSpace(run.Summary))
+                {
+                    AppendFencedBlock(builder, RedactSecrets(run.Summary));
+                }
+            }
+        }
+
         return builder.ToString().TrimEnd();
     }
 

@@ -69,7 +69,21 @@ Tool execution can be disabled from user or workspace config:
 }
 ```
 
-Disabled tool names are merged from user and workspace config. A disabled tool is omitted from `caicli tools list` and returns `unknown-tool` if invoked.
+Disabled tool names are merged from user and workspace config. A disabled tool is omitted from `caicli tools list` and returns `tool-disabled` if invoked.
+
+Agentic `exec` loop budgets can be configured from user or workspace config:
+
+```json
+{
+  "agentRunLimits": {
+    "maxSteps": 8,
+    "maxToolCalls": 32,
+    "timeoutSeconds": 600
+  }
+}
+```
+
+`maxTurns` is accepted as a compatibility alias for `maxSteps`. If both are present they must match. User config takes priority over workspace config for each budget field. CLI options `--max-steps`, `--max-turns`, `--max-tool-calls`, and `--timeout-seconds` override configured values for one invocation.
 
 Shell execution policy can be constrained from user or workspace config:
 
@@ -98,7 +112,12 @@ Shell execution policy can be constrained from user or workspace config:
   "baseUrl": "https://api.openai.com/v1",
   "apiKey": "<your-api-key>",
   "agentBackend": "direct",
-  "approvalMode": "on-request"
+  "approvalMode": "on-request",
+  "agentRunLimits": {
+    "maxSteps": 8,
+    "maxToolCalls": 32,
+    "timeoutSeconds": 600
+  }
 }
 ```
 
@@ -111,6 +130,11 @@ Shell execution policy can be constrained from user or workspace config:
   "agentBackend": "direct",
   "approvalMode": "on-request",
   "disabledTools": [],
+  "agentRunLimits": {
+    "maxSteps": 8,
+    "maxToolCalls": 32,
+    "timeoutSeconds": 600
+  },
   "mcpServers": {
     "disabled-example": {
       "enabled": false,

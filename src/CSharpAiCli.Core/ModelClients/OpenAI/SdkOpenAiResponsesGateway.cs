@@ -1,4 +1,6 @@
 using System.ClientModel;
+using System.Text;
+using System.Text.Json;
 using OpenAI;
 using OpenAI.Responses;
 
@@ -38,8 +40,14 @@ public sealed class SdkOpenAiResponsesGateway : IOpenAiResponsesGateway
         OpenAiAgentRequest request,
         CancellationToken cancellationToken = default)
     {
-        throw new NotSupportedException(
-            "OpenAI agent tool continuation is not implemented for the SDK gateway yet.");
+        ArgumentNullException.ThrowIfNull(request);
+
+        CreateResponseOptions options = CreateAgentOptions(request);
+        ClientResult<ResponseResult> result = client.CreateResponse(
+            options,
+            cancellationToken: cancellationToken);
+
+        return ToEnvelope(result.Value, request.Model);
     }
 
     public OpenAiResponseEnvelope CreateResponse(
@@ -110,6 +118,99 @@ public sealed class SdkOpenAiResponsesGateway : IOpenAiResponsesGateway
 
         options.InputItems.Add(ResponseItem.CreateUserMessageItem(prompt));
         return options;
+    }
+
+    internal static CreateResponseOptions CreateAgentOptions(OpenAiAgentRequest request)
+    {
+        ArgumentNullException.ThrowIfNull(request);
+        ArgumentException.ThrowIfNullOrWhiteSpace(request.Model);
+
+        CreateResponseOptions options = new()
+        {
+            Model = request.Model,
+            PreviousResponseId = request.PreviousResponseId,
+            Instructions = string.IsNullOrWhiteSpace(request.Instructions)
+                ? null
+                : request.Instructions,
+            StreamingEnabled = false
+        };
+
+        if (!string.IsNullOrWhiteSpace(request.Prompt))
+        {
+            options.InputItems.Add(ResponseItem.CreateUserMessageItem(request.Prompt));
+        }
+
+        foreach (OpenAiToolResultInput toolResult in request.ToolResults)
+        {
+            options.InputItems.Add(ResponseItem.CreateFunctionCallOutputItem(
+                toolResult.CallId,
+                CreateToolResultOutputJson(toolResult)));
+        }
+
+        foreach (OpenAiToolDefinition tool in request.Tools)
+        {
+            options.Tools.Add(ResponseTool.CreateFunctionTool(
+                tool.Name,
+                BinaryData.FromString(tool.ParametersSchema),
+                strictModeEnabled: null,
+                functionDescription: tool.Description));
+        }
+
+        return options;
+    }
+
+    internal static OpenAiResponseEnvelope ToEnvelope(ResponseResult response, string fallbackModel)
+    {
+        ArgumentNullException.ThrowIfNull(response);
+
+        OpenAiToolCall[] toolCalls = response.OutputItems
+            .OfType<FunctionCallResponseItem>()
+            .Select(toolCall => new OpenAiToolCall(
+                CallId: toolCall.CallId,
+                Name: toolCall.FunctionName,
+                ArgumentsJson: toolCall.FunctionArguments?.ToString()))
+            .ToArray();
+
+        return new OpenAiResponseEnvelope(
+            ResponseId: response.Id ?? "unknown",
+            Model: response.Model ?? fallbackModel,
+            Text: response.GetOutputText(),
+            ToolCalls: toolCalls);
+    }
+
+    internal static string CreateToolResultOutputJson(OpenAiToolResultInput toolResult)
+    {
+        ArgumentNullException.ThrowIfNull(toolResult);
+
+        using MemoryStream stream = new();
+        using (Utf8JsonWriter writer = new(stream))
+        {
+            writer.WriteStartObject();
+            writer.WriteString("callId", toolResult.CallId);
+            writer.WriteString("toolName", toolResult.ToolName);
+            writer.WriteBoolean("succeeded", toolResult.Succeeded);
+            writer.WriteString("summary", toolResult.Summary);
+            writer.WriteString("errorCode", toolResult.ErrorCode);
+            writer.WriteString("approvalStatus", toolResult.ApprovalStatus);
+            writer.WriteBoolean("retryable", toolResult.Retryable);
+
+            if (toolResult.StructuredPayload is not null)
+            {
+                writer.WritePropertyName("structuredPayload");
+                writer.WriteStartObject();
+                foreach (KeyValuePair<string, JsonElement> item in toolResult.StructuredPayload)
+                {
+                    writer.WritePropertyName(item.Key);
+                    item.Value.WriteTo(writer);
+                }
+
+                writer.WriteEndObject();
+            }
+
+            writer.WriteEndObject();
+        }
+
+        return Encoding.UTF8.GetString(stream.ToArray());
     }
 }
 #pragma warning restore OPENAI001

@@ -14,6 +14,7 @@
 ## 本周范围
 
 - direct backend 真实 tool-call continuation。
+- `0.2.1` 已将默认 `exec` 接到 direct OpenAI agent abstraction；本周重点是补齐 SDK tool-call/result translation。
 - 将统一 tool schema 暴露给真实模型调用路径。
 - 将 `ToolExecutionResult` structured payload 和 errorCode 回写给模型。
 - 保持 fake model 与真实模型路径共享同一事件契约。
@@ -21,16 +22,16 @@
 
 ## 任务清单
 
-- [ ] Step 1: 梳理当前 fake/offline agent loop 与 direct model client 的边界。
-- [ ] Step 2: 定义真实模型 tool-call continuation 的内部 DTO，不把 provider SDK 类型泄漏到 Core 之外。
-- [ ] Step 3: 将 `ToolDefinition` 渲染为 direct backend 可消费的工具定义。
-- [ ] Step 4: 实现模型响应中的 tool call 解析、参数校验和 tool registry dispatch。
-- [ ] Step 5: 将 tool result、structured payload、errorCode 和 approvalStatus 回写给模型 continuation。
-- [ ] Step 6: 将真实 continuation 事件映射到 text/NDJSON/session/trace。
-- [ ] Step 7: 增加 fake model continuation 测试，覆盖多轮 tool call、tool error、invalid args。
-- [ ] Step 8: 增加 opt-in real model smoke，缺 key/model 时跳过并输出清晰说明。
-- [ ] Step 9: 更新 capability status 和 known limitations。
-- [ ] Step 10: 运行 build/test 并创建 `39_week_review.md`。
+- [x] Step 1: 梳理当前 fake/offline agent loop 与 direct model client 的边界。
+- [x] Step 2: 定义真实模型 tool-call continuation 的内部 DTO，不把 provider SDK 类型泄漏到 Core 之外。
+- [x] Step 3: 将 `ToolDefinition` 渲染为 direct backend 可消费的工具定义。
+- [x] Step 4: 实现模型响应中的 tool call 解析、参数校验和 tool registry dispatch。
+- [x] Step 5: 将 tool result、structured payload、errorCode 和 approvalStatus 回写给模型 continuation。
+- [x] Step 6: 将真实 continuation 事件映射到 text/NDJSON/session/trace。
+- [x] Step 7: 增加 fake model continuation 测试，覆盖多轮 tool call、tool error、invalid args。
+- [x] Step 8: 增加 opt-in real model smoke，缺 key/model 时跳过并输出清晰说明。
+- [x] Step 9: 更新 capability status 和 known limitations。
+- [x] Step 10: 运行 build/test 并创建 `39_week_review.md`。
 
 ## 验收标准
 
@@ -63,4 +64,3 @@
 第 40 周输入：
 -
 ```
-

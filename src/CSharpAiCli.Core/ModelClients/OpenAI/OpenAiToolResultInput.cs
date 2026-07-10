@@ -1,3 +1,5 @@
+using System.Text.Json;
+
 namespace CSharpAiCli.Core;
 
 public sealed record OpenAiToolResultInput(
@@ -6,4 +8,6 @@ public sealed record OpenAiToolResultInput(
     bool Succeeded,
     string Summary,
     string? ErrorCode,
-    string ApprovalStatus);
+    string ApprovalStatus,
+    bool Retryable = false,
+    IReadOnlyDictionary<string, JsonElement>? StructuredPayload = null);

@@ -57,6 +57,11 @@ public static class ConfigLoader
         (string baseUrl, string baseUrlSource) = SelectBaseUrl(openAiBaseUrl, userConfig, workspaceConfig, warnings);
         (SecretValue? apiKey, string apiKeySource) = SelectApiKey(openAiApiKey, userConfig);
         ShellPolicyConfiguration shellPolicy = SelectShellPolicy(userConfig, workspaceConfig, warnings);
+        (
+            AgentRunLimits agentRunLimits,
+            string agentRunMaxStepsSource,
+            string agentRunMaxToolCallsSource,
+            string agentRunTimeoutSource) = SelectAgentRunLimits(userConfig, workspaceConfig, warnings);
 
         return new EffectiveConfiguration(
             WorkspaceRoot: workspace.RootPath,
@@ -77,7 +82,11 @@ public static class ConfigLoader
             BaseUrlSource = baseUrlSource,
             ApprovalMode = approvalMode,
             ApprovalModeSource = approvalModeSource,
-            ShellPolicy = shellPolicy
+            ShellPolicy = shellPolicy,
+            AgentRunLimits = agentRunLimits,
+            AgentRunMaxStepsSource = agentRunMaxStepsSource,
+            AgentRunMaxToolCallsSource = agentRunMaxToolCallsSource,
+            AgentRunTimeoutSource = agentRunTimeoutSource
         };
     }
 
@@ -133,6 +142,7 @@ public static class ConfigLoader
             || !string.IsNullOrWhiteSpace(config.ApprovalMode)
             || config.DisabledTools is { Length: > 0 }
             || HasMeaningfulShellPolicy(config.ShellPolicy)
+            || HasMeaningfulAgentRunLimits(config.AgentRunLimits)
             || config.McpServers is { Count: > 0 }
             || config.WorkflowProfiles is { Count: > 0 };
     }
@@ -143,6 +153,15 @@ public static class ConfigLoader
             && (policy.AllowedCommands is not null
                 || policy.DeniedCommands is not null
                 || policy.MaxTimeoutMilliseconds.HasValue);
+    }
+
+    private static bool HasMeaningfulAgentRunLimits(AgentRunLimitsConfig? limits)
+    {
+        return limits is not null &&
+            (limits.MaxSteps.HasValue ||
+                limits.MaxTurns.HasValue ||
+                limits.MaxToolCalls.HasValue ||
+                limits.TimeoutSeconds.HasValue);
     }
 
     public static bool TryNormalizeBaseUrl(string? value, out string? baseUrl)
@@ -534,6 +553,133 @@ public static class ConfigLoader
         }
 
         return ("direct", "default");
+    }
+
+    private static (
+        AgentRunLimits Limits,
+        string MaxStepsSource,
+        string MaxToolCallsSource,
+        string TimeoutSource) SelectAgentRunLimits(
+            CliConfigFile? userConfig,
+            CliConfigFile? workspaceConfig,
+            List<string> warnings)
+    {
+        (int? maxSteps, string maxStepsSource) = SelectAgentRunMaxSteps(userConfig, workspaceConfig, warnings);
+        (int? maxToolCalls, string maxToolCallsSource) = SelectPositiveAgentRunLimit(
+            userConfig?.AgentRunLimits?.MaxToolCalls,
+            workspaceConfig?.AgentRunLimits?.MaxToolCalls,
+            "agentRunLimits.maxToolCalls",
+            warnings);
+        (int? timeoutSeconds, string timeoutSource) = SelectPositiveAgentRunLimit(
+            userConfig?.AgentRunLimits?.TimeoutSeconds,
+            workspaceConfig?.AgentRunLimits?.TimeoutSeconds,
+            "agentRunLimits.timeoutSeconds",
+            warnings);
+
+        TimeSpan? timeout = timeoutSeconds is null
+            ? null
+            : TimeSpan.FromSeconds(timeoutSeconds.Value);
+
+        AgentRunLimits limits = new(
+            MaxSteps: maxSteps,
+            MaxToolCalls: maxToolCalls,
+            ModelCallTimeout: timeout,
+            OverallTimeout: timeout);
+        return (limits, maxStepsSource, maxToolCallsSource, timeoutSource);
+    }
+
+    private static (int? Value, string Source) SelectAgentRunMaxSteps(
+        CliConfigFile? userConfig,
+        CliConfigFile? workspaceConfig,
+        List<string> warnings)
+    {
+        if (TryNormalizeAgentRunMaxSteps(userConfig?.AgentRunLimits, "user config", warnings, out int userMaxSteps))
+        {
+            return (userMaxSteps, "user config");
+        }
+
+        if (TryNormalizeAgentRunMaxSteps(workspaceConfig?.AgentRunLimits, "workspace config", warnings, out int workspaceMaxSteps))
+        {
+            return (workspaceMaxSteps, "workspace config");
+        }
+
+        return (null, "default");
+    }
+
+    private static bool TryNormalizeAgentRunMaxSteps(
+        AgentRunLimitsConfig? limits,
+        string source,
+        List<string> warnings,
+        out int maxSteps)
+    {
+        maxSteps = 0;
+        if (limits is null || (!limits.MaxSteps.HasValue && !limits.MaxTurns.HasValue))
+        {
+            return false;
+        }
+
+        int? selected = limits.MaxSteps ?? limits.MaxTurns;
+        string selectedName = limits.MaxSteps.HasValue
+            ? "agentRunLimits.maxSteps"
+            : "agentRunLimits.maxTurns";
+        if (selected is <= 0)
+        {
+            warnings.Add($"ignored invalid {selectedName} from {source}");
+            return false;
+        }
+
+        if (limits.MaxSteps.HasValue &&
+            limits.MaxTurns.HasValue &&
+            limits.MaxSteps.Value != limits.MaxTurns.Value)
+        {
+            warnings.Add($"ignored conflicting agentRunLimits.maxSteps/maxTurns from {source}");
+            return false;
+        }
+
+        maxSteps = selected!.Value;
+        return true;
+    }
+
+    private static (int? Value, string Source) SelectPositiveAgentRunLimit(
+        int? userValue,
+        int? workspaceValue,
+        string name,
+        List<string> warnings)
+    {
+        if (TryNormalizePositiveAgentRunLimit(userValue, name, "user config", warnings, out int selected))
+        {
+            return (selected, "user config");
+        }
+
+        if (TryNormalizePositiveAgentRunLimit(workspaceValue, name, "workspace config", warnings, out selected))
+        {
+            return (selected, "workspace config");
+        }
+
+        return (null, "default");
+    }
+
+    private static bool TryNormalizePositiveAgentRunLimit(
+        int? value,
+        string name,
+        string source,
+        List<string> warnings,
+        out int selected)
+    {
+        selected = 0;
+        if (!value.HasValue)
+        {
+            return false;
+        }
+
+        if (value.Value > 0)
+        {
+            selected = value.Value;
+            return true;
+        }
+
+        warnings.Add($"ignored invalid {name} from {source}");
+        return false;
     }
 
     private static (ApprovalMode Mode, string Source) SelectApprovalMode(

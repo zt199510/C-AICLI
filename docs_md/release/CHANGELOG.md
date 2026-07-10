@@ -2,7 +2,21 @@
 
 ## Unreleased
 
-No unreleased changes.
+Added:
+- Direct OpenAI Responses SDK agent tool-call continuation for `exec`: unified tool schemas are sent as function tools, SDK function calls are parsed into the existing agent loop, and structured tool results are written back for model continuation.
+
+Changed:
+- Release smoke keeps real model execution opt-in with `CAICLI_REAL_MODEL_SMOKE=1`; default smoke remains credential-free and local-only.
+
+## 0.2.1 - 2026-07-10
+
+Changed:
+- Default `exec` now routes configured model/key runs through the existing `OpenAiAgentRunner` / `OpenAiToolCallingModel` abstraction instead of stopping before the direct agent path.
+- Until SDK tool-call continuation is implemented, the default direct agent gateway still reports the same structured `agent-backend-unavailable` error without leaking API keys.
+- Release smoke tests now read the release version from `Directory.Build.props` instead of hardcoding `0.2.0`, so later 0.3.0 release verification can reuse the script.
+
+Known deferred items:
+- Direct OpenAI SDK tool-call continuation still needs the Week 39 SDK request/response translation work before real model-driven tool loops can run.
 
 ## 0.2.0 - 2026-07-10
 

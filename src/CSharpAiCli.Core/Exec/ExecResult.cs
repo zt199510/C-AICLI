@@ -10,6 +10,7 @@ public sealed record ExecResult
         string? Summary,
         string? ErrorCode,
         string? ApprovalStatus,
+        string? StopReason,
         IReadOnlyList<ExecEvent> Events)
     {
         this.IsSuccess = IsSuccess;
@@ -17,6 +18,7 @@ public sealed record ExecResult
         this.Summary = Summary;
         this.ErrorCode = ErrorCode;
         this.ApprovalStatus = ApprovalStatus;
+        this.StopReason = StopReason;
         this.Events = new ReadOnlyCollection<ExecEvent>(Events.ToArray());
     }
 
@@ -30,12 +32,15 @@ public sealed record ExecResult
 
     public string? ApprovalStatus { get; }
 
+    public string? StopReason { get; }
+
     public IReadOnlyList<ExecEvent> Events { get; }
 
     public static ExecResult Success(
         string? Summary,
         IReadOnlyList<ExecEvent> Events,
-        string? ApprovalStatus = null)
+        string? ApprovalStatus = null,
+        string? StopReason = null)
     {
         ArgumentNullException.ThrowIfNull(Events);
 
@@ -45,6 +50,7 @@ public sealed record ExecResult
             Summary,
             ErrorCode: null,
             ApprovalStatus,
+            StopReason,
             Events);
     }
 
@@ -53,7 +59,8 @@ public sealed record ExecResult
         string? Summary,
         string ErrorCode,
         IReadOnlyList<ExecEvent> Events,
-        string? ApprovalStatus = null)
+        string? ApprovalStatus = null,
+        string? StopReason = null)
     {
         if (ExitCode == 0)
         {
@@ -73,6 +80,7 @@ public sealed record ExecResult
             Summary,
             ErrorCode,
             ApprovalStatus,
+            StopReason,
             Events);
     }
 }

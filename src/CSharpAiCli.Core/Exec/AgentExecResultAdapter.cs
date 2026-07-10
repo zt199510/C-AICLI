@@ -12,7 +12,11 @@ public static class AgentExecResultAdapter
 
         if (result.IsSuccess)
         {
-            return ExecResult.Success(result.Text, events, FindLastApprovalStatus(events));
+            return ExecResult.Success(
+                result.Text,
+                events,
+                FindLastApprovalStatus(events),
+                result.StopReason);
         }
 
         AgentError error = result.Error!;
@@ -21,7 +25,8 @@ public static class AgentExecResultAdapter
             Summary: error.SafeMessage,
             ErrorCode: error.LocalErrorCode,
             Events: events,
-            ApprovalStatus: FindLastApprovalStatus(events));
+            ApprovalStatus: FindLastApprovalStatus(events),
+            StopReason: result.StopReason);
     }
 
     private static ExecEvent ToExecEvent(AgentRunEvent agentEvent)
@@ -37,7 +42,9 @@ public static class AgentExecResultAdapter
             ApprovalStatus: agentEvent.ApprovalStatus,
             Status: agentEvent.Status,
             DurationMs: agentEvent.DurationMs,
-            ApprovalDurationMs: agentEvent.ApprovalDurationMs);
+            ApprovalDurationMs: agentEvent.ApprovalDurationMs,
+            StepIndex: agentEvent.StepIndex,
+            StopReason: agentEvent.StopReason);
     }
 
     private static string? FindLastApprovalStatus(IReadOnlyList<ExecEvent> events)

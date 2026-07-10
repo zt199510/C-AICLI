@@ -73,6 +73,12 @@ public static class TraceLogger
         AddIfPresent(record, "message", execEvent.Message);
         AddIfPresent(record, "summary", execEvent.Summary);
         AddIfPresent(record, "status", execEvent.Status);
+        if (execEvent.StepIndex.HasValue)
+        {
+            record["stepIndex"] = execEvent.StepIndex.Value;
+        }
+
+        AddIfPresent(record, "stopReason", execEvent.StopReason);
         AddIfPresent(record, "errorCode", execEvent.ErrorCode);
         AddIfPresent(record, "approvalStatus", execEvent.ApprovalStatus);
         if (execEvent.DurationMs.HasValue)
@@ -114,6 +120,7 @@ public static class TraceLogger
         AddIfPresent(record, "summary", result.Summary);
         AddIfPresent(record, "errorCode", result.ErrorCode);
         AddIfPresent(record, "approvalStatus", result.ApprovalStatus);
+        AddIfPresent(record, "stopReason", result.StopReason);
         record["payload"] = new Dictionary<string, object?>
         {
             ["exitCode"] = result.ExitCode,

@@ -50,6 +50,11 @@ public sealed class ExecJsonRenderer
             envelope["approvalStatus"] = result.ApprovalStatus;
         }
 
+        if (!string.IsNullOrEmpty(result.StopReason))
+        {
+            envelope["stopReason"] = result.StopReason;
+        }
+
         envelope["payload"] = new Dictionary<string, object?>
         {
             ["status"] = result.IsSuccess ? "success" : "failure",
@@ -82,6 +87,16 @@ public sealed class ExecJsonRenderer
         if (!string.IsNullOrEmpty(execEvent.Status))
         {
             envelope["status"] = execEvent.Status;
+        }
+
+        if (execEvent.StepIndex.HasValue)
+        {
+            envelope["stepIndex"] = execEvent.StepIndex.Value;
+        }
+
+        if (!string.IsNullOrEmpty(execEvent.StopReason))
+        {
+            envelope["stopReason"] = execEvent.StopReason;
         }
 
         if (execEvent.DurationMs.HasValue)

@@ -8,6 +8,7 @@ public sealed class ToolErrorCodeTests
     public void Core_executor_error_codes_expose_stable_canonical_values()
     {
         Assert.Equal("unknown-tool", ToolErrorCode.UnknownTool);
+        Assert.Equal("tool-disabled", ToolErrorCode.ToolDisabled);
         Assert.Equal("invalid-tool-arguments", ToolErrorCode.InvalidToolArguments);
         Assert.Equal("tool-returned-null", ToolErrorCode.ToolReturnedNull);
         Assert.Equal("tool-execution-failed", ToolErrorCode.ToolExecutionFailed);

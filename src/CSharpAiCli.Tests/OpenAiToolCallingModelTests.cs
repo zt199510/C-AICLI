@@ -1,3 +1,4 @@
+using System.Text.Json;
 using CSharpAiCli.Core;
 
 namespace CSharpAiCli.Tests;
@@ -131,19 +132,30 @@ public sealed class OpenAiToolCallingModelTests
             gateway);
 
         AgentModelTurn firstTurn = model.Start(CreateRequest("check status"));
+        using JsonDocument payloadDocument = JsonDocument.Parse("""
+        {
+          "branch": "main",
+          "clean": true
+        }
+        """);
+        Dictionary<string, JsonElement> structuredPayload = payloadDocument.RootElement
+            .EnumerateObject()
+            .ToDictionary(property => property.Name, property => property.Value);
         AgentModelTurn turn = model.Continue(
             CreateRequest("check status"),
             [
                 new AgentToolCallResult(
                     firstTurn.ToolCalls.Single(),
-                    ToolExecutionResult.Success("On branch main. nothing to commit."))
+                    ToolExecutionResult.Success(
+                        "On branch main. nothing to commit.",
+                        structuredPayload: structuredPayload))
             ]);
 
         OpenAiAgentRequest sentRequest = gateway.AgentRequests[1];
         Assert.Null(sentRequest.Prompt);
         Assert.Equal("resp_tool", sentRequest.PreviousResponseId);
         Assert.Equal("Summarize tool output.", sentRequest.Instructions);
-        Assert.Empty(sentRequest.Tools);
+        Assert.Equal("workspace.git_status", Assert.Single(sentRequest.Tools).Name);
         OpenAiToolResultInput resultInput = Assert.Single(sentRequest.ToolResults);
         Assert.Equal("call_status", resultInput.CallId);
         Assert.Equal("workspace.git_status", resultInput.ToolName);
@@ -151,6 +163,10 @@ public sealed class OpenAiToolCallingModelTests
         Assert.Equal("On branch main. nothing to commit.", resultInput.Summary);
         Assert.Null(resultInput.ErrorCode);
         Assert.Equal("not-required", resultInput.ApprovalStatus);
+        IReadOnlyDictionary<string, JsonElement> resultPayload =
+            resultInput.StructuredPayload ?? throw new InvalidOperationException("Structured payload was not set.");
+        Assert.Equal("main", resultPayload["branch"].GetString());
+        Assert.True(resultPayload["clean"].GetBoolean());
         Assert.True(turn.IsFinal);
         Assert.Equal("Working tree is clean.", turn.FinalText);
     }

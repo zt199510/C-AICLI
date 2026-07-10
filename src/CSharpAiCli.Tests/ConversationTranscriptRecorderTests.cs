@@ -18,6 +18,7 @@ public sealed class ConversationTranscriptRecorderTests
         Assert.Empty(transcript.Messages);
         Assert.Empty(transcript.ToolCalls);
         Assert.Empty(transcript.Errors);
+        Assert.Empty(transcript.AgentRuns);
     }
 
     [Fact]
@@ -113,6 +114,28 @@ public sealed class ConversationTranscriptRecorderTests
 
         Assert.Same(toolCall, Assert.Single(transcript.ToolCalls));
         Assert.Equal(toolTime, transcript.UpdatedAtUtc);
+    }
+
+    [Fact]
+    public void Add_agent_run_appends_run_summary_and_updates_timestamp()
+    {
+        ConversationTranscript transcript = ConversationTranscript.Create(
+            "smoke",
+            DateTimeOffset.Parse("2024-01-01T00:00:00Z"));
+        DateTimeOffset completedAt = DateTimeOffset.Parse("2024-01-01T00:00:06Z");
+        ConversationAgentRun run = new(
+            CompletedAtUtc: completedAt,
+            Status: "failure",
+            StopReason: "tool-disabled",
+            ErrorCode: "tool-disabled",
+            Summary: "Tool disabled.",
+            EventCount: 3,
+            ToolCallCount: 1);
+
+        transcript.AddAgentRun(run);
+
+        Assert.Same(run, Assert.Single(transcript.AgentRuns));
+        Assert.Equal(completedAt, transcript.UpdatedAtUtc);
     }
 
     [Fact]

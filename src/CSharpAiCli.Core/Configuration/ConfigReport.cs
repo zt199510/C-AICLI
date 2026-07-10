@@ -30,6 +30,12 @@ public sealed record ConfigReport(IReadOnlyList<string> Lines)
             $"agentBackendSource: {configuration.AgentBackendSource}",
             $"approvalMode: {FormatApprovalMode(configuration.ApprovalMode)}",
             $"approvalModeSource: {configuration.ApprovalModeSource}",
+            $"agentRunMaxSteps: {configuration.AgentRunLimits.MaxSteps.ToString(System.Globalization.CultureInfo.InvariantCulture)}",
+            $"agentRunMaxStepsSource: {configuration.AgentRunMaxStepsSource}",
+            $"agentRunMaxToolCalls: {configuration.AgentRunLimits.MaxToolCalls.ToString(System.Globalization.CultureInfo.InvariantCulture)}",
+            $"agentRunMaxToolCallsSource: {configuration.AgentRunMaxToolCallsSource}",
+            $"agentRunTimeoutSeconds: {FormatSeconds(configuration.AgentRunLimits.OverallTimeout)}",
+            $"agentRunTimeoutSource: {configuration.AgentRunTimeoutSource}",
             $"shellPolicyAllowedCommandsConfigured: {FormatBoolean(configuration.ShellPolicy.AllowedCommandsConfigured)}",
             $"shellPolicyAllowedCommandsSource: {configuration.ShellPolicy.AllowedCommandsSource}",
             $"shellPolicyAllowedCommands: {FormatShellPolicyCommands(configuration.ShellPolicy.AllowedCommands)}",
@@ -102,6 +108,11 @@ public sealed record ConfigReport(IReadOnlyList<string> Lines)
         return maxTimeoutMilliseconds.HasValue
             ? maxTimeoutMilliseconds.Value.ToString(System.Globalization.CultureInfo.InvariantCulture)
             : "none";
+    }
+
+    private static string FormatSeconds(TimeSpan timeout)
+    {
+        return ((int)timeout.TotalSeconds).ToString(System.Globalization.CultureInfo.InvariantCulture);
     }
 
     private static string FormatBoolean(bool value)

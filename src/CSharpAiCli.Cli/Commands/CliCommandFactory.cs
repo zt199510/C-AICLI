@@ -761,7 +761,7 @@ public static class CliCommandFactory
             ToolRegistry registry = CliToolFactory.CreateRegistry(
                 snapshot,
                 ApprovalPolicyResolver.Resolve(snapshot.Configuration.ApprovalMode, cliApprovalMode));
-            ToolExecutor executor = new(registry);
+            ToolExecutor executor = new(registry, snapshot.Configuration.DisabledTools);
             ToolExecutionResult result = executor.Execute(
                 toolName,
                 new ToolExecutionContext("cli_tool_call", snapshot.Workspace, argumentsJson));
@@ -878,7 +878,11 @@ public static class CliCommandFactory
         };
         Option<int?> execMaxTurnsOption = new("--max-turns")
         {
-            Description = "Maximum agent loop turns for agentic exec.",
+            Description = "Legacy alias for --max-steps.",
+        };
+        Option<int?> execMaxStepsOption = new("--max-steps")
+        {
+            Description = "Maximum agent loop steps for agentic exec.",
         };
         Option<int?> execMaxToolCallsOption = new("--max-tool-calls")
         {
@@ -911,6 +915,7 @@ public static class CliCommandFactory
             }
         });
         AddPositiveIntegerValidator(execMaxTurnsOption, "--max-turns");
+        AddPositiveIntegerValidator(execMaxStepsOption, "--max-steps");
         AddPositiveIntegerValidator(execMaxToolCallsOption, "--max-tool-calls");
         AddPositiveIntegerValidator(execTimeoutSecondsOption, "--timeout-seconds");
         execCommand.Arguments.Add(execTaskArgument);
@@ -918,6 +923,7 @@ public static class CliCommandFactory
         execCommand.Options.Add(execApprovalOption);
         execCommand.Options.Add(execJsonOption);
         execCommand.Options.Add(execOutputOption);
+        execCommand.Options.Add(execMaxStepsOption);
         execCommand.Options.Add(execMaxTurnsOption);
         execCommand.Options.Add(execMaxToolCallsOption);
         execCommand.Options.Add(execTimeoutSecondsOption);
@@ -933,6 +939,7 @@ public static class CliCommandFactory
             string? approvalModeValue = parseResult.GetValue(execApprovalOption);
             bool jsonRequested = parseResult.GetValue(execJsonOption);
             string outputMode = parseResult.GetValue(execOutputOption) ?? "text";
+            int? maxSteps = parseResult.GetValue(execMaxStepsOption);
             int? maxTurns = parseResult.GetValue(execMaxTurnsOption);
             int? maxToolCalls = parseResult.GetValue(execMaxToolCallsOption);
             int? timeoutSeconds = parseResult.GetValue(execTimeoutSecondsOption);
@@ -940,6 +947,8 @@ public static class CliCommandFactory
             string? resume = parseResult.GetValue(execResumeOption);
             bool sessionSupplied = IsOptionExplicit(parseResult, execSessionOption);
             bool resumeSupplied = IsOptionExplicit(parseResult, execResumeOption);
+            bool maxStepsSupplied = IsOptionExplicit(parseResult, execMaxStepsOption);
+            bool maxTurnsSupplied = IsOptionExplicit(parseResult, execMaxTurnsOption);
             CliEnvironmentSnapshot snapshot = snapshotProvider(workspacePath, cwdPath);
             DiagnosticContext? traceContext = CreateTraceContext(parseResult, snapshot);
             ApprovalMode? cliApprovalMode = GetApprovalOverride(approvalModeValue, parseResult.GetResult(execApprovalOption), approve);
@@ -1008,9 +1017,21 @@ public static class CliCommandFactory
                     []);
             }
 
+            if (maxStepsSupplied &&
+                maxTurnsSupplied &&
+                maxSteps.HasValue &&
+                maxTurns.HasValue &&
+                maxSteps.Value != maxTurns.Value)
+            {
+                return WriteExecFailureWithTrace(
+                    "invalid-agent-limits",
+                    "Use either --max-steps or --max-turns, or set them to the same value.",
+                    []);
+            }
+
             IApprovalPolicy approvalPolicy = ApprovalPolicyResolver.Resolve(snapshot.Configuration.ApprovalMode, cliApprovalMode);
             ToolRegistry registry = CliToolFactory.CreateRegistry(snapshot, approvalPolicy);
-            ToolExecutor executor = new(registry);
+            ToolExecutor executor = new(registry, snapshot.Configuration.DisabledTools);
             string? effectiveSession = resumeSupplied ? resume : session;
             ConversationSessionName? sessionName = null;
             ConversationTranscript? transcript = null;
@@ -1062,10 +1083,11 @@ public static class CliCommandFactory
                 snapshot.Instructions.Instructions,
                 effectiveSession,
                 Limits: new AgentRunLimits(
-                    MaxTurns: maxTurns,
+                    MaxSteps: maxSteps ?? maxTurns,
                     MaxToolCalls: maxToolCalls,
                     ModelCallTimeout: timeoutSeconds is null ? null : TimeSpan.FromSeconds(timeoutSeconds.Value),
-                    OverallTimeout: timeoutSeconds is null ? null : TimeSpan.FromSeconds(timeoutSeconds.Value)),
+                    OverallTimeout: timeoutSeconds is null ? null : TimeSpan.FromSeconds(timeoutSeconds.Value))
+                    .MergeWith(snapshot.Configuration.AgentRunLimits),
                 TranscriptContext: transcriptContext);
 
             IAgentRunner runner = execAgentRunnerFactory(snapshot, registry, executor);
@@ -1073,6 +1095,7 @@ public static class CliCommandFactory
             ExecResult execResult = AgentExecResultAdapter.FromAgentResult(agentResult);
             if (sessionName is not null && transcript is not null && conversationStore is not null)
             {
+                transcript.AddAgentRun(ConversationAgentRun.FromAgentResult(agentResult, utcNowProvider()));
                 try
                 {
                     conversationStore.Save(sessionName, transcript);
@@ -1111,7 +1134,7 @@ public static class CliCommandFactory
             ApprovalMode? cliApprovalMode = approve ? ApprovalMode.Always : null;
             IApprovalPolicy approvalPolicy = ApprovalPolicyResolver.Resolve(snapshot.Configuration.ApprovalMode, cliApprovalMode);
             ToolRegistry registry = CliToolFactory.CreateRegistry(snapshot, approvalPolicy);
-            ToolExecutor executor = new(registry);
+            ToolExecutor executor = new(registry, snapshot.Configuration.DisabledTools);
             ExecRunner runner = new(approvalPolicy);
             ExecRequest request = new(task, WorkspaceRoot: snapshot.Workspace.RootPath);
             ExecResult result = runner.Run(request, snapshot.Workspace, executor);
@@ -1780,10 +1803,13 @@ public static class CliCommandFactory
                 Retryable: false));
         }
 
-        return new StaticAgentRunner(new AgentError(
-            "agent-backend-unavailable",
-            "Agent backend is unavailable.",
-            Retryable: false));
+        SdkOpenAiResponsesGateway gateway = new(apiKey.Value, snapshot.Configuration.BaseUrl);
+        return new OpenAiAgentRunner(
+            model,
+            snapshot.Instructions.Instructions,
+            registry,
+            gateway,
+            executor);
     }
 
     private static bool IsExecCommand(ParseResult parseResult)
@@ -2158,8 +2184,15 @@ public static class CliCommandFactory
                 Sequence: 0,
                 Timestamp: DateTimeOffset.UtcNow,
                 Message: error.SafeMessage,
-                ErrorCode: error.LocalErrorCode);
-            return AgentRunResult.Failure(error, [], [errorEvent]);
+                ErrorCode: error.LocalErrorCode,
+                Status: "failure",
+                StopReason: AgentStopReason.FromErrorCode(error.LocalErrorCode));
+            return AgentRunResult.Failure(
+                error,
+                [],
+                [errorEvent],
+                stopReason: AgentStopReason.FromErrorCode(error.LocalErrorCode),
+                status: "failure");
         }
     }
 }

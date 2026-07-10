@@ -24,8 +24,10 @@ public sealed class AgentExecResultAdapterTests
                     ErrorCode: null,
                     ApprovalStatus: "not-required",
                     Status: "success",
-                    DurationMs: 35)
-            ]);
+                    DurationMs: 35,
+                    StepIndex: 1)
+            ],
+            stopReason: "completed");
 
         ExecResult result = AgentExecResultAdapter.FromAgentResult(agentResult);
 
@@ -33,6 +35,7 @@ public sealed class AgentExecResultAdapterTests
         Assert.Equal(0, result.ExitCode);
         Assert.Equal("done", result.Summary);
         Assert.Equal("not-required", result.ApprovalStatus);
+        Assert.Equal("completed", result.StopReason);
         ExecEvent execEvent = Assert.Single(result.Events);
         Assert.Equal("tool.result", execEvent.Type);
         Assert.Equal(2, execEvent.Sequence);
@@ -42,6 +45,7 @@ public sealed class AgentExecResultAdapterTests
         Assert.Equal("not-required", execEvent.ApprovalStatus);
         Assert.Equal("success", execEvent.Status);
         Assert.Equal(35, execEvent.DurationMs);
+        Assert.Equal(1, execEvent.StepIndex);
     }
 
     [Fact]
@@ -59,15 +63,20 @@ public sealed class AgentExecResultAdapterTests
                     Sequence: 0,
                     Timestamp: DateTimeOffset.Parse("2024-01-01T00:00:00Z"),
                     Message: "Agent loop reached the maximum iteration limit.",
-                    ErrorCode: "agent-loop-limit-reached")
-            ]);
+                    ErrorCode: "agent-loop-limit-reached",
+                    StopReason: "max-steps-exceeded")
+            ],
+            stopReason: "max-steps-exceeded");
 
         ExecResult result = AgentExecResultAdapter.FromAgentResult(agentResult);
 
         Assert.False(result.IsSuccess);
         Assert.Equal(1, result.ExitCode);
         Assert.Equal("agent-loop-limit-reached", result.ErrorCode);
+        Assert.Equal("max-steps-exceeded", result.StopReason);
         Assert.Equal("Agent loop reached the maximum iteration limit.", result.Summary);
-        Assert.Equal("agent-loop-limit-reached", Assert.Single(result.Events).ErrorCode);
+        ExecEvent execEvent = Assert.Single(result.Events);
+        Assert.Equal("agent-loop-limit-reached", execEvent.ErrorCode);
+        Assert.Equal("max-steps-exceeded", execEvent.StopReason);
     }
 }

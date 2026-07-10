@@ -31,6 +31,8 @@ public sealed class OfflineAgentRunnerTests
         AgentRunResult result = runner.Run(CreateRequest(), transcript);
 
         Assert.True(result.IsSuccess);
+        Assert.Equal("success", result.Status);
+        Assert.Equal("completed", result.StopReason);
         Assert.Equal("tool said: hello", result.Text);
         ConversationToolCall toolCall = Assert.Single(result.ToolCalls);
         Assert.Equal("call_echo_1", toolCall.CallId);
@@ -49,6 +51,15 @@ public sealed class OfflineAgentRunnerTests
             result.Events.Select(agentEvent => agentEvent.Type).ToArray());
         Assert.Equal(new long[] { 0, 1, 2, 3, 4 }, result.Events.Select(agentEvent => agentEvent.Sequence).ToArray());
         Assert.All(result.Events, agentEvent => Assert.Equal(now, agentEvent.Timestamp));
+        Assert.Null(result.Events[0].StepIndex);
+        Assert.Equal(0, result.Events[1].StepIndex);
+        Assert.Equal(0, result.Events[2].StepIndex);
+        Assert.Equal(0, result.Events[3].StepIndex);
+        Assert.Equal("completed", result.Events[4].StopReason);
+        AgentStep step = Assert.Single(result.Steps);
+        Assert.Equal(0, step.Index);
+        Assert.Equal("success", step.Status);
+        Assert.Equal(1, step.ToolCallCount);
         Assert.Equal("test.echo", result.Events[1].Payload?["toolName"]);
         Assert.Equal("call_echo_1", result.Events[1].Payload?["callId"]);
         Assert.Equal("not-required", result.Events[2].ApprovalStatus);
@@ -268,7 +279,7 @@ public sealed class OfflineAgentRunnerTests
     }
 
     [Fact]
-    public void Run_records_tool_failure_and_continues_model_loop()
+    public void Run_records_tool_failure_without_marking_run_success()
     {
         ToolExecutor executor = new(new ToolRegistry());
         FakeToolCallingModel model = new(
@@ -276,13 +287,7 @@ public sealed class OfflineAgentRunnerTests
                 CallId: "call_missing",
                 ToolName: "missing.tool",
                 ArgumentsJson: "{}")),
-            continueFactory: results =>
-            {
-                AgentToolCallResult result = Assert.Single(results);
-                Assert.False(result.Result.Succeeded);
-                Assert.Equal("unknown-tool", result.Result.ErrorCode);
-                return AgentModelTurn.Final("handled " + result.Result.ErrorCode);
-            });
+            continueFactory: _ => throw new InvalidOperationException("Tool failure should stop the run."));
         DateTimeOffset now = DateTimeOffset.Parse("2024-01-01T00:00:05Z");
         OfflineAgentRunner runner = new(model, executor, () => now);
         ConversationTranscript transcript = ConversationTranscript.Create(
@@ -291,12 +296,15 @@ public sealed class OfflineAgentRunnerTests
 
         AgentRunResult result = runner.Run(CreateRequest(), transcript);
 
-        Assert.True(result.IsSuccess);
-        Assert.Equal("handled unknown-tool", result.Text);
+        Assert.False(result.IsSuccess);
+        Assert.Equal("unknown-tool", result.Error?.LocalErrorCode);
+        Assert.Equal("tool-failure", result.StopReason);
         ConversationToolCall toolCall = Assert.Single(transcript.ToolCalls);
         Assert.False(toolCall.Succeeded);
         Assert.Equal("Tool 'missing.tool' is not registered.", toolCall.FailureReason);
         Assert.Equal("unknown-tool", toolCall.ErrorCode);
+        AgentRunEvent errorEvent = Assert.Single(result.Events, agentEvent => agentEvent.Type == "agent.error");
+        Assert.Equal("tool-failure", errorEvent.StopReason);
     }
 
     [Fact]
@@ -310,21 +318,48 @@ public sealed class OfflineAgentRunnerTests
                 CallId: "call_bad_args",
                 ToolName: "test.echo",
                 ArgumentsJson: "[")),
-            continueFactory: results =>
-            {
-                AgentToolCallResult result = Assert.Single(results);
-                Assert.False(result.Result.Succeeded);
-                Assert.Equal("invalid-tool-arguments", result.Result.ErrorCode);
-                return AgentModelTurn.Final("argument failure recorded");
-            });
+            continueFactory: _ => throw new InvalidOperationException("Tool failure should stop the run."));
         OfflineAgentRunner runner = new(model, executor, () => DateTimeOffset.Parse("2024-01-01T00:00:05Z"));
 
         AgentRunResult result = runner.Run(CreateRequest());
 
-        Assert.True(result.IsSuccess);
+        Assert.False(result.IsSuccess);
+        Assert.Equal("invalid-tool-arguments", result.Error?.LocalErrorCode);
+        Assert.Equal("tool-failure", result.StopReason);
         ConversationToolCall toolCall = Assert.Single(result.ToolCalls);
         Assert.False(toolCall.Succeeded);
         Assert.Equal("invalid-tool-arguments", toolCall.ErrorCode);
+    }
+
+    [Fact]
+    public void Run_records_disabled_tool_as_tool_disabled_stop_reason()
+    {
+        ToolRegistry registry = new();
+        registry.Register(new EchoTool());
+        ToolExecutor executor = new(
+            registry,
+            new HashSet<string>(StringComparer.Ordinal)
+            {
+                "test.echo"
+            });
+        FakeToolCallingModel model = new(
+            startTurn: AgentModelTurn.RequestTools(new AgentToolCallRequest(
+                CallId: "call_disabled",
+                ToolName: "test.echo",
+                ArgumentsJson: """{"text":"hello"}""")),
+            continueFactory: _ => throw new InvalidOperationException("Disabled tool should stop the run."));
+        OfflineAgentRunner runner = new(model, executor, () => DateTimeOffset.Parse("2024-01-01T00:00:05Z"));
+
+        AgentRunResult result = runner.Run(CreateRequest());
+
+        Assert.False(result.IsSuccess);
+        Assert.Equal("tool-disabled", result.Error?.LocalErrorCode);
+        Assert.Equal("tool-disabled", result.StopReason);
+        ConversationToolCall toolCall = Assert.Single(result.ToolCalls);
+        Assert.False(toolCall.Succeeded);
+        Assert.Equal("tool-disabled", toolCall.ErrorCode);
+        AgentRunEvent errorEvent = Assert.Single(result.Events, agentEvent => agentEvent.Type == "agent.error");
+        Assert.Equal("tool-disabled", errorEvent.StopReason);
     }
 
     [Fact]
@@ -352,9 +387,12 @@ public sealed class OfflineAgentRunnerTests
 
         Assert.False(result.IsSuccess);
         Assert.Equal("agent-loop-limit-reached", result.Error?.LocalErrorCode);
+        Assert.Equal("failure", result.Status);
+        Assert.Equal("max-steps-exceeded", result.StopReason);
         Assert.Equal(2, result.ToolCalls.Count);
         AgentRunEvent limitEvent = Assert.Single(result.Events, agentEvent => agentEvent.Type == "agent.error");
         Assert.Equal("agent-loop-limit-reached", limitEvent.ErrorCode);
+        Assert.Equal("max-steps-exceeded", limitEvent.StopReason);
         Assert.Contains("maximum iteration limit", limitEvent.Message);
     }
 
@@ -475,9 +513,11 @@ public sealed class OfflineAgentRunnerTests
 
         Assert.False(result.IsSuccess);
         Assert.Equal("agent-tool-call-limit-reached", result.Error?.LocalErrorCode);
+        Assert.Equal("max-tool-calls-exceeded", result.StopReason);
         Assert.Single(result.ToolCalls);
         AgentRunEvent limitEvent = Assert.Single(result.Events, agentEvent => agentEvent.Type == "agent.error");
         Assert.Equal("agent-tool-call-limit-reached", limitEvent.ErrorCode);
+        Assert.Equal("max-tool-calls-exceeded", limitEvent.StopReason);
     }
 
     [Fact]

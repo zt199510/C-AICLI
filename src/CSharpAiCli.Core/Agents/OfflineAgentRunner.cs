@@ -36,19 +36,19 @@ public sealed class OfflineAgentRunner : IAgentRunner
     {
         ArgumentNullException.ThrowIfNull(request);
 
-        AgentRunLimits limits = (request.Limits ?? AgentRunLimits.Default).MergeWith(new AgentRunLimits(MaxTurns: maxIterations));
-        DateTimeOffset deadlineUtc = utcNowProvider().Add(limits.OverallTimeout);
+        AgentRunLimits limits = (request.Limits ?? AgentRunLimits.Default).MergeWith(new AgentRunLimits(MaxSteps: maxIterations));
+        AgentRunState state = new(limits, utcNowProvider);
+        DateTimeOffset deadlineUtc = state.DeadlineUtc;
         List<ConversationToolCall> recordedToolCalls = [];
         List<AgentRunEvent> events = [];
-        if (TryCreateTimeoutResult(deadlineUtc, recordedToolCalls, events, out AgentRunResult? timeoutResult))
+        if (TryCreateTimeoutResult(state, recordedToolCalls, events, out AgentRunResult? timeoutResult))
         {
             return timeoutResult!;
         }
 
         if (!TryInvokeModelStart(
             request,
-            limits,
-            deadlineUtc,
+            state,
             cancellationToken,
             recordedToolCalls,
             events,
@@ -60,58 +60,56 @@ public sealed class OfflineAgentRunner : IAgentRunner
         }
 
         AgentModelTurn currentTurn = turn!;
-        RecordModelTurn(events, currentTurn, modelCallDurationMs);
-        int toolCallCount = 0;
+        RecordModelTurn(events, currentTurn, modelCallDurationMs, step: null);
 
-        for (int iteration = 0; iteration < limits.MaxTurns; iteration++)
+        while (true)
         {
             cancellationToken.ThrowIfCancellationRequested();
-            if (TryCreateTimeoutResult(deadlineUtc, recordedToolCalls, events, out timeoutResult))
+            if (TryCreateTimeoutResult(state, recordedToolCalls, events, out timeoutResult))
             {
                 return timeoutResult!;
             }
 
             if (currentTurn.IsFinal)
             {
-                RecordFinalResponse(events, currentTurn.FinalText!);
-                return AgentRunResult.Success(currentTurn.FinalText!, recordedToolCalls, events);
+                state.StopSuccess();
+                RecordFinalResponse(events, currentTurn.FinalText!, state);
+                return AgentRunResult.Success(
+                    currentTurn.FinalText!,
+                    recordedToolCalls,
+                    events,
+                    state.Steps,
+                    state.StopReason ?? AgentStopReason.Completed);
             }
 
             if (currentTurn.ToolCalls.Count == 0)
             {
-                AgentError error = new(
-                    "agent-empty-turn",
-                    "Agent model returned neither a final response nor tool calls.",
-                    Retryable: false);
-                RecordError(events, error);
-                return AgentRunResult.Failure(
-                    error,
-                    recordedToolCalls,
-                    events);
+                AgentLoopError error = state.StopEmptyTurn();
+                RecordError(events, error, step: null);
+                return CreateFailureResult(error, recordedToolCalls, events, state);
+            }
+
+            if (!state.TryBeginStep(out AgentStep? step, out AgentLoopError? stepLimitError))
+            {
+                RecordError(events, stepLimitError!, step: null);
+                return CreateFailureResult(stepLimitError!, recordedToolCalls, events, state);
             }
 
             List<AgentToolCallResult> toolResults = [];
             foreach (AgentToolCallRequest toolCall in currentTurn.ToolCalls)
             {
-                if (toolCallCount >= limits.MaxToolCalls)
+                if (!state.TryReserveToolCall(step, out AgentLoopError? toolCallLimitError))
                 {
-                    AgentError toolCallLimitError = new(
-                        "agent-tool-call-limit-reached",
-                        "Agent loop reached the maximum tool call limit.",
-                        Retryable: false);
-                    RecordError(events, toolCallLimitError);
-                    return AgentRunResult.Failure(
-                        toolCallLimitError,
-                        recordedToolCalls,
-                        events);
+                    RecordError(events, toolCallLimitError!, step);
+                    return CreateFailureResult(toolCallLimitError!, recordedToolCalls, events, state);
                 }
 
-                if (TryCreateTimeoutResult(deadlineUtc, recordedToolCalls, events, out timeoutResult))
+                if (TryCreateTimeoutResult(state, recordedToolCalls, events, out timeoutResult))
                 {
                     return timeoutResult!;
                 }
 
-                RecordToolCall(events, toolCall);
+                RecordToolCall(events, toolCall, step);
                 ToolExecutionContext context = new(
                     CallId: toolCall.CallId,
                     Workspace: request.Workspace,
@@ -119,10 +117,11 @@ public sealed class OfflineAgentRunner : IAgentRunner
                 if (!TryExecuteTool(
                     toolCall,
                     context,
-                    deadlineUtc,
+                    state,
                     cancellationToken,
                     recordedToolCalls,
                     events,
+                    step,
                     out ToolExecutionResult executionResult,
                     out long? toolDurationMs,
                     out AgentRunResult? toolTimeoutResult))
@@ -142,11 +141,24 @@ public sealed class OfflineAgentRunner : IAgentRunner
                     nowUtc);
                 recordedToolCalls.Add(transcriptToolCall);
                 transcript?.AddToolCall(transcriptToolCall);
-                RecordToolResult(events, toolCall, executionResult, toolDurationMs);
-                toolCallCount++;
+                RecordToolResult(events, toolCall, executionResult, toolDurationMs, step);
+
+                if (!executionResult.Succeeded)
+                {
+                    AgentLoopError toolFailure = state.StopFailure(
+                        AgentStopReason.FromToolResult(executionResult),
+                        executionResult.ErrorCode ?? ToolErrorCode.ToolExecutionFailed,
+                        executionResult.Summary,
+                        executionResult.Retryable);
+                    state.CompleteStep(step, toolFailure.Status, toolFailure.StopReason);
+                    RecordError(events, toolFailure, step);
+                    return CreateFailureResult(toolFailure, recordedToolCalls, events, state);
+                }
             }
 
-            if (TryCreateTimeoutResult(deadlineUtc, recordedToolCalls, events, out timeoutResult))
+            state.CompleteStep(step, DiagnosticEventStatus.Success);
+
+            if (TryCreateTimeoutResult(state, recordedToolCalls, events, out timeoutResult))
             {
                 return timeoutResult!;
             }
@@ -154,11 +166,11 @@ public sealed class OfflineAgentRunner : IAgentRunner
             if (!TryInvokeModelContinue(
                 request,
                 toolResults,
-                limits,
-                deadlineUtc,
+                state,
                 cancellationToken,
                 recordedToolCalls,
                 events,
+                step,
                 out turn,
                 out modelCallDurationMs,
                 out modelTimeoutResult))
@@ -167,34 +179,29 @@ public sealed class OfflineAgentRunner : IAgentRunner
             }
 
             currentTurn = turn!;
-            RecordModelTurn(events, currentTurn, modelCallDurationMs);
-            if (TryCreateTimeoutResult(deadlineUtc, recordedToolCalls, events, out timeoutResult))
+            RecordModelTurn(events, currentTurn, modelCallDurationMs, step);
+            if (TryCreateTimeoutResult(state, recordedToolCalls, events, out timeoutResult))
             {
                 return timeoutResult!;
             }
 
             if (currentTurn.IsFinal)
             {
-                RecordFinalResponse(events, currentTurn.FinalText!);
-                return AgentRunResult.Success(currentTurn.FinalText!, recordedToolCalls, events);
+                state.StopSuccess();
+                RecordFinalResponse(events, currentTurn.FinalText!, state);
+                return AgentRunResult.Success(
+                    currentTurn.FinalText!,
+                    recordedToolCalls,
+                    events,
+                    state.Steps,
+                    state.StopReason ?? AgentStopReason.Completed);
             }
         }
-
-        AgentError loopLimitError = new(
-            "agent-loop-limit-reached",
-            "Agent loop reached the maximum iteration limit.",
-            Retryable: false);
-        RecordError(events, loopLimitError);
-        return AgentRunResult.Failure(
-            loopLimitError,
-            recordedToolCalls,
-            events);
     }
 
     private bool TryInvokeModelStart(
         AgentRunRequest request,
-        AgentRunLimits limits,
-        DateTimeOffset deadlineUtc,
+        AgentRunState state,
         CancellationToken cancellationToken,
         IReadOnlyList<ConversationToolCall> recordedToolCalls,
         List<AgentRunEvent> events,
@@ -202,12 +209,14 @@ public sealed class OfflineAgentRunner : IAgentRunner
         out long? durationMs,
         out AgentRunResult? result)
     {
+        AgentRunLimits limits = state.Limits;
+        DateTimeOffset deadlineUtc = state.DeadlineUtc;
         TimeSpan remainingOverallTimeout = deadlineUtc - utcNowProvider();
         if (remainingOverallTimeout <= TimeSpan.Zero)
         {
             turn = null;
             durationMs = null;
-            result = CreateOverallTimeoutResult(recordedToolCalls, events);
+            result = CreateOverallTimeoutResult(state, recordedToolCalls, events);
             return false;
         }
 
@@ -242,19 +251,19 @@ public sealed class OfflineAgentRunner : IAgentRunner
                     || overallTimeoutSource.IsCancellationRequested
                     || utcNowProvider() > deadlineUtc))
             {
-                result = CreateModelCallTimeoutResult(recordedToolCalls, events, durationMs);
+                result = CreateModelCallTimeoutResult(state, recordedToolCalls, events, durationMs);
                 return false;
             }
 
             if (overallTimeoutSource.IsCancellationRequested || utcNowProvider() > deadlineUtc)
             {
-                result = CreateOverallTimeoutResult(recordedToolCalls, events, durationMs);
+                result = CreateOverallTimeoutResult(state, recordedToolCalls, events, durationMs);
                 return false;
             }
 
             if (modelTimeoutSource.IsCancellationRequested)
             {
-                result = CreateModelCallTimeoutResult(recordedToolCalls, events, durationMs);
+                result = CreateModelCallTimeoutResult(state, recordedToolCalls, events, durationMs);
                 return false;
             }
 
@@ -265,21 +274,23 @@ public sealed class OfflineAgentRunner : IAgentRunner
     private bool TryInvokeModelContinue(
         AgentRunRequest request,
         IReadOnlyList<AgentToolCallResult> toolResults,
-        AgentRunLimits limits,
-        DateTimeOffset deadlineUtc,
+        AgentRunState state,
         CancellationToken cancellationToken,
         IReadOnlyList<ConversationToolCall> recordedToolCalls,
         List<AgentRunEvent> events,
+        AgentStep? step,
         out AgentModelTurn? turn,
         out long? durationMs,
         out AgentRunResult? result)
     {
+        AgentRunLimits limits = state.Limits;
+        DateTimeOffset deadlineUtc = state.DeadlineUtc;
         TimeSpan remainingOverallTimeout = deadlineUtc - utcNowProvider();
         if (remainingOverallTimeout <= TimeSpan.Zero)
         {
             turn = null;
             durationMs = null;
-            result = CreateOverallTimeoutResult(recordedToolCalls, events);
+            result = CreateOverallTimeoutResult(state, recordedToolCalls, events, step: step);
             return false;
         }
 
@@ -314,19 +325,19 @@ public sealed class OfflineAgentRunner : IAgentRunner
                     || overallTimeoutSource.IsCancellationRequested
                     || utcNowProvider() > deadlineUtc))
             {
-                result = CreateModelCallTimeoutResult(recordedToolCalls, events, durationMs);
+                result = CreateModelCallTimeoutResult(state, recordedToolCalls, events, durationMs, step);
                 return false;
             }
 
             if (overallTimeoutSource.IsCancellationRequested || utcNowProvider() > deadlineUtc)
             {
-                result = CreateOverallTimeoutResult(recordedToolCalls, events, durationMs);
+                result = CreateOverallTimeoutResult(state, recordedToolCalls, events, durationMs, step);
                 return false;
             }
 
             if (modelTimeoutSource.IsCancellationRequested)
             {
-                result = CreateModelCallTimeoutResult(recordedToolCalls, events, durationMs);
+                result = CreateModelCallTimeoutResult(state, recordedToolCalls, events, durationMs, step);
                 return false;
             }
 
@@ -337,21 +348,23 @@ public sealed class OfflineAgentRunner : IAgentRunner
     private bool TryExecuteTool(
         AgentToolCallRequest toolCall,
         ToolExecutionContext context,
-        DateTimeOffset deadlineUtc,
+        AgentRunState state,
         CancellationToken cancellationToken,
         IReadOnlyList<ConversationToolCall> recordedToolCalls,
         List<AgentRunEvent> events,
+        AgentStep? step,
         out ToolExecutionResult executionResult,
         out long? durationMs,
         out AgentRunResult? result)
     {
+        DateTimeOffset deadlineUtc = state.DeadlineUtc;
         TimeSpan remainingOverallTimeout = deadlineUtc - utcNowProvider();
         if (remainingOverallTimeout <= TimeSpan.Zero)
         {
             executionResult = null!;
             durationMs = null;
-            RecordToolTimeout(events, toolCall, durationMs);
-            result = CreateOverallTimeoutResult(recordedToolCalls, events);
+            RecordToolTimeout(events, toolCall, durationMs, step);
+            result = CreateOverallTimeoutResult(state, recordedToolCalls, events, step: step);
             return false;
         }
 
@@ -382,8 +395,8 @@ public sealed class OfflineAgentRunner : IAgentRunner
             durationMs = durationClock.GetElapsedMilliseconds(startedTimestamp);
             if (overallTimeoutSource.IsCancellationRequested || utcNowProvider() > deadlineUtc)
             {
-                RecordToolTimeout(events, toolCall, durationMs);
-                result = CreateOverallTimeoutResult(recordedToolCalls, events, durationMs);
+                RecordToolTimeout(events, toolCall, durationMs, step);
+                result = CreateOverallTimeoutResult(state, recordedToolCalls, events, durationMs, step);
                 return false;
             }
 
@@ -392,48 +405,68 @@ public sealed class OfflineAgentRunner : IAgentRunner
     }
 
     private AgentRunResult CreateModelCallTimeoutResult(
+        AgentRunState state,
         IReadOnlyList<ConversationToolCall> recordedToolCalls,
         List<AgentRunEvent> events,
-        long? durationMs = null)
+        long? durationMs = null,
+        AgentStep? step = null)
     {
-        AgentError timeoutError = new(
-            "agent-model-call-timeout-reached",
-            "Agent model call reached the timeout.",
-            Retryable: false);
-        RecordError(events, timeoutError, DiagnosticEventStatus.Timeout, durationMs);
-        return AgentRunResult.Failure(timeoutError, recordedToolCalls, events);
+        AgentLoopError timeoutError = state.StopModelTimeout();
+        state.CompleteStep(step, timeoutError.Status, timeoutError.StopReason);
+        RecordError(events, timeoutError, step, durationMs);
+        return CreateFailureResult(timeoutError, recordedToolCalls, events, state);
     }
 
     private AgentRunResult CreateOverallTimeoutResult(
+        AgentRunState state,
         IReadOnlyList<ConversationToolCall> recordedToolCalls,
         List<AgentRunEvent> events,
-        long? durationMs = null)
+        long? durationMs = null,
+        AgentStep? step = null)
     {
-        AgentError timeoutError = new(
-            "agent-overall-timeout-reached",
-            "Agent loop reached the overall timeout.",
-            Retryable: false);
-        RecordError(events, timeoutError, DiagnosticEventStatus.Timeout, durationMs);
-        return AgentRunResult.Failure(timeoutError, recordedToolCalls, events);
+        AgentLoopError timeoutError = state.StopOverallTimeout();
+        state.CompleteStep(step, timeoutError.Status, timeoutError.StopReason);
+        RecordError(events, timeoutError, step, durationMs);
+        return CreateFailureResult(timeoutError, recordedToolCalls, events, state);
     }
 
     private bool TryCreateTimeoutResult(
-        DateTimeOffset deadlineUtc,
+        AgentRunState state,
         IReadOnlyList<ConversationToolCall> recordedToolCalls,
         List<AgentRunEvent> events,
         out AgentRunResult? result)
     {
-        if (utcNowProvider() <= deadlineUtc)
+        if (!state.TryCreateOverallTimeoutError(out AgentLoopError? error))
         {
             result = null;
             return false;
         }
 
-        result = CreateOverallTimeoutResult(recordedToolCalls, events);
+        RecordError(events, error!, step: null);
+        result = CreateFailureResult(error!, recordedToolCalls, events, state);
         return true;
     }
 
-    private void RecordModelTurn(List<AgentRunEvent> events, AgentModelTurn turn, long? durationMs)
+    private static AgentRunResult CreateFailureResult(
+        AgentLoopError error,
+        IReadOnlyList<ConversationToolCall> recordedToolCalls,
+        IReadOnlyList<AgentRunEvent> events,
+        AgentRunState state)
+    {
+        return AgentRunResult.Failure(
+            error.ToAgentError(),
+            recordedToolCalls,
+            events,
+            state.Steps,
+            error.StopReason,
+            error.Status);
+    }
+
+    private void RecordModelTurn(
+        List<AgentRunEvent> events,
+        AgentModelTurn turn,
+        long? durationMs,
+        AgentStep? step)
     {
         Dictionary<string, string> payload = new()
         {
@@ -448,10 +481,14 @@ public sealed class OfflineAgentRunner : IAgentRunner
             Summary: turn.IsFinal ? turn.FinalText : null,
             Payload: payload,
             Status: DiagnosticEventStatus.Success,
-            DurationMs: durationMs));
+            DurationMs: durationMs,
+            StepIndex: step?.Index));
     }
 
-    private void RecordToolCall(List<AgentRunEvent> events, AgentToolCallRequest toolCall)
+    private void RecordToolCall(
+        List<AgentRunEvent> events,
+        AgentToolCallRequest toolCall,
+        AgentStep? step)
     {
         events.Add(new AgentRunEvent(
             Type: "tool.call",
@@ -464,14 +501,16 @@ public sealed class OfflineAgentRunner : IAgentRunner
                 ["toolName"] = toolCall.ToolName,
                 ["argumentsJson"] = toolCall.ArgumentsJson
             },
-            Status: DiagnosticEventStatus.Started));
+            Status: DiagnosticEventStatus.Started,
+            StepIndex: step?.Index));
     }
 
     private void RecordToolResult(
         List<AgentRunEvent> events,
         AgentToolCallRequest toolCall,
         ToolExecutionResult result,
-        long? durationMs)
+        long? durationMs,
+        AgentStep? step)
     {
         Dictionary<string, string> payload = new()
         {
@@ -495,13 +534,15 @@ public sealed class OfflineAgentRunner : IAgentRunner
             ApprovalStatus: result.ApprovalStatus,
             Status: result.Succeeded ? DiagnosticEventStatus.Success : DiagnosticEventStatus.Failure,
             DurationMs: durationMs,
-            ApprovalDurationMs: result.ApprovalDurationMs));
+            ApprovalDurationMs: result.ApprovalDurationMs,
+            StepIndex: step?.Index));
     }
 
     private void RecordToolTimeout(
         List<AgentRunEvent> events,
         AgentToolCallRequest toolCall,
-        long? durationMs)
+        long? durationMs,
+        AgentStep? step)
     {
         events.Add(new AgentRunEvent(
             Type: "tool.result",
@@ -517,23 +558,29 @@ public sealed class OfflineAgentRunner : IAgentRunner
             },
             ErrorCode: "agent-overall-timeout-reached",
             Status: DiagnosticEventStatus.Timeout,
-            DurationMs: durationMs));
+            DurationMs: durationMs,
+            StepIndex: step?.Index,
+            StopReason: AgentStopReason.ToolTimeout));
     }
 
-    private void RecordFinalResponse(List<AgentRunEvent> events, string finalText)
+    private void RecordFinalResponse(
+        List<AgentRunEvent> events,
+        string finalText,
+        AgentRunState state)
     {
         events.Add(new AgentRunEvent(
             Type: "final.response",
             Sequence: events.Count,
             Timestamp: utcNowProvider(),
             Summary: finalText,
-            Status: DiagnosticEventStatus.Success));
+            Status: DiagnosticEventStatus.Success,
+            StopReason: state.StopReason ?? AgentStopReason.Completed));
     }
 
     private void RecordError(
         List<AgentRunEvent> events,
-        AgentError error,
-        string status = DiagnosticEventStatus.Failure,
+        AgentLoopError error,
+        AgentStep? step,
         long? durationMs = null)
     {
         events.Add(new AgentRunEvent(
@@ -541,9 +588,11 @@ public sealed class OfflineAgentRunner : IAgentRunner
             Sequence: events.Count,
             Timestamp: utcNowProvider(),
             Message: error.SafeMessage,
-            ErrorCode: error.LocalErrorCode,
-            Status: status,
-            DurationMs: durationMs));
+            ErrorCode: error.ErrorCode,
+            Status: error.Status,
+            DurationMs: durationMs,
+            StepIndex: step?.Index,
+            StopReason: error.StopReason));
     }
 
     private static void AddStructuredDiagnosticPayload(

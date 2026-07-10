@@ -16,7 +16,20 @@ public sealed class CliConfigFile
 
     public ShellPolicyConfig? ShellPolicy { get; init; }
 
+    public AgentRunLimitsConfig? AgentRunLimits { get; init; }
+
     public Dictionary<string, McpServerConfig>? McpServers { get; init; }
 
     public Dictionary<string, WorkflowProfileConfig>? WorkflowProfiles { get; init; }
+}
+
+public sealed class AgentRunLimitsConfig
+{
+    public int? MaxSteps { get; init; }
+
+    public int? MaxTurns { get; init; }
+
+    public int? MaxToolCalls { get; init; }
+
+    public int? TimeoutSeconds { get; init; }
 }

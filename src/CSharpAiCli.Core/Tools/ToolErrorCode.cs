@@ -3,6 +3,7 @@ namespace CSharpAiCli.Core;
 public static class ToolErrorCode
 {
     public const string UnknownTool = "unknown-tool";
+    public const string ToolDisabled = "tool-disabled";
     public const string InvalidToolArguments = "invalid-tool-arguments";
     public const string ToolReturnedNull = "tool-returned-null";
     public const string ToolExecutionFailed = "tool-execution-failed";

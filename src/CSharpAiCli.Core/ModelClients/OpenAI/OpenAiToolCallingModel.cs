@@ -71,7 +71,7 @@ public sealed class OpenAiToolCallingModel : IToolCallingModel
             Prompt: null,
             PreviousResponseId: previousResponseId,
             Instructions: request.Instructions ?? instructions,
-            Tools: [],
+            Tools: OpenAiToolDefinitionMapper.FromRegistry(registry),
             ToolResults: toolResults.Select(ToToolResultInput).ToArray());
 
         OpenAiResponseEnvelope response = gateway.CreateAgentResponse(
@@ -89,6 +89,8 @@ public sealed class OpenAiToolCallingModel : IToolCallingModel
             Succeeded: toolResult.Result.Succeeded,
             Summary: toolResult.Result.Summary,
             ErrorCode: toolResult.Result.ErrorCode,
-            ApprovalStatus: toolResult.Result.ApprovalStatus);
+            ApprovalStatus: toolResult.Result.ApprovalStatus,
+            Retryable: toolResult.Result.Retryable,
+            StructuredPayload: toolResult.Result.StructuredPayload);
     }
 }

@@ -10,9 +10,20 @@ $ErrorActionPreference = "Stop"
 
 $scriptRoot = Split-Path -Parent $MyInvocation.MyCommand.Path
 $repoRoot = Resolve-Path (Join-Path $scriptRoot "..")
+$propsPath = Join-Path $repoRoot "Directory.Build.props"
+
+if (-not (Test-Path -LiteralPath $propsPath)) {
+    throw "Version metadata not found: $propsPath"
+}
+
+[xml]$props = Get-Content -LiteralPath $propsPath -Raw
+$releaseVersion = [string]$props.Project.PropertyGroup.Version
+if ([string]::IsNullOrWhiteSpace($releaseVersion)) {
+    throw "Directory.Build.props must define a Version property."
+}
 
 if ([string]::IsNullOrWhiteSpace($ExecutablePath)) {
-    $ExecutablePath = Join-Path $repoRoot "artifacts\release\caicli-0.2.0-win-x64\caicli.exe"
+    $ExecutablePath = Join-Path $repoRoot "artifacts\release\caicli-$releaseVersion-win-x64\caicli.exe"
 }
 
 if (-not (Test-Path -LiteralPath $ExecutablePath)) {
@@ -281,6 +292,7 @@ $oldUserProfile = $env:USERPROFILE
 $oldCaiCliUserProfile = $env:CAICLI_USER_PROFILE
 $oldOpenAiKey = $env:OPENAI_API_KEY
 $oldOpenAiModel = $env:OPENAI_MODEL
+$realModelSmokeOptIn = [System.String]::Equals($env:CAICLI_REAL_MODEL_SMOKE, "1", [System.StringComparison]::Ordinal)
 
 try {
     New-Item -ItemType Directory -Path $workspace, $userProfile | Out-Null
@@ -297,7 +309,7 @@ try {
 
     $version = Invoke-CaiCli -Arguments @("version")
     Assert-ExitCode $version 0 "version"
-    Assert-Contains $version.Output "caicli 0.2.0" "version"
+    Assert-Contains $version.Output "caicli $releaseVersion" "version"
 
     $configGet = Invoke-CaiCli -Arguments @("config", "get", "--workspace", $workspace)
     Assert-ExitCode $configGet 0 "config get"
@@ -413,14 +425,48 @@ try {
     )
     Assert-ExitCode $execMissingKey 1 "exec missing key"
     Assert-Contains $execMissingKey.Output "missing-openai-api-key" "exec missing key"
-
-    $env:OPENAI_API_KEY = "sk-smoke-local"
-    $execBackendUnavailable = Invoke-CaiCli -Arguments @("exec", "--workspace", $workspace, "summarize workspace")
-    Assert-ExitCode $execBackendUnavailable 1 "exec backend unavailable"
-    Assert-Contains $execBackendUnavailable.Output "errorCode=agent-backend-unavailable" "exec backend unavailable"
-    Assert-NotContains $execBackendUnavailable.Output "sk-smoke-local" "exec backend unavailable redaction"
     Remove-Item Env:OPENAI_API_KEY -ErrorAction SilentlyContinue
     Remove-Item Env:OPENAI_MODEL -ErrorAction SilentlyContinue
+
+    if (-not $realModelSmokeOptIn) {
+        Write-Host "real model smoke skipped: set CAICLI_REAL_MODEL_SMOKE=1 to enable read-only exec with caller OPENAI_API_KEY/OPENAI_MODEL."
+    } else {
+        $missingRealModelSettings = @()
+        if ([string]::IsNullOrWhiteSpace($oldOpenAiKey)) {
+            $missingRealModelSettings += "OPENAI_API_KEY"
+        }
+
+        if ([string]::IsNullOrWhiteSpace($oldOpenAiModel)) {
+            $missingRealModelSettings += "OPENAI_MODEL"
+        }
+
+        if ($missingRealModelSettings.Count -gt 0) {
+            Write-Host "real model smoke skipped: CAICLI_REAL_MODEL_SMOKE=1 requires caller $($missingRealModelSettings -join ' and ')."
+        } else {
+            try {
+                $env:OPENAI_API_KEY = $oldOpenAiKey
+                $env:OPENAI_MODEL = $oldOpenAiModel
+
+                $noteBeforeRealModelExec = Get-Content -LiteralPath (Join-Path $workspace "note.txt") -Raw
+                $realModelExec = Invoke-CaiCli -Arguments @(
+                    "exec", "--workspace", $workspace, "--approval", "never",
+                    "--max-turns", "2", "--max-tool-calls", "1", "--timeout-seconds", "60",
+                    "Use workspace.read_text to read note.txt, then summarize it in one sentence. Do not modify files or run shell commands."
+                )
+                Assert-ExitCode $realModelExec 0 "real model read-only exec"
+                Assert-Contains $realModelExec.Output "result: success" "real model read-only exec"
+                Assert-Contains $realModelExec.Output "workspace.read_text" "real model read-only exec tool call"
+                $noteAfterRealModelExec = Get-Content -LiteralPath (Join-Path $workspace "note.txt") -Raw
+                if ($noteAfterRealModelExec -ne $noteBeforeRealModelExec) {
+                    throw "real model read-only exec modified note.txt."
+                }
+            }
+            finally {
+                Remove-Item Env:OPENAI_API_KEY -ErrorAction SilentlyContinue
+                Remove-Item Env:OPENAI_MODEL -ErrorAction SilentlyContinue
+            }
+        }
+    }
 
     $patchArguments = New-ArgumentsFile "patch-arguments.json" '{"path":"note.txt","find":"before","replace":"after"}'
     $approvalDenied = Invoke-CaiCli -Arguments @(

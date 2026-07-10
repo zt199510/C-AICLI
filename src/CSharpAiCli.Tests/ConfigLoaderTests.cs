@@ -67,6 +67,28 @@ public sealed class ConfigLoaderTests
     }
 
     [Fact]
+    public void CliConfigFile_deserializes_agent_run_limits_from_camel_case_json()
+    {
+        CliConfigFile? config = JsonSerializer.Deserialize<CliConfigFile>(
+            """
+            {
+              "agentRunLimits": {
+                "maxSteps": 4,
+                "maxToolCalls": 9,
+                "timeoutSeconds": 11
+              }
+            }
+            """,
+            new JsonSerializerOptions(JsonSerializerDefaults.Web));
+
+        Assert.NotNull(config);
+        Assert.NotNull(config.AgentRunLimits);
+        Assert.Equal(4, config.AgentRunLimits.MaxSteps);
+        Assert.Equal(9, config.AgentRunLimits.MaxToolCalls);
+        Assert.Equal(11, config.AgentRunLimits.TimeoutSeconds);
+    }
+
+    [Fact]
     public void CliConfigFile_deserializes_shell_policy_from_camel_case_json()
     {
         CliConfigFile? config = JsonSerializer.Deserialize<CliConfigFile>(
@@ -436,6 +458,120 @@ public sealed class ConfigLoaderTests
             Assert.Contains(workspaceConfigPath, workspaceConfiguration.LoadedConfigPaths);
             Assert.Equal(ApprovalMode.OnRequest, defaultConfiguration.ApprovalMode);
             Assert.Equal("default", defaultConfiguration.ApprovalModeSource);
+        }
+        finally
+        {
+            Directory.Delete(root, recursive: true);
+        }
+    }
+
+    [Fact]
+    public void Load_uses_agent_run_limits_from_config_with_user_priority()
+    {
+        string root = CreateTempDirectory();
+
+        try
+        {
+            string userProfile = Path.Combine(root, "home");
+            string workspaceRoot = Path.Combine(root, "workspace");
+            Directory.CreateDirectory(userProfile);
+            Directory.CreateDirectory(workspaceRoot);
+
+            string userConfigPath = Path.Combine(userProfile, ".caicli", "config.json");
+            Directory.CreateDirectory(Path.GetDirectoryName(userConfigPath)!);
+            File.WriteAllText(userConfigPath, """
+            {
+              "agentRunLimits": {
+                "maxSteps": 4,
+                "maxToolCalls": 9,
+                "timeoutSeconds": 11
+              }
+            }
+            """);
+            string workspaceConfigPath = Path.Combine(workspaceRoot, ".caicli", "config.json");
+            Directory.CreateDirectory(Path.GetDirectoryName(workspaceConfigPath)!);
+            File.WriteAllText(workspaceConfigPath, """
+            {
+              "agentRunLimits": {
+                "maxSteps": 2,
+                "maxToolCalls": 3,
+                "timeoutSeconds": 5
+              }
+            }
+            """);
+
+            WorkspaceContext workspace = WorkspaceContext.Detect(workspaceRoot, root);
+            EffectiveConfiguration configuration = ConfigLoader.Load(
+                workspace,
+                userProfile: userProfile,
+                openAiApiKey: "");
+
+            Assert.Equal(4, configuration.AgentRunLimits.MaxSteps);
+            Assert.Equal(9, configuration.AgentRunLimits.MaxToolCalls);
+            Assert.Equal(TimeSpan.FromSeconds(11), configuration.AgentRunLimits.OverallTimeout);
+            Assert.Equal(TimeSpan.FromSeconds(11), configuration.AgentRunLimits.ModelCallTimeout);
+            Assert.Equal("user config", configuration.AgentRunMaxStepsSource);
+            Assert.Equal("user config", configuration.AgentRunMaxToolCallsSource);
+            Assert.Equal("user config", configuration.AgentRunTimeoutSource);
+            Assert.Contains(userConfigPath, configuration.LoadedConfigPaths);
+            Assert.Contains(workspaceConfigPath, configuration.LoadedConfigPaths);
+        }
+        finally
+        {
+            Directory.Delete(root, recursive: true);
+        }
+    }
+
+    [Fact]
+    public void Load_warns_for_invalid_agent_run_limits_and_falls_back_to_workspace()
+    {
+        string root = CreateTempDirectory();
+
+        try
+        {
+            string userProfile = Path.Combine(root, "home");
+            string workspaceRoot = Path.Combine(root, "workspace");
+            Directory.CreateDirectory(userProfile);
+            Directory.CreateDirectory(workspaceRoot);
+
+            string userConfigPath = Path.Combine(userProfile, ".caicli", "config.json");
+            Directory.CreateDirectory(Path.GetDirectoryName(userConfigPath)!);
+            File.WriteAllText(userConfigPath, """
+            {
+              "agentRunLimits": {
+                "maxSteps": 0,
+                "maxToolCalls": -1,
+                "timeoutSeconds": 0
+              }
+            }
+            """);
+            string workspaceConfigPath = Path.Combine(workspaceRoot, ".caicli", "config.json");
+            Directory.CreateDirectory(Path.GetDirectoryName(workspaceConfigPath)!);
+            File.WriteAllText(workspaceConfigPath, """
+            {
+              "agentRunLimits": {
+                "maxSteps": 3,
+                "maxToolCalls": 5,
+                "timeoutSeconds": 7
+              }
+            }
+            """);
+
+            WorkspaceContext workspace = WorkspaceContext.Detect(workspaceRoot, root);
+            EffectiveConfiguration configuration = ConfigLoader.Load(
+                workspace,
+                userProfile: userProfile,
+                openAiApiKey: "");
+
+            Assert.Equal(3, configuration.AgentRunLimits.MaxSteps);
+            Assert.Equal(5, configuration.AgentRunLimits.MaxToolCalls);
+            Assert.Equal(TimeSpan.FromSeconds(7), configuration.AgentRunLimits.OverallTimeout);
+            Assert.Equal("workspace config", configuration.AgentRunMaxStepsSource);
+            Assert.Equal("workspace config", configuration.AgentRunMaxToolCallsSource);
+            Assert.Equal("workspace config", configuration.AgentRunTimeoutSource);
+            Assert.Contains(configuration.Warnings, warning => warning.Contains("ignored invalid agentRunLimits.maxSteps from user config", StringComparison.Ordinal));
+            Assert.Contains(configuration.Warnings, warning => warning.Contains("ignored invalid agentRunLimits.maxToolCalls from user config", StringComparison.Ordinal));
+            Assert.Contains(configuration.Warnings, warning => warning.Contains("ignored invalid agentRunLimits.timeoutSeconds from user config", StringComparison.Ordinal));
         }
         finally
         {

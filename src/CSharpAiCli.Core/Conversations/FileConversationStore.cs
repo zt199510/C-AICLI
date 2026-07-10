@@ -130,6 +130,7 @@ public sealed class FileConversationStore : IConversationStore
             Messages = sourceTranscript.Messages,
             ToolCalls = sourceTranscript.ToolCalls,
             Errors = sourceTranscript.Errors,
+            AgentRuns = sourceTranscript.AgentRuns,
         };
 
         string json = JsonSerializer.Serialize(destinationTranscript, JsonOptions);
@@ -210,9 +211,11 @@ public sealed class FileConversationStore : IConversationStore
             transcript.Messages is null ||
             transcript.ToolCalls is null ||
             transcript.Errors is null ||
+            transcript.AgentRuns is null ||
             transcript.Messages.Any(message => message is null) ||
             transcript.ToolCalls.Any(toolCall => toolCall is null) ||
-            transcript.Errors.Any(error => error is null))
+            transcript.Errors.Any(error => error is null) ||
+            transcript.AgentRuns.Any(run => run is null))
         {
             throw new InvalidOperationException(InvalidTranscriptMessage);
         }
