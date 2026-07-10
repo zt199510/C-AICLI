@@ -60,6 +60,7 @@ public sealed class ExecRendererTests
             },
             ErrorCode: "none",
             ApprovalStatus: "approved",
+            ApprovalDurationMs: 12,
             Status: "started");
         ExecEvent plainEvent = new(
             Type: "task.completed",
@@ -89,6 +90,7 @@ public sealed class ExecRendererTests
         Assert.Equal("dotnet test", first.GetProperty("payload").GetProperty("command").GetString());
         Assert.Equal("none", first.GetProperty("errorCode").GetString());
         Assert.Equal("approved", first.GetProperty("approvalStatus").GetString());
+        Assert.Equal(12, first.GetProperty("approvalDurationMs").GetInt64());
         Assert.Equal("started", first.GetProperty("status").GetString());
 
         JsonElement second = JsonSerializer.Deserialize<JsonElement>(lines[1]);

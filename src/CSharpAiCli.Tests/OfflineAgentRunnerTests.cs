@@ -197,6 +197,63 @@ public sealed class OfflineAgentRunnerTests
     }
 
     [Fact]
+    public void Run_records_approval_duration_on_tool_result_events()
+    {
+        ToolRegistry registry = new();
+        registry.Register(new ApprovalDiagnosticTool());
+        OfflineAgentRunner runner = new(
+            new FakeToolCallingModel(
+                startTurn: AgentModelTurn.RequestTools(new AgentToolCallRequest(
+                    CallId: "call_approval",
+                    ToolName: "test.approval-diagnostic",
+                    ArgumentsJson: "{}")),
+                continueFactory: _ => AgentModelTurn.Final("done")),
+            new ToolExecutor(registry),
+            () => DateTimeOffset.Parse("2024-01-01T00:00:05Z"));
+
+        AgentRunResult result = runner.Run(CreateRequest());
+
+        AgentRunEvent toolResult = Assert.Single(result.Events, agentEvent => agentEvent.Type == "tool.result");
+        Assert.Equal("approved", toolResult.ApprovalStatus);
+        Assert.Equal(23, toolResult.ApprovalDurationMs);
+    }
+
+    [Fact]
+    public void Run_exposes_mcp_status_and_duration_in_json_tool_result_payload()
+    {
+        ToolRegistry registry = new();
+        registry.Register(new McpDiagnosticTool());
+        OfflineAgentRunner runner = new(
+            new FakeToolCallingModel(
+                startTurn: AgentModelTurn.RequestTools(new AgentToolCallRequest(
+                    CallId: "call_mcp",
+                    ToolName: "mcp.fixture.call",
+                    ArgumentsJson: "{}")),
+                continueFactory: _ => AgentModelTurn.Final("done")),
+            new ToolExecutor(registry),
+            () => DateTimeOffset.Parse("2024-01-01T00:00:05Z"));
+
+        AgentRunResult result = runner.Run(CreateRequest());
+        ExecResult execResult = AgentExecResultAdapter.FromAgentResult(result);
+        using StringWriter writer = new();
+        ExecJsonRenderer renderer = new(writer);
+        foreach (ExecEvent execEvent in execResult.Events)
+        {
+            renderer.WriteEvent(execEvent);
+        }
+
+        JsonElement toolResult = writer.ToString()
+            .TrimEnd()
+            .Split(Environment.NewLine)
+            .Select(line => JsonSerializer.Deserialize<JsonElement>(line))
+            .Single(element => element.GetProperty("type").GetString() == "tool.result");
+
+        JsonElement payload = toolResult.GetProperty("payload");
+        Assert.Equal("success", payload.GetProperty("mcpStatus").GetString());
+        Assert.Equal("17", payload.GetProperty("mcpDurationMs").GetString());
+    }
+
+    [Fact]
     public void Run_records_tool_failure_and_continues_model_loop()
     {
         ToolExecutor executor = new(new ToolRegistry());
@@ -715,6 +772,54 @@ public sealed class OfflineAgentRunnerTests
 
             return ToolExecutionResult.Success(
                 "Read notes.txt.",
+                structuredPayload: payload);
+        }
+    }
+
+    private sealed class ApprovalDiagnosticTool : ITool
+    {
+        public ToolDefinition Definition { get; } = new(
+            "test.approval-diagnostic",
+            "Returns approval diagnostics.",
+            """{"type":"object"}""");
+
+        public ToolExecutionResult Execute(
+            ToolExecutionContext context,
+            CancellationToken cancellationToken = default)
+        {
+            return ToolExecutionResult.Success(
+                "Approval diagnostic completed.",
+                "approved",
+                approvalDurationMs: 23);
+        }
+    }
+
+    private sealed class McpDiagnosticTool : ITool
+    {
+        public ToolDefinition Definition { get; } = new(
+            "mcp.fixture.call",
+            "Returns MCP diagnostics.",
+            """{"type":"object"}""");
+
+        public ToolExecutionResult Execute(
+            ToolExecutionContext context,
+            CancellationToken cancellationToken = default)
+        {
+            using JsonDocument document = JsonDocument.Parse("""
+            {
+              "mcpStatus": "success",
+              "mcpDurationMs": 17,
+              "structuredContent": {
+                "ok": true
+              }
+            }
+            """);
+            Dictionary<string, JsonElement> payload = document.RootElement
+                .EnumerateObject()
+                .ToDictionary(property => property.Name, property => property.Value);
+
+            return ToolExecutionResult.Success(
+                "MCP diagnostic completed.",
                 structuredPayload: payload);
         }
     }

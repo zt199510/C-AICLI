@@ -156,7 +156,8 @@ public sealed class ExecRunner : IExecRunner
             ErrorCode: toolResult.ErrorCode,
             ApprovalStatus: toolResult.ApprovalStatus,
             Status: toolResult.Succeeded ? DiagnosticEventStatus.Success : DiagnosticEventStatus.Failure,
-            DurationMs: CalculateDurationMs(started.Timestamp, completedTimestamp));
+            DurationMs: CalculateDurationMs(started.Timestamp, completedTimestamp),
+            ApprovalDurationMs: toolResult.ApprovalDurationMs);
 
         IReadOnlyList<ExecEvent> events = new[] { started, completed };
         return toolResult.Succeeded
@@ -241,6 +242,7 @@ public sealed class ExecRunner : IExecRunner
         WorkspaceContext workspace,
         CancellationToken cancellationToken)
     {
+        DateTimeOffset approvalStartedUtc = utcNowProvider();
         ApprovalDecision approval = approvalPolicy.RequestApproval(new ApprovalRequest(
             Operation: "workspace.apply_patch",
             Summary: "Create caicli-smoke.txt seed file for smoke note patch.",
@@ -259,13 +261,15 @@ public sealed class ExecRunner : IExecRunner
                 ["reason"] = "Smoke note seed creation writes a workspace file and requires approval."
             },
             RiskLevel: ToolRiskLevel.Write));
+        long approvalDurationMs = CalculateDurationMs(approvalStartedUtc, utcNowProvider());
 
         if (!approval.Approved)
         {
             return ToolExecutionResult.Failure(
                 "approval-denied",
                 approval.SafeMessage,
-                approvalStatus: approval.Status);
+                approvalStatus: approval.Status,
+                approvalDurationMs: approvalDurationMs);
         }
 
         cancellationToken.ThrowIfCancellationRequested();
@@ -278,6 +282,7 @@ public sealed class ExecRunner : IExecRunner
 
         return ToolExecutionResult.Success(
             "Created caicli-smoke.txt seed file.",
-            approval.Status);
+            approval.Status,
+            approvalDurationMs: approvalDurationMs);
     }
 }

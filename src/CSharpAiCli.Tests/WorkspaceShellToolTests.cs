@@ -51,6 +51,8 @@ public sealed class WorkspaceShellToolTests
         Assert.False(result.Succeeded);
         Assert.Equal(ToolErrorCode.ApprovalDenied, result.ErrorCode);
         Assert.Equal("denied", result.ApprovalStatus);
+        Assert.NotNull(result.ApprovalDurationMs);
+        Assert.True(result.ApprovalDurationMs >= 0);
         IReadOnlyDictionary<string, JsonElement> payload = AssertPayload(result);
         Assert.Equal("dotnet --version", payload["command"].GetString());
         Assert.Equal(".", payload["cwd"].GetString());

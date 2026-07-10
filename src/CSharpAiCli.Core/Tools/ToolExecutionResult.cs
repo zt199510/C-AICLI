@@ -11,7 +11,8 @@ public sealed record ToolExecutionResult(
     string? ErrorCode,
     bool Retryable,
     string ApprovalStatus = "not-required",
-    IReadOnlyDictionary<string, JsonElement>? StructuredPayload = null)
+    IReadOnlyDictionary<string, JsonElement>? StructuredPayload = null,
+    long? ApprovalDurationMs = null)
 {
     private readonly IReadOnlyDictionary<string, JsonElement>? structuredPayload =
         CopyStructuredPayload(StructuredPayload);
@@ -22,10 +23,13 @@ public sealed record ToolExecutionResult(
         init => structuredPayload = CopyStructuredPayload(value);
     }
 
+    public long? ApprovalDurationMs { get; init; } = ApprovalDurationMs;
+
     public static ToolExecutionResult Success(
         string summary,
         string approvalStatus = "not-required",
-        IReadOnlyDictionary<string, JsonElement>? structuredPayload = null)
+        IReadOnlyDictionary<string, JsonElement>? structuredPayload = null,
+        long? approvalDurationMs = null)
     {
         return new ToolExecutionResult(
             Succeeded: true,
@@ -33,7 +37,8 @@ public sealed record ToolExecutionResult(
             ErrorCode: null,
             Retryable: false,
             ApprovalStatus: approvalStatus,
-            StructuredPayload: structuredPayload);
+            StructuredPayload: structuredPayload,
+            ApprovalDurationMs: approvalDurationMs);
     }
 
     public static ToolExecutionResult Failure(
@@ -41,7 +46,8 @@ public sealed record ToolExecutionResult(
         string safeMessage,
         bool retryable = false,
         string approvalStatus = "not-required",
-        IReadOnlyDictionary<string, JsonElement>? structuredPayload = null)
+        IReadOnlyDictionary<string, JsonElement>? structuredPayload = null,
+        long? approvalDurationMs = null)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(errorCode);
 
@@ -51,7 +57,8 @@ public sealed record ToolExecutionResult(
             ErrorCode: errorCode,
             Retryable: retryable,
             ApprovalStatus: approvalStatus,
-            StructuredPayload: structuredPayload);
+            StructuredPayload: structuredPayload,
+            ApprovalDurationMs: approvalDurationMs);
     }
 
     private static IReadOnlyDictionary<string, JsonElement>? CopyStructuredPayload(

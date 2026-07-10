@@ -105,6 +105,11 @@ public sealed class ExecJsonRenderer
             envelope["approvalStatus"] = execEvent.ApprovalStatus;
         }
 
+        if (execEvent.ApprovalDurationMs.HasValue)
+        {
+            envelope["approvalDurationMs"] = execEvent.ApprovalDurationMs.Value;
+        }
+
         return envelope;
     }
 }

@@ -67,6 +67,11 @@ public sealed class ExecTextRenderer
             parts.Add($"approvalStatus={execEvent.ApprovalStatus}");
         }
 
+        if (execEvent.ApprovalDurationMs.HasValue)
+        {
+            parts.Add($"approvalDurationMs={execEvent.ApprovalDurationMs.Value.ToString(CultureInfo.InvariantCulture)}");
+        }
+
         if (execEvent.Payload is not null)
         {
             foreach (KeyValuePair<string, string> pair in execEvent.Payload.OrderBy(entry => entry.Key, StringComparer.Ordinal))

@@ -48,6 +48,8 @@ public sealed class WorkspacePatchToolTests
         Assert.False(result.Succeeded);
         Assert.Equal(ToolErrorCode.ApprovalDenied, result.ErrorCode);
         Assert.Equal("denied", result.ApprovalStatus);
+        Assert.NotNull(result.ApprovalDurationMs);
+        Assert.True(result.ApprovalDurationMs >= 0);
         Assert.Equal("hello world", File.ReadAllText(filePath));
         IReadOnlyDictionary<string, JsonElement> payload = AssertPayload(result);
         Assert.Equal("notes.txt", payload["path"].GetString());

@@ -49,7 +49,7 @@ public sealed class WorkspacePatchTool : ITool
                 structuredPayload: CreatePreviewFailurePayload(operation.Path, exception.ErrorCode));
         }
 
-        ApprovalDecision approval = approvalPolicy.RequestApproval(new ApprovalRequest(
+        ApprovalDiagnosticResult approval = ApprovalDiagnostics.Request(approvalPolicy, new ApprovalRequest(
             Operation: Definition.Name,
             Summary: preview.Summary,
             Diff: preview.Diff,
@@ -61,13 +61,14 @@ public sealed class WorkspacePatchTool : ITool
             },
             RiskLevel: Definition.RiskLevel));
 
-        if (!approval.Approved)
+        if (!approval.Decision.Approved)
         {
             return ToolExecutionResult.Failure(
                 ToolErrorCode.ApprovalDenied,
-                approval.SafeMessage,
-                approvalStatus: approval.Status,
-                structuredPayload: CreatePatchPayload(preview, approval.Status));
+                approval.Decision.SafeMessage,
+                approvalStatus: approval.Decision.Status,
+                structuredPayload: CreatePatchPayload(preview, approval.Decision.Status),
+                approvalDurationMs: approval.DurationMs);
         }
 
         cancellationToken.ThrowIfCancellationRequested();
@@ -75,17 +76,19 @@ public sealed class WorkspacePatchTool : ITool
         return applyResult.Succeeded
             ? ToolExecutionResult.Success(
                 applyResult.Summary,
-                approval.Status,
-                structuredPayload: CreatePatchPayload(preview, approval.Status, applyResult.Diff))
+                approval.Decision.Status,
+                structuredPayload: CreatePatchPayload(preview, approval.Decision.Status, applyResult.Diff),
+                approvalDurationMs: approval.DurationMs)
             : ToolExecutionResult.Failure(
                 applyResult.ErrorCode ?? ToolErrorCode.PatchApplyFailed,
                 applyResult.Summary,
-                approvalStatus: approval.Status,
+                approvalStatus: approval.Decision.Status,
                 structuredPayload: CreatePatchPayload(
                     preview,
-                    approval.Status,
+                    approval.Decision.Status,
                     applyResult.Diff,
-                    applyResult.ErrorCode ?? ToolErrorCode.PatchApplyFailed));
+                    applyResult.ErrorCode ?? ToolErrorCode.PatchApplyFailed),
+                approvalDurationMs: approval.DurationMs);
     }
 
     private static bool TryReadOperation(

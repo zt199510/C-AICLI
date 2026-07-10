@@ -468,6 +468,15 @@ public sealed class OfflineAgentRunner : IAgentRunner
         ToolExecutionResult result,
         long? durationMs)
     {
+        Dictionary<string, string> payload = new()
+        {
+            ["callId"] = toolCall.CallId,
+            ["toolName"] = toolCall.ToolName,
+            ["succeeded"] = result.Succeeded ? "true" : "false"
+        };
+        AddStructuredDiagnosticPayload(payload, result.StructuredPayload, "mcpStatus");
+        AddStructuredDiagnosticPayload(payload, result.StructuredPayload, "mcpDurationMs");
+
         events.Add(new AgentRunEvent(
             Type: "tool.result",
             Sequence: events.Count,
@@ -476,16 +485,12 @@ public sealed class OfflineAgentRunner : IAgentRunner
                 ? $"Tool '{toolCall.ToolName}' completed."
                 : $"Tool '{toolCall.ToolName}' failed.",
             Summary: result.Summary,
-            Payload: new Dictionary<string, string>
-            {
-                ["callId"] = toolCall.CallId,
-                ["toolName"] = toolCall.ToolName,
-                ["succeeded"] = result.Succeeded ? "true" : "false"
-            },
+            Payload: payload,
             ErrorCode: result.ErrorCode,
             ApprovalStatus: result.ApprovalStatus,
             Status: result.Succeeded ? DiagnosticEventStatus.Success : DiagnosticEventStatus.Failure,
-            DurationMs: durationMs));
+            DurationMs: durationMs,
+            ApprovalDurationMs: result.ApprovalDurationMs));
     }
 
     private void RecordFinalResponse(List<AgentRunEvent> events, string finalText)
@@ -517,5 +522,24 @@ public sealed class OfflineAgentRunner : IAgentRunner
     private static long CalculateDurationMs(DateTimeOffset startedUtc, DateTimeOffset completedUtc)
     {
         return Math.Max(0, (long)(completedUtc - startedUtc).TotalMilliseconds);
+    }
+
+    private static void AddStructuredDiagnosticPayload(
+        Dictionary<string, string> payload,
+        IReadOnlyDictionary<string, System.Text.Json.JsonElement>? structuredPayload,
+        string key)
+    {
+        if (structuredPayload is null || !structuredPayload.TryGetValue(key, out System.Text.Json.JsonElement value))
+        {
+            return;
+        }
+
+        if (value.ValueKind == System.Text.Json.JsonValueKind.String)
+        {
+            payload[key] = value.GetString() ?? string.Empty;
+            return;
+        }
+
+        payload[key] = value.GetRawText();
     }
 }

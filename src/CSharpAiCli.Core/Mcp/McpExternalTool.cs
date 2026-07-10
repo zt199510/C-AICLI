@@ -78,7 +78,7 @@ public sealed class McpExternalTool : ITool
                 "MCP server is not active.");
         }
 
-        ApprovalDecision approval = approvalPolicy.RequestApproval(new ApprovalRequest(
+        ApprovalDiagnosticResult approval = ApprovalDiagnostics.Request(approvalPolicy, new ApprovalRequest(
             Operation: definition.Name,
             Summary: $"Call MCP tool '{remoteToolName}' on server '{server.Name}'.",
             Diff: null,
@@ -92,24 +92,33 @@ public sealed class McpExternalTool : ITool
             },
             RiskLevel: definition.RiskLevel));
 
-        if (!approval.Approved)
+        if (!approval.Decision.Approved)
         {
             return ToolExecutionResult.Failure(
                 "approval-denied",
-                approval.SafeMessage,
-                approvalStatus: approval.Status);
+                approval.Decision.SafeMessage,
+                approvalStatus: approval.Decision.Status,
+                approvalDurationMs: approval.DurationMs);
         }
 
         if (!TryNormalizeArguments(context.ArgumentsJson, out string normalizedArguments, out ToolExecutionResult? failure))
         {
-            return failure with { ApprovalStatus = approval.Status };
+            return failure with
+            {
+                ApprovalStatus = approval.Decision.Status,
+                ApprovalDurationMs = approval.DurationMs
+            };
         }
 
         ToolExecutionResult result = invoker.Invoke(
             new McpToolRequest(server, remoteToolName, normalizedArguments),
             context.Workspace,
             cancellationToken);
-        return result with { ApprovalStatus = approval.Status };
+        return result with
+        {
+            ApprovalStatus = approval.Decision.Status,
+            ApprovalDurationMs = approval.DurationMs
+        };
     }
 
     private static bool TryNormalizeArguments(

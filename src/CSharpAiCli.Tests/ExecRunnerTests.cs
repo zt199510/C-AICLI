@@ -141,6 +141,31 @@ public sealed class ExecRunnerTests
         Assert.Equal("Smoke note seed creation writes a workspace file and requires approval.", approvalRequest.Metadata["reason"]);
     }
 
+    [Fact]
+    public void Run_create_smoke_note_seed_records_approval_status_and_duration()
+    {
+        using TempDirectory temp = TempDirectory.Create();
+        WorkspaceContext workspace = new(
+            RootPath: temp.Path,
+            ConfigPath: Path.Combine(temp.Path, ".caicli", "config.json"),
+            Status: WorkspaceStatus.Ready);
+        ExecRequest request = new(
+            Task: "create smoke note",
+            WorkspaceRoot: temp.Path);
+        DateTimeOffset now = DateTimeOffset.Parse("2026-06-09T10:30:00Z");
+        RecordingApprovalPolicy approvalPolicy = new(
+            ApprovalDecision.Deny("Denied by recording policy."),
+            () => now = now.AddMilliseconds(44));
+        ExecRunner runner = new(approvalPolicy, () => now);
+
+        ExecResult result = runner.Run(request, workspace, new MissingSmokeNotePatchExecutor());
+
+        Assert.False(result.IsSuccess);
+        ExecEvent failed = result.Events[1];
+        Assert.Equal("denied", failed.ApprovalStatus);
+        Assert.Equal(44, failed.ApprovalDurationMs);
+    }
+
     private sealed class RecordingToolExecutor(Action? afterCall = null) : IToolExecutor
     {
         public List<(string ToolName, ToolExecutionContext Context)> Calls { get; } = new();
@@ -174,7 +199,9 @@ public sealed class ExecRunnerTests
         }
     }
 
-    private sealed class RecordingApprovalPolicy(ApprovalDecision decision) : IApprovalPolicy
+    private sealed class RecordingApprovalPolicy(
+        ApprovalDecision decision,
+        Action? afterRequest = null) : IApprovalPolicy
     {
         private readonly List<ApprovalRequest> requests = [];
 
@@ -183,6 +210,7 @@ public sealed class ExecRunnerTests
         public ApprovalDecision RequestApproval(ApprovalRequest request)
         {
             requests.Add(request);
+            afterRequest?.Invoke();
             return decision;
         }
     }

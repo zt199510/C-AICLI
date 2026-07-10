@@ -78,7 +78,7 @@ public sealed class WorkspaceShellTool : ITool
             metadata["matchedRule"] = detection.MatchedRule;
         }
 
-        ApprovalDecision approval = approvalPolicy.RequestApproval(new ApprovalRequest(
+        ApprovalDiagnosticResult approval = ApprovalDiagnostics.Request(approvalPolicy, new ApprovalRequest(
             Operation: Definition.Name,
             Summary: $"Run shell command in workspace: {request.Command}",
             Diff: null,
@@ -86,18 +86,19 @@ public sealed class WorkspaceShellTool : ITool
             Metadata: metadata,
             RiskLevel: riskLevel));
 
-        if (!approval.Approved)
+        if (!approval.Decision.Approved)
         {
             return ToolExecutionResult.Failure(
                 ToolErrorCode.ApprovalDenied,
-                AppendCommandRiskSummary(approval.SafeMessage, commandRiskSummary),
-                approvalStatus: approval.Status,
+                AppendCommandRiskSummary(approval.Decision.SafeMessage, commandRiskSummary),
+                approvalStatus: approval.Decision.Status,
                 structuredPayload: CreateShellPayload(
                     request,
-                    approval.Status,
+                    approval.Decision.Status,
                     commandRiskSummary,
                     errorCode: ToolErrorCode.ApprovalDenied,
-                    matchedRule: matchedRule));
+                    matchedRule: matchedRule),
+                approvalDurationMs: approval.DurationMs);
         }
 
         ShellCommandResult shellResult = shellRunner.Run(context.Workspace, request, cancellationToken);
@@ -105,24 +106,26 @@ public sealed class WorkspaceShellTool : ITool
         return shellResult.Succeeded
             ? ToolExecutionResult.Success(
                 summary,
-                approval.Status,
+                approval.Decision.Status,
                 structuredPayload: CreateShellPayload(
                     request,
-                    approval.Status,
+                    approval.Decision.Status,
                     commandRiskSummary,
                     shellResult,
-                    matchedRule: matchedRule))
+                    matchedRule: matchedRule),
+                approvalDurationMs: approval.DurationMs)
             : ToolExecutionResult.Failure(
                 shellResult.ErrorCode ?? ToolErrorCode.ShellCommandFailed,
                 summary,
-                approvalStatus: approval.Status,
+                approvalStatus: approval.Decision.Status,
                 structuredPayload: CreateShellPayload(
                     request,
-                    approval.Status,
+                    approval.Decision.Status,
                     commandRiskSummary,
                     shellResult,
                     shellResult.ErrorCode ?? ToolErrorCode.ShellCommandFailed,
-                    matchedRule));
+                    matchedRule),
+                approvalDurationMs: approval.DurationMs);
     }
 
     private static string FormatSummary(ShellCommandResult result, string commandRiskSummary)
