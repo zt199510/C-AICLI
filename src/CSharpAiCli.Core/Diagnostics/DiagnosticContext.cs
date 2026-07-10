@@ -32,6 +32,8 @@ public sealed record DiagnosticContext
         Func<string>? sessionIdProvider = null,
         Func<DateTimeOffset>? utcNowProvider = null)
     {
+        ArgumentException.ThrowIfNullOrWhiteSpace(workspace);
+
         commandIdProvider ??= CreateId;
         sessionIdProvider ??= CreateId;
         utcNowProvider ??= () => DateTimeOffset.UtcNow;
