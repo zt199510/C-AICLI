@@ -1015,6 +1015,85 @@ public sealed class CliCommandFactoryTests
     }
 
     [Fact]
+    public void Config_list_command_accepts_verbose_and_writes_safe_diagnostics()
+    {
+        using TempDirectory temp = TempDirectory.Create();
+        using StringWriter output = new();
+        CliEnvironmentSnapshot snapshot = CreateSnapshot(
+            workspacePath: temp.Path,
+            apiKey: "sk-test-secret",
+            apiKeySource: "OPENAI_API_KEY",
+            model: "gpt-workspace",
+            baseUrl: "https://gateway.example.test/v1",
+            baseUrlSource: "workspace config");
+
+        int exitCode = CliCommandFactory
+            .Create(
+                output,
+                _ => snapshot,
+                (_, _) => { },
+                _ => new FakeChatModelClient(ChatModelResult.Success(new ChatResponse("openai", "gpt-test", "resp", ""))),
+                writer => new TerminalChatStreamingRenderer(writer),
+                _ => new FakeConversationStore(),
+                () => DateTimeOffset.Parse("2024-01-01T00:00:00Z"),
+                (_, _, _) => throw new InvalidOperationException("config list must not create an exec runner"))
+            .Parse(["config", "list", "--verbose"])
+            .Invoke();
+
+        string text = output.ToString();
+        string[] lines = text.Split(Environment.NewLine, StringSplitOptions.RemoveEmptyEntries);
+        Assert.Equal(0, exitCode);
+        Assert.Contains("C# AI CLI verbose diagnostics", text);
+        Assert.Contains("commandName: config list", text);
+        Assert.Contains(lines, line => line.StartsWith("commandId: ", StringComparison.Ordinal) && line.Length > "commandId: ".Length);
+        Assert.Contains(lines, line => line.StartsWith("sessionId: ", StringComparison.Ordinal) && line.Length > "sessionId: ".Length);
+        Assert.Contains("timestampUtc: 2024-01-01T00:00:00.0000000Z", text);
+        Assert.Contains($"workspace: {temp.Path}", text);
+        Assert.Contains("workspaceStatus: ready", text);
+        Assert.Contains("model: gpt-workspace", text);
+        Assert.Contains("modelSource: workspace config", text);
+        Assert.Contains("baseUrl: https://gateway.example.test/v1", text);
+        Assert.Contains("baseUrlSource: workspace config", text);
+        Assert.Contains("apiKey: present", text);
+        Assert.Contains("apiKeySource: OPENAI_API_KEY", text);
+        Assert.Contains("C# AI CLI effective configuration", text);
+        Assert.DoesNotContain("sk-test-secret", text, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Tools_call_verbose_redacts_secret_like_values_from_diagnostics()
+    {
+        using StringWriter output = new();
+        CliEnvironmentSnapshot snapshot = CreateSnapshot(
+            workspacePath: null,
+            apiKey: null,
+            apiKeySource: "missing",
+            model: "gpt-workspace",
+            baseUrl: "https://gateway.example.test/v1\napiKey: sk-command-secret",
+            baseUrlSource: "workspace config");
+
+        int exitCode = CliCommandFactory
+            .Create(
+                output,
+                _ => snapshot,
+                (_, _) => { },
+                _ => new FakeChatModelClient(ChatModelResult.Success(new ChatResponse("openai", "gpt-test", "resp", ""))),
+                writer => new TerminalChatStreamingRenderer(writer),
+                _ => new FakeConversationStore(),
+                () => DateTimeOffset.Parse("2024-01-01T00:00:00Z"),
+                (_, _, _) => throw new InvalidOperationException("tools call must not create an exec runner"))
+            .Parse(["tools", "call", "missing.tool", "{}", "--verbose"])
+            .Invoke();
+
+        string text = output.ToString();
+        Assert.Equal(1, exitCode);
+        Assert.Contains("C# AI CLI verbose diagnostics", text);
+        Assert.DoesNotContain("sk-command-secret", text, StringComparison.Ordinal);
+        Assert.DoesNotContain("apiKey: sk-command-secret", text, StringComparison.Ordinal);
+        Assert.Contains("apiKey: missing", text);
+    }
+
+    [Fact]
     public void Config_set_model_creates_user_config_json()
     {
         using TempDirectory temp = TempDirectory.Create();
@@ -2798,6 +2877,60 @@ public sealed class CliCommandFactoryTests
         Assert.Equal("success", result["payload"]?["status"]?.GetValue<string>());
         Assert.Equal(0, result["payload"]?["exitCode"]?.GetValue<int>());
         Assert.DoesNotContain("sk-test-secret", output.ToString(), StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Exec_output_json_with_verbose_remains_valid_ndjson_without_verbose_text()
+    {
+        using TempDirectory temp = TempDirectory.Create();
+        using StringWriter output = new();
+        FakeAgentRunner agentRunner = new(AgentRunResult.Success(
+            "json agent summary",
+            [],
+            [
+                new AgentRunEvent(
+                    Type: "model.turn",
+                    Sequence: 0,
+                    Timestamp: DateTimeOffset.Parse("2024-01-01T00:00:00Z"),
+                    Summary: "model planned")
+            ]));
+
+        int exitCode = CliCommandFactory
+            .Create(
+                output,
+                workspacePath => CreateSnapshot(
+                    workspacePath,
+                    apiKey: "sk-test-secret",
+                    apiKeySource: "OPENAI_API_KEY",
+                    model: "gpt-test"),
+                (_, _) => { },
+                _ => new FakeChatModelClient(ChatModelResult.Success(new ChatResponse("openai", "gpt-test", "resp", ""))),
+                writer => new TerminalChatStreamingRenderer(writer),
+                _ => new FakeConversationStore(),
+                () => DateTimeOffset.Parse("2024-01-01T00:00:00Z"),
+                (_, _, _) => agentRunner)
+            .Parse(["exec", "--output", "json", "--verbose", "--workspace", temp.Path, "summarize workspace"])
+            .Invoke();
+
+        string text = output.ToString();
+        string[] lines = text
+            .TrimEnd()
+            .Split(Environment.NewLine, StringSplitOptions.RemoveEmptyEntries);
+
+        Assert.Equal(0, exitCode);
+        Assert.Equal(2, lines.Length);
+        foreach (string line in lines)
+        {
+            JsonNode? node = JsonNode.Parse(line);
+            Assert.NotNull(node);
+        }
+
+        JsonObject result = Assert.IsType<JsonObject>(JsonNode.Parse(lines[^1]));
+        Assert.Equal("exec.result", result["type"]?.GetValue<string>());
+        Assert.Equal("json agent summary", result["summary"]?.GetValue<string>());
+        Assert.DoesNotContain("C# AI CLI verbose diagnostics", text, StringComparison.Ordinal);
+        Assert.DoesNotContain("commandId:", text, StringComparison.Ordinal);
+        Assert.DoesNotContain("sk-test-secret", text, StringComparison.Ordinal);
     }
 
     [Fact]

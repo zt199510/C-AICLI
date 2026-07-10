@@ -231,7 +231,31 @@ public static class CliCommandFactory
             Description = "Use a workspace directory instead of the current directory.",
             Recursive = true,
         };
+        Option<bool> verboseOption = new("--verbose")
+        {
+            Description = "Show detailed human-readable diagnostics.",
+            Recursive = true,
+        };
         rootCommand.Options.Add(workspaceOption);
+        rootCommand.Options.Add(verboseOption);
+
+        void WriteVerboseDiagnostics(
+            ParseResult parseResult,
+            string commandName,
+            CliEnvironmentSnapshot snapshot,
+            bool humanReadableOutput = true)
+        {
+            if (!humanReadableOutput || !parseResult.GetValue(verboseOption))
+            {
+                return;
+            }
+
+            DiagnosticContext context = DiagnosticContext.Create(
+                workspace: snapshot.CurrentDirectory,
+                utcNowProvider: utcNowProvider);
+            output.WriteLine(VerboseDiagnosticsReport.Create(commandName, snapshot, context).ToDisplayText());
+            output.WriteLine();
+        }
 
         Command versionCommand = new("version", "Print product version metadata.");
         versionCommand.SetAction(_ =>
@@ -248,6 +272,7 @@ public static class CliCommandFactory
             string? workspacePath = parseResult.GetValue(workspaceOption);
             CliEnvironmentSnapshot snapshot = workspaceSnapshotProvider(workspacePath);
             TryWriteCommandLog(commandLogger, "doctor", snapshot);
+            WriteVerboseDiagnostics(parseResult, "doctor", snapshot);
             output.WriteLine(DoctorReport.Create(snapshot).ToDisplayText());
             return 0;
         });
@@ -258,6 +283,7 @@ public static class CliCommandFactory
             string? workspacePath = parseResult.GetValue(workspaceOption);
             CliEnvironmentSnapshot snapshot = workspaceSnapshotProvider(workspacePath);
             TryWriteCommandLog(commandLogger, "status", snapshot);
+            WriteVerboseDiagnostics(parseResult, "status", snapshot);
             GitStatusTool gitStatusTool = new(new WorkspaceGuard());
             ToolExecutionResult gitStatus = gitStatusTool.Execute(new ToolExecutionContext(
                 "cli_status",
@@ -273,6 +299,7 @@ public static class CliCommandFactory
             string? workspacePath = parseResult.GetValue(workspaceOption);
             CliEnvironmentSnapshot snapshot = workspaceSnapshotProvider(workspacePath);
             TryWriteCommandLog(commandLogger, "models", snapshot);
+            WriteVerboseDiagnostics(parseResult, "models", snapshot);
             output.WriteLine(ModelsReport.Create(snapshot).ToDisplayText());
             return 0;
         });
@@ -289,6 +316,7 @@ public static class CliCommandFactory
             bool stat = parseResult.GetValue(diffStatOption);
             CliEnvironmentSnapshot snapshot = workspaceSnapshotProvider(workspacePath);
             TryWriteCommandLog(commandLogger, "diff", snapshot);
+            WriteVerboseDiagnostics(parseResult, "diff", snapshot);
             GitDiffTool gitDiffTool = new(new WorkspaceGuard());
             string argumentsJson = stat ? """{"stat":true}""" : "{}";
             ToolExecutionResult result = gitDiffTool.Execute(new ToolExecutionContext(
@@ -335,6 +363,11 @@ public static class CliCommandFactory
             bool jsonRequested = parseResult.GetValue(reviewJsonOption);
             string outputMode = parseResult.GetValue(reviewOutputOption) ?? "text";
             CliEnvironmentSnapshot snapshot = workspaceSnapshotProvider(workspacePath);
+            WriteVerboseDiagnostics(
+                parseResult,
+                "review",
+                snapshot,
+                humanReadableOutput: !IsJsonOutputRequested(jsonRequested, outputMode));
 
             GitDiffTool gitDiffTool = new(new WorkspaceGuard());
             ToolExecutionResult gitDiff = gitDiffTool.Execute(new ToolExecutionContext(
@@ -370,6 +403,7 @@ public static class CliCommandFactory
             string? workspacePath = parseResult.GetValue(workspaceOption);
             CliEnvironmentSnapshot snapshot = workspaceSnapshotProvider(workspacePath);
             TryWriteCommandLog(commandLogger, "config get", snapshot);
+            WriteVerboseDiagnostics(parseResult, "config get", snapshot);
             output.WriteLine(ConfigReport.Create(snapshot).ToDisplayText());
             return 0;
         });
@@ -379,6 +413,7 @@ public static class CliCommandFactory
             string? workspacePath = parseResult.GetValue(workspaceOption);
             CliEnvironmentSnapshot snapshot = workspaceSnapshotProvider(workspacePath);
             TryWriteCommandLog(commandLogger, "config list", snapshot);
+            WriteVerboseDiagnostics(parseResult, "config list", snapshot);
             output.WriteLine(ConfigReport.Create(snapshot).ToDisplayText());
             return 0;
         });
@@ -400,6 +435,7 @@ public static class CliCommandFactory
             string value = parseResult.GetValue(configSetValueArgument) ?? string.Empty;
             CliEnvironmentSnapshot snapshot = workspaceSnapshotProvider(workspacePath);
             TryWriteCommandLog(commandLogger, "config set", snapshot);
+            WriteVerboseDiagnostics(parseResult, "config set", snapshot);
 
             ConfigFileEditResult result = ConfigFileEditor.SetUserScalar(snapshot.UserConfigPath, key, value);
             WriteConfigEditResult(output, result);
@@ -417,6 +453,7 @@ public static class CliCommandFactory
             string key = parseResult.GetValue(configUnsetKeyArgument) ?? string.Empty;
             CliEnvironmentSnapshot snapshot = workspaceSnapshotProvider(workspacePath);
             TryWriteCommandLog(commandLogger, "config unset", snapshot);
+            WriteVerboseDiagnostics(parseResult, "config unset", snapshot);
 
             ConfigFileEditResult result = ConfigFileEditor.UnsetUserScalar(snapshot.UserConfigPath, key);
             WriteConfigEditResult(output, result);
@@ -435,6 +472,7 @@ public static class CliCommandFactory
             string? workspacePath = parseResult.GetValue(workspaceOption);
             CliEnvironmentSnapshot snapshot = workspaceSnapshotProvider(workspacePath);
             TryWriteCommandLog(commandLogger, "mcp list", snapshot);
+            WriteVerboseDiagnostics(parseResult, "mcp list", snapshot);
             output.WriteLine(McpListReport.Create(snapshot).ToDisplayText());
             return 0;
         });
@@ -445,6 +483,7 @@ public static class CliCommandFactory
             string? workspacePath = parseResult.GetValue(workspaceOption);
             CliEnvironmentSnapshot snapshot = workspaceSnapshotProvider(workspacePath);
             TryWriteCommandLog(commandLogger, "mcp doctor", snapshot);
+            WriteVerboseDiagnostics(parseResult, "mcp doctor", snapshot);
             output.WriteLine(McpDoctorReport.Create(snapshot).ToDisplayText());
             return 0;
         });
@@ -457,6 +496,7 @@ public static class CliCommandFactory
             string? workspacePath = parseResult.GetValue(workspaceOption);
             CliEnvironmentSnapshot snapshot = workspaceSnapshotProvider(workspacePath);
             TryWriteCommandLog(commandLogger, "workflow list", snapshot);
+            WriteVerboseDiagnostics(parseResult, "workflow list", snapshot);
             output.WriteLine(WorkflowListReport.Create(snapshot).ToDisplayText());
             return 0;
         });
@@ -472,6 +512,7 @@ public static class CliCommandFactory
             string profile = parseResult.GetValue(workflowProfileArgument) ?? string.Empty;
             CliEnvironmentSnapshot snapshot = workspaceSnapshotProvider(workspacePath);
             TryWriteCommandLog(commandLogger, "workflow validate", snapshot);
+            WriteVerboseDiagnostics(parseResult, "workflow validate", snapshot);
             output.WriteLine(WorkflowValidateReport.Create(snapshot, profile).ToDisplayText());
             return 0;
         });
@@ -491,7 +532,13 @@ public static class CliCommandFactory
             CliEnvironmentSnapshot snapshot = workspaceSnapshotProvider(workspacePath);
             TryWriteCommandLog(commandLogger, "tools list", snapshot);
             ToolRegistry registry = CliToolFactory.CreateRegistry(snapshot, new DefaultDenyApprovalPolicy());
-            if (parseResult.GetValue(toolsListJsonOption))
+            bool toolsListJsonRequested = parseResult.GetValue(toolsListJsonOption);
+            WriteVerboseDiagnostics(
+                parseResult,
+                "tools list",
+                snapshot,
+                humanReadableOutput: !toolsListJsonRequested);
+            if (toolsListJsonRequested)
             {
                 output.WriteLine(JsonSerializer.Serialize(CreateToolsListJson(registry, snapshot.Configuration.DisabledTools), JsonOptions));
                 return 0;
@@ -580,6 +627,7 @@ public static class CliCommandFactory
             CliEnvironmentSnapshot snapshot = workspaceSnapshotProvider(workspacePath);
             ApprovalMode? cliApprovalMode = GetApprovalOverride(approvalModeValue, parseResult.GetResult(toolsApprovalOption), approve);
             TryWriteCommandLog(commandLogger, "tools call", snapshot);
+            WriteVerboseDiagnostics(parseResult, "tools call", snapshot);
             ToolRegistry registry = CliToolFactory.CreateRegistry(
                 snapshot,
                 ApprovalPolicyResolver.Resolve(snapshot.Configuration.ApprovalMode, cliApprovalMode));
@@ -684,6 +732,11 @@ public static class CliCommandFactory
             CliEnvironmentSnapshot snapshot = snapshotProvider(workspacePath, cwdPath);
             ApprovalMode? cliApprovalMode = GetApprovalOverride(approvalModeValue, parseResult.GetResult(execApprovalOption), approve);
             TryWriteCommandLog(commandLogger, "exec", snapshot);
+            WriteVerboseDiagnostics(
+                parseResult,
+                "exec",
+                snapshot,
+                humanReadableOutput: !IsJsonOutputRequested(jsonRequested, outputMode));
 
             if (sessionSupplied && resumeSupplied)
             {
@@ -807,6 +860,7 @@ public static class CliCommandFactory
             bool approve = parseResult.GetValue(runApproveOption);
             CliEnvironmentSnapshot snapshot = workspaceSnapshotProvider(workspacePath);
             TryWriteCommandLog(commandLogger, "run", snapshot);
+            WriteVerboseDiagnostics(parseResult, "run", snapshot);
             ApprovalMode? cliApprovalMode = approve ? ApprovalMode.Always : null;
             IApprovalPolicy approvalPolicy = ApprovalPolicyResolver.Resolve(snapshot.Configuration.ApprovalMode, cliApprovalMode);
             ToolRegistry registry = CliToolFactory.CreateRegistry(snapshot, approvalPolicy);
@@ -864,6 +918,7 @@ public static class CliCommandFactory
             string? workspacePath = parseResult.GetValue(workspaceOption);
             CliEnvironmentSnapshot snapshot = workspaceSnapshotProvider(workspacePath);
             TryWriteCommandLog(commandLogger, "session list", snapshot);
+            WriteVerboseDiagnostics(parseResult, "session list", snapshot);
             try
             {
                 WriteSessionList(output, conversationStoreFactory(snapshot).ListSummaries());
@@ -880,6 +935,7 @@ public static class CliCommandFactory
             string name = parseResult.GetValue(sessionNameArgument) ?? string.Empty;
             CliEnvironmentSnapshot snapshot = workspaceSnapshotProvider(workspacePath);
             TryWriteCommandLog(commandLogger, "session show", snapshot);
+            WriteVerboseDiagnostics(parseResult, "session show", snapshot);
             if (!TryParseSessionName(output, name, out ConversationSessionName sessionName))
             {
                 return 1;
@@ -901,6 +957,11 @@ public static class CliCommandFactory
             string format = parseResult.GetValue(sessionExportFormatOption) ?? "json";
             CliEnvironmentSnapshot snapshot = workspaceSnapshotProvider(workspacePath);
             TryWriteCommandLog(commandLogger, "session export", snapshot);
+            WriteVerboseDiagnostics(
+                parseResult,
+                "session export",
+                snapshot,
+                humanReadableOutput: string.Equals(format, "markdown", StringComparison.OrdinalIgnoreCase));
             if (!TryParseSessionName(output, name, out ConversationSessionName sessionName))
             {
                 return 1;
@@ -926,6 +987,7 @@ public static class CliCommandFactory
             string name = parseResult.GetValue(sessionNameArgument) ?? string.Empty;
             CliEnvironmentSnapshot snapshot = workspaceSnapshotProvider(workspacePath);
             TryWriteCommandLog(commandLogger, "session clear", snapshot);
+            WriteVerboseDiagnostics(parseResult, "session clear", snapshot);
             if (!TryParseSessionName(output, name, out ConversationSessionName sessionName))
             {
                 return 1;
@@ -946,6 +1008,7 @@ public static class CliCommandFactory
             string name = parseResult.GetValue(sessionNameArgument) ?? string.Empty;
             CliEnvironmentSnapshot snapshot = workspaceSnapshotProvider(workspacePath);
             TryWriteCommandLog(commandLogger, "session delete", snapshot);
+            WriteVerboseDiagnostics(parseResult, "session delete", snapshot);
             if (!TryParseSessionName(output, name, out ConversationSessionName sessionName))
             {
                 return 1;
@@ -967,6 +1030,7 @@ public static class CliCommandFactory
             string destination = parseResult.GetValue(sessionRenameDestinationArgument) ?? string.Empty;
             CliEnvironmentSnapshot snapshot = workspaceSnapshotProvider(workspacePath);
             TryWriteCommandLog(commandLogger, "session rename", snapshot);
+            WriteVerboseDiagnostics(parseResult, "session rename", snapshot);
             if (!TryParseSessionName(output, source, out ConversationSessionName sourceSessionName) ||
                 !TryParseSessionName(output, destination, out ConversationSessionName destinationSessionName))
             {
@@ -1021,6 +1085,7 @@ public static class CliCommandFactory
             bool resumeSupplied = IsOptionExplicit(parseResult, resumeOption);
             CliEnvironmentSnapshot snapshot = snapshotProvider(workspacePath, cwdPath);
             TryWriteCommandLog(commandLogger, "chat", snapshot);
+            WriteVerboseDiagnostics(parseResult, "chat", snapshot);
 
             if (sessionSupplied && resumeSupplied)
             {
