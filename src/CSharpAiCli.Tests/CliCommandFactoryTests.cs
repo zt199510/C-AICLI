@@ -737,6 +737,37 @@ public sealed class CliCommandFactoryTests
     }
 
     [Fact]
+    public void Review_json_with_verbose_remains_single_json_object_without_verbose_text()
+    {
+        using TempDirectory temp = TempDirectory.Create();
+        string filePath = InitializeGitRepository(temp.Path);
+        File.AppendAllText(filePath, "changed\n");
+        using StringWriter output = new();
+        FakeChatModelClient chatClient = new(ChatModelResult.Success(new ChatResponse(
+            Provider: "openai",
+            Model: "gpt-test",
+            ResponseId: "resp_test",
+            Text: "review report")));
+
+        int exitCode = CliCommandFactory.Invoke(
+            CliCommandFactory.Create(
+                output,
+                workspacePath => CreateSnapshot(workspacePath, apiKey: "sk-test-secret", apiKeySource: "OPENAI_API_KEY", model: "gpt-test"),
+                (_, _) => throw new InvalidOperationException("review must not write command logs"),
+                _ => chatClient),
+            ["review", "--json", "--verbose", "--workspace", temp.Path],
+            output);
+
+        JsonObject json = AssertSingleReviewJsonResult(output);
+        string text = output.ToString();
+        Assert.Equal(0, exitCode);
+        Assert.Equal("completed", json["status"]?.GetValue<string>());
+        Assert.DoesNotContain("C# AI CLI verbose diagnostics", text, StringComparison.Ordinal);
+        Assert.DoesNotContain("commandId:", text, StringComparison.Ordinal);
+        Assert.DoesNotContain("sk-test-secret", text, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void Review_command_json_success_includes_empty_findings_text()
     {
         using TempDirectory temp = TempDirectory.Create();
@@ -1679,6 +1710,24 @@ public sealed class CliCommandFactoryTests
     }
 
     [Fact]
+    public void Version_command_without_verbose_does_not_create_snapshot()
+    {
+        using StringWriter output = new();
+
+        int exitCode = CliCommandFactory
+            .Create(output, _ => throw new InvalidOperationException("plain version must not create a snapshot"))
+            .Parse(["version"])
+            .Invoke();
+
+        string text = output.ToString();
+        Assert.Equal(0, exitCode);
+        Assert.Contains("caicli ", text);
+        Assert.Contains("target framework: net9.0", text);
+        Assert.Contains("release runtime: win-x64", text);
+        Assert.DoesNotContain("C# AI CLI verbose diagnostics", text, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void Version_command_accepts_verbose_and_writes_safe_diagnostics()
     {
         using TempDirectory temp = TempDirectory.Create();
@@ -1900,6 +1949,30 @@ public sealed class CliCommandFactoryTests
             .Select(tool => tool?.GetValue<string>() ?? string.Empty)
             .ToArray();
         Assert.Equal(["workspace.run_shell", "workspace.search_text"], disabledToolNames);
+    }
+
+    [Fact]
+    public void Tools_list_json_with_verbose_remains_parseable_without_verbose_text()
+    {
+        using StringWriter output = new();
+        CliEnvironmentSnapshot snapshot = CreateSnapshot(
+            workspacePath: null,
+            apiKey: "sk-tools-secret",
+            apiKeySource: "OPENAI_API_KEY",
+            model: "gpt-test");
+
+        int exitCode = CliCommandFactory
+            .Create(output, _ => snapshot)
+            .Parse(["tools", "list", "--json", "--verbose"])
+            .Invoke();
+
+        string text = output.ToString();
+        Assert.Equal(0, exitCode);
+        JsonObject json = Assert.IsType<JsonObject>(JsonNode.Parse(text));
+        Assert.Equal("tools.list", json["type"]?.GetValue<string>());
+        Assert.DoesNotContain("C# AI CLI verbose diagnostics", text, StringComparison.Ordinal);
+        Assert.DoesNotContain("commandId:", text, StringComparison.Ordinal);
+        Assert.DoesNotContain("sk-tools-secret", text, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -4194,6 +4267,48 @@ public sealed class CliCommandFactoryTests
 
         Assert.Equal(0, exportExitCode);
         Assert.Contains("\"sessionName\": \"smoke\"", exportOutput.ToString());
+    }
+
+    [Fact]
+    public void Session_export_format_json_with_verbose_remains_parseable_without_verbose_text()
+    {
+        using TempDirectory temp = TempDirectory.Create();
+        string userHome = Path.Combine(temp.Path, "user-home");
+        string workspace = Path.Combine(temp.Path, "workspace");
+        Directory.CreateDirectory(workspace);
+        string sessionDirectory = Path.Combine(userHome, ".caicli", "sessions");
+        Directory.CreateDirectory(sessionDirectory);
+        File.WriteAllText(Path.Combine(sessionDirectory, "smoke.transcript.json"), """
+        {
+          "schemaVersion": 1,
+          "sessionName": "smoke",
+          "createdAtUtc": "2024-01-01T00:00:00+00:00",
+          "updatedAtUtc": "2024-01-01T00:00:00+00:00",
+          "messages": [],
+          "toolCalls": [],
+          "errors": []
+        }
+        """);
+        using StringWriter exportOutput = new();
+        CliEnvironmentSnapshot snapshot = CreateSnapshot(
+            workspacePath: workspace,
+            apiKey: "sk-session-secret",
+            apiKeySource: "OPENAI_API_KEY",
+            model: "gpt-test",
+            userConfigPath: Path.Combine(userHome, ".caicli", "config.json"));
+
+        int exportExitCode = CliCommandFactory
+            .Create(exportOutput, _ => snapshot)
+            .Parse(["session", "export", "--format", "json", "--verbose", "smoke"])
+            .Invoke();
+
+        string text = exportOutput.ToString();
+        JsonObject json = Assert.IsType<JsonObject>(JsonNode.Parse(text));
+        Assert.Equal(0, exportExitCode);
+        Assert.Equal("smoke", json["sessionName"]?.GetValue<string>());
+        Assert.DoesNotContain("C# AI CLI verbose diagnostics", text, StringComparison.Ordinal);
+        Assert.DoesNotContain("commandId:", text, StringComparison.Ordinal);
+        Assert.DoesNotContain("sk-session-secret", text, StringComparison.Ordinal);
     }
 
     [Fact]

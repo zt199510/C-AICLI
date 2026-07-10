@@ -1,4 +1,5 @@
 using System.Globalization;
+using System.Text;
 using System.Text.RegularExpressions;
 
 namespace CSharpAiCli.Core;
@@ -10,8 +11,11 @@ public sealed record VerboseDiagnosticsReport(IReadOnlyList<string> Lines)
         "|apiKey|accessToken|refreshToken|clientSecret|awsSecretAccessKey";
 
     private static readonly Regex KeyValueSecretPattern = new(
-        $$"""\b(?:{{SecretKeyNamePattern}})\b(\s*[:=]\s*)(?:"(?:\\.|[^"\\])*"|'(?:\\.|[^'\\])*'|Bearer\s+[A-Za-z0-9._~+/=-]+|[^\s,;]+)""",
+        $$"""(?<![A-Za-z0-9_-])(?:"(?i:{{SecretKeyNamePattern}})"|'(?i:{{SecretKeyNamePattern}})'|(?i:{{SecretKeyNamePattern}}))(?![A-Za-z0-9_-])(\s*[:=]\s*)(?:"(?:\\.|[^"\\])*"|'(?:\\.|[^'\\])*'|Bearer\s+[A-Za-z0-9._~+/=-]+|[^\s,;}]+)""",
         RegexOptions.CultureInvariant | RegexOptions.IgnoreCase);
+    private static readonly Regex WhitespacePattern = new(
+        @"\s+",
+        RegexOptions.CultureInvariant);
     private static readonly Regex BearerTokenPattern = new(
         @"\bBearer\s+[A-Za-z0-9._~+/=-]+",
         RegexOptions.CultureInvariant | RegexOptions.IgnoreCase);
@@ -19,7 +23,7 @@ public sealed record VerboseDiagnosticsReport(IReadOnlyList<string> Lines)
         @"\bsk-[A-Za-z0-9._-]+",
         RegexOptions.CultureInvariant);
     private static readonly Regex GitHubTokenPattern = new(
-        @"\bgh[pousr]_[A-Za-z0-9_]+",
+        @"\b(?:gh[pousr]|github_pat)_[A-Za-z0-9_]+",
         RegexOptions.CultureInvariant);
 
     public static VerboseDiagnosticsReport Create(
@@ -69,12 +73,18 @@ public sealed record VerboseDiagnosticsReport(IReadOnlyList<string> Lines)
 
     private static string Sanitize(string value)
     {
-        string withoutPipes = value.Replace("|", "/", StringComparison.Ordinal);
-        string singleLine = string.Join(
-            " ",
-            withoutPipes.Split(
-                ['\r', '\n'],
-                StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries));
+        StringBuilder builder = new(value.Length);
+        foreach (char character in value)
+        {
+            builder.Append(character switch
+            {
+                '|' => '/',
+                _ when char.IsControl(character) => ' ',
+                _ => character
+            });
+        }
+
+        string singleLine = WhitespacePattern.Replace(builder.ToString(), " ").Trim();
         return RedactSecrets(singleLine);
     }
 
