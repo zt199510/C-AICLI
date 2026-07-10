@@ -181,6 +181,31 @@ public static class CliCommandFactory
 
     public static RootCommand Create(
         TextWriter output,
+        Func<string?, CliEnvironmentSnapshot> snapshotProvider,
+        Action<string, CliEnvironmentSnapshot> commandLogger,
+        Func<CliEnvironmentSnapshot, IChatModelClient> chatModelClientFactory,
+        Func<TextWriter, IChatStreamingRenderer> streamingRendererFactory,
+        Func<CliEnvironmentSnapshot, IConversationStore> conversationStoreFactory,
+        Func<DateTimeOffset> utcNowProvider,
+        Func<CliEnvironmentSnapshot, ToolRegistry, IToolExecutor, IAgentRunner> execAgentRunnerFactory,
+        Func<string, string?> environmentVariableProvider)
+    {
+        ArgumentNullException.ThrowIfNull(snapshotProvider);
+
+        return Create(
+            output,
+            (workspacePath, _) => snapshotProvider(workspacePath),
+            commandLogger,
+            chatModelClientFactory,
+            streamingRendererFactory,
+            conversationStoreFactory,
+            utcNowProvider,
+            execAgentRunnerFactory,
+            environmentVariableProvider);
+    }
+
+    public static RootCommand Create(
+        TextWriter output,
         Func<string?, string?, CliEnvironmentSnapshot> snapshotProvider,
         Action<string, CliEnvironmentSnapshot> commandLogger,
         Func<CliEnvironmentSnapshot, IChatModelClient> chatModelClientFactory,
@@ -201,6 +226,30 @@ public static class CliCommandFactory
             Console.In);
     }
 
+    public static RootCommand Create(
+        TextWriter output,
+        Func<string?, string?, CliEnvironmentSnapshot> snapshotProvider,
+        Action<string, CliEnvironmentSnapshot> commandLogger,
+        Func<CliEnvironmentSnapshot, IChatModelClient> chatModelClientFactory,
+        Func<TextWriter, IChatStreamingRenderer> streamingRendererFactory,
+        Func<CliEnvironmentSnapshot, IConversationStore> conversationStoreFactory,
+        Func<DateTimeOffset> utcNowProvider,
+        Func<CliEnvironmentSnapshot, ToolRegistry, IToolExecutor, IAgentRunner> execAgentRunnerFactory,
+        Func<string, string?> environmentVariableProvider)
+    {
+        return Create(
+            output,
+            snapshotProvider,
+            commandLogger,
+            chatModelClientFactory,
+            streamingRendererFactory,
+            conversationStoreFactory,
+            utcNowProvider,
+            execAgentRunnerFactory,
+            Console.In,
+            environmentVariableProvider);
+    }
+
     private static RootCommand Create(
         TextWriter output,
         Func<string?, string?, CliEnvironmentSnapshot> snapshotProvider,
@@ -210,7 +259,8 @@ public static class CliCommandFactory
         Func<CliEnvironmentSnapshot, IConversationStore> conversationStoreFactory,
         Func<DateTimeOffset> utcNowProvider,
         Func<CliEnvironmentSnapshot, ToolRegistry, IToolExecutor, IAgentRunner> execAgentRunnerFactory,
-        TextReader input)
+        TextReader input,
+        Func<string, string?>? environmentVariableProvider = null)
     {
         ArgumentNullException.ThrowIfNull(output);
         ArgumentNullException.ThrowIfNull(snapshotProvider);
@@ -221,6 +271,7 @@ public static class CliCommandFactory
         ArgumentNullException.ThrowIfNull(utcNowProvider);
         ArgumentNullException.ThrowIfNull(execAgentRunnerFactory);
         ArgumentNullException.ThrowIfNull(input);
+        environmentVariableProvider ??= Environment.GetEnvironmentVariable;
 
         Func<string?, CliEnvironmentSnapshot> workspaceSnapshotProvider =
             workspacePath => snapshotProvider(workspacePath, null);
@@ -236,8 +287,14 @@ public static class CliCommandFactory
             Description = "Show detailed human-readable diagnostics.",
             Recursive = true,
         };
+        Option<bool> traceOption = new("--trace")
+        {
+            Description = "Write trace-level local diagnostics.",
+            Recursive = true,
+        };
         rootCommand.Options.Add(workspaceOption);
         rootCommand.Options.Add(verboseOption);
+        rootCommand.Options.Add(traceOption);
 
         void WriteVerboseDiagnostics(
             ParseResult parseResult,
@@ -255,6 +312,68 @@ public static class CliCommandFactory
                 utcNowProvider: utcNowProvider);
             output.WriteLine(VerboseDiagnosticsReport.Create(commandName, snapshot, context).ToDisplayText());
             output.WriteLine();
+        }
+
+        bool IsTraceEnabled(ParseResult parseResult)
+        {
+            return parseResult.GetValue(traceOption) ||
+                string.Equals(environmentVariableProvider("CAICLI_TRACE"), "1", StringComparison.Ordinal);
+        }
+
+        DiagnosticContext? CreateTraceContext(ParseResult parseResult, CliEnvironmentSnapshot snapshot)
+        {
+            if (!IsTraceEnabled(parseResult))
+            {
+                return null;
+            }
+
+            return DiagnosticContext.Create(
+                workspace: snapshot.CurrentDirectory,
+                utcNowProvider: utcNowProvider);
+        }
+
+        void TryWriteTraceCommandEvent(
+            string commandName,
+            CliEnvironmentSnapshot snapshot,
+            DiagnosticContext? context,
+            string type,
+            long sequence,
+            string status,
+            string? summary = null,
+            string? errorCode = null)
+        {
+            if (context is null)
+            {
+                return;
+            }
+
+            try
+            {
+                TraceLogger.AppendCommandEvent(commandName, snapshot, context, type, sequence, status, summary, errorCode);
+            }
+            catch
+            {
+            }
+        }
+
+        void TryWriteTraceExecResult(
+            string commandName,
+            CliEnvironmentSnapshot snapshot,
+            DiagnosticContext? context,
+            ExecResult result)
+        {
+            if (context is null)
+            {
+                return;
+            }
+
+            try
+            {
+                TraceLogger.AppendExecResult(commandName, snapshot, context, result);
+            }
+            catch
+            {
+            }
         }
 
         Command versionCommand = new("version", "Print product version metadata.");
@@ -278,9 +397,12 @@ public static class CliCommandFactory
         {
             string? workspacePath = parseResult.GetValue(workspaceOption);
             CliEnvironmentSnapshot snapshot = workspaceSnapshotProvider(workspacePath);
+            DiagnosticContext? traceContext = CreateTraceContext(parseResult, snapshot);
+            TryWriteTraceCommandEvent("doctor", snapshot, traceContext, "command.start", 0, "started");
             TryWriteCommandLog(commandLogger, "doctor", snapshot);
             WriteVerboseDiagnostics(parseResult, "doctor", snapshot);
             output.WriteLine(DoctorReport.Create(snapshot).ToDisplayText());
+            TryWriteTraceCommandEvent("doctor", snapshot, traceContext, "command.complete", 1, "success");
             return 0;
         });
 
@@ -737,6 +859,7 @@ public static class CliCommandFactory
             bool sessionSupplied = IsOptionExplicit(parseResult, execSessionOption);
             bool resumeSupplied = IsOptionExplicit(parseResult, execResumeOption);
             CliEnvironmentSnapshot snapshot = snapshotProvider(workspacePath, cwdPath);
+            DiagnosticContext? traceContext = CreateTraceContext(parseResult, snapshot);
             ApprovalMode? cliApprovalMode = GetApprovalOverride(approvalModeValue, parseResult.GetResult(execApprovalOption), approve);
             TryWriteCommandLog(commandLogger, "exec", snapshot);
             WriteVerboseDiagnostics(
@@ -834,6 +957,7 @@ public static class CliCommandFactory
             }
 
             ExecResult execResult = AgentExecResultAdapter.FromAgentResult(agentResult);
+            TryWriteTraceExecResult("exec", snapshot, traceContext, execResult);
 
             if (IsJsonOutputRequested(jsonRequested, outputMode))
             {

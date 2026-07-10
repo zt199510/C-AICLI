@@ -24,6 +24,40 @@ public sealed class CliCommandFactoryTests
     }
 
     [Fact]
+    public void Doctor_trace_writes_command_start_and_complete_without_polluting_stdout()
+    {
+        using TempDirectory temp = TempDirectory.Create();
+        using StringWriter output = new();
+        RootCommand command = CliCommandFactory.Create(
+            output,
+            workspacePath => CreateSnapshot(workspacePath),
+            (_, _) => { },
+            _ => throw new InvalidOperationException("doctor must not create a model client"),
+            writer => new TerminalChatStreamingRenderer(writer),
+            _ => new FakeConversationStore(),
+            () => DateTimeOffset.Parse("2024-01-01T00:00:00Z"));
+
+        int exitCode = CliCommandFactory.Invoke(command, ["doctor", "--trace", "--workspace", temp.Path], output);
+
+        string text = output.ToString();
+        string tracePath = Path.Combine(temp.Path, ".caicli", "logs", "2024-01-01.trace.log");
+        string[] traceLines = File.ReadAllLines(tracePath);
+        JsonObject start = Assert.IsType<JsonObject>(JsonNode.Parse(traceLines[0]));
+        JsonObject complete = Assert.IsType<JsonObject>(JsonNode.Parse(traceLines[1]));
+
+        Assert.Equal(0, exitCode);
+        Assert.Contains("C# AI CLI doctor", text, StringComparison.Ordinal);
+        Assert.DoesNotContain("command.start", text, StringComparison.Ordinal);
+        Assert.DoesNotContain("commandId", text, StringComparison.Ordinal);
+        Assert.Equal(2, traceLines.Length);
+        Assert.Equal("doctor", start["command"]?.GetValue<string>());
+        Assert.Equal("command.start", start["type"]?.GetValue<string>());
+        Assert.Equal("started", start["status"]?.GetValue<string>());
+        Assert.Equal("command.complete", complete["type"]?.GetValue<string>());
+        Assert.Equal("success", complete["status"]?.GetValue<string>());
+    }
+
+    [Fact]
     public void Status_command_writes_status_report_for_non_git_workspace()
     {
         using TempDirectory temp = TempDirectory.Create();
@@ -3057,6 +3091,160 @@ public sealed class CliCommandFactoryTests
         Assert.DoesNotContain("C# AI CLI verbose diagnostics", text, StringComparison.Ordinal);
         Assert.DoesNotContain("commandId:", text, StringComparison.Ordinal);
         Assert.DoesNotContain("sk-test-secret", text, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Exec_trace_output_json_remains_valid_ndjson_and_writes_ordered_trace_events()
+    {
+        using TempDirectory temp = TempDirectory.Create();
+        using StringWriter output = new();
+        FakeAgentRunner agentRunner = new(AgentRunResult.Success(
+            "json trace summary",
+            [],
+            [
+                new AgentRunEvent(
+                    Type: "model.turn",
+                    Sequence: 0,
+                    Timestamp: DateTimeOffset.Parse("2024-01-01T00:00:01Z"),
+                    Summary: "model planned",
+                    Payload: new Dictionary<string, string>
+                    {
+                        ["toolCallCount"] = "1"
+                    },
+                    Status: "success",
+                    DurationMs: 25),
+                new AgentRunEvent(
+                    Type: "tool.completed",
+                    Sequence: 1,
+                    Timestamp: DateTimeOffset.Parse("2024-01-01T00:00:02Z"),
+                    Summary: "tool completed",
+                    Payload: new Dictionary<string, string>
+                    {
+                        ["toolName"] = "workspace.search"
+                    },
+                    ApprovalStatus: "approved",
+                    ApprovalDurationMs: 7,
+                    Status: "success",
+                    DurationMs: 11)
+            ]));
+
+        int exitCode = CliCommandFactory
+            .Create(
+                output,
+                workspacePath => CreateSnapshot(
+                    workspacePath,
+                    apiKey: "sk-test-secret",
+                    apiKeySource: "OPENAI_API_KEY",
+                    model: "gpt-test"),
+                (_, _) => { },
+                _ => new FakeChatModelClient(ChatModelResult.Success(new ChatResponse("openai", "gpt-test", "resp", ""))),
+                writer => new TerminalChatStreamingRenderer(writer),
+                _ => new FakeConversationStore(),
+                () => DateTimeOffset.Parse("2024-01-01T00:00:00Z"),
+                (_, _, _) => agentRunner)
+            .Parse(["exec", "--trace", "--output", "json", "--workspace", temp.Path, "summarize workspace"])
+            .Invoke();
+
+        string[] outputLines = output.ToString()
+            .TrimEnd()
+            .Split(Environment.NewLine, StringSplitOptions.RemoveEmptyEntries);
+        Assert.Equal(0, exitCode);
+        Assert.Equal(3, outputLines.Length);
+        foreach (string line in outputLines)
+        {
+            JsonNode? node = JsonNode.Parse(line);
+            Assert.NotNull(node);
+        }
+
+        string tracePath = Path.Combine(temp.Path, ".caicli", "logs", "2024-01-01.trace.log");
+        string[] traceLines = File.ReadAllLines(tracePath);
+        JsonObject modelTurn = Assert.IsType<JsonObject>(JsonNode.Parse(traceLines[0]));
+        JsonObject toolCompleted = Assert.IsType<JsonObject>(JsonNode.Parse(traceLines[1]));
+        JsonObject result = Assert.IsType<JsonObject>(JsonNode.Parse(traceLines[2]));
+
+        Assert.Equal("model.turn", modelTurn["type"]?.GetValue<string>());
+        Assert.Equal("tool.completed", toolCompleted["type"]?.GetValue<string>());
+        Assert.Equal("exec.result", result["type"]?.GetValue<string>());
+        Assert.Equal("exec", modelTurn["command"]?.GetValue<string>());
+        Assert.False(string.IsNullOrWhiteSpace(modelTurn["commandId"]?.GetValue<string>()));
+        Assert.False(string.IsNullOrWhiteSpace(modelTurn["sessionId"]?.GetValue<string>()));
+        Assert.Equal(temp.Path, modelTurn["workspace"]?.GetValue<string>());
+        Assert.Equal("success", modelTurn["status"]?.GetValue<string>());
+        Assert.Equal(25, modelTurn["durationMs"]?.GetValue<long>());
+        Assert.Equal("approved", toolCompleted["approvalStatus"]?.GetValue<string>());
+        Assert.Equal(7, toolCompleted["approvalDurationMs"]?.GetValue<long>());
+        Assert.Equal("json trace summary", result["summary"]?.GetValue<string>());
+        Assert.Equal("success", result["status"]?.GetValue<string>());
+        Assert.DoesNotContain("sk-test-secret", File.ReadAllText(tracePath), StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Exec_trace_can_be_enabled_with_environment_variable()
+    {
+        using TempDirectory temp = TempDirectory.Create();
+        using StringWriter output = new();
+        FakeAgentRunner agentRunner = new(AgentRunResult.Success("environment trace summary", []));
+
+        int exitCode = CliCommandFactory
+            .Create(
+                output,
+                workspacePath => CreateSnapshot(
+                    workspacePath,
+                    apiKey: "sk-test-secret",
+                    apiKeySource: "OPENAI_API_KEY",
+                    model: "gpt-test"),
+                (_, _) => { },
+                _ => new FakeChatModelClient(ChatModelResult.Success(new ChatResponse("openai", "gpt-test", "resp", ""))),
+                writer => new TerminalChatStreamingRenderer(writer),
+                _ => new FakeConversationStore(),
+                () => DateTimeOffset.Parse("2024-01-01T00:00:00Z"),
+                (_, _, _) => agentRunner,
+                name => string.Equals(name, "CAICLI_TRACE", StringComparison.Ordinal) ? "1" : null)
+            .Parse(["exec", "--output", "json", "--workspace", temp.Path, "summarize workspace"])
+            .Invoke();
+
+        string tracePath = Path.Combine(temp.Path, ".caicli", "logs", "2024-01-01.trace.log");
+        string[] outputLines = output.ToString()
+            .TrimEnd()
+            .Split(Environment.NewLine, StringSplitOptions.RemoveEmptyEntries);
+        JsonObject result = Assert.IsType<JsonObject>(JsonNode.Parse(outputLines[^1]));
+
+        Assert.Equal(0, exitCode);
+        Assert.Equal("exec.result", result["type"]?.GetValue<string>());
+        Assert.True(File.Exists(tracePath));
+        Assert.Contains("environment trace summary", File.ReadAllText(tracePath), StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Exec_without_trace_does_not_create_trace_file()
+    {
+        using TempDirectory temp = TempDirectory.Create();
+        using StringWriter output = new();
+        FakeAgentRunner agentRunner = new(AgentRunResult.Success("no trace summary", []));
+
+        int exitCode = CliCommandFactory
+            .Create(
+                output,
+                workspacePath => CreateSnapshot(
+                    workspacePath,
+                    apiKey: "sk-test-secret",
+                    apiKeySource: "OPENAI_API_KEY",
+                    model: "gpt-test"),
+                (_, _) => { },
+                _ => new FakeChatModelClient(ChatModelResult.Success(new ChatResponse("openai", "gpt-test", "resp", ""))),
+                writer => new TerminalChatStreamingRenderer(writer),
+                _ => new FakeConversationStore(),
+                () => DateTimeOffset.Parse("2024-01-01T00:00:00Z"),
+                (_, _, _) => agentRunner,
+                _ => null)
+            .Parse(["exec", "--output", "json", "--workspace", temp.Path, "summarize workspace"])
+            .Invoke();
+
+        string logDirectory = Path.Combine(temp.Path, ".caicli", "logs");
+
+        Assert.Equal(0, exitCode);
+        Assert.False(Directory.Exists(logDirectory) &&
+            Directory.EnumerateFiles(logDirectory, "*.trace.log").Any());
     }
 
     [Fact]
