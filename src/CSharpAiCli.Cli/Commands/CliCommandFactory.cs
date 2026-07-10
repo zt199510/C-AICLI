@@ -835,7 +835,7 @@ public static class CliCommandFactory
             WriteVerboseDiagnostics(parseResult, "logs clear", snapshot);
 
             string logDirectory = LogPathResolver.ResolveLogDirectory(snapshot);
-            if (!Directory.Exists(logDirectory))
+            if (!Directory.Exists(logDirectory) || IsSymlinkOrReparsePoint(logDirectory))
             {
                 return 0;
             }
@@ -1463,7 +1463,7 @@ public static class CliCommandFactory
                         break;
                     }
                 }
-                catch (Exception exception) when (IsBestEffortLogReadException(exception))
+                catch (Exception exception) when (IsBestEffortLogFileException(exception))
                 {
                     break;
                 }
@@ -1471,7 +1471,7 @@ public static class CliCommandFactory
                 logPaths.Add(enumerator.Current);
             }
         }
-        catch (Exception exception) when (IsBestEffortLogReadException(exception))
+        catch (Exception exception) when (IsBestEffortLogFileException(exception))
         {
         }
         finally
@@ -1496,7 +1496,7 @@ public static class CliCommandFactory
                 }
             }
         }
-        catch (Exception exception) when (IsBestEffortLogReadException(exception))
+        catch (Exception exception) when (IsBestEffortLogFileException(exception))
         {
         }
     }
@@ -1513,13 +1513,25 @@ public static class CliCommandFactory
             File.Delete(logPath);
             return !File.Exists(logPath);
         }
-        catch (Exception exception) when (IsBestEffortLogReadException(exception))
+        catch (Exception exception) when (IsBestEffortLogFileException(exception))
         {
             return false;
         }
     }
 
-    private static bool IsBestEffortLogReadException(Exception exception)
+    private static bool IsSymlinkOrReparsePoint(string path)
+    {
+        try
+        {
+            return (File.GetAttributes(path) & FileAttributes.ReparsePoint) != 0;
+        }
+        catch (Exception exception) when (IsBestEffortLogFileException(exception))
+        {
+            return true;
+        }
+    }
+
+    private static bool IsBestEffortLogFileException(Exception exception)
     {
         if (exception is FileNotFoundException)
         {

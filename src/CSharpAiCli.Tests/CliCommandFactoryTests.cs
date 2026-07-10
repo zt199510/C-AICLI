@@ -6244,6 +6244,33 @@ public sealed class CliCommandFactoryTests
     }
 
     [Fact]
+    public void Logs_clear_skips_log_directory_symlink_or_junction()
+    {
+        using TempDirectory temp = TempDirectory.Create();
+        using StringWriter output = new();
+        string workspaceRoot = Path.Combine(temp.Path, "workspace");
+        string outsideTarget = Path.Combine(temp.Path, "outside-target");
+        Directory.CreateDirectory(outsideTarget);
+        string outsideLogPath = Path.Combine(outsideTarget, "outside.log");
+        File.WriteAllText(outsideLogPath, "outside");
+        CliEnvironmentSnapshot snapshot = CreateSnapshot(workspaceRoot);
+        string logDirectory = LogPathResolver.ResolveLogDirectory(snapshot);
+        Directory.CreateDirectory(Path.GetDirectoryName(logDirectory)!);
+        if (!TryCreateDirectoryLink(logDirectory, outsideTarget))
+        {
+            return;
+        }
+
+        int exitCode = CliCommandFactory
+            .Create(output, _ => snapshot)
+            .Parse(["logs", "clear"])
+            .Invoke();
+
+        Assert.Equal(0, exitCode);
+        Assert.True(File.Exists(outsideLogPath));
+    }
+
+    [Fact]
     public void Logs_clear_does_not_call_command_logger_or_create_new_log_entry()
     {
         using TempDirectory temp = TempDirectory.Create();
@@ -7495,6 +7522,54 @@ public sealed class CliCommandFactoryTests
             "--no-verify",
             "-m",
             message);
+    }
+
+    private static bool TryCreateDirectoryLink(string linkPath, string targetPath)
+    {
+        try
+        {
+            new DirectoryInfo(linkPath).CreateAsSymbolicLink(targetPath);
+            return true;
+        }
+        catch (Exception exception) when (exception is IOException
+            or UnauthorizedAccessException
+            or PlatformNotSupportedException
+            or NotSupportedException)
+        {
+            return OperatingSystem.IsWindows() && TryCreateWindowsJunction(linkPath, targetPath);
+        }
+    }
+
+    private static bool TryCreateWindowsJunction(string linkPath, string targetPath)
+    {
+        using Process process = new()
+        {
+            StartInfo = new ProcessStartInfo("cmd.exe")
+            {
+                RedirectStandardError = true,
+                RedirectStandardOutput = true,
+                UseShellExecute = false
+            }
+        };
+
+        process.StartInfo.ArgumentList.Add("/c");
+        process.StartInfo.ArgumentList.Add("mklink");
+        process.StartInfo.ArgumentList.Add("/J");
+        process.StartInfo.ArgumentList.Add(linkPath);
+        process.StartInfo.ArgumentList.Add(targetPath);
+
+        try
+        {
+            process.Start();
+            process.WaitForExit();
+            return process.ExitCode == 0;
+        }
+        catch (Exception exception) when (exception is IOException
+            or UnauthorizedAccessException
+            or PlatformNotSupportedException)
+        {
+            return false;
+        }
     }
 
     private sealed class TempDirectory : IDisposable
