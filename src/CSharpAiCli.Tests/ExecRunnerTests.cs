@@ -66,6 +66,31 @@ public sealed class ExecRunnerTests
     }
 
     [Fact]
+    public void Run_records_status_and_duration_for_tool_backed_task()
+    {
+        using TempDirectory temp = TempDirectory.Create();
+        File.WriteAllText(Path.Combine(temp.Path, "note.txt"), "hello runner");
+        WorkspaceContext workspace = new(
+            RootPath: temp.Path,
+            ConfigPath: Path.Combine(temp.Path, ".caicli", "config.json"),
+            Status: WorkspaceStatus.Ready);
+        ExecRequest request = new(
+            Task: "read note.txt",
+            WorkspaceRoot: temp.Path);
+        DateTimeOffset now = DateTimeOffset.Parse("2026-06-09T10:30:00Z");
+        RecordingToolExecutor executor = new(() => now = now.AddMilliseconds(28));
+        ExecRunner runner = new(new DefaultDenyApprovalPolicy(), () => now);
+
+        ExecResult result = runner.Run(request, workspace, executor);
+
+        Assert.True(result.IsSuccess);
+        Assert.Equal("started", result.Events[0].Status);
+        Assert.Null(result.Events[0].DurationMs);
+        Assert.Equal("success", result.Events[1].Status);
+        Assert.Equal(28, result.Events[1].DurationMs);
+    }
+
+    [Fact]
     public void Run_unsupported_task_returns_failure_without_invoking_a_tool()
     {
         WorkspaceContext workspace = new(
@@ -116,7 +141,7 @@ public sealed class ExecRunnerTests
         Assert.Equal("Smoke note seed creation writes a workspace file and requires approval.", approvalRequest.Metadata["reason"]);
     }
 
-    private sealed class RecordingToolExecutor : IToolExecutor
+    private sealed class RecordingToolExecutor(Action? afterCall = null) : IToolExecutor
     {
         public List<(string ToolName, ToolExecutionContext Context)> Calls { get; } = new();
 
@@ -126,6 +151,7 @@ public sealed class ExecRunnerTests
             CancellationToken cancellationToken = default)
         {
             Calls.Add((toolName, context));
+            afterCall?.Invoke();
 
             if (toolName == "workspace.read_text")
             {

@@ -64,7 +64,9 @@ public sealed class McpStdioToolClientTests
                 }
             }
         });
+        DateTimeOffset now = DateTimeOffset.Parse("2026-06-09T10:30:00Z");
         FakeMcpClientSessionFactory factory = new(
+            () => now = now.AddMilliseconds(10),
             McpStdioTransportResult.Success(CreateInitializeResponse(1), "", false),
             McpStdioTransportResult.Success(
                 new McpJsonRpcResponse
@@ -74,11 +76,13 @@ public sealed class McpStdioToolClientTests
                 },
                 "",
                 false));
-        McpStdioToolDiscoverer discoverer = new(factory);
+        McpStdioToolDiscoverer discoverer = new(factory, () => now);
 
         McpToolsListResult result = discoverer.DiscoverTools(CreateServer(), CreateWorkspace());
 
         Assert.True(result.Succeeded, result.SafeMessage);
+        Assert.Equal("success", result.Status);
+        Assert.Equal(20, result.DurationMs);
         McpDiscoveredTool tool = Assert.Single(result.Tools);
         Assert.Equal("echo", tool.Name);
         Assert.Equal(["initialize", "tools/list"], factory.Session.Requests.Select(request => request.Method).ToArray());
@@ -135,6 +139,44 @@ public sealed class McpStdioToolClientTests
     }
 
     [Fact]
+    public void Invoke_adds_mcp_status_and_duration_to_structured_payload()
+    {
+        JsonElement callResult = JsonSerializer.SerializeToElement(new
+        {
+            content = new[]
+            {
+                new
+                {
+                    type = "text",
+                    text = "echo: hello"
+                }
+            }
+        });
+        DateTimeOffset now = DateTimeOffset.Parse("2026-06-09T10:30:00Z");
+        FakeMcpClientSessionFactory factory = new(
+            () => now = now.AddMilliseconds(15),
+            McpStdioTransportResult.Success(CreateInitializeResponse(1), "", false),
+            McpStdioTransportResult.Success(
+                new McpJsonRpcResponse
+                {
+                    Id = JsonSerializer.SerializeToElement(2),
+                    Result = callResult
+                },
+                "",
+                false));
+        McpStdioToolInvoker invoker = new(factory, () => now);
+
+        ToolExecutionResult result = invoker.Invoke(
+            new McpToolRequest(CreateServer(), "remote echo", """{"text":"hello"}"""),
+            CreateWorkspace());
+
+        Assert.True(result.Succeeded, result.Summary);
+        Assert.NotNull(result.StructuredPayload);
+        Assert.Equal("success", result.StructuredPayload["mcpStatus"].GetString());
+        Assert.Equal(30, result.StructuredPayload["mcpDurationMs"].GetInt64());
+    }
+
+    [Fact]
     public void Invoke_maps_mcp_is_error_true_to_failed_tool_result()
     {
         JsonElement callResult = JsonSerializer.SerializeToElement(new
@@ -174,7 +216,9 @@ public sealed class McpStdioToolClientTests
     [Fact]
     public void Invoke_maps_json_rpc_failure_to_failed_tool_result()
     {
+        DateTimeOffset now = DateTimeOffset.Parse("2026-06-09T10:30:00Z");
         FakeMcpClientSessionFactory factory = new(
+            () => now = now.AddMilliseconds(10),
             McpStdioTransportResult.Success(CreateInitializeResponse(1), "", false),
             McpStdioTransportResult.Success(
                 new McpJsonRpcResponse
@@ -188,7 +232,7 @@ public sealed class McpStdioToolClientTests
                 },
                 "server stderr",
                 false));
-        McpStdioToolInvoker invoker = new(factory);
+        McpStdioToolInvoker invoker = new(factory, () => now);
 
         ToolExecutionResult result = invoker.Invoke(
             new McpToolRequest(CreateServer(), "search", """{"query":"mcp"}"""),
@@ -198,6 +242,9 @@ public sealed class McpStdioToolClientTests
         Assert.Equal(McpErrorCode.JsonRpcError, result.ErrorCode);
         Assert.Contains("MCP tools/call returned a JSON-RPC error.", result.Summary, StringComparison.Ordinal);
         Assert.False(result.Retryable);
+        Assert.NotNull(result.StructuredPayload);
+        Assert.Equal("failure", result.StructuredPayload["mcpStatus"].GetString());
+        Assert.Equal(20, result.StructuredPayload["mcpDurationMs"].GetInt64());
     }
 
     [Fact]
@@ -288,8 +335,15 @@ public sealed class McpStdioToolClientTests
         private readonly McpClientSessionOpenResult? openFailure;
 
         public FakeMcpClientSessionFactory(params McpStdioTransportResult[] requestResults)
+            : this(afterRequest: null, requestResults)
         {
-            Session = new FakeMcpSession(requestResults);
+        }
+
+        public FakeMcpClientSessionFactory(
+            Action? afterRequest,
+            params McpStdioTransportResult[] requestResults)
+        {
+            Session = new FakeMcpSession(afterRequest, requestResults);
         }
 
         private FakeMcpClientSessionFactory(McpClientSessionOpenResult openFailure)
@@ -323,10 +377,19 @@ public sealed class McpStdioToolClientTests
     private sealed class FakeMcpSession : IMcpJsonRpcSession, IDisposable
     {
         private readonly Queue<McpStdioTransportResult> requestResults;
+        private readonly Action? afterRequest;
 
         public FakeMcpSession(params McpStdioTransportResult[] requestResults)
+            : this(afterRequest: null, requestResults)
+        {
+        }
+
+        public FakeMcpSession(
+            Action? afterRequest,
+            params McpStdioTransportResult[] requestResults)
         {
             this.requestResults = new Queue<McpStdioTransportResult>(requestResults);
+            this.afterRequest = afterRequest;
         }
 
         public List<McpJsonRpcRequest> Requests { get; } = [];
@@ -345,6 +408,7 @@ public sealed class McpStdioToolClientTests
                 throw new InvalidOperationException("No fake MCP response was configured.");
             }
 
+            afterRequest?.Invoke();
             return result;
         }
 

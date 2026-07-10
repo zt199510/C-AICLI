@@ -12,7 +12,9 @@ public sealed record ExecEvent
         string? Summary = null,
         IReadOnlyDictionary<string, string>? Payload = null,
         string? ErrorCode = null,
-        string? ApprovalStatus = null)
+        string? ApprovalStatus = null,
+        string? Status = null,
+        long? DurationMs = null)
     {
         if (string.IsNullOrWhiteSpace(Type))
         {
@@ -22,6 +24,11 @@ public sealed record ExecEvent
         if (Sequence < 0)
         {
             throw new ArgumentOutOfRangeException(nameof(Sequence));
+        }
+
+        if (DurationMs is < 0)
+        {
+            throw new ArgumentOutOfRangeException(nameof(DurationMs));
         }
 
         this.Type = Type;
@@ -34,6 +41,8 @@ public sealed record ExecEvent
             : new ReadOnlyDictionary<string, string>(new Dictionary<string, string>(Payload));
         this.ErrorCode = ErrorCode;
         this.ApprovalStatus = ApprovalStatus;
+        this.Status = Status;
+        this.DurationMs = DurationMs;
     }
 
     public string Type { get; }
@@ -51,4 +60,8 @@ public sealed record ExecEvent
     public string? ErrorCode { get; }
 
     public string? ApprovalStatus { get; }
+
+    public string? Status { get; }
+
+    public long? DurationMs { get; }
 }

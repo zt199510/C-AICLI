@@ -162,6 +162,41 @@ public sealed class OfflineAgentRunnerTests
     }
 
     [Fact]
+    public void Run_records_status_and_duration_for_model_and_tool_events()
+    {
+        DateTimeOffset now = DateTimeOffset.Parse("2024-01-01T00:00:00Z");
+        ToolRegistry registry = new();
+        registry.Register(new ClockAdvancingTool(() => now = now.AddMilliseconds(40)));
+        OfflineAgentRunner runner = new(
+            new ClockAdvancingModel(
+                advanceStartClock: () => now = now.AddMilliseconds(125),
+                advanceContinueClock: () => now = now.AddMilliseconds(75)),
+            new ToolExecutor(registry),
+            () => now);
+
+        AgentRunResult result = runner.Run(CreateRequest());
+
+        Assert.True(result.IsSuccess);
+        AgentRunEvent[] modelTurns = result.Events
+            .Where(agentEvent => agentEvent.Type == "model.turn")
+            .ToArray();
+        Assert.Equal(2, modelTurns.Length);
+        Assert.Equal("success", modelTurns[0].Status);
+        Assert.Equal(125, modelTurns[0].DurationMs);
+        Assert.Equal("success", modelTurns[1].Status);
+        Assert.Equal(75, modelTurns[1].DurationMs);
+
+        AgentRunEvent toolCall = Assert.Single(result.Events, agentEvent => agentEvent.Type == "tool.call");
+        Assert.Equal("started", toolCall.Status);
+        Assert.Null(toolCall.DurationMs);
+
+        AgentRunEvent toolResult = Assert.Single(result.Events, agentEvent => agentEvent.Type == "tool.result");
+        Assert.Equal("success", toolResult.Status);
+        Assert.Equal(40, toolResult.DurationMs);
+        Assert.Equal("not-required", toolResult.ApprovalStatus);
+    }
+
+    [Fact]
     public void Run_records_tool_failure_and_continues_model_loop()
     {
         ToolExecutor executor = new(new ToolRegistry());
@@ -734,6 +769,33 @@ public sealed class OfflineAgentRunnerTests
             CancellationToken cancellationToken = default)
         {
             return continueFactory(toolResults);
+        }
+    }
+
+    private sealed class ClockAdvancingModel(
+        Action advanceStartClock,
+        Action advanceContinueClock) : IToolCallingModel
+    {
+        public AgentModelTurn Start(
+            AgentRunRequest request,
+            CancellationToken cancellationToken = default)
+        {
+            advanceStartClock();
+            return AgentModelTurn.RequestTools(new AgentToolCallRequest(
+                CallId: "call_advance_clock",
+                ToolName: "test.advance-clock",
+                ArgumentsJson: "{}"));
+        }
+
+        public AgentModelTurn Continue(
+            AgentRunRequest request,
+            IReadOnlyList<AgentToolCallResult> toolResults,
+            CancellationToken cancellationToken = default)
+        {
+            AgentToolCallResult result = Assert.Single(toolResults);
+            Assert.True(result.Result.Succeeded);
+            advanceContinueClock();
+            return AgentModelTurn.Final("done");
         }
     }
 

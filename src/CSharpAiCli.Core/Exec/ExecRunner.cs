@@ -7,6 +7,7 @@ public sealed class ExecRunner : IExecRunner
     private const string SmokeNotePath = "caicli-smoke.txt";
     private const string SmokeNoteSeedContent = "status: pending";
     private readonly IApprovalPolicy approvalPolicy;
+    private readonly Func<DateTimeOffset> utcNowProvider;
 
     public ExecRunner()
         : this(new DefaultDenyApprovalPolicy())
@@ -14,9 +15,15 @@ public sealed class ExecRunner : IExecRunner
     }
 
     public ExecRunner(IApprovalPolicy approvalPolicy)
+        : this(approvalPolicy, null)
+    {
+    }
+
+    public ExecRunner(IApprovalPolicy approvalPolicy, Func<DateTimeOffset>? utcNowProvider)
     {
         ArgumentNullException.ThrowIfNull(approvalPolicy);
         this.approvalPolicy = approvalPolicy;
+        this.utcNowProvider = utcNowProvider ?? (() => DateTimeOffset.UtcNow);
     }
 
     public ExecResult Run(
@@ -115,12 +122,12 @@ public sealed class ExecRunner : IExecRunner
             ErrorCode: "unsupported-run-task");
     }
 
-    private static ExecEvent CreateStartedEvent(string task, IReadOnlyDictionary<string, string>? payload)
+    private ExecEvent CreateStartedEvent(string task, IReadOnlyDictionary<string, string>? payload)
     {
         return new ExecEvent(
             Type: "task.started",
             Sequence: 0,
-            Timestamp: DateTimeOffset.UtcNow,
+            Timestamp: utcNowProvider(),
             Message: "Task started.",
             Payload: payload is null
                 ? new Dictionary<string, string>
@@ -130,22 +137,26 @@ public sealed class ExecRunner : IExecRunner
                 : new Dictionary<string, string>(payload)
                 {
                     ["task"] = task
-                });
+                },
+            Status: DiagnosticEventStatus.Started);
     }
 
-    private static ExecResult CreateResult(
+    private ExecResult CreateResult(
         ExecEvent started,
         ToolExecutionResult toolResult,
         IReadOnlyDictionary<string, string> payload)
     {
+        DateTimeOffset completedTimestamp = utcNowProvider();
         ExecEvent completed = new(
             Type: toolResult.Succeeded ? "task.completed" : "task.failed",
             Sequence: 1,
-            Timestamp: DateTimeOffset.UtcNow,
+            Timestamp: completedTimestamp,
             Summary: toolResult.Summary,
             Payload: payload,
             ErrorCode: toolResult.ErrorCode,
-            ApprovalStatus: toolResult.ApprovalStatus);
+            ApprovalStatus: toolResult.ApprovalStatus,
+            Status: toolResult.Succeeded ? DiagnosticEventStatus.Success : DiagnosticEventStatus.Failure,
+            DurationMs: CalculateDurationMs(started.Timestamp, completedTimestamp));
 
         IReadOnlyList<ExecEvent> events = new[] { started, completed };
         return toolResult.Succeeded
@@ -161,17 +172,20 @@ public sealed class ExecRunner : IExecRunner
                 ApprovalStatus: toolResult.ApprovalStatus);
     }
 
-    private static ExecResult CreateFailureResult(
+    private ExecResult CreateFailureResult(
         ExecEvent started,
         string Summary,
         string ErrorCode)
     {
+        DateTimeOffset failedTimestamp = utcNowProvider();
         ExecEvent failed = new(
             Type: "task.failed",
             Sequence: 1,
-            Timestamp: DateTimeOffset.UtcNow,
+            Timestamp: failedTimestamp,
             Summary: Summary,
-            ErrorCode: ErrorCode);
+            ErrorCode: ErrorCode,
+            Status: DiagnosticEventStatus.Failure,
+            DurationMs: CalculateDurationMs(started.Timestamp, failedTimestamp));
 
         IReadOnlyList<ExecEvent> events = new[] { started, failed };
         return ExecResult.Failure(
@@ -202,6 +216,11 @@ public sealed class ExecRunner : IExecRunner
         }
 
         return payload;
+    }
+
+    private static long CalculateDurationMs(DateTimeOffset startedUtc, DateTimeOffset completedUtc)
+    {
+        return Math.Max(0, (long)(completedUtc - startedUtc).TotalMilliseconds);
     }
 
     private static ToolExecutionResult ApplySmokeNotePatch(

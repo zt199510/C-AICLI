@@ -69,7 +69,9 @@ public sealed class ExecDtoTests
             Summary: "Tests started",
             Payload: payload,
             ErrorCode: null,
-            ApprovalStatus: "approved");
+            ApprovalStatus: "approved",
+            Status: "success",
+            DurationMs: 42);
         payload["command"] = "dotnet build";
         payload["extra"] = "ignored";
 
@@ -84,6 +86,8 @@ public sealed class ExecDtoTests
         Assert.False(execEvent.Payload.ContainsKey("extra"));
         Assert.Null(execEvent.ErrorCode);
         Assert.Equal("approved", execEvent.ApprovalStatus);
+        Assert.Equal("success", execEvent.Status);
+        Assert.Equal(42, execEvent.DurationMs);
     }
 
     [Fact]

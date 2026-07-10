@@ -1,3 +1,5 @@
+using System.Globalization;
+
 namespace CSharpAiCli.Core;
 
 public sealed class ExecTextRenderer
@@ -34,6 +36,16 @@ public sealed class ExecTextRenderer
             $"seq={execEvent.Sequence}",
             $"ts={execEvent.Timestamp:O}"
         };
+
+        if (!string.IsNullOrEmpty(execEvent.Status))
+        {
+            parts.Add($"status={execEvent.Status}");
+        }
+
+        if (execEvent.DurationMs.HasValue)
+        {
+            parts.Add($"durationMs={execEvent.DurationMs.Value.ToString(CultureInfo.InvariantCulture)}");
+        }
 
         if (!string.IsNullOrEmpty(execEvent.Message))
         {

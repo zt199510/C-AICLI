@@ -79,6 +79,16 @@ public sealed class ExecJsonRenderer
             envelope["summary"] = execEvent.Summary;
         }
 
+        if (!string.IsNullOrEmpty(execEvent.Status))
+        {
+            envelope["status"] = execEvent.Status;
+        }
+
+        if (execEvent.DurationMs.HasValue)
+        {
+            envelope["durationMs"] = execEvent.DurationMs.Value;
+        }
+
         if (execEvent.Payload is not null)
         {
             envelope["payload"] = execEvent.Payload.OrderBy(pair => pair.Key, StringComparer.Ordinal)

@@ -34,7 +34,9 @@ public static class AgentExecResultAdapter
             Summary: agentEvent.Summary,
             Payload: agentEvent.Payload,
             ErrorCode: agentEvent.ErrorCode,
-            ApprovalStatus: agentEvent.ApprovalStatus);
+            ApprovalStatus: agentEvent.ApprovalStatus,
+            Status: agentEvent.Status,
+            DurationMs: agentEvent.DurationMs);
     }
 
     private static string? FindLastApprovalStatus(IReadOnlyList<ExecEvent> events)

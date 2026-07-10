@@ -22,7 +22,9 @@ public sealed class AgentExecResultAdapterTests
                         ["toolName"] = "workspace.read_text"
                     },
                     ErrorCode: null,
-                    ApprovalStatus: "not-required")
+                    ApprovalStatus: "not-required",
+                    Status: "success",
+                    DurationMs: 35)
             ]);
 
         ExecResult result = AgentExecResultAdapter.FromAgentResult(agentResult);
@@ -38,6 +40,8 @@ public sealed class AgentExecResultAdapterTests
         Assert.Equal("read README", execEvent.Summary);
         Assert.Equal("workspace.read_text", execEvent.Payload?["toolName"]);
         Assert.Equal("not-required", execEvent.ApprovalStatus);
+        Assert.Equal("success", execEvent.Status);
+        Assert.Equal(35, execEvent.DurationMs);
     }
 
     [Fact]

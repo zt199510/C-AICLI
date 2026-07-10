@@ -19,12 +19,15 @@ public sealed class ExecRendererTests
             {
                 ["command"] = "dotnet test"
             },
-            ApprovalStatus: "approved");
+            ApprovalStatus: "approved",
+            Status: "started");
         ExecEvent completed = new(
             Type: "task.completed",
             Sequence: 2,
             Timestamp: new DateTimeOffset(2026, 6, 9, 10, 31, 0, TimeSpan.Zero),
-            Summary: "Done.");
+            Summary: "Done.",
+            Status: "success",
+            DurationMs: 60000);
 
         renderer.WriteEvent(started);
         renderer.WriteEvent(completed);
@@ -35,8 +38,8 @@ public sealed class ExecRendererTests
 
         string[] lines = writer.ToString().TrimEnd().Split(Environment.NewLine);
 
-        Assert.Equal("event: tool.started seq=1 ts=2026-06-09T10:30:00.0000000+00:00 message=Running tests. approvalStatus=approved payload.command=dotnet test", lines[0]);
-        Assert.Equal("event: task.completed seq=2 ts=2026-06-09T10:31:00.0000000+00:00 summary=Done.", lines[1]);
+        Assert.Equal("event: tool.started seq=1 ts=2026-06-09T10:30:00.0000000+00:00 status=started message=Running tests. approvalStatus=approved payload.command=dotnet test", lines[0]);
+        Assert.Equal("event: task.completed seq=2 ts=2026-06-09T10:31:00.0000000+00:00 status=success durationMs=60000 summary=Done.", lines[1]);
         Assert.Equal("result: success exitCode=0 summary=All good. approvalStatus=approved events=2", lines[2]);
     }
 
@@ -56,11 +59,14 @@ public sealed class ExecRendererTests
                 ["command"] = "dotnet test"
             },
             ErrorCode: "none",
-            ApprovalStatus: "approved");
+            ApprovalStatus: "approved",
+            Status: "started");
         ExecEvent plainEvent = new(
             Type: "task.completed",
             Sequence: 2,
-            Timestamp: new DateTimeOffset(2026, 6, 9, 10, 31, 0, TimeSpan.Zero));
+            Timestamp: new DateTimeOffset(2026, 6, 9, 10, 31, 0, TimeSpan.Zero),
+            Status: "failure",
+            DurationMs: 60000);
 
         renderer.WriteEvent(eventWithPayload);
         renderer.WriteEvent(plainEvent);
@@ -83,6 +89,11 @@ public sealed class ExecRendererTests
         Assert.Equal("dotnet test", first.GetProperty("payload").GetProperty("command").GetString());
         Assert.Equal("none", first.GetProperty("errorCode").GetString());
         Assert.Equal("approved", first.GetProperty("approvalStatus").GetString());
+        Assert.Equal("started", first.GetProperty("status").GetString());
+
+        JsonElement second = JsonSerializer.Deserialize<JsonElement>(lines[1]);
+        Assert.Equal("failure", second.GetProperty("status").GetString());
+        Assert.Equal(60000, second.GetProperty("durationMs").GetInt64());
 
         JsonElement result = JsonSerializer.Deserialize<JsonElement>(lines[2]);
         Assert.Equal("exec.result", result.GetProperty("type").GetString());

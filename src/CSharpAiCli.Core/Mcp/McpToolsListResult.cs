@@ -11,12 +11,16 @@ public sealed record McpToolsListResult(
     string? JsonRpcErrorMessage,
     bool TimedOut,
     string StderrSnippet,
-    bool StderrTruncated)
+    bool StderrTruncated,
+    string? Status = null,
+    long? DurationMs = null)
 {
     public static McpToolsListResult Success(
         IReadOnlyList<McpDiscoveredTool> tools,
         string stderrSnippet,
-        bool stderrTruncated)
+        bool stderrTruncated,
+        string? status = "success",
+        long? durationMs = null)
     {
         return new McpToolsListResult(
             Succeeded: true,
@@ -27,7 +31,9 @@ public sealed record McpToolsListResult(
             JsonRpcErrorMessage: null,
             TimedOut: false,
             StderrSnippet: stderrSnippet,
-            StderrTruncated: stderrTruncated);
+            StderrTruncated: stderrTruncated,
+            Status: status,
+            DurationMs: durationMs);
     }
 
     public static McpToolsListResult Failure(
@@ -37,7 +43,9 @@ public sealed record McpToolsListResult(
         string? jsonRpcErrorMessage = null,
         bool timedOut = false,
         string stderrSnippet = "",
-        bool stderrTruncated = false)
+        bool stderrTruncated = false,
+        string? status = "failure",
+        long? durationMs = null)
     {
         return new McpToolsListResult(
             Succeeded: false,
@@ -48,7 +56,9 @@ public sealed record McpToolsListResult(
             JsonRpcErrorMessage: jsonRpcErrorMessage,
             TimedOut: timedOut,
             StderrSnippet: stderrSnippet,
-            StderrTruncated: stderrTruncated);
+            StderrTruncated: stderrTruncated,
+            Status: status,
+            DurationMs: durationMs);
     }
 }
 
