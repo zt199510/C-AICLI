@@ -91,6 +91,35 @@ public sealed class ToolExecutionResultTests
         Assert.Equal(10, structuredPayload["retryAfterSeconds"].GetInt32());
     }
 
+    [Fact]
+    public void Factories_reject_negative_approval_duration()
+    {
+        Assert.Throws<ArgumentOutOfRangeException>(() =>
+            ToolExecutionResult.Success(
+                "Done.",
+                approvalDurationMs: -1));
+
+        Assert.Throws<ArgumentOutOfRangeException>(() =>
+            ToolExecutionResult.Failure(
+                "approval-denied",
+                "Denied.",
+                approvalDurationMs: -1));
+
+        Assert.Throws<ArgumentOutOfRangeException>(() =>
+            new ToolExecutionResult(
+                Succeeded: true,
+                Summary: "Done.",
+                ErrorCode: null,
+                Retryable: false,
+                ApprovalDurationMs: -1));
+
+        Assert.Throws<ArgumentOutOfRangeException>(() =>
+            ToolExecutionResult.Success("Done.") with
+            {
+                ApprovalDurationMs = -1
+            });
+    }
+
     private static Dictionary<string, JsonElement> CreatePayload(JsonElement root)
     {
         return root.EnumerateObject()

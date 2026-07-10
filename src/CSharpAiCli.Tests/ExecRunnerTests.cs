@@ -78,8 +78,13 @@ public sealed class ExecRunnerTests
             Task: "read note.txt",
             WorkspaceRoot: temp.Path);
         DateTimeOffset now = DateTimeOffset.Parse("2026-06-09T10:30:00Z");
-        RecordingToolExecutor executor = new(() => now = now.AddMilliseconds(28));
-        ExecRunner runner = new(new DefaultDenyApprovalPolicy(), () => now);
+        long timestamp = 0;
+        RecordingToolExecutor executor = new(() =>
+        {
+            now = now.AddSeconds(-5);
+            timestamp += TimestampForMilliseconds(28);
+        });
+        ExecRunner runner = new(new DefaultDenyApprovalPolicy(), () => now, () => timestamp);
 
         ExecResult result = runner.Run(request, workspace, executor);
 
@@ -153,10 +158,15 @@ public sealed class ExecRunnerTests
             Task: "create smoke note",
             WorkspaceRoot: temp.Path);
         DateTimeOffset now = DateTimeOffset.Parse("2026-06-09T10:30:00Z");
+        long timestamp = 0;
         RecordingApprovalPolicy approvalPolicy = new(
             ApprovalDecision.Deny("Denied by recording policy."),
-            () => now = now.AddMilliseconds(44));
-        ExecRunner runner = new(approvalPolicy, () => now);
+            () =>
+            {
+                now = now.AddSeconds(-5);
+                timestamp += TimestampForMilliseconds(44);
+            });
+        ExecRunner runner = new(approvalPolicy, () => now, () => timestamp);
 
         ExecResult result = runner.Run(request, workspace, new MissingSmokeNotePatchExecutor());
 
@@ -238,5 +248,10 @@ public sealed class ExecRunnerTests
                 Directory.Delete(Path, recursive: true);
             }
         }
+    }
+
+    private static long TimestampForMilliseconds(long milliseconds)
+    {
+        return System.Diagnostics.Stopwatch.Frequency * milliseconds / 1000;
     }
 }

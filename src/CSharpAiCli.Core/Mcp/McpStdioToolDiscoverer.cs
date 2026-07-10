@@ -3,7 +3,7 @@ namespace CSharpAiCli.Core;
 public sealed class McpStdioToolDiscoverer : IMcpToolDiscoverer
 {
     private readonly IMcpClientSessionFactory sessionFactory;
-    private readonly Func<DateTimeOffset> utcNowProvider;
+    private readonly DiagnosticDurationClock durationClock;
 
     public McpStdioToolDiscoverer(IMcpClientSessionFactory sessionFactory)
         : this(sessionFactory, null)
@@ -12,11 +12,12 @@ public sealed class McpStdioToolDiscoverer : IMcpToolDiscoverer
 
     public McpStdioToolDiscoverer(
         IMcpClientSessionFactory sessionFactory,
-        Func<DateTimeOffset>? utcNowProvider)
+        Func<DateTimeOffset>? utcNowProvider,
+        Func<long>? timestampProvider = null)
     {
         ArgumentNullException.ThrowIfNull(sessionFactory);
         this.sessionFactory = sessionFactory;
-        this.utcNowProvider = utcNowProvider ?? (() => DateTimeOffset.UtcNow);
+        durationClock = new DiagnosticDurationClock(timestampProvider);
     }
 
     public McpToolsListResult DiscoverTools(
@@ -28,7 +29,7 @@ public sealed class McpStdioToolDiscoverer : IMcpToolDiscoverer
         ArgumentNullException.ThrowIfNull(workspace);
         cancellationToken.ThrowIfCancellationRequested();
 
-        DateTimeOffset startedUtc = utcNowProvider();
+        long startedTimestamp = durationClock.GetTimestamp();
         try
         {
             McpClientSessionOpenResult openResult = sessionFactory.OpenSession(server, workspace, cancellationToken);
@@ -40,7 +41,7 @@ public sealed class McpStdioToolDiscoverer : IMcpToolDiscoverer
                         openResult.SafeMessage,
                         stderrSnippet: openResult.StderrSnippet,
                         stderrTruncated: openResult.StderrTruncated),
-                    startedUtc);
+                    startedTimestamp);
             }
 
             using IDisposable? sessionLease = openResult.Session as IDisposable;
@@ -57,10 +58,10 @@ public sealed class McpStdioToolDiscoverer : IMcpToolDiscoverer
                         initializeResult.TimedOut,
                         initializeResult.StderrSnippet,
                         initializeResult.StderrTruncated),
-                    startedUtc);
+                    startedTimestamp);
             }
 
-            return Complete(client.ListTools(cancellationToken), startedUtc);
+            return Complete(client.ListTools(cancellationToken), startedTimestamp);
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
         {
@@ -72,11 +73,11 @@ public sealed class McpStdioToolDiscoverer : IMcpToolDiscoverer
                 McpToolsListResult.Failure(
                     McpErrorCode.ClientFailed,
                     "MCP tool discovery failed."),
-                startedUtc);
+                startedTimestamp);
         }
     }
 
-    private McpToolsListResult Complete(McpToolsListResult result, DateTimeOffset startedUtc)
+    private McpToolsListResult Complete(McpToolsListResult result, long startedTimestamp)
     {
         string status = result.Succeeded
             ? DiagnosticEventStatus.Success
@@ -87,12 +88,7 @@ public sealed class McpStdioToolDiscoverer : IMcpToolDiscoverer
         return result with
         {
             Status = status,
-            DurationMs = CalculateDurationMs(startedUtc, utcNowProvider())
+            DurationMs = durationClock.GetElapsedMilliseconds(startedTimestamp)
         };
-    }
-
-    private static long CalculateDurationMs(DateTimeOffset startedUtc, DateTimeOffset completedUtc)
-    {
-        return Math.Max(0, (long)(completedUtc - startedUtc).TotalMilliseconds);
     }
 }

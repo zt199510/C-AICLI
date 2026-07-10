@@ -165,14 +165,28 @@ public sealed class OfflineAgentRunnerTests
     public void Run_records_status_and_duration_for_model_and_tool_events()
     {
         DateTimeOffset now = DateTimeOffset.Parse("2024-01-01T00:00:00Z");
+        long timestamp = 0;
         ToolRegistry registry = new();
-        registry.Register(new ClockAdvancingTool(() => now = now.AddMilliseconds(40)));
+        registry.Register(new ClockAdvancingTool(() =>
+        {
+            now = now.AddSeconds(-4);
+            timestamp += TimestampForMilliseconds(40);
+        }));
         OfflineAgentRunner runner = new(
             new ClockAdvancingModel(
-                advanceStartClock: () => now = now.AddMilliseconds(125),
-                advanceContinueClock: () => now = now.AddMilliseconds(75)),
+                advanceStartClock: () =>
+                {
+                    now = now.AddSeconds(-5);
+                    timestamp += TimestampForMilliseconds(125);
+                },
+                advanceContinueClock: () =>
+                {
+                    now = now.AddSeconds(-3);
+                    timestamp += TimestampForMilliseconds(75);
+                }),
             new ToolExecutor(registry),
-            () => now);
+            () => now,
+            timestampProvider: () => timestamp);
 
         AgentRunResult result = runner.Run(CreateRequest());
 
@@ -671,8 +685,13 @@ public sealed class OfflineAgentRunnerTests
         Assert.Equal("agent-overall-timeout-reached", result.Error?.LocalErrorCode);
         Assert.Empty(result.ToolCalls);
         Assert.Equal(
-            new[] { "model.turn", "tool.call", "agent.error" },
+            new[] { "model.turn", "tool.call", "tool.result", "agent.error" },
             result.Events.Select(agentEvent => agentEvent.Type).ToArray());
+        AgentRunEvent toolResult = result.Events[2];
+        Assert.Equal("timeout", toolResult.Status);
+        Assert.Equal("call_wait_1", toolResult.Payload?["callId"]);
+        Assert.Equal("test.wait-for-cancellation", toolResult.Payload?["toolName"]);
+        Assert.NotNull(toolResult.DurationMs);
         Assert.Equal("agent-overall-timeout-reached", result.Events[^1].ErrorCode);
     }
 
@@ -730,6 +749,11 @@ public sealed class OfflineAgentRunnerTests
             Prompt: "use a test tool",
             Workspace: workspace,
             Limits: limits);
+    }
+
+    private static long TimestampForMilliseconds(long milliseconds)
+    {
+        return System.Diagnostics.Stopwatch.Frequency * milliseconds / 1000;
     }
 
     private sealed class EchoTool : ITool

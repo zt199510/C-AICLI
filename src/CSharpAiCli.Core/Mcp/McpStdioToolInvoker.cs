@@ -8,7 +8,7 @@ public sealed class McpStdioToolInvoker : IMcpToolInvoker
     private const int MaxSummaryLength = 1000;
 
     private readonly IMcpClientSessionFactory sessionFactory;
-    private readonly Func<DateTimeOffset> utcNowProvider;
+    private readonly DiagnosticDurationClock durationClock;
 
     public McpStdioToolInvoker(IMcpClientSessionFactory sessionFactory)
         : this(sessionFactory, null)
@@ -17,11 +17,12 @@ public sealed class McpStdioToolInvoker : IMcpToolInvoker
 
     public McpStdioToolInvoker(
         IMcpClientSessionFactory sessionFactory,
-        Func<DateTimeOffset>? utcNowProvider)
+        Func<DateTimeOffset>? utcNowProvider,
+        Func<long>? timestampProvider = null)
     {
         ArgumentNullException.ThrowIfNull(sessionFactory);
         this.sessionFactory = sessionFactory;
-        this.utcNowProvider = utcNowProvider ?? (() => DateTimeOffset.UtcNow);
+        durationClock = new DiagnosticDurationClock(timestampProvider);
     }
 
     public ToolExecutionResult Invoke(
@@ -33,10 +34,10 @@ public sealed class McpStdioToolInvoker : IMcpToolInvoker
         ArgumentNullException.ThrowIfNull(workspace);
         cancellationToken.ThrowIfCancellationRequested();
 
-        DateTimeOffset startedUtc = utcNowProvider();
+        long startedTimestamp = durationClock.GetTimestamp();
         if (!TryParseArguments(request.ArgumentsJson, out JsonDocument? arguments, out ToolExecutionResult? argumentsFailure))
         {
-            return Complete(argumentsFailure, DiagnosticEventStatus.Failure, startedUtc);
+            return Complete(argumentsFailure, DiagnosticEventStatus.Failure, startedTimestamp);
         }
 
         JsonDocument argumentsDocument = arguments
@@ -53,7 +54,7 @@ public sealed class McpStdioToolInvoker : IMcpToolInvoker
                             openResult.ErrorCode ?? McpErrorCode.StartFailed,
                             openResult.SafeMessage),
                         DiagnosticEventStatus.Failure,
-                        startedUtc);
+                        startedTimestamp);
                 }
 
                 using IDisposable? sessionLease = openResult.Session as IDisposable;
@@ -66,7 +67,7 @@ public sealed class McpStdioToolInvoker : IMcpToolInvoker
                             initializeResult.ErrorCode ?? McpErrorCode.InvalidResponse,
                             initializeResult.SafeMessage),
                         initializeResult.TimedOut ? DiagnosticEventStatus.Timeout : DiagnosticEventStatus.Failure,
-                        startedUtc);
+                        startedTimestamp);
                 }
 
                 McpToolCallResult callResult = client.CallTool(
@@ -80,7 +81,7 @@ public sealed class McpStdioToolInvoker : IMcpToolInvoker
                             callResult.ErrorCode ?? McpErrorCode.InvalidResponse,
                             callResult.SafeMessage),
                         callResult.TimedOut ? DiagnosticEventStatus.Timeout : DiagnosticEventStatus.Failure,
-                        startedUtc);
+                        startedTimestamp);
                 }
 
                 IReadOnlyDictionary<string, JsonElement>? payload = CreateStructuredPayload(callResult);
@@ -97,7 +98,7 @@ public sealed class McpStdioToolInvoker : IMcpToolInvoker
                 return Complete(
                     result,
                     callResult.IsToolError ? DiagnosticEventStatus.Failure : DiagnosticEventStatus.Success,
-                    startedUtc);
+                    startedTimestamp);
             }
             catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
             {
@@ -110,7 +111,7 @@ public sealed class McpStdioToolInvoker : IMcpToolInvoker
                         McpErrorCode.ClientFailed,
                         "MCP tool invocation failed."),
                     DiagnosticEventStatus.Failure,
-                    startedUtc);
+                    startedTimestamp);
             }
         }
     }
@@ -118,14 +119,14 @@ public sealed class McpStdioToolInvoker : IMcpToolInvoker
     private ToolExecutionResult Complete(
         ToolExecutionResult result,
         string status,
-        DateTimeOffset startedUtc)
+        long startedTimestamp)
     {
         return result with
         {
             StructuredPayload = AddMcpDiagnostics(
                 result.StructuredPayload,
                 status,
-                CalculateDurationMs(startedUtc, utcNowProvider()))
+                durationClock.GetElapsedMilliseconds(startedTimestamp))
         };
     }
 
@@ -141,11 +142,6 @@ public sealed class McpStdioToolInvoker : IMcpToolInvoker
         copy["mcpStatus"] = JsonSerializer.SerializeToElement(status);
         copy["mcpDurationMs"] = JsonSerializer.SerializeToElement(durationMs);
         return copy;
-    }
-
-    private static long CalculateDurationMs(DateTimeOffset startedUtc, DateTimeOffset completedUtc)
-    {
-        return Math.Max(0, (long)(completedUtc - startedUtc).TotalMilliseconds);
     }
 
     private static bool TryParseArguments(

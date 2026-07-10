@@ -8,6 +8,7 @@ public sealed class ExecRunner : IExecRunner
     private const string SmokeNoteSeedContent = "status: pending";
     private readonly IApprovalPolicy approvalPolicy;
     private readonly Func<DateTimeOffset> utcNowProvider;
+    private readonly DiagnosticDurationClock durationClock;
 
     public ExecRunner()
         : this(new DefaultDenyApprovalPolicy())
@@ -19,11 +20,15 @@ public sealed class ExecRunner : IExecRunner
     {
     }
 
-    public ExecRunner(IApprovalPolicy approvalPolicy, Func<DateTimeOffset>? utcNowProvider)
+    public ExecRunner(
+        IApprovalPolicy approvalPolicy,
+        Func<DateTimeOffset>? utcNowProvider,
+        Func<long>? timestampProvider = null)
     {
         ArgumentNullException.ThrowIfNull(approvalPolicy);
         this.approvalPolicy = approvalPolicy;
         this.utcNowProvider = utcNowProvider ?? (() => DateTimeOffset.UtcNow);
+        durationClock = new DiagnosticDurationClock(timestampProvider);
     }
 
     public ExecResult Run(
@@ -37,12 +42,14 @@ public sealed class ExecRunner : IExecRunner
         ArgumentNullException.ThrowIfNull(toolExecutor);
 
         string trimmedTask = request.Task.Trim();
+        long startedTimestamp = durationClock.GetTimestamp();
         ExecEvent started = CreateStartedEvent(trimmedTask, null);
 
         if (string.IsNullOrWhiteSpace(trimmedTask))
         {
             return CreateFailureResult(
                 started,
+                startedTimestamp,
                 Summary: "Run task is empty.",
                 ErrorCode: "empty-run-task");
         }
@@ -50,6 +57,7 @@ public sealed class ExecRunner : IExecRunner
         if (trimmedTask.Contains("create", StringComparison.OrdinalIgnoreCase) &&
             trimmedTask.Contains("smoke", StringComparison.OrdinalIgnoreCase))
         {
+            startedTimestamp = durationClock.GetTimestamp();
             started = CreateStartedEvent(trimmedTask, CreateToolPayload("workspace.apply_patch", path: SmokeNotePath));
             ToolExecutionResult toolResult = ApplySmokeNotePatch(workspace, toolExecutor, cancellationToken);
 
@@ -60,6 +68,7 @@ public sealed class ExecRunner : IExecRunner
                 {
                     return CreateResult(
                         started,
+                        startedTimestamp,
                         seedResult,
                         CreateToolPayload("workspace.apply_patch", path: SmokeNotePath));
                 }
@@ -69,6 +78,7 @@ public sealed class ExecRunner : IExecRunner
 
             return CreateResult(
                 started,
+                startedTimestamp,
                 toolResult,
                 CreateToolPayload("workspace.apply_patch", path: SmokeNotePath));
         }
@@ -76,6 +86,7 @@ public sealed class ExecRunner : IExecRunner
         if (trimmedTask.StartsWith("read ", StringComparison.OrdinalIgnoreCase))
         {
             string path = trimmedTask["read ".Length..].Trim();
+            startedTimestamp = durationClock.GetTimestamp();
             started = CreateStartedEvent(trimmedTask, CreateToolPayload("workspace.read_text", path: path));
             ToolExecutionResult toolResult = toolExecutor.Execute(
                 "workspace.read_text",
@@ -90,6 +101,7 @@ public sealed class ExecRunner : IExecRunner
 
             return CreateResult(
                 started,
+                startedTimestamp,
                 toolResult,
                 CreateToolPayload("workspace.read_text", path: path));
         }
@@ -97,6 +109,7 @@ public sealed class ExecRunner : IExecRunner
         if (trimmedTask.StartsWith("shell ", StringComparison.OrdinalIgnoreCase))
         {
             string command = trimmedTask["shell ".Length..].Trim();
+            startedTimestamp = durationClock.GetTimestamp();
             started = CreateStartedEvent(trimmedTask, CreateToolPayload("workspace.run_shell", command: command));
             ToolExecutionResult toolResult = toolExecutor.Execute(
                 "workspace.run_shell",
@@ -112,12 +125,14 @@ public sealed class ExecRunner : IExecRunner
 
             return CreateResult(
                 started,
+                startedTimestamp,
                 toolResult,
                 CreateToolPayload("workspace.run_shell", command: command));
         }
 
         return CreateFailureResult(
             started,
+            startedTimestamp,
             Summary: "Supported run tasks are: create smoke note, read <path>, shell <command>.",
             ErrorCode: "unsupported-run-task");
     }
@@ -143,6 +158,7 @@ public sealed class ExecRunner : IExecRunner
 
     private ExecResult CreateResult(
         ExecEvent started,
+        long startedTimestamp,
         ToolExecutionResult toolResult,
         IReadOnlyDictionary<string, string> payload)
     {
@@ -156,7 +172,7 @@ public sealed class ExecRunner : IExecRunner
             ErrorCode: toolResult.ErrorCode,
             ApprovalStatus: toolResult.ApprovalStatus,
             Status: toolResult.Succeeded ? DiagnosticEventStatus.Success : DiagnosticEventStatus.Failure,
-            DurationMs: CalculateDurationMs(started.Timestamp, completedTimestamp),
+            DurationMs: durationClock.GetElapsedMilliseconds(startedTimestamp),
             ApprovalDurationMs: toolResult.ApprovalDurationMs);
 
         IReadOnlyList<ExecEvent> events = new[] { started, completed };
@@ -175,6 +191,7 @@ public sealed class ExecRunner : IExecRunner
 
     private ExecResult CreateFailureResult(
         ExecEvent started,
+        long startedTimestamp,
         string Summary,
         string ErrorCode)
     {
@@ -186,7 +203,7 @@ public sealed class ExecRunner : IExecRunner
             Summary: Summary,
             ErrorCode: ErrorCode,
             Status: DiagnosticEventStatus.Failure,
-            DurationMs: CalculateDurationMs(started.Timestamp, failedTimestamp));
+            DurationMs: durationClock.GetElapsedMilliseconds(startedTimestamp));
 
         IReadOnlyList<ExecEvent> events = new[] { started, failed };
         return ExecResult.Failure(
@@ -219,11 +236,6 @@ public sealed class ExecRunner : IExecRunner
         return payload;
     }
 
-    private static long CalculateDurationMs(DateTimeOffset startedUtc, DateTimeOffset completedUtc)
-    {
-        return Math.Max(0, (long)(completedUtc - startedUtc).TotalMilliseconds);
-    }
-
     private static ToolExecutionResult ApplySmokeNotePatch(
         WorkspaceContext workspace,
         IToolExecutor toolExecutor,
@@ -242,7 +254,7 @@ public sealed class ExecRunner : IExecRunner
         WorkspaceContext workspace,
         CancellationToken cancellationToken)
     {
-        DateTimeOffset approvalStartedUtc = utcNowProvider();
+        long approvalStartedTimestamp = durationClock.GetTimestamp();
         ApprovalDecision approval = approvalPolicy.RequestApproval(new ApprovalRequest(
             Operation: "workspace.apply_patch",
             Summary: "Create caicli-smoke.txt seed file for smoke note patch.",
@@ -261,7 +273,7 @@ public sealed class ExecRunner : IExecRunner
                 ["reason"] = "Smoke note seed creation writes a workspace file and requires approval."
             },
             RiskLevel: ToolRiskLevel.Write));
-        long approvalDurationMs = CalculateDurationMs(approvalStartedUtc, utcNowProvider());
+        long approvalDurationMs = durationClock.GetElapsedMilliseconds(approvalStartedTimestamp);
 
         if (!approval.Approved)
         {

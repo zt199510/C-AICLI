@@ -5,13 +5,15 @@ public sealed class OfflineAgentRunner : IAgentRunner
     private readonly IToolCallingModel model;
     private readonly IToolExecutor toolExecutor;
     private readonly Func<DateTimeOffset> utcNowProvider;
+    private readonly DiagnosticDurationClock durationClock;
     private readonly int maxIterations;
 
     public OfflineAgentRunner(
         IToolCallingModel model,
         IToolExecutor toolExecutor,
         Func<DateTimeOffset>? utcNowProvider = null,
-        int maxIterations = 8)
+        int maxIterations = 8,
+        Func<long>? timestampProvider = null)
     {
         ArgumentNullException.ThrowIfNull(model);
         ArgumentNullException.ThrowIfNull(toolExecutor);
@@ -23,6 +25,7 @@ public sealed class OfflineAgentRunner : IAgentRunner
         this.model = model;
         this.toolExecutor = toolExecutor;
         this.utcNowProvider = utcNowProvider ?? (() => DateTimeOffset.UtcNow);
+        durationClock = new DiagnosticDurationClock(timestampProvider);
         this.maxIterations = maxIterations;
     }
 
@@ -209,7 +212,7 @@ public sealed class OfflineAgentRunner : IAgentRunner
         }
 
         bool modelTimeoutWins = limits.ModelCallTimeout <= remainingOverallTimeout;
-        DateTimeOffset startedUtc = utcNowProvider();
+        long startedTimestamp = durationClock.GetTimestamp();
         using CancellationTokenSource overallTimeoutSource = new();
         using CancellationTokenSource modelTimeoutSource = new();
         using CancellationTokenSource timeoutSource = CancellationTokenSource.CreateLinkedTokenSource(
@@ -221,7 +224,7 @@ public sealed class OfflineAgentRunner : IAgentRunner
         try
         {
             turn = model.Start(request, timeoutSource.Token);
-            durationMs = CalculateDurationMs(startedUtc, utcNowProvider());
+            durationMs = durationClock.GetElapsedMilliseconds(startedTimestamp);
             result = null;
             return true;
         }
@@ -233,7 +236,7 @@ public sealed class OfflineAgentRunner : IAgentRunner
             }
 
             turn = null;
-            durationMs = CalculateDurationMs(startedUtc, utcNowProvider());
+            durationMs = durationClock.GetElapsedMilliseconds(startedTimestamp);
             if (modelTimeoutWins
                 && (modelTimeoutSource.IsCancellationRequested
                     || overallTimeoutSource.IsCancellationRequested
@@ -281,7 +284,7 @@ public sealed class OfflineAgentRunner : IAgentRunner
         }
 
         bool modelTimeoutWins = limits.ModelCallTimeout <= remainingOverallTimeout;
-        DateTimeOffset startedUtc = utcNowProvider();
+        long startedTimestamp = durationClock.GetTimestamp();
         using CancellationTokenSource overallTimeoutSource = new();
         using CancellationTokenSource modelTimeoutSource = new();
         using CancellationTokenSource timeoutSource = CancellationTokenSource.CreateLinkedTokenSource(
@@ -293,7 +296,7 @@ public sealed class OfflineAgentRunner : IAgentRunner
         try
         {
             turn = model.Continue(request, toolResults, timeoutSource.Token);
-            durationMs = CalculateDurationMs(startedUtc, utcNowProvider());
+            durationMs = durationClock.GetElapsedMilliseconds(startedTimestamp);
             result = null;
             return true;
         }
@@ -305,7 +308,7 @@ public sealed class OfflineAgentRunner : IAgentRunner
             }
 
             turn = null;
-            durationMs = CalculateDurationMs(startedUtc, utcNowProvider());
+            durationMs = durationClock.GetElapsedMilliseconds(startedTimestamp);
             if (modelTimeoutWins
                 && (modelTimeoutSource.IsCancellationRequested
                     || overallTimeoutSource.IsCancellationRequested
@@ -347,11 +350,12 @@ public sealed class OfflineAgentRunner : IAgentRunner
         {
             executionResult = null!;
             durationMs = null;
+            RecordToolTimeout(events, toolCall, durationMs);
             result = CreateOverallTimeoutResult(recordedToolCalls, events);
             return false;
         }
 
-        DateTimeOffset startedUtc = utcNowProvider();
+        long startedTimestamp = durationClock.GetTimestamp();
         using CancellationTokenSource overallTimeoutSource = new();
         using CancellationTokenSource timeoutSource = CancellationTokenSource.CreateLinkedTokenSource(
             cancellationToken,
@@ -363,7 +367,7 @@ public sealed class OfflineAgentRunner : IAgentRunner
                 toolCall.ToolName,
                 context,
                 timeoutSource.Token);
-            durationMs = CalculateDurationMs(startedUtc, utcNowProvider());
+            durationMs = durationClock.GetElapsedMilliseconds(startedTimestamp);
             result = null;
             return true;
         }
@@ -375,9 +379,10 @@ public sealed class OfflineAgentRunner : IAgentRunner
             }
 
             executionResult = null!;
-            durationMs = CalculateDurationMs(startedUtc, utcNowProvider());
+            durationMs = durationClock.GetElapsedMilliseconds(startedTimestamp);
             if (overallTimeoutSource.IsCancellationRequested || utcNowProvider() > deadlineUtc)
             {
+                RecordToolTimeout(events, toolCall, durationMs);
                 result = CreateOverallTimeoutResult(recordedToolCalls, events, durationMs);
                 return false;
             }
@@ -493,6 +498,28 @@ public sealed class OfflineAgentRunner : IAgentRunner
             ApprovalDurationMs: result.ApprovalDurationMs));
     }
 
+    private void RecordToolTimeout(
+        List<AgentRunEvent> events,
+        AgentToolCallRequest toolCall,
+        long? durationMs)
+    {
+        events.Add(new AgentRunEvent(
+            Type: "tool.result",
+            Sequence: events.Count,
+            Timestamp: utcNowProvider(),
+            Message: $"Tool '{toolCall.ToolName}' timed out.",
+            Summary: "Tool execution reached the overall timeout.",
+            Payload: new Dictionary<string, string>
+            {
+                ["callId"] = toolCall.CallId,
+                ["toolName"] = toolCall.ToolName,
+                ["succeeded"] = "false"
+            },
+            ErrorCode: "agent-overall-timeout-reached",
+            Status: DiagnosticEventStatus.Timeout,
+            DurationMs: durationMs));
+    }
+
     private void RecordFinalResponse(List<AgentRunEvent> events, string finalText)
     {
         events.Add(new AgentRunEvent(
@@ -517,11 +544,6 @@ public sealed class OfflineAgentRunner : IAgentRunner
             ErrorCode: error.LocalErrorCode,
             Status: status,
             DurationMs: durationMs));
-    }
-
-    private static long CalculateDurationMs(DateTimeOffset startedUtc, DateTimeOffset completedUtc)
-    {
-        return Math.Max(0, (long)(completedUtc - startedUtc).TotalMilliseconds);
     }
 
     private static void AddStructuredDiagnosticPayload(

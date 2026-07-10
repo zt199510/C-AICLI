@@ -16,6 +16,7 @@ public sealed record ToolExecutionResult(
 {
     private readonly IReadOnlyDictionary<string, JsonElement>? structuredPayload =
         CopyStructuredPayload(StructuredPayload);
+    private readonly long? approvalDurationMs = ValidateApprovalDurationMs(ApprovalDurationMs);
 
     public IReadOnlyDictionary<string, JsonElement>? StructuredPayload
     {
@@ -23,7 +24,11 @@ public sealed record ToolExecutionResult(
         init => structuredPayload = CopyStructuredPayload(value);
     }
 
-    public long? ApprovalDurationMs { get; init; } = ApprovalDurationMs;
+    public long? ApprovalDurationMs
+    {
+        get => approvalDurationMs;
+        init => approvalDurationMs = ValidateApprovalDurationMs(value);
+    }
 
     public static ToolExecutionResult Success(
         string summary,
@@ -76,5 +81,15 @@ public sealed record ToolExecutionResult(
         }
 
         return new ReadOnlyDictionary<string, JsonElement>(copy);
+    }
+
+    private static long? ValidateApprovalDurationMs(long? approvalDurationMs)
+    {
+        if (approvalDurationMs is < 0)
+        {
+            throw new ArgumentOutOfRangeException(nameof(approvalDurationMs));
+        }
+
+        return approvalDurationMs;
     }
 }
