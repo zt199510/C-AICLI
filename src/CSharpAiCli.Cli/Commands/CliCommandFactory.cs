@@ -835,7 +835,7 @@ public static class CliCommandFactory
             WriteVerboseDiagnostics(parseResult, "logs clear", snapshot);
 
             string logDirectory = LogPathResolver.ResolveLogDirectory(snapshot);
-            if (!Directory.Exists(logDirectory) || IsSymlinkOrReparsePoint(logDirectory))
+            if (!IsClearableLogDirectory(logDirectory))
             {
                 return 0;
             }
@@ -1514,6 +1514,50 @@ public static class CliCommandFactory
             return !File.Exists(logPath);
         }
         catch (Exception exception) when (IsBestEffortLogFileException(exception))
+        {
+            return false;
+        }
+    }
+
+    private static bool IsClearableLogDirectory(string logDirectory)
+    {
+        try
+        {
+            string fullPath = Path.GetFullPath(logDirectory);
+            if (!Directory.Exists(fullPath))
+            {
+                return false;
+            }
+
+            string? root = Path.GetPathRoot(fullPath);
+            if (string.IsNullOrEmpty(root) || IsSymlinkOrReparsePoint(root))
+            {
+                return false;
+            }
+
+            string relativePath = Path.GetRelativePath(root, fullPath);
+            if (string.Equals(relativePath, ".", StringComparison.Ordinal))
+            {
+                return true;
+            }
+
+            string currentPath = root;
+            foreach (string segment in relativePath.Split(
+                [Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar],
+                StringSplitOptions.RemoveEmptyEntries))
+            {
+                currentPath = Path.Combine(currentPath, segment);
+                if (IsSymlinkOrReparsePoint(currentPath))
+                {
+                    return false;
+                }
+            }
+
+            return true;
+        }
+        catch (Exception exception) when (IsBestEffortLogFileException(exception)
+            || exception is ArgumentException
+            || exception is NotSupportedException)
         {
             return false;
         }

@@ -6271,6 +6271,35 @@ public sealed class CliCommandFactoryTests
     }
 
     [Fact]
+    public void Logs_clear_skips_when_caicli_directory_is_symlink_or_junction()
+    {
+        using TempDirectory temp = TempDirectory.Create();
+        using StringWriter output = new();
+        string workspaceRoot = Path.Combine(temp.Path, "workspace");
+        string outsideTarget = Path.Combine(temp.Path, "outside-target");
+        string outsideLogsDirectory = Path.Combine(outsideTarget, "logs");
+        Directory.CreateDirectory(workspaceRoot);
+        Directory.CreateDirectory(outsideLogsDirectory);
+        string outsideLogPath = Path.Combine(outsideLogsDirectory, "outside.log");
+        File.WriteAllText(outsideLogPath, "outside");
+        string caicliDirectory = Path.Combine(workspaceRoot, ".caicli");
+        if (!TryCreateDirectoryLink(caicliDirectory, outsideTarget))
+        {
+            return;
+        }
+
+        CliEnvironmentSnapshot snapshot = CreateSnapshot(workspaceRoot);
+
+        int exitCode = CliCommandFactory
+            .Create(output, _ => snapshot)
+            .Parse(["logs", "clear"])
+            .Invoke();
+
+        Assert.Equal(0, exitCode);
+        Assert.True(File.Exists(outsideLogPath));
+    }
+
+    [Fact]
     public void Logs_clear_does_not_call_command_logger_or_create_new_log_entry()
     {
         using TempDirectory temp = TempDirectory.Create();
