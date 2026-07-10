@@ -5840,6 +5840,24 @@ public sealed class CliCommandFactoryTests
     }
 
     [Fact]
+    public void Logs_path_with_real_command_logger_prints_path_without_creating_log_directory()
+    {
+        using TempDirectory temp = TempDirectory.Create();
+        using StringWriter output = new();
+        string expectedPath = Path.Combine(temp.Path, ".caicli", "logs");
+        CliEnvironmentSnapshot snapshot = CreateSnapshot(temp.Path);
+
+        int exitCode = CliCommandFactory
+            .Create(output, _ => snapshot, (commandName, commandSnapshot) => CommandLogger.Append(commandName, commandSnapshot))
+            .Parse(["logs", "path"])
+            .Invoke();
+
+        Assert.Equal(0, exitCode);
+        Assert.Equal(expectedPath + Environment.NewLine, output.ToString());
+        Assert.False(Directory.Exists(expectedPath));
+    }
+
+    [Fact]
     public void Logs_path_honors_workspace_option()
     {
         using StringWriter output = new();
@@ -5860,15 +5878,18 @@ public sealed class CliCommandFactoryTests
     }
 
     [Fact]
-    public void Logs_path_writes_command_log_through_delegate()
+    public void Logs_path_writes_command_log_through_delegate_when_log_directory_exists()
     {
+        using TempDirectory temp = TempDirectory.Create();
         using StringWriter output = new();
         List<string> loggedCommands = [];
+        CliEnvironmentSnapshot snapshot = CreateSnapshot(temp.Path);
+        Directory.CreateDirectory(LogPathResolver.ResolveLogDirectory(snapshot));
 
         int exitCode = CliCommandFactory
             .Create(
                 output,
-                CreateSnapshot,
+                _ => snapshot,
                 (commandName, _) => loggedCommands.Add(commandName))
             .Parse(["logs", "path"])
             .Invoke();

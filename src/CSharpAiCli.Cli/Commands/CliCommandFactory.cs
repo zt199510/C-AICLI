@@ -779,9 +779,14 @@ public static class CliCommandFactory
         {
             string? workspacePath = parseResult.GetValue(workspaceOption);
             CliEnvironmentSnapshot snapshot = workspaceSnapshotProvider(workspacePath);
-            TryWriteCommandLog(commandLogger, "logs path", snapshot);
+            string logDirectory = LogPathResolver.ResolveLogDirectory(snapshot);
+            if (Directory.Exists(logDirectory))
+            {
+                TryWriteCommandLog(commandLogger, "logs path", snapshot);
+            }
+
             WriteVerboseDiagnostics(parseResult, "logs path", snapshot);
-            output.WriteLine(LogPathResolver.ResolveLogDirectory(snapshot));
+            output.WriteLine(logDirectory);
             return 0;
         });
         logsCommand.Subcommands.Add(logsPathCommand);
