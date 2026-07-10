@@ -56,7 +56,7 @@ Approval status is included in text output and in `exec` JSON events/results thr
 
 ## File Editing
 
-The release MVP uses a single-file exact-text patch tool.
+The release uses a single-file exact-text patch tool.
 
 - `workspace.apply_patch` performs single-file exact-text replacement.
 - Patch dry-run preview returns structured details, including preview type, paths, files, replacement counts, whether a diff exists, and dirty workspace status/summary.
@@ -117,7 +117,7 @@ Users can disable tools through `disabledTools` in user or workspace config. Dis
 - Remote/http MCP transport remains Deferred.
 - Gerber/TIFF project pack status/profile support exists, but real Gerber execution is Deferred.
 
-These deferred capabilities do not block the direct backend release.
+These deferred capabilities do not block the `0.2.0` direct backend release.
 
 ## Current Limitations
 
@@ -125,5 +125,5 @@ These deferred capabilities do not block the direct backend release.
 - It does not run destructive commands without the shell runner safety checks, but users should still review commands and diffs.
 - Dangerous command detection and shell policy use conservative text and pattern boundaries, not full shell parsing or semantic proof.
 - Allowlist entries are command text, not exact argv arrays. Unusual quoted arguments containing metacharacters may be conservatively blocked.
-- The first release is Windows-focused.
-- Dotnet tool packaging is not enabled for the first release package.
+- The release is Windows-focused.
+- Dotnet tool packaging is not enabled for the `0.2.0` package.

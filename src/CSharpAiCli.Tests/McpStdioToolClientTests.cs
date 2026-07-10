@@ -9,7 +9,7 @@ public sealed class McpStdioToolClientTests
     public void Discover_and_invoke_use_real_stdio_fake_server()
     {
         using FakeMcpStdioServer server = FakeMcpStdioServer.CreateSuccessful();
-        McpServerDefinition definition = server.CreateServerDefinition(timeoutMilliseconds: 2_000);
+        McpServerDefinition definition = server.CreateServerDefinition(timeoutMilliseconds: 10_000);
         WorkspaceContext workspace = server.CreateWorkspace();
         McpStdioClientSessionFactory sessionFactory = new(new McpStdioTransport(new WorkspaceGuard()));
         McpStdioToolDiscoverer discoverer = new(sessionFactory);

@@ -71,6 +71,25 @@ Tool execution can be disabled from user or workspace config:
 
 Disabled tool names are merged from user and workspace config. A disabled tool is omitted from `caicli tools list` and returns `unknown-tool` if invoked.
 
+Shell execution policy can be constrained from user or workspace config:
+
+```json
+{
+  "shellPolicy": {
+    "allowedCommands": [
+      "dotnet test",
+      "git status"
+    ],
+    "deniedCommands": [
+      "rm -rf ."
+    ],
+    "maxTimeoutMilliseconds": 10000
+  }
+}
+```
+
+`deniedCommands` take precedence over `allowedCommands`. An empty configured allowlist denies all shell commands. Prefix allowlist entries permit ordinary arguments but reject shell control and metacharacter syntax after the prefix. The policy applies before approval and before execution for `workspace.run_shell` and MCP stdio startup commands.
+
 ## User Config Example
 
 ```json

@@ -48,11 +48,11 @@
 | 31 | `31_week_session_resume_management.plan.md` | 已验收 | 会话可 list/show/rename/delete/export，`chat/exec --resume` 复用 transcript。 | build/test 通过；resume context 边界和 markdown secret redaction 已验证。 |
 | 32 | `32_week_project_instructions_agents_md.plan.md` | 已验收 | 支持 `AGENTS.md`、`AICLI.md` fallback 与 root-to-leaf 层级项目指令。 | `chat/exec --cwd` 使用目标路径指令；doctor/config 显示 source/order。 |
 | 33 | `33_week_diff_review_status_models.plan.md` | 已验收 | 新增 `status`、`diff`、`review`、`models`，并加固 diff/review 只读收集。 | `review` 默认只读；`models` 不需要 API key；离线 smoke 覆盖 status/models/diff。 |
-| 34 | `34_week_tool_system_hardening.plan.md` | 计划中 | 工具 schema、stdin、JSON list、错误码和 structured result 统一。 | `tools list --json` 稳定可解析；工具错误码稳定。 |
-| 35 | `35_week_mcp_real_stdio_v1.plan.md` | 计划中 | 启用 MCP stdio 真连接 v1。 | fake MCP server 可 handshake/list/call；remote MCP 仍 Deferred。 |
-| 36 | `36_week_security_sandbox_boundaries.plan.md` | 计划中 | 强化 shell policy、patch preview、MCP 启动安全策略。 | denylist/timeout/risk summary 生效。 |
-| 37 | `37_week_observability_logs_trace.plan.md` | 计划中 | 增加 `--verbose`、`--trace`、`logs show/clear/path`。 | 可追踪 exec 的模型/工具/审批顺序，secret 不泄露。 |
-| 38 | `38_week_cli_0_2_release_acceptance.plan.md` | 计划中 | 0.2.0 发布验收、文档、smoke tests 和 release zip。 | build/test/smoke 通过，0.2.0 zip size/SHA256 记录。 |
+| 34 | `34_week_tool_system_hardening.plan.md` | 已验收 | 工具 schema、stdin、JSON list、错误码和 structured result 统一。 | `tools list --json` 稳定可解析；工具错误码稳定。 |
+| 35 | `35_week_mcp_real_stdio_v1.plan.md` | 已验收 | 启用 MCP stdio 真连接 v1。 | fake MCP server 可 handshake/list/call；remote MCP 仍 Deferred。 |
+| 36 | `36_week_security_sandbox_boundaries.plan.md` | 已验收 | 强化 shell policy、patch preview、MCP 启动安全策略。 | denylist/timeout/risk summary 生效。 |
+| 37 | `37_week_observability_logs_trace.plan.md` | 已验收 | 增加 `--verbose`、`--trace`、`logs show/clear/path`。 | 可追踪 exec 的模型/工具/审批顺序，secret 不泄露。 |
+| 38 | `38_week_cli_0_2_release_acceptance.plan.md` | 已验收 | 0.2.0 发布验收、文档、smoke tests 和 release zip。 | build/test/smoke 通过，0.2.0 zip size/SHA256 已记录。 |
 
 ## 设计原则
 

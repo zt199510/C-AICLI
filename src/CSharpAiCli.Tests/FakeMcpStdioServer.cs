@@ -362,7 +362,30 @@ internal sealed class FakeMcpStdioServer : IDisposable
         {
             if (Directory.Exists(Path))
             {
-                Directory.Delete(Path, recursive: true);
+                DeleteDirectoryWithRetry(Path);
+            }
+        }
+
+        private static void DeleteDirectoryWithRetry(string path)
+        {
+            IOException? lastIOException = null;
+            for (int attempt = 0; attempt < 10; attempt++)
+            {
+                try
+                {
+                    Directory.Delete(path, recursive: true);
+                    return;
+                }
+                catch (IOException exception)
+                {
+                    lastIOException = exception;
+                    Thread.Sleep(100);
+                }
+            }
+
+            if (lastIOException is not null)
+            {
+                throw lastIOException;
             }
         }
     }

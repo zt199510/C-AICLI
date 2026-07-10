@@ -1,6 +1,6 @@
 # C# AI CLI Capability Status
 
-## MVP Release Capabilities
+## 0.2.0 Release Capabilities
 
 | Capability | Status | Notes |
 |---|---|---|
@@ -37,9 +37,9 @@
 | Microsoft Agent Framework real backend | Deferred | Adapter project and tool bridge exist; real framework package/runtime is not enabled. |
 | MCP remote/http transport | Deferred | Stdio MCP v1 is available for user-configured stdio servers in registry/tool paths and for explicit `mcp doctor` diagnostics; remote/http transport is not enabled. |
 | Gerber/TIFF real workflow execution | Deferred | Project pack status/profile MVP exists; real toolchain execution is not enabled. |
-| Dotnet tool package | Deferred | Windows self-contained package is the first release artifact. |
+| Dotnet tool package | Deferred | Windows self-contained package is the current release artifact. |
 | Direct OpenAI SDK agent tool loop | Deferred | Offline/fake agent loop contracts are implemented and tested, but the default SDK gateway still returns `agent-backend-unavailable` for tool-call continuation until SDK tool calls/results are translated. |
 
 ## Release Decision
 
-The direct backend MVP is releasable when Phase 06 smoke tests and final acceptance pass. Deferred enhanced capabilities are documented and must not be presented as first-release core behavior.
+The direct backend `0.2.0` release candidate is scoped to the accepted and solidified capabilities above. Deferred enhanced capabilities are documented and must not be presented as current release behavior.

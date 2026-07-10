@@ -2,9 +2,9 @@
 
 ## Release Scope
 
-- Version `0.1.0` is a local Windows MVP release candidate.
+- Version `0.2.0` is a local Windows release candidate.
 - The primary supported package is `win-x64` self-contained single-file publish.
-- Dotnet tool packaging is not part of the first release package.
+- Dotnet tool packaging is not part of the `0.2.0` release package.
 
 ## Model And Agent Behavior
 
@@ -32,6 +32,7 @@
 - Workspace path checks reduce accidental boundary escapes but do not replace OS permissions or code review.
 - Patch editing is single-file exact-text replacement, not a full merge engine.
 - Patch writes remain approval-gated and recheck file content before apply, but previews do not make patching risk-free.
+- There is no interactive approval UI. Non-interactive `on-request` and `on-failure` modes report approval-required failures for write and shell actions.
 - Shell policy and dangerous command detection run before approval/execution, including for MCP stdio startup commands, but users must still inspect commands.
 - Dangerous command detection and shell policy are conservative text/pattern checks, not complete shell parsing or semantic proof.
 - Shell allowlist entries are command text, not exact argv arrays; unusual quoted arguments with metacharacters may be conservatively blocked.
