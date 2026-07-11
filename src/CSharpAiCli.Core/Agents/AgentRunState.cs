@@ -34,6 +34,10 @@ public sealed class AgentRunState
 
     public int ToolCallCount { get; private set; }
 
+    public int RetryCount { get; private set; }
+
+    public int RemainingRetries => Math.Max(0, Limits.MaxRetries - RetryCount);
+
     public IReadOnlyList<AgentStep> Steps => new ReadOnlyCollection<AgentStep>(steps.ToArray());
 
     public bool TryBeginStep(out AgentStep? step, out AgentLoopError? error)
@@ -81,6 +85,19 @@ public sealed class AgentRunState
         return true;
     }
 
+    public bool TryReserveRetry(out AgentLoopError? error)
+    {
+        if (RetryCount >= Limits.MaxRetries)
+        {
+            error = StopRetryBudgetExhausted();
+            return false;
+        }
+
+        RetryCount++;
+        error = null;
+        return true;
+    }
+
     public bool TryCreateOverallTimeoutError(out AgentLoopError? error)
     {
         if (utcNowProvider() <= DeadlineUtc)
@@ -124,6 +141,15 @@ public sealed class AgentRunState
             AgentStopReason.EmptyTurn,
             "agent-empty-turn",
             "Agent model returned neither a final response nor tool calls.",
+            retryable: false);
+    }
+
+    public AgentLoopError StopRetryBudgetExhausted()
+    {
+        return StopFailure(
+            AgentStopReason.RetryBudgetExhausted,
+            "agent-retry-budget-exhausted",
+            "Agent retry budget was exhausted before the failure could be repaired.",
             retryable: false);
     }
 

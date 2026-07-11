@@ -10,6 +10,8 @@ public static class AgentStopReason
     public const string ModelTimeout = "model-timeout";
     public const string ToolTimeout = "tool-timeout";
     public const string ToolFailure = "tool-failure";
+    public const string VerificationFailure = "verification-failure";
+    public const string RetryBudgetExhausted = "retry-budget-exhausted";
     public const string ToolDisabled = "tool-disabled";
     public const string ApprovalDenied = "approval-denied";
     public const string ModelError = "model-error";
@@ -22,6 +24,7 @@ public static class AgentStopReason
         {
             "agent-loop-limit-reached" => MaxStepsExceeded,
             "agent-tool-call-limit-reached" => MaxToolCallsExceeded,
+            "agent-retry-budget-exhausted" => RetryBudgetExhausted,
             "agent-overall-timeout-reached" => OverallTimeout,
             "agent-model-call-timeout-reached" => ModelTimeout,
             "agent-model-call-canceled" => ModelTimeout,

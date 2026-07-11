@@ -122,4 +122,49 @@ public sealed class AgentExecResultAdapterTests
         Assert.Equal("agent-loop-limit-reached", execEvent.ErrorCode);
         Assert.Equal("max-steps-exceeded", execEvent.StopReason);
     }
+
+    [Fact]
+    public void FromAgentResult_preserves_retry_attempts_and_failure_summary()
+    {
+        AgentRetryAttempt attempt = new(
+            Index: 1,
+            FailureKind: AgentFailureKind.Verification,
+            StopReason: AgentStopReason.VerificationFailure,
+            ErrorCode: ToolErrorCode.ShellExitCode,
+            SourceToolCallId: "call_patch",
+            ToolName: "workspace.apply_patch",
+            Summary: "tests failed",
+            Commands: ["dotnet test"],
+            ChangedFiles: ["src/App.cs"],
+            VerificationStatus: "failure");
+        AgentFailureSummary failureSummary = new(
+            FailureKind: AgentFailureKind.Verification,
+            StopReason: AgentStopReason.RetryBudgetExhausted,
+            ErrorCode: "agent-retry-budget-exhausted",
+            Message: "Agent retry budget was exhausted.",
+            RetryBudget: 1,
+            RetryCount: 1,
+            RemainingRetries: 0,
+            RemainingRisk: "Review changed files.",
+            RetryAttempts: [attempt],
+            Commands: ["dotnet test"],
+            ChangedFiles: ["src/App.cs"]);
+        AgentRunResult agentResult = AgentRunResult.Failure(
+            new AgentError(
+                "agent-retry-budget-exhausted",
+                "Agent retry budget was exhausted.",
+                Retryable: false),
+            [],
+            [],
+            retryAttempts: [attempt],
+            failureSummary: failureSummary,
+            stopReason: AgentStopReason.RetryBudgetExhausted);
+
+        ExecResult result = AgentExecResultAdapter.FromAgentResult(agentResult);
+
+        AgentRetryAttempt mappedAttempt = Assert.Single(result.RetryAttempts);
+        Assert.Equal("verification", mappedAttempt.FailureKind);
+        Assert.Equal("dotnet test", Assert.Single(mappedAttempt.Commands));
+        Assert.Same(failureSummary, result.FailureSummary);
+    }
 }

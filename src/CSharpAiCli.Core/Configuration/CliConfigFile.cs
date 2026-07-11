@@ -31,5 +31,7 @@ public sealed class AgentRunLimitsConfig
 
     public int? MaxToolCalls { get; init; }
 
+    public int? MaxRetries { get; init; }
+
     public int? TimeoutSeconds { get; init; }
 }

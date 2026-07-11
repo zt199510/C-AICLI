@@ -274,6 +274,233 @@ public sealed class OfflineAgentRunnerTests
     }
 
     [Fact]
+    public void Run_retries_after_verification_failure_with_read_search_patch_verify_flow()
+    {
+        ToolRegistry registry = new();
+        registry.Register(new SequenceResultTool(
+            "workspace.apply_patch",
+            "Applies a patch.",
+            ToolRiskLevel.Write,
+            CreatePatchSuccess("src/App.cs"),
+            CreatePatchSuccess("src/App.cs")));
+        registry.Register(new StaticResultTool(
+            "workspace.read_text",
+            "Reads text.",
+            ToolRiskLevel.Read,
+            ToolExecutionResult.Success("Read src/App.cs.")));
+        registry.Register(new StaticResultTool(
+            "workspace.search",
+            "Searches text.",
+            ToolRiskLevel.Read,
+            ToolExecutionResult.Success("Found src/App.cs:1.")));
+        registry.Register(new StaticResultTool(
+            "git.status",
+            "Shows status.",
+            ToolRiskLevel.Read,
+            ToolExecutionResult.Success(
+                " M src/App.cs",
+                structuredPayload: CreatePayload("""{"command":"git status --short","exitCode":0}"""))));
+        registry.Register(new StaticResultTool(
+            "git.diff",
+            "Shows diff.",
+            ToolRiskLevel.Read,
+            ToolExecutionResult.Success(
+                "src/App.cs | 2 +-",
+                structuredPayload: CreatePayload("""{"stat":true,"truncated":false}"""))));
+        registry.Register(new SequenceResultTool(
+            "workspace.run_shell",
+            "Runs shell.",
+            ToolRiskLevel.Shell,
+            CreateVerificationShellFailure("tests failed", "Assert.Equal failed"),
+            CreateVerificationShellSuccess("tests passed")));
+
+        int continueCount = 0;
+        FakeToolCallingModel model = new(
+            startTurn: AgentModelTurn.RequestTools(new AgentToolCallRequest(
+                CallId: "call_patch_1",
+                ToolName: "workspace.apply_patch",
+                ArgumentsJson: """{"path":"src/App.cs","find":"old","replace":"broken"}""")),
+            continueFactory: results =>
+            {
+                continueCount++;
+                if (continueCount == 1)
+                {
+                    AgentToolCallResult patch = Assert.Single(results);
+                    JsonElement payload = (patch.Result.StructuredPayload ?? throw new InvalidOperationException("Patch payload missing."))["retryFeedback"];
+                    Assert.Equal("verification", payload.GetProperty("failureKind").GetString());
+                    Assert.Equal(1, payload.GetProperty("attempt").GetInt32());
+                    Assert.Equal("dotnet test", payload.GetProperty("commands")[0].GetString());
+                    Assert.Equal("failure", patch.Result.StructuredPayload["verification"].GetProperty("status").GetString());
+
+                    return AgentModelTurn.RequestTools(
+                        new AgentToolCallRequest(
+                            CallId: "call_read_fix",
+                            ToolName: "workspace.read_text",
+                            ArgumentsJson: """{"path":"src/App.cs"}"""),
+                        new AgentToolCallRequest(
+                            CallId: "call_search_fix",
+                            ToolName: "workspace.search",
+                            ArgumentsJson: """{"query":"broken"}"""),
+                        new AgentToolCallRequest(
+                            CallId: "call_patch_2",
+                            ToolName: "workspace.apply_patch",
+                            ArgumentsJson: """{"path":"src/App.cs","find":"broken","replace":"fixed"}"""));
+                }
+
+                Assert.Equal(3, results.Count);
+                AgentToolCallResult secondPatch = results[2];
+                Assert.Equal("workspace.apply_patch", secondPatch.Request.ToolName);
+                Assert.Equal("success", secondPatch.Result.StructuredPayload?["verification"].GetProperty("status").GetString());
+                return AgentModelTurn.Final("patched after retry");
+            });
+        OfflineAgentRunner runner = new(model, new ToolExecutor(registry), () => DateTimeOffset.Parse("2024-01-01T00:00:05Z"));
+
+        AgentRunResult run = runner.Run(CreateRequest() with
+        {
+            TaskContext = CreateTaskContext(instructions: "VerificationCommand: dotnet test")
+        });
+
+        Assert.True(run.IsSuccess);
+        Assert.Equal("patched after retry", run.Text);
+        AgentRetryAttempt attempt = Assert.Single(run.RetryAttempts);
+        Assert.Equal("verification", attempt.FailureKind);
+        Assert.Equal("verification-failure", attempt.StopReason);
+        Assert.Contains("dotnet test", attempt.Commands);
+        Assert.Contains("src/App.cs", attempt.ChangedFiles);
+        Assert.Equal(2, run.VerificationResults.Count);
+        Assert.Equal("failure", run.VerificationResults[0].Status);
+        Assert.Equal("success", run.VerificationResults[1].Status);
+        Assert.Contains(run.Events, agentEvent => agentEvent.Type == "retry.attempt");
+        Assert.Null(run.FailureSummary);
+    }
+
+    [Fact]
+    public void Run_returns_failure_summary_when_verification_retry_budget_is_exhausted()
+    {
+        ToolRegistry registry = new();
+        registry.Register(new SequenceResultTool(
+            "workspace.apply_patch",
+            "Applies a patch.",
+            ToolRiskLevel.Write,
+            CreatePatchSuccess("src/App.cs"),
+            CreatePatchSuccess("src/App.cs")));
+        registry.Register(new StaticResultTool(
+            "git.status",
+            "Shows status.",
+            ToolRiskLevel.Read,
+            ToolExecutionResult.Success(
+                " M src/App.cs",
+                structuredPayload: CreatePayload("""{"command":"git status --short","exitCode":0}"""))));
+        registry.Register(new StaticResultTool(
+            "git.diff",
+            "Shows diff.",
+            ToolRiskLevel.Read,
+            ToolExecutionResult.Success(
+                "src/App.cs | 2 +-",
+                structuredPayload: CreatePayload("""{"stat":true,"truncated":false}"""))));
+        registry.Register(new SequenceResultTool(
+            "workspace.run_shell",
+            "Runs shell.",
+            ToolRiskLevel.Shell,
+            CreateVerificationShellFailure("tests failed", "compile failed"),
+            CreateVerificationShellFailure("tests still failed", "compile failed again")));
+        int continueCount = 0;
+        OfflineAgentRunner runner = new(
+            new FakeToolCallingModel(
+                startTurn: AgentModelTurn.RequestTools(new AgentToolCallRequest(
+                    CallId: "call_patch",
+                    ToolName: "workspace.apply_patch",
+                    ArgumentsJson: """{"path":"src/App.cs","find":"old","replace":"broken"}""")),
+                continueFactory: _ =>
+                {
+                    continueCount++;
+                    if (continueCount == 1)
+                    {
+                        return AgentModelTurn.RequestTools(new AgentToolCallRequest(
+                            CallId: "call_patch_retry",
+                            ToolName: "workspace.apply_patch",
+                            ArgumentsJson: """{"path":"src/App.cs","find":"broken","replace":"fixed"}"""));
+                    }
+
+                    throw new InvalidOperationException("Retry budget exhausted should stop before second continue.");
+                }),
+            new ToolExecutor(registry),
+            () => DateTimeOffset.Parse("2024-01-01T00:00:05Z"));
+
+        AgentRunResult run = runner.Run(CreateRequest(new AgentRunLimits(MaxRetries: 1)) with
+        {
+            TaskContext = CreateTaskContext(instructions: "VerificationCommand: dotnet test")
+        });
+
+        Assert.False(run.IsSuccess);
+        Assert.Equal("agent-retry-budget-exhausted", run.Error?.LocalErrorCode);
+        Assert.Equal("retry-budget-exhausted", run.StopReason);
+        AgentRetryAttempt retryAttempt = Assert.Single(run.RetryAttempts);
+        Assert.Equal("verification", retryAttempt.FailureKind);
+        AgentFailureSummary summary = run.FailureSummary ?? throw new InvalidOperationException("Failure summary missing.");
+        Assert.Equal("verification", summary.FailureKind);
+        Assert.Equal(1, summary.RetryBudget);
+        Assert.Equal(1, summary.RetryCount);
+        Assert.Contains("dotnet test", summary.Commands);
+        Assert.Contains("src/App.cs", summary.ChangedFiles);
+        Assert.Contains(run.Events, agentEvent => agentEvent.Type == "retry.exhausted");
+    }
+
+    [Fact]
+    public void Run_feeds_bounded_shell_failure_to_model_before_retrying()
+    {
+        string longStdout = new('x', 5000);
+        ToolRegistry registry = new();
+        registry.Register(new StaticResultTool(
+            "workspace.run_shell",
+            "Runs shell.",
+            ToolRiskLevel.Shell,
+            ToolExecutionResult.Failure(
+                ToolErrorCode.ShellExitCode,
+                "Shell command completed with exit code 1." + Environment.NewLine + longStdout,
+                approvalStatus: "approved",
+                structuredPayload: ToolStructuredPayload.Create(
+                    ("command", "dotnet test"),
+                    ("cwd", "."),
+                    ("succeeded", false),
+                    ("summary", "Shell command completed with exit code 1."),
+                    ("exitCode", 1),
+                    ("timedOut", false),
+                    ("stdoutTruncated", false),
+                    ("stderrTruncated", false),
+                    ("stdout", longStdout),
+                    ("stderr", "failed"),
+                    ("approvalStatus", "approved")))));
+        FakeToolCallingModel model = new(
+            startTurn: AgentModelTurn.RequestTools(new AgentToolCallRequest(
+                CallId: "call_shell",
+                ToolName: "workspace.run_shell",
+                ArgumentsJson: """{"command":"dotnet test"}""")),
+            continueFactory: results =>
+            {
+                AgentToolCallResult result = Assert.Single(results);
+                Assert.False(result.Result.Succeeded);
+                Assert.True(result.Result.Summary.Length <= 4096);
+                JsonElement payload = (result.Result.StructuredPayload ?? throw new InvalidOperationException("Shell payload missing."))["retryFeedback"];
+                Assert.Equal("shell", payload.GetProperty("failureKind").GetString());
+                Assert.Equal("dotnet test", payload.GetProperty("commands")[0].GetString());
+                Assert.Equal(4096, result.Result.StructuredPayload["stdout"].GetString()?.Length);
+                Assert.True(result.Result.StructuredPayload["feedbackTruncated"].GetBoolean());
+                return AgentModelTurn.Final("handled shell failure");
+            });
+        OfflineAgentRunner runner = new(model, new ToolExecutor(registry), () => DateTimeOffset.Parse("2024-01-01T00:00:05Z"));
+
+        AgentRunResult run = runner.Run(CreateRequest());
+
+        Assert.True(run.IsSuccess);
+        Assert.Equal("handled shell failure", run.Text);
+        AgentRetryAttempt attempt = Assert.Single(run.RetryAttempts);
+        Assert.Equal("shell", attempt.FailureKind);
+        Assert.Contains("dotnet test", attempt.Commands);
+        Assert.Contains(run.Events, agentEvent => agentEvent.Type == "retry.attempt");
+    }
+
+    [Fact]
     public void Run_patch_denial_records_patch_events_without_verification()
     {
         ToolRegistry registry = new();
@@ -577,7 +804,7 @@ public sealed class OfflineAgentRunnerTests
             "smoke",
             DateTimeOffset.Parse("2024-01-01T00:00:00Z"));
 
-        AgentRunResult result = runner.Run(CreateRequest(), transcript);
+        AgentRunResult result = runner.Run(CreateRequest(new AgentRunLimits(MaxRetries: 0)), transcript);
 
         Assert.False(result.IsSuccess);
         Assert.Equal("unknown-tool", result.Error?.LocalErrorCode);
@@ -604,7 +831,7 @@ public sealed class OfflineAgentRunnerTests
             continueFactory: _ => throw new InvalidOperationException("Tool failure should stop the run."));
         OfflineAgentRunner runner = new(model, executor, () => DateTimeOffset.Parse("2024-01-01T00:00:05Z"));
 
-        AgentRunResult result = runner.Run(CreateRequest());
+        AgentRunResult result = runner.Run(CreateRequest(new AgentRunLimits(MaxRetries: 0)));
 
         Assert.False(result.IsSuccess);
         Assert.Equal("invalid-tool-arguments", result.Error?.LocalErrorCode);
@@ -1116,6 +1343,64 @@ public sealed class OfflineAgentRunnerTests
             .ToDictionary(property => property.Name, property => property.Value.Clone());
     }
 
+    private static ToolExecutionResult CreatePatchSuccess(string path)
+    {
+        return ToolExecutionResult.Success(
+            "Applied patch.",
+            "approved",
+            ToolStructuredPayload.Create(
+                ("path", path),
+                ("approvalStatus", "approved"),
+                ("replacements", 1),
+                ("hasDiff", true),
+                ("dryRunPreview", new
+                {
+                    type = "patch.dry_run_preview",
+                    paths = new[] { path },
+                    totalReplacements = 1,
+                    hasDiff = true
+                })));
+    }
+
+    private static ToolExecutionResult CreateVerificationShellFailure(string stdout, string stderr)
+    {
+        return ToolExecutionResult.Failure(
+            ToolErrorCode.ShellExitCode,
+            "Shell command completed with exit code 1.",
+            approvalStatus: "approved",
+            structuredPayload: ToolStructuredPayload.Create(
+                ("command", "dotnet test"),
+                ("cwd", "."),
+                ("succeeded", false),
+                ("summary", "Shell command completed with exit code 1."),
+                ("exitCode", 1),
+                ("timedOut", false),
+                ("stdoutTruncated", false),
+                ("stderrTruncated", false),
+                ("stdout", stdout),
+                ("stderr", stderr),
+                ("approvalStatus", "approved")));
+    }
+
+    private static ToolExecutionResult CreateVerificationShellSuccess(string stdout)
+    {
+        return ToolExecutionResult.Success(
+            "Shell command completed with exit code 0.",
+            "approved",
+            ToolStructuredPayload.Create(
+                ("command", "dotnet test"),
+                ("cwd", "."),
+                ("succeeded", true),
+                ("summary", "Shell command completed with exit code 0."),
+                ("exitCode", 0),
+                ("timedOut", false),
+                ("stdoutTruncated", false),
+                ("stderrTruncated", false),
+                ("stdout", stdout),
+                ("stderr", string.Empty),
+                ("approvalStatus", "approved")));
+    }
+
     private sealed class EchoTool : ITool
     {
         public ToolDefinition Definition { get; } = new(
@@ -1154,6 +1439,37 @@ public sealed class OfflineAgentRunnerTests
             CancellationToken cancellationToken = default)
         {
             return result;
+        }
+    }
+
+    private sealed class SequenceResultTool : ITool
+    {
+        private readonly Queue<ToolExecutionResult> results;
+
+        public SequenceResultTool(
+            string name,
+            string description,
+            ToolRiskLevel riskLevel,
+            params ToolExecutionResult[] results)
+        {
+            if (results.Length == 0)
+            {
+                throw new ArgumentException("At least one result is required.", nameof(results));
+            }
+
+            Definition = new ToolDefinition(name, description, """{"type":"object"}""", riskLevel);
+            this.results = new Queue<ToolExecutionResult>(results);
+        }
+
+        public ToolDefinition Definition { get; }
+
+        public ToolExecutionResult Execute(
+            ToolExecutionContext context,
+            CancellationToken cancellationToken = default)
+        {
+            return results.Count > 1
+                ? results.Dequeue()
+                : results.Peek();
         }
     }
 

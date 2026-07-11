@@ -35,6 +35,8 @@ public sealed class ConfigReportTests
         Assert.Contains("agentRunMaxStepsSource: default", text);
         Assert.Contains("agentRunMaxToolCalls: 32", text);
         Assert.Contains("agentRunMaxToolCallsSource: default", text);
+        Assert.Contains("agentRunMaxRetries: 1", text);
+        Assert.Contains("agentRunMaxRetriesSource: default", text);
         Assert.Contains("agentRunTimeoutSeconds: 600", text);
         Assert.Contains("agentRunTimeoutSource: default", text);
         Assert.Contains("shellPolicyAllowedCommandsConfigured: false", text);

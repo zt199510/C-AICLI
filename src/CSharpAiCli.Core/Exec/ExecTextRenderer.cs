@@ -25,7 +25,7 @@ public sealed class ExecTextRenderer
 
         string status = result.IsSuccess ? "success" : "failure";
         writer.WriteLine(
-            $"result: {status} exitCode={result.ExitCode}{FormatOptional("summary", result.Summary, redact: true)}{FormatOptional("errorCode", result.ErrorCode)}{FormatOptional("approvalStatus", result.ApprovalStatus)}{FormatOptional("stopReason", result.StopReason)}{FormatOptional("changedFiles", FormatChangedFiles(result.ChangedFiles), redact: true)}{FormatOptional("verificationStatus", FormatVerificationStatus(result.VerificationResults))} events={result.Events.Count}");
+            $"result: {status} exitCode={result.ExitCode}{FormatOptional("summary", result.Summary, redact: true)}{FormatOptional("errorCode", result.ErrorCode)}{FormatOptional("approvalStatus", result.ApprovalStatus)}{FormatOptional("stopReason", result.StopReason)}{FormatOptional("changedFiles", FormatChangedFiles(result.ChangedFiles), redact: true)}{FormatOptional("verificationStatus", FormatVerificationStatus(result.VerificationResults))}{FormatOptional("retryCount", FormatRetryCount(result.RetryAttempts))}{FormatOptional("failureKind", result.FailureSummary?.FailureKind)}{FormatOptional("commands", FormatCommands(result.FailureSummary?.Commands), redact: true)}{FormatOptional("remainingRisk", result.FailureSummary?.RemainingRisk, redact: true)} events={result.Events.Count}");
     }
 
     private static string FormatEvent(ExecEvent execEvent)
@@ -116,5 +116,19 @@ public sealed class ExecTextRenderer
         return verificationResults.Count == 0
             ? null
             : verificationResults[^1].Status;
+    }
+
+    private static string? FormatRetryCount(IReadOnlyList<AgentRetryAttempt> retryAttempts)
+    {
+        return retryAttempts.Count == 0
+            ? null
+            : retryAttempts.Count.ToString(CultureInfo.InvariantCulture);
+    }
+
+    private static string? FormatCommands(IReadOnlyList<string>? commands)
+    {
+        return commands is null || commands.Count == 0
+            ? null
+            : string.Join(",", commands);
     }
 }

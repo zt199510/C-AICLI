@@ -34,6 +34,8 @@ public sealed record ConfigReport(IReadOnlyList<string> Lines)
             $"agentRunMaxStepsSource: {configuration.AgentRunMaxStepsSource}",
             $"agentRunMaxToolCalls: {configuration.AgentRunLimits.MaxToolCalls.ToString(System.Globalization.CultureInfo.InvariantCulture)}",
             $"agentRunMaxToolCallsSource: {configuration.AgentRunMaxToolCallsSource}",
+            $"agentRunMaxRetries: {configuration.AgentRunLimits.MaxRetries.ToString(System.Globalization.CultureInfo.InvariantCulture)}",
+            $"agentRunMaxRetriesSource: {configuration.AgentRunMaxRetriesSource}",
             $"agentRunTimeoutSeconds: {FormatSeconds(configuration.AgentRunLimits.OverallTimeout)}",
             $"agentRunTimeoutSource: {configuration.AgentRunTimeoutSource}",
             $"shellPolicyAllowedCommandsConfigured: {FormatBoolean(configuration.ShellPolicy.AllowedCommandsConfigured)}",

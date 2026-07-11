@@ -75,6 +75,7 @@ public sealed class ConfigLoaderTests
               "agentRunLimits": {
                 "maxSteps": 4,
                 "maxToolCalls": 9,
+                "maxRetries": 2,
                 "timeoutSeconds": 11
               }
             }
@@ -85,6 +86,7 @@ public sealed class ConfigLoaderTests
         Assert.NotNull(config.AgentRunLimits);
         Assert.Equal(4, config.AgentRunLimits.MaxSteps);
         Assert.Equal(9, config.AgentRunLimits.MaxToolCalls);
+        Assert.Equal(2, config.AgentRunLimits.MaxRetries);
         Assert.Equal(11, config.AgentRunLimits.TimeoutSeconds);
     }
 
@@ -484,6 +486,7 @@ public sealed class ConfigLoaderTests
               "agentRunLimits": {
                 "maxSteps": 4,
                 "maxToolCalls": 9,
+                "maxRetries": 2,
                 "timeoutSeconds": 11
               }
             }
@@ -495,6 +498,7 @@ public sealed class ConfigLoaderTests
               "agentRunLimits": {
                 "maxSteps": 2,
                 "maxToolCalls": 3,
+                "maxRetries": 1,
                 "timeoutSeconds": 5
               }
             }
@@ -508,10 +512,12 @@ public sealed class ConfigLoaderTests
 
             Assert.Equal(4, configuration.AgentRunLimits.MaxSteps);
             Assert.Equal(9, configuration.AgentRunLimits.MaxToolCalls);
+            Assert.Equal(2, configuration.AgentRunLimits.MaxRetries);
             Assert.Equal(TimeSpan.FromSeconds(11), configuration.AgentRunLimits.OverallTimeout);
             Assert.Equal(TimeSpan.FromSeconds(11), configuration.AgentRunLimits.ModelCallTimeout);
             Assert.Equal("user config", configuration.AgentRunMaxStepsSource);
             Assert.Equal("user config", configuration.AgentRunMaxToolCallsSource);
+            Assert.Equal("user config", configuration.AgentRunMaxRetriesSource);
             Assert.Equal("user config", configuration.AgentRunTimeoutSource);
             Assert.Contains(userConfigPath, configuration.LoadedConfigPaths);
             Assert.Contains(workspaceConfigPath, configuration.LoadedConfigPaths);
@@ -541,6 +547,7 @@ public sealed class ConfigLoaderTests
               "agentRunLimits": {
                 "maxSteps": 0,
                 "maxToolCalls": -1,
+                "maxRetries": -1,
                 "timeoutSeconds": 0
               }
             }
@@ -552,6 +559,7 @@ public sealed class ConfigLoaderTests
               "agentRunLimits": {
                 "maxSteps": 3,
                 "maxToolCalls": 5,
+                "maxRetries": 0,
                 "timeoutSeconds": 7
               }
             }
@@ -565,12 +573,15 @@ public sealed class ConfigLoaderTests
 
             Assert.Equal(3, configuration.AgentRunLimits.MaxSteps);
             Assert.Equal(5, configuration.AgentRunLimits.MaxToolCalls);
+            Assert.Equal(0, configuration.AgentRunLimits.MaxRetries);
             Assert.Equal(TimeSpan.FromSeconds(7), configuration.AgentRunLimits.OverallTimeout);
             Assert.Equal("workspace config", configuration.AgentRunMaxStepsSource);
             Assert.Equal("workspace config", configuration.AgentRunMaxToolCallsSource);
+            Assert.Equal("workspace config", configuration.AgentRunMaxRetriesSource);
             Assert.Equal("workspace config", configuration.AgentRunTimeoutSource);
             Assert.Contains(configuration.Warnings, warning => warning.Contains("ignored invalid agentRunLimits.maxSteps from user config", StringComparison.Ordinal));
             Assert.Contains(configuration.Warnings, warning => warning.Contains("ignored invalid agentRunLimits.maxToolCalls from user config", StringComparison.Ordinal));
+            Assert.Contains(configuration.Warnings, warning => warning.Contains("ignored invalid agentRunLimits.maxRetries from user config", StringComparison.Ordinal));
             Assert.Contains(configuration.Warnings, warning => warning.Contains("ignored invalid agentRunLimits.timeoutSeconds from user config", StringComparison.Ordinal));
         }
         finally

@@ -4446,6 +4446,28 @@ public sealed class CliCommandFactoryTests
     }
 
     [Fact]
+    public void Exec_max_retries_rejects_negative_values_before_running_task()
+    {
+        using TempDirectory temp = TempDirectory.Create();
+        File.WriteAllText(Path.Combine(temp.Path, "note.txt"), "hello exec");
+        using StringWriter output = new();
+        List<string> loggedCommands = [];
+        RootCommand command = CliCommandFactory.Create(
+            output,
+            CreateSnapshot,
+            (commandName, _) => loggedCommands.Add(commandName));
+
+        int exitCode = CliCommandFactory.Invoke(
+            command,
+            ["exec", "--workspace", temp.Path, "--max-retries", "-1", "read note.txt"],
+            output);
+
+        Assert.Equal(2, exitCode);
+        Assert.Empty(loggedCommands);
+        Assert.DoesNotContain("hello exec", output.ToString(), StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void Exec_rejects_conflicting_max_steps_and_max_turns_before_running_task()
     {
         using TempDirectory temp = TempDirectory.Create();
@@ -4674,6 +4696,7 @@ public sealed class CliCommandFactoryTests
             agentRunLimits: new AgentRunLimits(
                 MaxSteps: 4,
                 MaxToolCalls: 9,
+                MaxRetries: 2,
                 ModelCallTimeout: TimeSpan.FromSeconds(11),
                 OverallTimeout: TimeSpan.FromSeconds(11)));
 
@@ -4693,6 +4716,7 @@ public sealed class CliCommandFactoryTests
         Assert.Equal(0, exitCode);
         Assert.Equal(4, agentRunner.LastRequest?.Limits?.MaxSteps);
         Assert.Equal(9, agentRunner.LastRequest?.Limits?.MaxToolCalls);
+        Assert.Equal(2, agentRunner.LastRequest?.Limits?.MaxRetries);
         Assert.Equal(TimeSpan.FromSeconds(11), agentRunner.LastRequest?.Limits?.OverallTimeout);
         Assert.Equal(TimeSpan.FromSeconds(11), agentRunner.LastRequest?.Limits?.ModelCallTimeout);
     }
@@ -4711,6 +4735,7 @@ public sealed class CliCommandFactoryTests
             agentRunLimits: new AgentRunLimits(
                 MaxSteps: 4,
                 MaxToolCalls: 9,
+                MaxRetries: 2,
                 ModelCallTimeout: TimeSpan.FromSeconds(11),
                 OverallTimeout: TimeSpan.FromSeconds(11)));
 
@@ -4732,6 +4757,8 @@ public sealed class CliCommandFactoryTests
                 "2",
                 "--max-tool-calls",
                 "3",
+                "--max-retries",
+                "0",
                 "--timeout-seconds",
                 "5",
                 "summarize workspace"
@@ -4741,6 +4768,7 @@ public sealed class CliCommandFactoryTests
         Assert.Equal(0, exitCode);
         Assert.Equal(2, agentRunner.LastRequest?.Limits?.MaxSteps);
         Assert.Equal(3, agentRunner.LastRequest?.Limits?.MaxToolCalls);
+        Assert.Equal(0, agentRunner.LastRequest?.Limits?.MaxRetries);
         Assert.Equal(TimeSpan.FromSeconds(5), agentRunner.LastRequest?.Limits?.OverallTimeout);
         Assert.Equal(TimeSpan.FromSeconds(5), agentRunner.LastRequest?.Limits?.ModelCallTimeout);
     }

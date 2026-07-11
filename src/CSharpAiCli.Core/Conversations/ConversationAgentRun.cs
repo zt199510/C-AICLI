@@ -14,7 +14,9 @@ public sealed record ConversationAgentRun
         int ToolCallCount,
         string? PlanSummary = null,
         IReadOnlyList<ChangedFileSummary>? ChangedFiles = null,
-        IReadOnlyList<VerificationResultSummary>? VerificationResults = null)
+        IReadOnlyList<VerificationResultSummary>? VerificationResults = null,
+        IReadOnlyList<AgentRetryAttempt>? RetryAttempts = null,
+        AgentFailureSummary? FailureSummary = null)
     {
         this.CompletedAtUtc = CompletedAtUtc;
         this.Status = Status;
@@ -26,6 +28,8 @@ public sealed record ConversationAgentRun
         this.PlanSummary = PlanSummary;
         this.ChangedFiles = new ReadOnlyCollection<ChangedFileSummary>((ChangedFiles ?? []).ToArray());
         this.VerificationResults = new ReadOnlyCollection<VerificationResultSummary>((VerificationResults ?? []).ToArray());
+        this.RetryAttempts = new ReadOnlyCollection<AgentRetryAttempt>((RetryAttempts ?? []).ToArray());
+        this.FailureSummary = FailureSummary;
     }
 
     public DateTimeOffset CompletedAtUtc { get; }
@@ -48,6 +52,10 @@ public sealed record ConversationAgentRun
 
     public IReadOnlyList<VerificationResultSummary> VerificationResults { get; }
 
+    public IReadOnlyList<AgentRetryAttempt> RetryAttempts { get; }
+
+    public AgentFailureSummary? FailureSummary { get; }
+
     public static ConversationAgentRun FromAgentResult(
         AgentRunResult result,
         DateTimeOffset completedAtUtc)
@@ -64,7 +72,9 @@ public sealed record ConversationAgentRun
             ToolCallCount: result.ToolCalls.Count,
             PlanSummary: FindPlanSummary(result.Events),
             ChangedFiles: result.ChangedFiles,
-            VerificationResults: result.VerificationResults);
+            VerificationResults: result.VerificationResults,
+            RetryAttempts: result.RetryAttempts,
+            FailureSummary: result.FailureSummary);
     }
 
     private static string? FindPlanSummary(IReadOnlyList<AgentRunEvent> events)

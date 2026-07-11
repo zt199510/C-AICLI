@@ -92,6 +92,41 @@ public sealed class ExecJsonRenderer
             }).ToArray();
         }
 
+        if (result.RetryAttempts.Count > 0)
+        {
+            payload["retryCount"] = result.RetryAttempts.Count;
+            payload["retryAttempts"] = result.RetryAttempts.Select(attempt => new Dictionary<string, object?>
+            {
+                ["index"] = attempt.Index,
+                ["failureKind"] = attempt.FailureKind,
+                ["stopReason"] = attempt.StopReason,
+                ["errorCode"] = attempt.ErrorCode,
+                ["sourceToolCallId"] = attempt.SourceToolCallId,
+                ["toolName"] = attempt.ToolName,
+                ["summary"] = ExecOutputRedactor.Redact(attempt.Summary ?? string.Empty),
+                ["commands"] = attempt.Commands.Select(ExecOutputRedactor.Redact).ToArray(),
+                ["changedFiles"] = attempt.ChangedFiles.Select(ExecOutputRedactor.Redact).ToArray(),
+                ["verificationStatus"] = attempt.VerificationStatus
+            }).ToArray();
+        }
+
+        if (result.FailureSummary is not null)
+        {
+            payload["failureSummary"] = new Dictionary<string, object?>
+            {
+                ["failureKind"] = result.FailureSummary.FailureKind,
+                ["stopReason"] = result.FailureSummary.StopReason,
+                ["errorCode"] = result.FailureSummary.ErrorCode,
+                ["message"] = ExecOutputRedactor.Redact(result.FailureSummary.Message),
+                ["retryBudget"] = result.FailureSummary.RetryBudget,
+                ["retryCount"] = result.FailureSummary.RetryCount,
+                ["remainingRetries"] = result.FailureSummary.RemainingRetries,
+                ["remainingRisk"] = ExecOutputRedactor.Redact(result.FailureSummary.RemainingRisk),
+                ["commands"] = result.FailureSummary.Commands.Select(ExecOutputRedactor.Redact).ToArray(),
+                ["changedFiles"] = result.FailureSummary.ChangedFiles.Select(ExecOutputRedactor.Redact).ToArray()
+            };
+        }
+
         envelope["payload"] = payload;
 
         writer.WriteLine(JsonSerializer.Serialize(envelope, JsonOptions));

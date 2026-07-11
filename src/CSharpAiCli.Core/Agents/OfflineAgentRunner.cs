@@ -51,6 +51,7 @@ public sealed class OfflineAgentRunner : IAgentRunner
         List<AgentRunEvent> events = [];
         List<ChangedFileSummary> changedFiles = [];
         List<VerificationResultSummary> verificationResults = [];
+        List<AgentRetryAttempt> retryAttempts = [];
         if (request.TaskContext is not null)
         {
             RecordStartupContext(events, request);
@@ -62,6 +63,7 @@ public sealed class OfflineAgentRunner : IAgentRunner
             events,
             changedFiles,
             verificationResults,
+            retryAttempts,
             out AgentRunResult? timeoutResult))
         {
             return timeoutResult!;
@@ -75,6 +77,7 @@ public sealed class OfflineAgentRunner : IAgentRunner
             events,
             changedFiles,
             verificationResults,
+            retryAttempts,
             out AgentModelTurn? turn,
             out long? modelCallDurationMs,
             out AgentRunResult? modelTimeoutResult))
@@ -94,6 +97,7 @@ public sealed class OfflineAgentRunner : IAgentRunner
                 events,
                 changedFiles,
                 verificationResults,
+                retryAttempts,
                 out timeoutResult))
             {
                 return timeoutResult!;
@@ -110,6 +114,7 @@ public sealed class OfflineAgentRunner : IAgentRunner
                     state.Steps,
                     changedFiles,
                     verificationResults,
+                    retryAttempts,
                     state.StopReason ?? AgentStopReason.Completed);
             }
 
@@ -117,22 +122,23 @@ public sealed class OfflineAgentRunner : IAgentRunner
             {
                 AgentLoopError error = state.StopEmptyTurn();
                 RecordError(events, error, step: null);
-                return CreateFailureResult(error, recordedToolCalls, events, state, changedFiles, verificationResults);
+                return CreateFailureResult(error, recordedToolCalls, events, state, changedFiles, verificationResults, retryAttempts);
             }
 
             if (!state.TryBeginStep(out AgentStep? step, out AgentLoopError? stepLimitError))
             {
                 RecordError(events, stepLimitError!, step: null);
-                return CreateFailureResult(stepLimitError!, recordedToolCalls, events, state, changedFiles, verificationResults);
+                return CreateFailureResult(stepLimitError!, recordedToolCalls, events, state, changedFiles, verificationResults, retryAttempts);
             }
 
             List<AgentToolCallResult> toolResults = [];
+            string? retryStepStopReason = null;
             foreach (AgentToolCallRequest toolCall in currentTurn.ToolCalls)
             {
                 if (!state.TryReserveToolCall(step, out AgentLoopError? toolCallLimitError))
                 {
                     RecordError(events, toolCallLimitError!, step);
-                    return CreateFailureResult(toolCallLimitError!, recordedToolCalls, events, state, changedFiles, verificationResults);
+                    return CreateFailureResult(toolCallLimitError!, recordedToolCalls, events, state, changedFiles, verificationResults, retryAttempts);
                 }
 
                 if (TryCreateTimeoutResult(
@@ -141,6 +147,7 @@ public sealed class OfflineAgentRunner : IAgentRunner
                     events,
                     changedFiles,
                     verificationResults,
+                    retryAttempts,
                     out timeoutResult))
                 {
                     return timeoutResult!;
@@ -161,6 +168,7 @@ public sealed class OfflineAgentRunner : IAgentRunner
                     step,
                     changedFiles,
                     verificationResults,
+                    retryAttempts,
                     out ToolExecutionResult executionResult,
                     out long? toolDurationMs,
                     out AgentRunResult? toolTimeoutResult))
@@ -179,6 +187,64 @@ public sealed class OfflineAgentRunner : IAgentRunner
                     changedFiles.AddRange(postPatch.ChangedFiles);
                     verificationResults.Add(postPatch.VerificationResult);
                     executionResult = AugmentPatchResult(executionResult, postPatch);
+
+                    if (TryCreateVerificationFailureInput(toolCall, postPatch.VerificationResult, out AgentRetryDecisionInput? verificationFailure))
+                    {
+                        AgentRetryDecision decision = AgentRetryPolicy.Decide(
+                            verificationFailure!,
+                            state.RemainingRetries,
+                            state.Limits.MaxRetries == 0);
+                        AgentLoopError? retryReserveError = null;
+                        if (decision.ShouldRetry && state.TryReserveRetry(out retryReserveError))
+                        {
+                            AgentRetryAttempt attempt = CreateRetryAttempt(
+                                verificationFailure!,
+                                state.RetryCount,
+                                changedFiles);
+                            retryAttempts.Add(attempt);
+                            executionResult = AddRetryFeedback(executionResult, attempt, decision);
+                            retryStepStopReason = verificationFailure!.StopReason;
+                        }
+                        else
+                        {
+                            AgentLoopError verificationError = decision.BudgetExhausted || retryReserveError is not null
+                                ? state.StopRetryBudgetExhausted()
+                                : state.StopFailure(
+                                    verificationFailure!.StopReason,
+                                    verificationFailure.ErrorCode ?? "verification-failure",
+                                    verificationFailure.Summary,
+                                    retryable: false);
+                            state.CompleteStep(step, verificationError.Status, verificationError.StopReason);
+                            DateTimeOffset terminalNowUtc = utcNowProvider();
+                            ConversationToolCall terminalTranscriptToolCall = ConversationToolCall.FromExecution(
+                                toolCall.CallId,
+                                toolCall.ToolName,
+                                context.ArgumentsJson,
+                                executionResult,
+                                terminalNowUtc);
+                            recordedToolCalls.Add(terminalTranscriptToolCall);
+                            transcript?.AddToolCall(terminalTranscriptToolCall);
+                            RecordToolResult(events, toolCall, executionResult, toolDurationMs, step);
+                            RecordPatchDiagnosticEvents(events, toolCall, executionResult, step);
+                            RecordChangedFilesEvent(events, toolCall, postPatch, step);
+                            RecordVerificationResultEvent(events, toolCall, postPatch.VerificationResult, step);
+                            if (decision.BudgetExhausted || retryReserveError is not null)
+                            {
+                                RecordRetryBudgetExhaustedEvent(events, verificationFailure!, decision, step);
+                            }
+
+                            RecordError(events, verificationError, step);
+                            return CreateFailureResult(
+                                verificationError,
+                                recordedToolCalls,
+                                events,
+                                state,
+                                changedFiles,
+                                verificationResults,
+                                retryAttempts,
+                                verificationFailure);
+                        }
+                    }
                 }
 
                 AgentToolCallResult toolResult = new(toolCall, executionResult);
@@ -206,20 +272,65 @@ public sealed class OfflineAgentRunner : IAgentRunner
                     RecordPlanToolEvent(events, toolCall, executionResult, step);
                 }
 
+                if (retryStepStopReason is not null)
+                {
+                    RecordRetryAttemptEvent(events, retryAttempts[^1], state, step);
+                    break;
+                }
+
                 if (!executionResult.Succeeded)
                 {
-                    AgentLoopError toolFailure = state.StopFailure(
-                        AgentStopReason.FromToolResult(executionResult),
-                        executionResult.ErrorCode ?? ToolErrorCode.ToolExecutionFailed,
-                        executionResult.Summary,
-                        executionResult.Retryable);
+                    AgentRetryDecisionInput toolFailureInput = CreateToolFailureInput(toolCall, executionResult);
+                    AgentRetryDecision decision = AgentRetryPolicy.Decide(
+                        toolFailureInput,
+                        state.RemainingRetries,
+                        state.Limits.MaxRetries == 0);
+                    AgentLoopError? retryReserveError = null;
+                    if (decision.ShouldRetry && state.TryReserveRetry(out retryReserveError))
+                    {
+                        AgentRetryAttempt attempt = CreateRetryAttempt(
+                            toolFailureInput,
+                            state.RetryCount,
+                            changedFiles);
+                        retryAttempts.Add(attempt);
+                        toolResults[^1] = new AgentToolCallResult(
+                            toolCall,
+                            AddRetryFeedback(executionResult, attempt, decision));
+                        RecordRetryAttemptEvent(events, attempt, state, step);
+                        retryStepStopReason = toolFailureInput.StopReason;
+                        break;
+                    }
+
+                    AgentLoopError toolFailure = decision.BudgetExhausted || retryReserveError is not null
+                        ? state.StopRetryBudgetExhausted()
+                        : state.StopFailure(
+                            toolFailureInput.StopReason,
+                            toolFailureInput.ErrorCode ?? ToolErrorCode.ToolExecutionFailed,
+                            toolFailureInput.Summary,
+                            executionResult.Retryable);
                     state.CompleteStep(step, toolFailure.Status, toolFailure.StopReason);
+                    if (decision.BudgetExhausted || retryReserveError is not null)
+                    {
+                        RecordRetryBudgetExhaustedEvent(events, toolFailureInput, decision, step);
+                    }
+
                     RecordError(events, toolFailure, step);
-                    return CreateFailureResult(toolFailure, recordedToolCalls, events, state, changedFiles, verificationResults);
+                    return CreateFailureResult(
+                        toolFailure,
+                        recordedToolCalls,
+                        events,
+                        state,
+                        changedFiles,
+                        verificationResults,
+                        retryAttempts,
+                        toolFailureInput);
                 }
             }
 
-            state.CompleteStep(step, DiagnosticEventStatus.Success);
+            state.CompleteStep(
+                step,
+                retryStepStopReason is null ? DiagnosticEventStatus.Success : DiagnosticEventStatus.Warning,
+                retryStepStopReason);
 
             if (TryCreateTimeoutResult(
                 state,
@@ -227,6 +338,7 @@ public sealed class OfflineAgentRunner : IAgentRunner
                 events,
                 changedFiles,
                 verificationResults,
+                retryAttempts,
                 out timeoutResult))
             {
                 return timeoutResult!;
@@ -242,6 +354,7 @@ public sealed class OfflineAgentRunner : IAgentRunner
                 step,
                 changedFiles,
                 verificationResults,
+                retryAttempts,
                 out turn,
                 out modelCallDurationMs,
                 out modelTimeoutResult))
@@ -257,6 +370,7 @@ public sealed class OfflineAgentRunner : IAgentRunner
                 events,
                 changedFiles,
                 verificationResults,
+                retryAttempts,
                 out timeoutResult))
             {
                 return timeoutResult!;
@@ -273,6 +387,7 @@ public sealed class OfflineAgentRunner : IAgentRunner
                     state.Steps,
                     changedFiles,
                     verificationResults,
+                    retryAttempts,
                     state.StopReason ?? AgentStopReason.Completed);
             }
         }
@@ -286,6 +401,7 @@ public sealed class OfflineAgentRunner : IAgentRunner
         List<AgentRunEvent> events,
         IReadOnlyList<ChangedFileSummary> changedFiles,
         IReadOnlyList<VerificationResultSummary> verificationResults,
+        IReadOnlyList<AgentRetryAttempt> retryAttempts,
         out AgentModelTurn? turn,
         out long? durationMs,
         out AgentRunResult? result)
@@ -297,7 +413,7 @@ public sealed class OfflineAgentRunner : IAgentRunner
         {
             turn = null;
             durationMs = null;
-            result = CreateOverallTimeoutResult(state, recordedToolCalls, events, changedFiles, verificationResults);
+            result = CreateOverallTimeoutResult(state, recordedToolCalls, events, changedFiles, verificationResults, retryAttempts);
             return false;
         }
 
@@ -332,19 +448,19 @@ public sealed class OfflineAgentRunner : IAgentRunner
                     || overallTimeoutSource.IsCancellationRequested
                     || utcNowProvider() > deadlineUtc))
             {
-                result = CreateModelCallTimeoutResult(state, recordedToolCalls, events, changedFiles, verificationResults, durationMs);
+                result = CreateModelCallTimeoutResult(state, recordedToolCalls, events, changedFiles, verificationResults, retryAttempts, durationMs);
                 return false;
             }
 
             if (overallTimeoutSource.IsCancellationRequested || utcNowProvider() > deadlineUtc)
             {
-                result = CreateOverallTimeoutResult(state, recordedToolCalls, events, changedFiles, verificationResults, durationMs);
+                result = CreateOverallTimeoutResult(state, recordedToolCalls, events, changedFiles, verificationResults, retryAttempts, durationMs);
                 return false;
             }
 
             if (modelTimeoutSource.IsCancellationRequested)
             {
-                result = CreateModelCallTimeoutResult(state, recordedToolCalls, events, changedFiles, verificationResults, durationMs);
+                result = CreateModelCallTimeoutResult(state, recordedToolCalls, events, changedFiles, verificationResults, retryAttempts, durationMs);
                 return false;
             }
 
@@ -362,6 +478,7 @@ public sealed class OfflineAgentRunner : IAgentRunner
         AgentStep? step,
         IReadOnlyList<ChangedFileSummary> changedFiles,
         IReadOnlyList<VerificationResultSummary> verificationResults,
+        IReadOnlyList<AgentRetryAttempt> retryAttempts,
         out AgentModelTurn? turn,
         out long? durationMs,
         out AgentRunResult? result)
@@ -373,7 +490,7 @@ public sealed class OfflineAgentRunner : IAgentRunner
         {
             turn = null;
             durationMs = null;
-            result = CreateOverallTimeoutResult(state, recordedToolCalls, events, changedFiles, verificationResults, step: step);
+            result = CreateOverallTimeoutResult(state, recordedToolCalls, events, changedFiles, verificationResults, retryAttempts, step: step);
             return false;
         }
 
@@ -408,19 +525,19 @@ public sealed class OfflineAgentRunner : IAgentRunner
                     || overallTimeoutSource.IsCancellationRequested
                     || utcNowProvider() > deadlineUtc))
             {
-                result = CreateModelCallTimeoutResult(state, recordedToolCalls, events, changedFiles, verificationResults, durationMs, step);
+                result = CreateModelCallTimeoutResult(state, recordedToolCalls, events, changedFiles, verificationResults, retryAttempts, durationMs, step);
                 return false;
             }
 
             if (overallTimeoutSource.IsCancellationRequested || utcNowProvider() > deadlineUtc)
             {
-                result = CreateOverallTimeoutResult(state, recordedToolCalls, events, changedFiles, verificationResults, durationMs, step);
+                result = CreateOverallTimeoutResult(state, recordedToolCalls, events, changedFiles, verificationResults, retryAttempts, durationMs, step);
                 return false;
             }
 
             if (modelTimeoutSource.IsCancellationRequested)
             {
-                result = CreateModelCallTimeoutResult(state, recordedToolCalls, events, changedFiles, verificationResults, durationMs, step);
+                result = CreateModelCallTimeoutResult(state, recordedToolCalls, events, changedFiles, verificationResults, retryAttempts, durationMs, step);
                 return false;
             }
 
@@ -438,6 +555,7 @@ public sealed class OfflineAgentRunner : IAgentRunner
         AgentStep? step,
         IReadOnlyList<ChangedFileSummary> changedFiles,
         IReadOnlyList<VerificationResultSummary> verificationResults,
+        IReadOnlyList<AgentRetryAttempt> retryAttempts,
         out ToolExecutionResult executionResult,
         out long? durationMs,
         out AgentRunResult? result)
@@ -449,7 +567,7 @@ public sealed class OfflineAgentRunner : IAgentRunner
             executionResult = null!;
             durationMs = null;
             RecordToolTimeout(events, toolCall, durationMs, step);
-            result = CreateOverallTimeoutResult(state, recordedToolCalls, events, changedFiles, verificationResults, step: step);
+            result = CreateOverallTimeoutResult(state, recordedToolCalls, events, changedFiles, verificationResults, retryAttempts, step: step);
             return false;
         }
 
@@ -481,7 +599,7 @@ public sealed class OfflineAgentRunner : IAgentRunner
             if (overallTimeoutSource.IsCancellationRequested || utcNowProvider() > deadlineUtc)
             {
                 RecordToolTimeout(events, toolCall, durationMs, step);
-                result = CreateOverallTimeoutResult(state, recordedToolCalls, events, changedFiles, verificationResults, durationMs, step);
+                result = CreateOverallTimeoutResult(state, recordedToolCalls, events, changedFiles, verificationResults, retryAttempts, durationMs, step);
                 return false;
             }
 
@@ -495,13 +613,14 @@ public sealed class OfflineAgentRunner : IAgentRunner
         List<AgentRunEvent> events,
         IReadOnlyList<ChangedFileSummary> changedFiles,
         IReadOnlyList<VerificationResultSummary> verificationResults,
+        IReadOnlyList<AgentRetryAttempt> retryAttempts,
         long? durationMs = null,
         AgentStep? step = null)
     {
         AgentLoopError timeoutError = state.StopModelTimeout();
         state.CompleteStep(step, timeoutError.Status, timeoutError.StopReason);
         RecordError(events, timeoutError, step, durationMs);
-        return CreateFailureResult(timeoutError, recordedToolCalls, events, state, changedFiles, verificationResults);
+        return CreateFailureResult(timeoutError, recordedToolCalls, events, state, changedFiles, verificationResults, retryAttempts);
     }
 
     private AgentRunResult CreateOverallTimeoutResult(
@@ -510,13 +629,14 @@ public sealed class OfflineAgentRunner : IAgentRunner
         List<AgentRunEvent> events,
         IReadOnlyList<ChangedFileSummary> changedFiles,
         IReadOnlyList<VerificationResultSummary> verificationResults,
+        IReadOnlyList<AgentRetryAttempt> retryAttempts,
         long? durationMs = null,
         AgentStep? step = null)
     {
         AgentLoopError timeoutError = state.StopOverallTimeout();
         state.CompleteStep(step, timeoutError.Status, timeoutError.StopReason);
         RecordError(events, timeoutError, step, durationMs);
-        return CreateFailureResult(timeoutError, recordedToolCalls, events, state, changedFiles, verificationResults);
+        return CreateFailureResult(timeoutError, recordedToolCalls, events, state, changedFiles, verificationResults, retryAttempts);
     }
 
     private bool TryCreateTimeoutResult(
@@ -525,6 +645,7 @@ public sealed class OfflineAgentRunner : IAgentRunner
         List<AgentRunEvent> events,
         IReadOnlyList<ChangedFileSummary> changedFiles,
         IReadOnlyList<VerificationResultSummary> verificationResults,
+        IReadOnlyList<AgentRetryAttempt> retryAttempts,
         out AgentRunResult? result)
     {
         if (!state.TryCreateOverallTimeoutError(out AgentLoopError? error))
@@ -534,7 +655,7 @@ public sealed class OfflineAgentRunner : IAgentRunner
         }
 
         RecordError(events, error!, step: null);
-        result = CreateFailureResult(error!, recordedToolCalls, events, state, changedFiles, verificationResults);
+        result = CreateFailureResult(error!, recordedToolCalls, events, state, changedFiles, verificationResults, retryAttempts);
         return true;
     }
 
@@ -544,8 +665,15 @@ public sealed class OfflineAgentRunner : IAgentRunner
         IReadOnlyList<AgentRunEvent> events,
         AgentRunState state,
         IReadOnlyList<ChangedFileSummary> changedFiles,
-        IReadOnlyList<VerificationResultSummary> verificationResults)
+        IReadOnlyList<VerificationResultSummary> verificationResults,
+        IReadOnlyList<AgentRetryAttempt> retryAttempts,
+        AgentRetryDecisionInput? lastFailure = null)
     {
+        AgentFailureSummary? failureSummary = retryAttempts.Count > 0 ||
+            string.Equals(error.ErrorCode, "agent-retry-budget-exhausted", StringComparison.Ordinal)
+                ? CreateFailureSummary(error, state, changedFiles, verificationResults, retryAttempts, lastFailure)
+                : null;
+
         return AgentRunResult.Failure(
             error.ToAgentError(),
             recordedToolCalls,
@@ -553,8 +681,320 @@ public sealed class OfflineAgentRunner : IAgentRunner
             state.Steps,
             changedFiles,
             verificationResults,
+            retryAttempts,
+            failureSummary,
             error.StopReason,
             error.Status);
+    }
+
+    private static AgentFailureSummary CreateFailureSummary(
+        AgentLoopError error,
+        AgentRunState state,
+        IReadOnlyList<ChangedFileSummary> changedFiles,
+        IReadOnlyList<VerificationResultSummary> verificationResults,
+        IReadOnlyList<AgentRetryAttempt> retryAttempts,
+        AgentRetryDecisionInput? lastFailure)
+    {
+        List<string> commands = retryAttempts
+            .SelectMany(attempt => attempt.Commands)
+            .Concat(verificationResults
+                .Select(result => result.Command)
+                .Where(command => !string.IsNullOrWhiteSpace(command))
+                .Select(command => command!))
+            .Distinct(StringComparer.Ordinal)
+            .ToList();
+        if (lastFailure is not null)
+        {
+            AddCommands(commands, lastFailure);
+        }
+
+        IReadOnlyList<string> changedFilePaths = retryAttempts
+            .SelectMany(attempt => attempt.ChangedFiles)
+            .Concat(changedFiles.Select(file => file.Path))
+            .Where(path => !string.IsNullOrWhiteSpace(path))
+            .Distinct(StringComparer.Ordinal)
+            .ToArray();
+
+        string failureKind = lastFailure?.FailureKind ?? ClassifyErrorCode(error.ErrorCode);
+        string remainingRisk = string.Equals(error.ErrorCode, "agent-retry-budget-exhausted", StringComparison.Ordinal)
+            ? "Retry budget was exhausted; review changed files, verification output, and command history before continuing."
+            : "The task stopped after retry feedback; review changed files and command output before continuing.";
+
+        return new AgentFailureSummary(
+            FailureKind: failureKind,
+            StopReason: error.StopReason,
+            ErrorCode: error.ErrorCode,
+            Message: error.SafeMessage,
+            RetryBudget: state.Limits.MaxRetries,
+            RetryCount: state.RetryCount,
+            RemainingRetries: state.RemainingRetries,
+            RemainingRisk: remainingRisk,
+            RetryAttempts: retryAttempts,
+            Commands: commands,
+            ChangedFiles: changedFilePaths);
+    }
+
+    private static bool TryCreateVerificationFailureInput(
+        AgentToolCallRequest toolCall,
+        VerificationResultSummary verification,
+        out AgentRetryDecisionInput? input)
+    {
+        if (verification.Succeeded ||
+            string.Equals(verification.Status, "skipped", StringComparison.Ordinal))
+        {
+            input = null;
+            return false;
+        }
+
+        bool approvalDenied = string.Equals(verification.ErrorCode, ToolErrorCode.ApprovalDenied, StringComparison.Ordinal) ||
+            verification.ApprovalStatus is "denied" or "approval-required" or "dangerous-shell-denied";
+        string failureKind = approvalDenied ? AgentFailureKind.Approval : AgentFailureKind.Verification;
+        string stopReason = approvalDenied ? AgentStopReason.ApprovalDenied : AgentStopReason.VerificationFailure;
+        input = new AgentRetryDecisionInput(
+            FailureKind: failureKind,
+            StopReason: stopReason,
+            ErrorCode: verification.ErrorCode,
+            Summary: CreateVerificationFailureFeedback(verification),
+            Retryable: !approvalDenied,
+            ApprovalStatus: verification.ApprovalStatus,
+            SourceToolCallId: toolCall.CallId,
+            ToolName: toolCall.ToolName,
+            Verification: verification);
+        return true;
+    }
+
+    private static string CreateVerificationFailureFeedback(VerificationResultSummary verification)
+    {
+        List<string> lines =
+        [
+            "Automatic verification failed.",
+            $"status: {verification.Status}"
+        ];
+
+        if (!string.IsNullOrWhiteSpace(verification.Command))
+        {
+            lines.Add($"command: {verification.Command}");
+        }
+
+        if (verification.ExitCode is not null)
+        {
+            lines.Add($"exitCode: {verification.ExitCode.Value.ToString(System.Globalization.CultureInfo.InvariantCulture)}");
+        }
+
+        if (!string.IsNullOrWhiteSpace(verification.ErrorCode))
+        {
+            lines.Add($"errorCode: {verification.ErrorCode}");
+        }
+
+        if (!string.IsNullOrWhiteSpace(verification.Summary))
+        {
+            lines.Add("summary:");
+            lines.Add(verification.Summary);
+        }
+
+        return Bound(string.Join(Environment.NewLine, lines), MaxSummaryCharacters).Text;
+    }
+
+    private static AgentRetryDecisionInput CreateToolFailureInput(
+        AgentToolCallRequest toolCall,
+        ToolExecutionResult result)
+    {
+        string failureKind = ClassifyToolFailure(toolCall.ToolName, result);
+        return new AgentRetryDecisionInput(
+            FailureKind: failureKind,
+            StopReason: AgentStopReason.FromToolResult(result),
+            ErrorCode: result.ErrorCode,
+            Summary: Bound(result.Summary, MaxSummaryCharacters).Text,
+            Retryable: result.Retryable,
+            ApprovalStatus: result.ApprovalStatus,
+            SourceToolCallId: toolCall.CallId,
+            ToolName: toolCall.ToolName,
+            StructuredPayload: result.StructuredPayload);
+    }
+
+    private static string ClassifyToolFailure(string toolName, ToolExecutionResult result)
+    {
+        if (string.Equals(result.ErrorCode, ToolErrorCode.ApprovalDenied, StringComparison.Ordinal) ||
+            result.ApprovalStatus is "denied" or "approval-required" or "dangerous-shell-denied")
+        {
+            return AgentFailureKind.Approval;
+        }
+
+        if (string.Equals(toolName, ShellToolName, StringComparison.Ordinal) || IsShellError(result.ErrorCode))
+        {
+            return AgentFailureKind.Shell;
+        }
+
+        if (string.Equals(toolName, PatchToolName, StringComparison.Ordinal) || IsPatchError(result.ErrorCode))
+        {
+            return AgentFailureKind.Patch;
+        }
+
+        return AgentFailureKind.Tool;
+    }
+
+    private static AgentRetryAttempt CreateRetryAttempt(
+        AgentRetryDecisionInput input,
+        int retryIndex,
+        IReadOnlyList<ChangedFileSummary> changedFiles)
+    {
+        List<string> commands = [];
+        AddCommands(commands, input);
+
+        IReadOnlyList<string> changedFilePaths = changedFiles
+            .Select(file => file.Path)
+            .Where(path => !string.IsNullOrWhiteSpace(path))
+            .Distinct(StringComparer.Ordinal)
+            .ToArray();
+
+        return new AgentRetryAttempt(
+            Index: retryIndex,
+            FailureKind: input.FailureKind,
+            StopReason: input.StopReason,
+            ErrorCode: input.ErrorCode,
+            SourceToolCallId: input.SourceToolCallId,
+            ToolName: input.ToolName,
+            Summary: Bound(input.Summary, 1024).Text,
+            Commands: commands,
+            ChangedFiles: changedFilePaths,
+            VerificationStatus: input.Verification?.Status);
+    }
+
+    private static ToolExecutionResult AddRetryFeedback(
+        ToolExecutionResult result,
+        AgentRetryAttempt attempt,
+        AgentRetryDecision decision)
+    {
+        Dictionary<string, JsonElement> payload = CopyBoundedFeedbackPayload(result.StructuredPayload, out bool payloadTruncated);
+        BoundedText summary = Bound(result.Summary, MaxSummaryCharacters);
+        payload["retryFeedback"] = JsonSerializer.SerializeToElement(new
+        {
+            attempt = attempt.Index,
+            failureKind = attempt.FailureKind,
+            stopReason = attempt.StopReason,
+            errorCode = attempt.ErrorCode,
+            remainingRetries = decision.RemainingRetries,
+            summary = attempt.Summary,
+            commands = attempt.Commands,
+            changedFiles = attempt.ChangedFiles,
+            verificationStatus = attempt.VerificationStatus
+        }).Clone();
+        payload["failureKind"] = JsonSerializer.SerializeToElement(attempt.FailureKind).Clone();
+        payload["stopReason"] = JsonSerializer.SerializeToElement(attempt.StopReason).Clone();
+        payload["remainingRetries"] = JsonSerializer.SerializeToElement(decision.RemainingRetries).Clone();
+        payload["feedbackTruncated"] = JsonSerializer.SerializeToElement(summary.Truncated || payloadTruncated).Clone();
+
+        return result with
+        {
+            Summary = summary.Text,
+            StructuredPayload = new ReadOnlyDictionary<string, JsonElement>(payload)
+        };
+    }
+
+    private static Dictionary<string, JsonElement> CopyBoundedFeedbackPayload(
+        IReadOnlyDictionary<string, JsonElement>? structuredPayload,
+        out bool truncated)
+    {
+        truncated = false;
+        Dictionary<string, JsonElement> copy = new(StringComparer.Ordinal);
+        if (structuredPayload is null)
+        {
+            return copy;
+        }
+
+        foreach (KeyValuePair<string, JsonElement> item in structuredPayload)
+        {
+            string text = item.Value.ValueKind == JsonValueKind.String
+                ? item.Value.GetString() ?? string.Empty
+                : item.Value.GetRawText();
+            if (text.Length > MaxSummaryCharacters)
+            {
+                BoundedText bounded = Bound(text, MaxSummaryCharacters);
+                copy[item.Key] = JsonSerializer.SerializeToElement(bounded.Text).Clone();
+                copy[item.Key + "FeedbackTruncated"] = JsonSerializer.SerializeToElement(true).Clone();
+                truncated = true;
+                continue;
+            }
+
+            copy[item.Key] = item.Value.Clone();
+        }
+
+        return copy;
+    }
+
+    private static void AddCommands(List<string> commands, AgentRetryDecisionInput input)
+    {
+        if (!string.IsNullOrWhiteSpace(input.Verification?.Command))
+        {
+            AddDistinct(commands, input.Verification.Command!);
+        }
+
+        string? command = ReadString(input.StructuredPayload, "command");
+        if (!string.IsNullOrWhiteSpace(command))
+        {
+            AddDistinct(commands, command!);
+        }
+    }
+
+    private static void AddDistinct(List<string> values, string value)
+    {
+        if (!values.Contains(value, StringComparer.Ordinal))
+        {
+            values.Add(value);
+        }
+    }
+
+    private static string ClassifyErrorCode(string? errorCode)
+    {
+        if (errorCode is "agent-loop-limit-reached"
+            or "agent-tool-call-limit-reached"
+            or "agent-overall-timeout-reached"
+            or "agent-model-call-timeout-reached"
+            or "agent-retry-budget-exhausted")
+        {
+            return AgentFailureKind.Budget;
+        }
+
+        if (errorCode is "openai-http-error" or "openai-client-error" or "agent-model-call-canceled")
+        {
+            return AgentFailureKind.Model;
+        }
+
+        if (string.Equals(errorCode, ToolErrorCode.ApprovalDenied, StringComparison.Ordinal))
+        {
+            return AgentFailureKind.Approval;
+        }
+
+        if (IsShellError(errorCode))
+        {
+            return AgentFailureKind.Shell;
+        }
+
+        if (IsPatchError(errorCode))
+        {
+            return AgentFailureKind.Patch;
+        }
+
+        return AgentFailureKind.Tool;
+    }
+
+    private static bool IsShellError(string? errorCode)
+    {
+        return errorCode is ToolErrorCode.ShellCommandFailed
+            or ToolErrorCode.ShellCwdDenied
+            or ToolErrorCode.ShellPolicyDenied
+            or ToolErrorCode.DangerousCommandDenied
+            or ToolErrorCode.ShellTimeout
+            or ToolErrorCode.ShellExitCode
+            or ToolErrorCode.ShellExecutionFailed;
+    }
+
+    private static bool IsPatchError(string? errorCode)
+    {
+        return errorCode is ToolErrorCode.PatchApplyFailed
+            or ToolErrorCode.InvalidPatch
+            or ToolErrorCode.PatchContextNotFound
+            or ToolErrorCode.PatchTargetChanged;
     }
 
     private PostPatchWorkflowResult RunPostPatchWorkflow(
@@ -1088,6 +1528,69 @@ public sealed class OfflineAgentRunner : IAgentRunner
             },
             Status: DiagnosticEventStatus.Started,
             StepIndex: step?.Index));
+    }
+
+    private void RecordRetryAttemptEvent(
+        List<AgentRunEvent> events,
+        AgentRetryAttempt attempt,
+        AgentRunState state,
+        AgentStep? step)
+    {
+        Dictionary<string, string> payload = new(StringComparer.Ordinal)
+        {
+            ["attempt"] = attempt.Index.ToString(System.Globalization.CultureInfo.InvariantCulture),
+            ["failureKind"] = attempt.FailureKind,
+            ["stopReason"] = attempt.StopReason,
+            ["remainingRetries"] = state.RemainingRetries.ToString(System.Globalization.CultureInfo.InvariantCulture),
+            ["commands"] = string.Join(";", attempt.Commands),
+            ["changedFiles"] = string.Join(";", attempt.ChangedFiles)
+        };
+        AddPayloadValue(payload, "errorCode", attempt.ErrorCode);
+        AddPayloadValue(payload, "sourceToolCallId", attempt.SourceToolCallId);
+        AddPayloadValue(payload, "toolName", attempt.ToolName);
+        AddPayloadValue(payload, "verificationStatus", attempt.VerificationStatus);
+
+        events.Add(new AgentRunEvent(
+            Type: "retry.attempt",
+            Sequence: events.Count,
+            Timestamp: utcNowProvider(),
+            Message: "Retry budget reserved for model feedback.",
+            Summary: attempt.Summary,
+            Payload: payload,
+            ErrorCode: attempt.ErrorCode,
+            Status: DiagnosticEventStatus.Warning,
+            StepIndex: step?.Index,
+            StopReason: attempt.StopReason));
+    }
+
+    private void RecordRetryBudgetExhaustedEvent(
+        List<AgentRunEvent> events,
+        AgentRetryDecisionInput input,
+        AgentRetryDecision decision,
+        AgentStep? step)
+    {
+        Dictionary<string, string> payload = new(StringComparer.Ordinal)
+        {
+            ["failureKind"] = input.FailureKind,
+            ["stopReason"] = input.StopReason,
+            ["remainingRetries"] = decision.RemainingRetries.ToString(System.Globalization.CultureInfo.InvariantCulture)
+        };
+        AddPayloadValue(payload, "errorCode", input.ErrorCode);
+        AddPayloadValue(payload, "sourceToolCallId", input.SourceToolCallId);
+        AddPayloadValue(payload, "toolName", input.ToolName);
+        AddPayloadValue(payload, "verificationStatus", input.Verification?.Status);
+
+        events.Add(new AgentRunEvent(
+            Type: "retry.exhausted",
+            Sequence: events.Count,
+            Timestamp: utcNowProvider(),
+            Message: "Retry budget was exhausted.",
+            Summary: decision.Reason,
+            Payload: payload,
+            ErrorCode: "agent-retry-budget-exhausted",
+            Status: DiagnosticEventStatus.Failure,
+            StepIndex: step?.Index,
+            StopReason: AgentStopReason.RetryBudgetExhausted));
     }
 
     private void RecordToolResult(

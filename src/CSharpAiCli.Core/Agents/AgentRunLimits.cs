@@ -5,6 +5,7 @@ public sealed record AgentRunLimits
     public const int DefaultMaxSteps = 8;
     public const int DefaultMaxTurns = 8;
     public const int DefaultMaxToolCalls = 32;
+    public const int DefaultMaxRetries = 1;
     public static readonly TimeSpan DefaultModelCallTimeout = TimeSpan.FromSeconds(120);
     public static readonly TimeSpan DefaultOverallTimeout = TimeSpan.FromMinutes(10);
 
@@ -13,7 +14,8 @@ public sealed record AgentRunLimits
         int? MaxToolCalls = null,
         TimeSpan? ModelCallTimeout = null,
         TimeSpan? OverallTimeout = null,
-        int? MaxSteps = null)
+        int? MaxSteps = null,
+        int? MaxRetries = null)
     {
         if (MaxTurns is <= 0)
         {
@@ -35,6 +37,11 @@ public sealed record AgentRunLimits
             throw new ArgumentOutOfRangeException(nameof(MaxToolCalls), "Max tool calls must be greater than zero.");
         }
 
+        if (MaxRetries is < 0)
+        {
+            throw new ArgumentOutOfRangeException(nameof(MaxRetries), "Max retries must be greater than or equal to zero.");
+        }
+
         if (ModelCallTimeout is { } modelCallTimeout && modelCallTimeout <= TimeSpan.Zero)
         {
             throw new ArgumentOutOfRangeException(nameof(ModelCallTimeout), "Model call timeout must be greater than zero.");
@@ -49,11 +56,13 @@ public sealed record AgentRunLimits
         MaxStepsOverride = effectiveMaxSteps;
         MaxTurnsOverride = effectiveMaxSteps;
         MaxToolCallsOverride = MaxToolCalls;
+        MaxRetriesOverride = MaxRetries;
         ModelCallTimeoutOverride = ModelCallTimeout;
         OverallTimeoutOverride = OverallTimeout;
         this.MaxSteps = effectiveMaxSteps ?? DefaultMaxSteps;
         this.MaxTurns = this.MaxSteps;
         this.MaxToolCalls = MaxToolCalls ?? DefaultMaxToolCalls;
+        this.MaxRetries = MaxRetries ?? DefaultMaxRetries;
         this.ModelCallTimeout = ModelCallTimeout ?? DefaultModelCallTimeout;
         this.OverallTimeout = OverallTimeout ?? DefaultOverallTimeout;
     }
@@ -64,6 +73,8 @@ public sealed record AgentRunLimits
 
     public int? MaxToolCallsOverride { get; }
 
+    public int? MaxRetriesOverride { get; }
+
     public TimeSpan? ModelCallTimeoutOverride { get; }
 
     public TimeSpan? OverallTimeoutOverride { get; }
@@ -73,6 +84,8 @@ public sealed record AgentRunLimits
     public int MaxTurns { get; }
 
     public int MaxToolCalls { get; }
+
+    public int MaxRetries { get; }
 
     public TimeSpan ModelCallTimeout { get; }
 
@@ -87,6 +100,7 @@ public sealed record AgentRunLimits
         return new AgentRunLimits(
             MaxSteps: MaxStepsOverride ?? defaults.MaxSteps,
             MaxToolCalls: MaxToolCallsOverride ?? defaults.MaxToolCalls,
+            MaxRetries: MaxRetriesOverride ?? defaults.MaxRetries,
             ModelCallTimeout: ModelCallTimeoutOverride ?? defaults.ModelCallTimeout,
             OverallTimeout: OverallTimeoutOverride ?? defaults.OverallTimeout);
     }

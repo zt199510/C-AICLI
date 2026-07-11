@@ -61,6 +61,7 @@ public static class ConfigLoader
             AgentRunLimits agentRunLimits,
             string agentRunMaxStepsSource,
             string agentRunMaxToolCallsSource,
+            string agentRunMaxRetriesSource,
             string agentRunTimeoutSource) = SelectAgentRunLimits(userConfig, workspaceConfig, warnings);
 
         return new EffectiveConfiguration(
@@ -86,6 +87,7 @@ public static class ConfigLoader
             AgentRunLimits = agentRunLimits,
             AgentRunMaxStepsSource = agentRunMaxStepsSource,
             AgentRunMaxToolCallsSource = agentRunMaxToolCallsSource,
+            AgentRunMaxRetriesSource = agentRunMaxRetriesSource,
             AgentRunTimeoutSource = agentRunTimeoutSource
         };
     }
@@ -161,6 +163,7 @@ public static class ConfigLoader
             (limits.MaxSteps.HasValue ||
                 limits.MaxTurns.HasValue ||
                 limits.MaxToolCalls.HasValue ||
+                limits.MaxRetries.HasValue ||
                 limits.TimeoutSeconds.HasValue);
     }
 
@@ -559,6 +562,7 @@ public static class ConfigLoader
         AgentRunLimits Limits,
         string MaxStepsSource,
         string MaxToolCallsSource,
+        string MaxRetriesSource,
         string TimeoutSource) SelectAgentRunLimits(
             CliConfigFile? userConfig,
             CliConfigFile? workspaceConfig,
@@ -569,6 +573,11 @@ public static class ConfigLoader
             userConfig?.AgentRunLimits?.MaxToolCalls,
             workspaceConfig?.AgentRunLimits?.MaxToolCalls,
             "agentRunLimits.maxToolCalls",
+            warnings);
+        (int? maxRetries, string maxRetriesSource) = SelectNonNegativeAgentRunLimit(
+            userConfig?.AgentRunLimits?.MaxRetries,
+            workspaceConfig?.AgentRunLimits?.MaxRetries,
+            "agentRunLimits.maxRetries",
             warnings);
         (int? timeoutSeconds, string timeoutSource) = SelectPositiveAgentRunLimit(
             userConfig?.AgentRunLimits?.TimeoutSeconds,
@@ -583,9 +592,10 @@ public static class ConfigLoader
         AgentRunLimits limits = new(
             MaxSteps: maxSteps,
             MaxToolCalls: maxToolCalls,
+            MaxRetries: maxRetries,
             ModelCallTimeout: timeout,
             OverallTimeout: timeout);
-        return (limits, maxStepsSource, maxToolCallsSource, timeoutSource);
+        return (limits, maxStepsSource, maxToolCallsSource, maxRetriesSource, timeoutSource);
     }
 
     private static (int? Value, string Source) SelectAgentRunMaxSteps(
@@ -659,6 +669,25 @@ public static class ConfigLoader
         return (null, "default");
     }
 
+    private static (int? Value, string Source) SelectNonNegativeAgentRunLimit(
+        int? userValue,
+        int? workspaceValue,
+        string name,
+        List<string> warnings)
+    {
+        if (TryNormalizeNonNegativeAgentRunLimit(userValue, name, "user config", warnings, out int selected))
+        {
+            return (selected, "user config");
+        }
+
+        if (TryNormalizeNonNegativeAgentRunLimit(workspaceValue, name, "workspace config", warnings, out selected))
+        {
+            return (selected, "workspace config");
+        }
+
+        return (null, "default");
+    }
+
     private static bool TryNormalizePositiveAgentRunLimit(
         int? value,
         string name,
@@ -680,6 +709,29 @@ public static class ConfigLoader
 
         warnings.Add($"ignored invalid {name} from {source}");
         return false;
+    }
+
+    private static bool TryNormalizeNonNegativeAgentRunLimit(
+        int? value,
+        string name,
+        string source,
+        List<string> warnings,
+        out int selected)
+    {
+        selected = 0;
+        if (!value.HasValue)
+        {
+            return false;
+        }
+
+        if (value.Value < 0)
+        {
+            warnings.Add($"ignored invalid {name} from {source}");
+            return false;
+        }
+
+        selected = value.Value;
+        return true;
     }
 
     private static (ApprovalMode Mode, string Source) SelectApprovalMode(

@@ -20,15 +20,15 @@
 
 ## 任务清单
 
-- [ ] Step 1: 定义 `AgentFailureKind` 和 retry decision 输入。
-- [ ] Step 2: 将 verification failure 摘要为模型可消费的 bounded feedback。
-- [ ] Step 3: 增加 retry budget 配置，默认值保守。
-- [ ] Step 4: 实现一次失败后再次 read/search/patch/verify 的 fake end-to-end 测试。
-- [ ] Step 5: 超过 retry budget 时生成 failure summary。
-- [ ] Step 6: 确保 retry 不绕过 approval、workspace guard 或 dirty checks。
-- [ ] Step 7: 记录每次 retry 的 commands、changed files、stop reason。
-- [ ] Step 8: 更新 capability status 和 known limitations。
-- [ ] Step 9: 运行 build/test 并创建 `43_week_review.md`。
+- [x] Step 1: 定义 `AgentFailureKind` 和 retry decision 输入。
+- [x] Step 2: 将 verification failure 摘要为模型可消费的 bounded feedback。
+- [x] Step 3: 增加 retry budget 配置，默认值保守。
+- [x] Step 4: 实现一次失败后再次 read/search/patch/verify 的 fake end-to-end 测试。
+- [x] Step 5: 超过 retry budget 时生成 failure summary。
+- [x] Step 6: 确保 retry 不绕过 approval、workspace guard 或 dirty checks。
+- [x] Step 7: 记录每次 retry 的 commands、changed files、stop reason。
+- [x] Step 8: 更新 capability status 和 known limitations。
+- [x] Step 9: 运行 build/test 并创建 `43_week_review.md`。
 
 ## 验收标准
 
@@ -60,4 +60,3 @@
 第 44 周输入：
 -
 ```
-

@@ -31,6 +31,8 @@ public sealed record EffectiveConfiguration(
 
     public string AgentRunMaxToolCallsSource { get; init; } = "default";
 
+    public string AgentRunMaxRetriesSource { get; init; } = "default";
+
     public string AgentRunTimeoutSource { get; init; } = "default";
 
     public bool HasApiKey => ApiKey is not null;

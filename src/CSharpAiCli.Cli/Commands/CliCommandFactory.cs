@@ -888,6 +888,10 @@ public static class CliCommandFactory
         {
             Description = "Maximum total tool calls for agentic exec.",
         };
+        Option<int?> execMaxRetriesOption = new("--max-retries")
+        {
+            Description = "Maximum failure-feedback retries for agentic exec. Use 0 to disable.",
+        };
         Option<int?> execTimeoutSecondsOption = new("--timeout-seconds")
         {
             Description = "Overall agentic exec timeout in seconds.",
@@ -917,6 +921,7 @@ public static class CliCommandFactory
         AddPositiveIntegerValidator(execMaxTurnsOption, "--max-turns");
         AddPositiveIntegerValidator(execMaxStepsOption, "--max-steps");
         AddPositiveIntegerValidator(execMaxToolCallsOption, "--max-tool-calls");
+        AddNonNegativeIntegerValidator(execMaxRetriesOption, "--max-retries");
         AddPositiveIntegerValidator(execTimeoutSecondsOption, "--timeout-seconds");
         execCommand.Arguments.Add(execTaskArgument);
         execCommand.Options.Add(execApproveOption);
@@ -926,6 +931,7 @@ public static class CliCommandFactory
         execCommand.Options.Add(execMaxStepsOption);
         execCommand.Options.Add(execMaxTurnsOption);
         execCommand.Options.Add(execMaxToolCallsOption);
+        execCommand.Options.Add(execMaxRetriesOption);
         execCommand.Options.Add(execTimeoutSecondsOption);
         execCommand.Options.Add(execSessionOption);
         execCommand.Options.Add(execResumeOption);
@@ -942,6 +948,7 @@ public static class CliCommandFactory
             int? maxSteps = parseResult.GetValue(execMaxStepsOption);
             int? maxTurns = parseResult.GetValue(execMaxTurnsOption);
             int? maxToolCalls = parseResult.GetValue(execMaxToolCallsOption);
+            int? maxRetries = parseResult.GetValue(execMaxRetriesOption);
             int? timeoutSeconds = parseResult.GetValue(execTimeoutSecondsOption);
             string? session = parseResult.GetValue(execSessionOption);
             string? resume = parseResult.GetValue(execResumeOption);
@@ -1092,6 +1099,7 @@ public static class CliCommandFactory
                 Limits: new AgentRunLimits(
                     MaxSteps: maxSteps ?? maxTurns,
                     MaxToolCalls: maxToolCalls,
+                    MaxRetries: maxRetries,
                     ModelCallTimeout: timeoutSeconds is null ? null : TimeSpan.FromSeconds(timeoutSeconds.Value),
                     OverallTimeout: timeoutSeconds is null ? null : TimeSpan.FromSeconds(timeoutSeconds.Value))
                     .MergeWith(snapshot.Configuration.AgentRunLimits),
@@ -1839,6 +1847,18 @@ public static class CliCommandFactory
             if (value is <= 0)
             {
                 result.AddError($"Invalid value for {optionName}. Value must be greater than zero.");
+            }
+        });
+    }
+
+    private static void AddNonNegativeIntegerValidator(Option<int?> option, string optionName)
+    {
+        option.Validators.Add(result =>
+        {
+            int? value = result.GetValueOrDefault<int?>();
+            if (value is < 0)
+            {
+                result.AddError($"Invalid value for {optionName}. Value must be greater than or equal to zero.");
             }
         });
     }
