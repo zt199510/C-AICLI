@@ -64,6 +64,7 @@ The release uses a single-file exact-text patch tool.
 - Dirty workspace state is included in the preview.
 - File edits require approval unless the effective approval mode or CLI override approves them.
 - Patch operations are recorded as transcript tool calls when run through `exec --session` and the agent loop.
+- Agentic `exec` emits patch lifecycle events for preview, approval, and apply outcomes. After a successful patch it records changed-file summaries from git status/diff and carries them into text, NDJSON, trace, and session run summaries.
 
 ## Shell Execution
 
@@ -86,6 +87,19 @@ Shell execution is restricted:
 - Timeout requests above `shellPolicy.maxTimeoutMilliseconds` are rejected with a safe explanation instead of being silently clamped.
 - Direct executable MCP policy input includes the executable and argv. Encoded PowerShell payloads are canonicalized/redacted in policy and detector messages.
 - Timeout, denied approval, and non-zero exit are returned as safe tool failures.
+
+## Post-Patch Verification
+
+Agentic `exec` may run verification after a successful patch, but only when a command is explicitly configured. It does not infer build, test, package, or cleanup commands from project contents.
+
+Verification command selection is conservative:
+
+- Project instructions win when the merged instruction text contains `VerificationCommand: <command>` or `ValidationCommand: <command>`.
+- If instructions do not define a command, a single unambiguous workflow profile `validationCommand` can be used.
+- If multiple workflow commands are configured and no workspace match disambiguates them, verification is skipped.
+- If no explicit command exists, verification is skipped.
+
+Verification execution always goes through `workspace.run_shell`. Approval mode, shell policy allowlist/denylist, timeout limits, dangerous-command detection, cwd guard, stdout/stderr truncation, and safe error codes are reused. Verification results are written back as structured tool payload data for model continuation and as `verification.result` events for text, NDJSON, trace, and session consumers.
 
 ## Tool Disable Controls
 

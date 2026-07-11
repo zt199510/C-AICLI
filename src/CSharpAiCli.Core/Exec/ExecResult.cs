@@ -11,7 +11,9 @@ public sealed record ExecResult
         string? ErrorCode,
         string? ApprovalStatus,
         string? StopReason,
-        IReadOnlyList<ExecEvent> Events)
+        IReadOnlyList<ExecEvent> Events,
+        IReadOnlyList<ChangedFileSummary>? ChangedFiles = null,
+        IReadOnlyList<VerificationResultSummary>? VerificationResults = null)
     {
         this.IsSuccess = IsSuccess;
         this.ExitCode = ExitCode;
@@ -20,6 +22,8 @@ public sealed record ExecResult
         this.ApprovalStatus = ApprovalStatus;
         this.StopReason = StopReason;
         this.Events = new ReadOnlyCollection<ExecEvent>(Events.ToArray());
+        this.ChangedFiles = new ReadOnlyCollection<ChangedFileSummary>((ChangedFiles ?? []).ToArray());
+        this.VerificationResults = new ReadOnlyCollection<VerificationResultSummary>((VerificationResults ?? []).ToArray());
     }
 
     public bool IsSuccess { get; }
@@ -36,11 +40,17 @@ public sealed record ExecResult
 
     public IReadOnlyList<ExecEvent> Events { get; }
 
+    public IReadOnlyList<ChangedFileSummary> ChangedFiles { get; }
+
+    public IReadOnlyList<VerificationResultSummary> VerificationResults { get; }
+
     public static ExecResult Success(
         string? Summary,
         IReadOnlyList<ExecEvent> Events,
         string? ApprovalStatus = null,
-        string? StopReason = null)
+        string? StopReason = null,
+        IReadOnlyList<ChangedFileSummary>? ChangedFiles = null,
+        IReadOnlyList<VerificationResultSummary>? VerificationResults = null)
     {
         ArgumentNullException.ThrowIfNull(Events);
 
@@ -51,7 +61,9 @@ public sealed record ExecResult
             ErrorCode: null,
             ApprovalStatus,
             StopReason,
-            Events);
+            Events,
+            ChangedFiles,
+            VerificationResults);
     }
 
     public static ExecResult Failure(
@@ -60,7 +72,9 @@ public sealed record ExecResult
         string ErrorCode,
         IReadOnlyList<ExecEvent> Events,
         string? ApprovalStatus = null,
-        string? StopReason = null)
+        string? StopReason = null,
+        IReadOnlyList<ChangedFileSummary>? ChangedFiles = null,
+        IReadOnlyList<VerificationResultSummary>? VerificationResults = null)
     {
         if (ExitCode == 0)
         {
@@ -81,6 +95,8 @@ public sealed record ExecResult
             ErrorCode,
             ApprovalStatus,
             StopReason,
-            Events);
+            Events,
+            ChangedFiles,
+            VerificationResults);
     }
 }

@@ -149,6 +149,10 @@ At startup, `exec` builds bounded task context before write-capable work begins.
 
 The offline/fake agent loop and the direct OpenAI Responses SDK path share the same tool-call contract. With model access configured, `exec` can expose local tool schemas to the model, execute requested tools, write structured tool results back, and continue to a final response. Normal tests do not require network access; the release smoke script only runs the real model path when `CAICLI_REAL_MODEL_SMOKE=1` is set with caller-provided `OPENAI_API_KEY` and `OPENAI_MODEL`.
 
+After a successful `workspace.apply_patch` tool call, `exec` records patch lifecycle events (`patch.preview`, `patch.approval`, and `patch.apply`), collects a `changed.files` summary from git status/diff, and adds changed-file details to text, NDJSON, trace, and session run summaries. If an explicit verification command is configured, `exec` runs it through `workspace.run_shell` and records `verification.result`; the shell approval mode, shell policy allowlist/denylist, timeout cap, dangerous-command detector, cwd guard, and output truncation rules still apply.
+
+Automatic verification uses only explicit commands. Project instructions take priority when they contain a line such as `VerificationCommand: dotnet test` or `ValidationCommand: dotnet test`. If instructions do not define a command, a single unambiguous workflow profile `validationCommand` can be used. When no explicit command exists, `exec` records verification as skipped and does not guess a build or test command.
+
 ```powershell
 artifacts\release\caicli-0.2.1-win-x64\caicli.exe exec --workspace . "read README.md"
 artifacts\release\caicli-0.2.1-win-x64\caicli.exe exec --json --workspace . "read README.md"

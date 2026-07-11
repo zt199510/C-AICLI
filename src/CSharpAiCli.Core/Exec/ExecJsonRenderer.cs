@@ -55,12 +55,44 @@ public sealed class ExecJsonRenderer
             envelope["stopReason"] = result.StopReason;
         }
 
-        envelope["payload"] = new Dictionary<string, object?>
+        Dictionary<string, object?> payload = new()
         {
             ["status"] = result.IsSuccess ? "success" : "failure",
             ["exitCode"] = result.ExitCode,
             ["eventCount"] = result.Events.Count
         };
+
+        if (result.ChangedFiles.Count > 0)
+        {
+            payload["changedFileCount"] = result.ChangedFiles.Count;
+            payload["changedFiles"] = result.ChangedFiles.Select(file => new Dictionary<string, object?>
+            {
+                ["path"] = ExecOutputRedactor.Redact(file.Path),
+                ["status"] = file.Status,
+                ["sourceToolCallId"] = file.SourceToolCallId,
+                ["diffStatTruncated"] = file.DiffStatTruncated,
+                ["errorCode"] = file.ErrorCode
+            }).ToArray();
+        }
+
+        if (result.VerificationResults.Count > 0)
+        {
+            payload["verificationResults"] = result.VerificationResults.Select(verification => new Dictionary<string, object?>
+            {
+                ["status"] = verification.Status,
+                ["source"] = verification.Source,
+                ["command"] = ExecOutputRedactor.Redact(verification.Command ?? string.Empty),
+                ["succeeded"] = verification.Succeeded,
+                ["approvalStatus"] = verification.ApprovalStatus,
+                ["errorCode"] = verification.ErrorCode,
+                ["exitCode"] = verification.ExitCode,
+                ["timedOut"] = verification.TimedOut,
+                ["stdoutTruncated"] = verification.StdoutTruncated,
+                ["stderrTruncated"] = verification.StderrTruncated
+            }).ToArray();
+        }
+
+        envelope["payload"] = payload;
 
         writer.WriteLine(JsonSerializer.Serialize(envelope, JsonOptions));
     }

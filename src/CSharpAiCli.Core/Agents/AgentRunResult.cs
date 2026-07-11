@@ -11,7 +11,9 @@ public sealed record AgentRunResult
         IReadOnlyList<AgentRunEvent>? Events = null,
         string? Status = null,
         string? StopReason = null,
-        IReadOnlyList<AgentStep>? Steps = null)
+        IReadOnlyList<AgentStep>? Steps = null,
+        IReadOnlyList<ChangedFileSummary>? ChangedFiles = null,
+        IReadOnlyList<VerificationResultSummary>? VerificationResults = null)
     {
         ArgumentNullException.ThrowIfNull(ToolCalls);
 
@@ -26,6 +28,8 @@ public sealed record AgentRunResult
             ? Error is null ? AgentStopReason.Completed : AgentStopReason.FromErrorCode(Error.LocalErrorCode)
             : StopReason;
         this.Steps = new ReadOnlyCollection<AgentStep>((Steps ?? []).ToArray());
+        this.ChangedFiles = new ReadOnlyCollection<ChangedFileSummary>((ChangedFiles ?? []).ToArray());
+        this.VerificationResults = new ReadOnlyCollection<VerificationResultSummary>((VerificationResults ?? []).ToArray());
     }
 
     public string? Text { get; }
@@ -42,6 +46,10 @@ public sealed record AgentRunResult
 
     public IReadOnlyList<AgentStep> Steps { get; }
 
+    public IReadOnlyList<ChangedFileSummary> ChangedFiles { get; }
+
+    public IReadOnlyList<VerificationResultSummary> VerificationResults { get; }
+
     public bool IsSuccess => Error is null;
 
     public static AgentRunResult Success(
@@ -49,6 +57,8 @@ public sealed record AgentRunResult
         IReadOnlyList<ConversationToolCall> toolCalls,
         IReadOnlyList<AgentRunEvent>? events = null,
         IReadOnlyList<AgentStep>? steps = null,
+        IReadOnlyList<ChangedFileSummary>? changedFiles = null,
+        IReadOnlyList<VerificationResultSummary>? verificationResults = null,
         string stopReason = AgentStopReason.Completed)
     {
         events ??= [];
@@ -59,7 +69,9 @@ public sealed record AgentRunResult
             Events: events,
             Status: DiagnosticEventStatus.Success,
             StopReason: stopReason,
-            Steps: steps);
+            Steps: steps,
+            ChangedFiles: changedFiles,
+            VerificationResults: verificationResults);
     }
 
     public static AgentRunResult Failure(
@@ -67,6 +79,8 @@ public sealed record AgentRunResult
         IReadOnlyList<ConversationToolCall> toolCalls,
         IReadOnlyList<AgentRunEvent>? events = null,
         IReadOnlyList<AgentStep>? steps = null,
+        IReadOnlyList<ChangedFileSummary>? changedFiles = null,
+        IReadOnlyList<VerificationResultSummary>? verificationResults = null,
         string? stopReason = null,
         string status = DiagnosticEventStatus.Failure)
     {
@@ -79,6 +93,8 @@ public sealed record AgentRunResult
             Events: events,
             Status: status,
             StopReason: stopReason ?? AgentStopReason.FromErrorCode(error.LocalErrorCode),
-            Steps: steps);
+            Steps: steps,
+            ChangedFiles: changedFiles,
+            VerificationResults: verificationResults);
     }
 }

@@ -121,11 +121,42 @@ public static class TraceLogger
         AddIfPresent(record, "errorCode", result.ErrorCode);
         AddIfPresent(record, "approvalStatus", result.ApprovalStatus);
         AddIfPresent(record, "stopReason", result.StopReason);
-        record["payload"] = new Dictionary<string, object?>
+        Dictionary<string, object?> payload = new()
         {
             ["exitCode"] = result.ExitCode,
             ["eventCount"] = result.Events.Count
         };
+        if (result.ChangedFiles.Count > 0)
+        {
+            payload["changedFileCount"] = result.ChangedFiles.Count;
+            payload["changedFiles"] = result.ChangedFiles.Select(file => new Dictionary<string, object?>
+            {
+                ["path"] = Sanitize(file.Path),
+                ["status"] = Sanitize(file.Status),
+                ["sourceToolCallId"] = Sanitize(file.SourceToolCallId),
+                ["diffStatTruncated"] = file.DiffStatTruncated,
+                ["errorCode"] = string.IsNullOrWhiteSpace(file.ErrorCode) ? null : Sanitize(file.ErrorCode)
+            }).ToArray();
+        }
+
+        if (result.VerificationResults.Count > 0)
+        {
+            payload["verificationResults"] = result.VerificationResults.Select(verification => new Dictionary<string, object?>
+            {
+                ["status"] = Sanitize(verification.Status),
+                ["source"] = Sanitize(verification.Source),
+                ["command"] = Sanitize(verification.Command ?? string.Empty),
+                ["succeeded"] = verification.Succeeded,
+                ["approvalStatus"] = Sanitize(verification.ApprovalStatus),
+                ["errorCode"] = string.IsNullOrWhiteSpace(verification.ErrorCode) ? null : Sanitize(verification.ErrorCode),
+                ["exitCode"] = verification.ExitCode,
+                ["timedOut"] = verification.TimedOut,
+                ["stdoutTruncated"] = verification.StdoutTruncated,
+                ["stderrTruncated"] = verification.StderrTruncated
+            }).ToArray();
+        }
+
+        record["payload"] = payload;
         return record;
     }
 

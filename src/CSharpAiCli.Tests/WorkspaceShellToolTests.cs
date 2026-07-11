@@ -32,8 +32,10 @@ public sealed class WorkspaceShellToolTests
         Assert.False(payload["stdoutTruncated"].GetBoolean());
         Assert.False(payload["stderrTruncated"].GetBoolean());
         Assert.Equal("approved", payload["approvalStatus"].GetString());
-        Assert.False(payload.ContainsKey("stdout"));
-        Assert.False(payload.ContainsKey("stderr"));
+        Assert.True(payload["succeeded"].GetBoolean());
+        Assert.Contains("Shell command completed", payload["summary"].GetString(), StringComparison.Ordinal);
+        Assert.False(string.IsNullOrWhiteSpace(payload["stdout"].GetString()));
+        Assert.Equal(string.Empty, payload["stderr"].GetString());
     }
 
     [Fact]

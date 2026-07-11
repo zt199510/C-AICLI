@@ -25,7 +25,7 @@ public sealed class ExecTextRenderer
 
         string status = result.IsSuccess ? "success" : "failure";
         writer.WriteLine(
-            $"result: {status} exitCode={result.ExitCode}{FormatOptional("summary", result.Summary, redact: true)}{FormatOptional("errorCode", result.ErrorCode)}{FormatOptional("approvalStatus", result.ApprovalStatus)}{FormatOptional("stopReason", result.StopReason)} events={result.Events.Count}");
+            $"result: {status} exitCode={result.ExitCode}{FormatOptional("summary", result.Summary, redact: true)}{FormatOptional("errorCode", result.ErrorCode)}{FormatOptional("approvalStatus", result.ApprovalStatus)}{FormatOptional("stopReason", result.StopReason)}{FormatOptional("changedFiles", FormatChangedFiles(result.ChangedFiles), redact: true)}{FormatOptional("verificationStatus", FormatVerificationStatus(result.VerificationResults))} events={result.Events.Count}");
     }
 
     private static string FormatEvent(ExecEvent execEvent)
@@ -102,5 +102,19 @@ public sealed class ExecTextRenderer
 
         string safeValue = redact ? ExecOutputRedactor.Redact(value) : value;
         return $" {name}={safeValue}";
+    }
+
+    private static string? FormatChangedFiles(IReadOnlyList<ChangedFileSummary> changedFiles)
+    {
+        return changedFiles.Count == 0
+            ? null
+            : string.Join(",", changedFiles.Select(file => file.Path));
+    }
+
+    private static string? FormatVerificationStatus(IReadOnlyList<VerificationResultSummary> verificationResults)
+    {
+        return verificationResults.Count == 0
+            ? null
+            : verificationResults[^1].Status;
     }
 }

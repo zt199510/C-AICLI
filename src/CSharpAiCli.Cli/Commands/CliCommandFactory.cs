@@ -1096,7 +1096,8 @@ public static class CliCommandFactory
                     OverallTimeout: timeoutSeconds is null ? null : TimeSpan.FromSeconds(timeoutSeconds.Value))
                     .MergeWith(snapshot.Configuration.AgentRunLimits),
                 TranscriptContext: transcriptContext,
-                TaskContext: taskContext);
+                TaskContext: taskContext,
+                WorkflowConfiguration: WorkflowProfileLoader.Load(snapshot.Configuration));
 
             IAgentRunner runner = execAgentRunnerFactory(snapshot, registry, executor);
             AgentRunResult agentResult = runner.Run(request, transcript);

@@ -303,10 +303,14 @@ public sealed class WorkspaceShellTool : ITool
             ("command", request.Command),
             ("cwd", request.WorkingDirectory),
             ("commandRiskSummary", commandRiskSummary),
+            ("succeeded", result?.Succeeded ?? false),
+            ("summary", result?.Summary ?? string.Empty),
             ("exitCode", result?.ExitCode),
             ("timedOut", result?.TimedOut ?? false),
             ("stdoutTruncated", result?.StdoutTruncated ?? false),
             ("stderrTruncated", result?.StderrTruncated ?? false),
+            ("stdout", result?.Stdout ?? string.Empty),
+            ("stderr", result?.Stderr ?? string.Empty),
             ("approvalStatus", approvalStatus)
         ];
 

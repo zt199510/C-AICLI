@@ -21,15 +21,15 @@
 
 ## 任务清单
 
-- [ ] Step 1: 定义 agent run 的 `ChangedFileSummary`。
-- [ ] Step 2: 将 patch preview、approval、apply result 纳入 agent step event。
-- [ ] Step 3: patch 后收集 git diff summary 和 changed files。
-- [ ] Step 4: 定义验证命令选择策略：project instructions 优先，其次 workflow/config，最后不自动猜危险命令。
-- [ ] Step 5: shell verification 复用 approval、timeout、denylist 和 risk summary。
-- [ ] Step 6: 将 verification stdout/stderr/truncation/status 回写给模型。
-- [ ] Step 7: 增加测试覆盖 patch accepted/denied、file changed after preview、verification success/failure。
-- [ ] Step 8: 更新 security model 和 quickstart。
-- [ ] Step 9: 运行 build/test 并创建 `42_week_review.md`。
+- [x] Step 1: 定义 agent run 的 `ChangedFileSummary`。
+- [x] Step 2: 将 patch preview、approval、apply result 纳入 agent step event。
+- [x] Step 3: patch 后收集 git diff summary 和 changed files。
+- [x] Step 4: 定义验证命令选择策略：project instructions 优先，其次 workflow/config，最后不自动猜危险命令。
+- [x] Step 5: shell verification 复用 approval、timeout、denylist 和 risk summary。
+- [x] Step 6: 将 verification stdout/stderr/truncation/status 回写给模型。
+- [x] Step 7: 增加测试覆盖 patch accepted/denied、file changed after preview、verification success/failure。
+- [x] Step 8: 更新 security model 和 quickstart。
+- [x] Step 9: 运行 build/test 并创建 `42_week_review.md`。
 
 ## 验收标准
 
@@ -61,4 +61,3 @@
 第 43 周输入：
 -
 ```
-

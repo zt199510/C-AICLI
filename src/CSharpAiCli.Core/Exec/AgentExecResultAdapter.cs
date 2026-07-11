@@ -16,7 +16,9 @@ public static class AgentExecResultAdapter
                 result.Text,
                 events,
                 FindLastApprovalStatus(events),
-                result.StopReason);
+                result.StopReason,
+                result.ChangedFiles,
+                result.VerificationResults);
         }
 
         AgentError error = result.Error!;
@@ -26,7 +28,9 @@ public static class AgentExecResultAdapter
             ErrorCode: error.LocalErrorCode,
             Events: events,
             ApprovalStatus: FindLastApprovalStatus(events),
-            StopReason: result.StopReason);
+            StopReason: result.StopReason,
+            ChangedFiles: result.ChangedFiles,
+            VerificationResults: result.VerificationResults);
     }
 
     private static ExecEvent ToExecEvent(AgentRunEvent agentEvent)

@@ -116,6 +116,26 @@ public static class ConversationTranscriptMarkdownFormatter
                     builder.AppendLine("  plan:");
                     AppendFencedBlock(builder, RedactSecrets(run.PlanSummary));
                 }
+
+                if (run.ChangedFiles.Count > 0)
+                {
+                    string changedFiles = string.Join(
+                        ", ",
+                        run.ChangedFiles.Select(file =>
+                            $"{NormalizeMarkdownMetadata(file.Path)} ({NormalizeMarkdownMetadata(file.Status)})"));
+                    builder.AppendLine($"  changedFiles: {changedFiles}");
+                }
+
+                if (run.VerificationResults.Count > 0)
+                {
+                    VerificationResultSummary verification = run.VerificationResults[^1];
+                    builder.AppendLine(
+                        $"  verification: status={NormalizeMarkdownMetadata(verification.Status)} approvalStatus={NormalizeMarkdownMetadata(verification.ApprovalStatus)} errorCode={NormalizeMarkdownMetadata(verification.ErrorCode)}");
+                    if (!string.IsNullOrWhiteSpace(verification.Command))
+                    {
+                        AppendFencedBlock(builder, RedactSecrets(verification.Command));
+                    }
+                }
             }
         }
 

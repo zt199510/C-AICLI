@@ -187,6 +187,53 @@ public sealed class ConversationTranscriptMarkdownFormatterTests
     }
 
     [Fact]
+    public void Format_includes_agent_run_changed_files_and_verification_summary()
+    {
+        ConversationTranscript transcript = ConversationTranscript.Create(
+            "smoke",
+            DateTimeOffset.Parse("2024-01-01T00:00:00Z"));
+        transcript.AddAgentRun(new ConversationAgentRun(
+            CompletedAtUtc: DateTimeOffset.Parse("2024-01-01T00:00:05Z"),
+            Status: "success",
+            StopReason: "completed",
+            ErrorCode: null,
+            Summary: "done",
+            EventCount: 4,
+            ToolCallCount: 1,
+            ChangedFiles:
+            [
+                new ChangedFileSummary(
+                    Path: "src/App.cs",
+                    Status: "modified",
+                    SourceToolCallId: "call_patch")
+            ],
+            VerificationResults:
+            [
+                new VerificationResultSummary(
+                    Status: "success",
+                    Source: "project-instructions",
+                    Command: "dotnet test",
+                    WorkingDirectory: ".",
+                    Succeeded: true,
+                    ApprovalStatus: "approved",
+                    ErrorCode: null,
+                    ExitCode: 0,
+                    TimedOut: false,
+                    StdoutTruncated: false,
+                    StderrTruncated: false,
+                    Stdout: "passed",
+                    Stderr: "",
+                    Summary: "Shell command completed.")
+            ]));
+
+        string markdown = ConversationTranscriptMarkdownFormatter.Format(transcript);
+
+        Assert.Contains("changedFiles: src/App.cs (modified)", markdown, StringComparison.Ordinal);
+        Assert.Contains("verification: status=success approvalStatus=approved", markdown, StringComparison.Ordinal);
+        Assert.Contains("dotnet test", markdown, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void Format_redacts_common_oauth_and_cloud_secret_names()
     {
         ConversationTranscript transcript = ConversationTranscript.Create(

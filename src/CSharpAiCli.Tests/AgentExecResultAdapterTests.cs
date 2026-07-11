@@ -49,6 +49,49 @@ public sealed class AgentExecResultAdapterTests
     }
 
     [Fact]
+    public void FromAgentResult_preserves_changed_files_and_verification_results()
+    {
+        AgentRunResult agentResult = AgentRunResult.Success(
+            "done",
+            [],
+            [],
+            changedFiles:
+            [
+                new ChangedFileSummary(
+                    Path: "src/App.cs",
+                    Status: "modified",
+                    SourceToolCallId: "call_patch")
+            ],
+            verificationResults:
+            [
+                new VerificationResultSummary(
+                    Status: "success",
+                    Source: "project-instructions",
+                    Command: "dotnet test",
+                    WorkingDirectory: ".",
+                    Succeeded: true,
+                    ApprovalStatus: "approved",
+                    ErrorCode: null,
+                    ExitCode: 0,
+                    TimedOut: false,
+                    StdoutTruncated: false,
+                    StderrTruncated: false,
+                    Stdout: "passed",
+                    Stderr: "",
+                    Summary: "Shell command completed.")
+            ],
+            stopReason: "completed");
+
+        ExecResult result = AgentExecResultAdapter.FromAgentResult(agentResult);
+
+        ChangedFileSummary changedFile = Assert.Single(result.ChangedFiles);
+        Assert.Equal("src/App.cs", changedFile.Path);
+        VerificationResultSummary verification = Assert.Single(result.VerificationResults);
+        Assert.Equal("success", verification.Status);
+        Assert.Equal("dotnet test", verification.Command);
+    }
+
+    [Fact]
     public void FromAgentResult_maps_failure_to_exit_one_and_agent_error_code()
     {
         AgentRunResult agentResult = AgentRunResult.Failure(

@@ -165,6 +165,49 @@ public sealed class ConversationTranscriptRecorderTests
     }
 
     [Fact]
+    public void Agent_run_summary_captures_changed_files_and_verification_results()
+    {
+        AgentRunResult result = AgentRunResult.Success(
+            "done",
+            [],
+            [],
+            changedFiles:
+            [
+                new ChangedFileSummary(
+                    Path: "src/App.cs",
+                    Status: "modified",
+                    SourceToolCallId: "call_patch")
+            ],
+            verificationResults:
+            [
+                new VerificationResultSummary(
+                    Status: "failure",
+                    Source: "project-instructions",
+                    Command: "dotnet test",
+                    WorkingDirectory: ".",
+                    Succeeded: false,
+                    ApprovalStatus: "approved",
+                    ErrorCode: "shell-exit-code",
+                    ExitCode: 1,
+                    TimedOut: false,
+                    StdoutTruncated: false,
+                    StderrTruncated: false,
+                    Stdout: "",
+                    Stderr: "failed",
+                    Summary: "Shell command failed.")
+            ]);
+
+        ConversationAgentRun run = ConversationAgentRun.FromAgentResult(
+            result,
+            DateTimeOffset.Parse("2024-01-01T00:00:03Z"));
+
+        Assert.Equal("src/App.cs", Assert.Single(run.ChangedFiles).Path);
+        VerificationResultSummary verification = Assert.Single(run.VerificationResults);
+        Assert.Equal("failure", verification.Status);
+        Assert.Equal("dotnet test", verification.Command);
+    }
+
+    [Fact]
     public void Record_success_appends_user_and_assistant_messages()
     {
         DateTimeOffset start = DateTimeOffset.Parse("2024-01-01T00:00:00Z");

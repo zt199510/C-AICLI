@@ -173,6 +173,159 @@ public sealed class OfflineAgentRunnerTests
     }
 
     [Fact]
+    public void Run_successful_patch_records_changed_files_and_verification_for_model_continue()
+    {
+        ToolRegistry registry = new();
+        registry.Register(new StaticResultTool(
+            "workspace.apply_patch",
+            "Applies a patch.",
+            ToolRiskLevel.Write,
+            ToolExecutionResult.Success(
+                "Applied patch.",
+                "approved",
+                CreatePayload("""
+                {
+                  "path": "src/App.cs",
+                  "approvalStatus": "approved",
+                  "replacements": 1,
+                  "hasDiff": true,
+                  "dryRunPreview": {
+                    "type": "patch.dry_run_preview",
+                    "paths": ["src/App.cs"],
+                    "totalReplacements": 1,
+                    "hasDiff": true
+                  }
+                }
+                """))));
+        registry.Register(new StaticResultTool(
+            "git.status",
+            "Shows status.",
+            ToolRiskLevel.Read,
+            ToolExecutionResult.Success(
+                " M src/App.cs",
+                structuredPayload: CreatePayload("""{"command":"git status --short","exitCode":0}"""))));
+        registry.Register(new StaticResultTool(
+            "git.diff",
+            "Shows diff.",
+            ToolRiskLevel.Read,
+            ToolExecutionResult.Success(
+                "src/App.cs | 2 +-",
+                structuredPayload: CreatePayload("""{"stat":true,"truncated":false}"""))));
+        registry.Register(new CapturingShellTool(ToolExecutionResult.Success(
+            "Shell command completed with exit code 0." + Environment.NewLine + "stdout:" + Environment.NewLine + "tests passed",
+            "approved",
+            CreatePayload("""
+            {
+              "command": "dotnet test",
+              "cwd": ".",
+              "succeeded": true,
+              "summary": "Shell command completed with exit code 0.",
+              "exitCode": 0,
+              "timedOut": false,
+              "stdoutTruncated": false,
+              "stderrTruncated": false,
+              "stdout": "tests passed",
+              "stderr": "",
+              "approvalStatus": "approved"
+            }
+            """))));
+        ToolExecutor executor = new(registry);
+        FakeToolCallingModel model = new(
+            startTurn: AgentModelTurn.RequestTools(new AgentToolCallRequest(
+                CallId: "call_patch",
+                ToolName: "workspace.apply_patch",
+                ArgumentsJson: """{"path":"src/App.cs","find":"old","replace":"new"}""")),
+            continueFactory: results =>
+            {
+                AgentToolCallResult result = Assert.Single(results);
+                IReadOnlyDictionary<string, JsonElement> payload =
+                    result.Result.StructuredPayload ?? throw new InvalidOperationException("Patch payload missing.");
+                Assert.Equal(1, payload["changedFileCount"].GetInt32());
+                Assert.Equal("src/App.cs", payload["changedFiles"][0].GetProperty("path").GetString());
+                Assert.Equal("modified", payload["changedFiles"][0].GetProperty("status").GetString());
+                JsonElement verification = payload["verification"];
+                Assert.Equal("success", verification.GetProperty("status").GetString());
+                Assert.Equal("dotnet test", verification.GetProperty("command").GetString());
+                Assert.Equal("tests passed", verification.GetProperty("stdout").GetString());
+                return AgentModelTurn.Final("patched and verified");
+            });
+        OfflineAgentRunner runner = new(model, executor, () => DateTimeOffset.Parse("2024-01-01T00:00:05Z"));
+
+        AgentRunResult run = runner.Run(CreateRequest() with
+        {
+            TaskContext = CreateTaskContext(instructions: "VerificationCommand: dotnet test")
+        });
+
+        Assert.True(run.IsSuccess);
+        ChangedFileSummary changedFile = Assert.Single(run.ChangedFiles);
+        Assert.Equal("src/App.cs", changedFile.Path);
+        Assert.Equal("modified", changedFile.Status);
+        VerificationResultSummary verificationResult = Assert.Single(run.VerificationResults);
+        Assert.Equal("success", verificationResult.Status);
+        Assert.Equal("dotnet test", verificationResult.Command);
+        Assert.Equal("tests passed", verificationResult.Stdout);
+        Assert.Contains(run.Events, agentEvent => agentEvent.Type == "patch.preview");
+        Assert.Contains(run.Events, agentEvent => agentEvent.Type == "patch.approval");
+        Assert.Contains(run.Events, agentEvent => agentEvent.Type == "patch.apply");
+        Assert.Contains(run.Events, agentEvent => agentEvent.Type == "changed.files");
+        AgentRunEvent verificationEvent = Assert.Single(run.Events, agentEvent => agentEvent.Type == "verification.result");
+        Assert.Equal("success", verificationEvent.Status);
+        Assert.Equal("dotnet test", verificationEvent.Payload?["command"]);
+    }
+
+    [Fact]
+    public void Run_patch_denial_records_patch_events_without_verification()
+    {
+        ToolRegistry registry = new();
+        registry.Register(new StaticResultTool(
+            "workspace.apply_patch",
+            "Applies a patch.",
+            ToolRiskLevel.Write,
+            ToolExecutionResult.Failure(
+                ToolErrorCode.ApprovalDenied,
+                "Patch denied.",
+                approvalStatus: "denied",
+                structuredPayload: CreatePayload("""
+                {
+                  "path": "src/App.cs",
+                  "approvalStatus": "denied",
+                  "replacements": 1,
+                  "hasDiff": true,
+                  "dryRunPreview": {
+                    "type": "patch.dry_run_preview",
+                    "paths": ["src/App.cs"],
+                    "totalReplacements": 1,
+                    "hasDiff": true
+                  },
+                  "errorCode": "approval-denied"
+                }
+                """))));
+        OfflineAgentRunner runner = new(
+            new FakeToolCallingModel(
+                startTurn: AgentModelTurn.RequestTools(new AgentToolCallRequest(
+                    CallId: "call_patch",
+                    ToolName: "workspace.apply_patch",
+                    ArgumentsJson: "{}")),
+                continueFactory: _ => throw new InvalidOperationException("Denied patch should stop before continue.")),
+            new ToolExecutor(registry),
+            () => DateTimeOffset.Parse("2024-01-01T00:00:05Z"));
+
+        AgentRunResult run = runner.Run(CreateRequest());
+
+        Assert.False(run.IsSuccess);
+        Assert.Empty(run.ChangedFiles);
+        Assert.Empty(run.VerificationResults);
+        Assert.Contains(run.Events, agentEvent => agentEvent.Type == "patch.preview");
+        AgentRunEvent approvalEvent = Assert.Single(run.Events, agentEvent => agentEvent.Type == "patch.approval");
+        Assert.Equal("failure", approvalEvent.Status);
+        Assert.Equal("denied", approvalEvent.ApprovalStatus);
+        AgentRunEvent applyEvent = Assert.Single(run.Events, agentEvent => agentEvent.Type == "patch.apply");
+        Assert.Equal("failure", applyEvent.Status);
+        Assert.Equal(ToolErrorCode.ApprovalDenied, applyEvent.ErrorCode);
+        Assert.DoesNotContain(run.Events, agentEvent => agentEvent.Type == "verification.result");
+    }
+
+    [Fact]
     public void Run_records_task_context_and_startup_plan_before_model_turn()
     {
         ToolExecutor executor = new(new ToolRegistry());
@@ -955,6 +1108,14 @@ public sealed class OfflineAgentRunnerTests
         return System.Diagnostics.Stopwatch.Frequency * milliseconds / 1000;
     }
 
+    private static IReadOnlyDictionary<string, JsonElement> CreatePayload(string json)
+    {
+        using JsonDocument document = JsonDocument.Parse(json);
+        return document.RootElement
+            .EnumerateObject()
+            .ToDictionary(property => property.Name, property => property.Value.Clone());
+    }
+
     private sealed class EchoTool : ITool
     {
         public ToolDefinition Definition { get; } = new(
@@ -969,6 +1130,49 @@ public sealed class OfflineAgentRunnerTests
             using JsonDocument document = JsonDocument.Parse(context.ArgumentsJson);
             string text = document.RootElement.GetProperty("text").GetString() ?? string.Empty;
             return ToolExecutionResult.Success(text);
+        }
+    }
+
+    private sealed class StaticResultTool : ITool
+    {
+        private readonly ToolExecutionResult result;
+
+        public StaticResultTool(
+            string name,
+            string description,
+            ToolRiskLevel riskLevel,
+            ToolExecutionResult result)
+        {
+            Definition = new ToolDefinition(name, description, """{"type":"object"}""", riskLevel);
+            this.result = result;
+        }
+
+        public ToolDefinition Definition { get; }
+
+        public ToolExecutionResult Execute(
+            ToolExecutionContext context,
+            CancellationToken cancellationToken = default)
+        {
+            return result;
+        }
+    }
+
+    private sealed class CapturingShellTool(ToolExecutionResult result) : ITool
+    {
+        public ToolDefinition Definition { get; } = new(
+            "workspace.run_shell",
+            "Runs shell.",
+            """{"type":"object"}""",
+            ToolRiskLevel.Shell);
+
+        public ToolExecutionResult Execute(
+            ToolExecutionContext context,
+            CancellationToken cancellationToken = default)
+        {
+            using JsonDocument document = JsonDocument.Parse(context.ArgumentsJson);
+            Assert.Equal("dotnet test", document.RootElement.GetProperty("command").GetString());
+            Assert.Equal(WorkspaceShellTool.DefaultTimeoutMilliseconds, document.RootElement.GetProperty("timeoutMilliseconds").GetInt32());
+            return result;
         }
     }
 
