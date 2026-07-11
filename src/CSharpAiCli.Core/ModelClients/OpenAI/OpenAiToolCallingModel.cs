@@ -36,6 +36,12 @@ public sealed class OpenAiToolCallingModel : IToolCallingModel
             : ConversationTranscriptContextFormatter.FormatWithCurrentPrompt(
                 request.TranscriptContext,
                 request.Prompt);
+        if (request.TaskContext is not null)
+        {
+            prompt = AgentTaskContextPromptFormatter.FormatWithCurrentPrompt(
+                request.TaskContext,
+                prompt);
+        }
 
         OpenAiAgentRequest agentRequest = new(
             Model: model,

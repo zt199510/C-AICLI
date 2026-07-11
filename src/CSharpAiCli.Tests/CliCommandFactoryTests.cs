@@ -2882,6 +2882,12 @@ public sealed class CliCommandFactoryTests
         Assert.Equal("summarize workspace", agentRunner.LastRequest?.Prompt);
         Assert.Same(snapshot.Workspace, agentRunner.LastRequest?.Workspace);
         Assert.Equal("Prefer concise answers.", agentRunner.LastRequest?.Instructions);
+        Assert.NotNull(agentRunner.LastRequest?.TaskContext);
+        Assert.Equal(temp.Path, agentRunner.LastRequest?.TaskContext?.WorkspaceRoot);
+        Assert.Equal("Prefer concise answers.", agentRunner.LastRequest?.TaskContext?.Instructions);
+        Assert.Single(agentRunner.LastRequest?.TaskContext?.InstructionSources ?? []);
+        Assert.False(agentRunner.LastRequest?.TaskContext?.Git.StatusSucceeded);
+        Assert.False(agentRunner.LastRequest?.TaskContext?.Git.DiffSucceeded);
         Assert.Equal(3, agentRunner.LastRequest?.Limits?.MaxSteps);
         Assert.Equal(3, agentRunner.LastRequest?.Limits?.MaxTurns);
         Assert.Equal(5, agentRunner.LastRequest?.Limits?.MaxToolCalls);
@@ -2942,6 +2948,10 @@ public sealed class CliCommandFactoryTests
         Assert.Equal(cwd, receivedCwd);
         Assert.Equal(temp.Path, agentRunner.LastRequest?.Workspace.RootPath);
         Assert.Equal("Root rules\n\nApp rules", agentRunner.LastRequest?.Instructions);
+        Assert.NotNull(agentRunner.LastRequest?.TaskContext);
+        Assert.Equal("Root rules\n\nApp rules", agentRunner.LastRequest?.TaskContext?.Instructions);
+        Assert.Equal(2, agentRunner.LastRequest?.TaskContext?.InstructionSources.Count);
+        Assert.EndsWith(Path.Combine("src", "app"), agentRunner.LastRequest?.TaskContext?.CurrentDirectory, StringComparison.OrdinalIgnoreCase);
         Assert.DoesNotContain("Root rules", output.ToString(), StringComparison.Ordinal);
         Assert.DoesNotContain("sk-test-secret", output.ToString(), StringComparison.Ordinal);
     }
@@ -2978,6 +2988,8 @@ public sealed class CliCommandFactoryTests
         Assert.Equal(0, exitCode);
         Assert.Equal(temp.Path, receivedWorkspace);
         Assert.Null(agentRunner.LastRequest?.Instructions);
+        Assert.NotNull(agentRunner.LastRequest?.TaskContext);
+        Assert.Null(agentRunner.LastRequest?.TaskContext?.Instructions);
     }
 
     [Fact]
@@ -3740,6 +3752,8 @@ public sealed class CliCommandFactoryTests
         Assert.Equal("smoke", store.LoadedSessionName?.Value);
         Assert.Equal("smoke", store.SavedSessionName?.Value);
         Assert.Equal("smoke", agentRunner.LastRequest?.SessionName);
+        Assert.Equal("smoke", agentRunner.LastRequest?.TaskContext?.SessionName);
+        Assert.False(agentRunner.LastRequest?.TaskContext?.HasTranscriptContext);
         Assert.Same(existing, agentRunner.LastTranscript);
         Assert.Same(existing, store.SavedTranscript);
         ConversationAgentRun run = Assert.Single(existing.AgentRuns);
@@ -3785,6 +3799,8 @@ public sealed class CliCommandFactoryTests
         Assert.Null(store.LoadedSessionName);
         Assert.Equal("smoke", store.SavedSessionName?.Value);
         Assert.Equal("smoke", agentRunner.LastRequest?.SessionName);
+        Assert.Equal("smoke", agentRunner.LastRequest?.TaskContext?.SessionName);
+        Assert.True(agentRunner.LastRequest?.TaskContext?.HasTranscriptContext);
         Assert.Same(existing, agentRunner.LastRequest?.TranscriptContext);
         Assert.Same(existing, agentRunner.LastTranscript);
         Assert.Same(existing, store.SavedTranscript);

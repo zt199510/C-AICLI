@@ -145,6 +145,8 @@ MCP config/list/doctor are available. User-configured stdio MCP servers can be d
 
 `exec` is the agentic v1 surface and contract. It is routed through `IAgentRunner`, emits model/tool/final/error events in the newline-delimited `--json` stream, supports loop limits and session transcripts, and returns exit code `0` on success, `1` on task failure, and `2` on argument error.
 
+At startup, `exec` builds bounded task context before write-capable work begins. The collected context includes the resolved workspace/cwd, project instruction source list, session or resume state, and a bounded git status/diff summary. The generated plan is emitted as a traceable `plan` event so text, NDJSON, session, and trace consumers can correlate the task goal, candidate files, expected tools, and risks before later model/tool events.
+
 The offline/fake agent loop and the direct OpenAI Responses SDK path share the same tool-call contract. With model access configured, `exec` can expose local tool schemas to the model, execute requested tools, write structured tool results back, and continue to a final response. Normal tests do not require network access; the release smoke script only runs the real model path when `CAICLI_REAL_MODEL_SMOKE=1` is set with caller-provided `OPENAI_API_KEY` and `OPENAI_MODEL`.
 
 ```powershell

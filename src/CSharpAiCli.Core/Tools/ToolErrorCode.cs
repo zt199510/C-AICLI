@@ -7,6 +7,7 @@ public static class ToolErrorCode
     public const string InvalidToolArguments = "invalid-tool-arguments";
     public const string ToolReturnedNull = "tool-returned-null";
     public const string ToolExecutionFailed = "tool-execution-failed";
+    public const string PlanningPhaseWriteDenied = "planning-phase-write-denied";
     public const string FileNotFound = "file-not-found";
     public const string FileTooLarge = "file-too-large";
     public const string BinaryFileNotSupported = "binary-file-not-supported";

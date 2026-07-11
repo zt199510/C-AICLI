@@ -1077,6 +1077,13 @@ public static class CliCommandFactory
                 }
             }
 
+            AgentTaskContext taskContext = new AgentTaskContextCollector().Collect(
+                snapshot.Workspace,
+                snapshot.Instructions,
+                cwdPath,
+                effectiveSession,
+                transcriptContext is not null);
+
             AgentRunRequest request = new(
                 task,
                 snapshot.Workspace,
@@ -1088,7 +1095,8 @@ public static class CliCommandFactory
                     ModelCallTimeout: timeoutSeconds is null ? null : TimeSpan.FromSeconds(timeoutSeconds.Value),
                     OverallTimeout: timeoutSeconds is null ? null : TimeSpan.FromSeconds(timeoutSeconds.Value))
                     .MergeWith(snapshot.Configuration.AgentRunLimits),
-                TranscriptContext: transcriptContext);
+                TranscriptContext: transcriptContext,
+                TaskContext: taskContext);
 
             IAgentRunner runner = execAgentRunnerFactory(snapshot, registry, executor);
             AgentRunResult agentResult = runner.Run(request, transcript);

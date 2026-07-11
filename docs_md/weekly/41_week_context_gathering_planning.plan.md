@@ -19,15 +19,15 @@
 
 ## 任务清单
 
-- [ ] Step 1: 定义 `AgentTaskContext`，包含 cwd、workspace、instructions、session、git summary。
-- [ ] Step 2: 将 `AGENTS.md`/`AICLI.md` 加载结果纳入 agent run 上下文事件。
-- [ ] Step 3: 增加初始 git status/diff summary 的 bounded 收集策略。
-- [ ] Step 4: 为 read/search 工具调用增加 planning 阶段约束，不读取 workspace 外路径。
-- [ ] Step 5: 实现 `plan` step 事件，记录目标、候选文件、预期工具和风险。
-- [ ] Step 6: 增加 plan truncation warning，避免上下文过大。
-- [ ] Step 7: 增加测试覆盖 instructions source、dirty workspace、large diff、workspace boundary。
-- [ ] Step 8: 更新 quickstart 和 capability status。
-- [ ] Step 9: 运行 build/test 并创建 `41_week_review.md`。
+- [x] Step 1: 定义 `AgentTaskContext`，包含 cwd、workspace、instructions、session、git summary。
+- [x] Step 2: 将 `AGENTS.md`/`AICLI.md` 加载结果纳入 agent run 上下文事件。
+- [x] Step 3: 增加初始 git status/diff summary 的 bounded 收集策略。
+- [x] Step 4: 为 read/search 工具调用增加 planning 阶段约束，不读取 workspace 外路径。
+- [x] Step 5: 实现 `plan` step 事件，记录目标、候选文件、预期工具和风险。
+- [x] Step 6: 增加 plan truncation warning，避免上下文过大。
+- [x] Step 7: 增加测试覆盖 instructions source、dirty workspace、large diff、workspace boundary。
+- [x] Step 8: 更新 quickstart 和 capability status。
+- [x] Step 9: 运行 build/test 并创建 `41_week_review.md`。
 
 ## 验收标准
 
@@ -59,4 +59,3 @@
 第 42 周输入：
 -
 ```
-

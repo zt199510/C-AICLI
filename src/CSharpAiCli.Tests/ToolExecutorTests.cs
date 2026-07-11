@@ -85,6 +85,28 @@ public sealed class ToolExecutorTests
     }
 
     [Fact]
+    public void Execute_rejects_write_tool_during_planning_phase()
+    {
+        ToolRegistry registry = new();
+        EchoTool tool = new();
+        registry.Register(tool);
+        ToolExecutor executor = new(registry);
+
+        ToolExecutionResult result = executor.Execute(
+            "test.echo",
+            CreateContext("{}") with { Phase = ToolExecutionPhase.Planning });
+
+        Assert.False(result.Succeeded);
+        Assert.Equal(ToolErrorCode.PlanningPhaseWriteDenied, result.ErrorCode);
+        Assert.Equal("Only read tools can run during the planning phase.", result.Summary);
+        Assert.Null(tool.LastArgumentsJson);
+        IReadOnlyDictionary<string, JsonElement> payload =
+            result.StructuredPayload ?? throw new InvalidOperationException("Structured payload was not set.");
+        Assert.Equal("planning", payload["phase"].GetString());
+        Assert.Equal("write", payload["riskLevel"].GetString());
+    }
+
+    [Fact]
     public void Execute_converts_tool_security_exception_to_safe_failure()
     {
         ToolRegistry registry = new();

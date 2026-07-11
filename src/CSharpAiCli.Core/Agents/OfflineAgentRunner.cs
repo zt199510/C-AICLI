@@ -41,6 +41,11 @@ public sealed class OfflineAgentRunner : IAgentRunner
         DateTimeOffset deadlineUtc = state.DeadlineUtc;
         List<ConversationToolCall> recordedToolCalls = [];
         List<AgentRunEvent> events = [];
+        if (request.TaskContext is not null)
+        {
+            RecordStartupContext(events, request);
+        }
+
         if (TryCreateTimeoutResult(state, recordedToolCalls, events, out AgentRunResult? timeoutResult))
         {
             return timeoutResult!;
@@ -142,6 +147,11 @@ public sealed class OfflineAgentRunner : IAgentRunner
                 recordedToolCalls.Add(transcriptToolCall);
                 transcript?.AddToolCall(transcriptToolCall);
                 RecordToolResult(events, toolCall, executionResult, toolDurationMs, step);
+                if (string.Equals(toolCall.ToolName, AgentPlanTool.ToolName, StringComparison.Ordinal) &&
+                    executionResult.Succeeded)
+                {
+                    RecordPlanToolEvent(events, toolCall, executionResult, step);
+                }
 
                 if (!executionResult.Succeeded)
                 {
@@ -485,6 +495,187 @@ public sealed class OfflineAgentRunner : IAgentRunner
             StepIndex: step?.Index));
     }
 
+    private void RecordStartupContext(
+        List<AgentRunEvent> events,
+        AgentRunRequest request)
+    {
+        AgentTaskContext taskContext = request.TaskContext!;
+        RecordWorkspaceContext(events, taskContext);
+        RecordInstructionContext(events, taskContext);
+        RecordSessionContext(events, taskContext);
+        RecordGitStatusContext(events, taskContext);
+        RecordGitDiffContext(events, taskContext);
+        RecordStartupPlan(events, request.Prompt, taskContext);
+    }
+
+    private void RecordWorkspaceContext(
+        List<AgentRunEvent> events,
+        AgentTaskContext taskContext)
+    {
+        Dictionary<string, string> payload = new()
+        {
+            ["workspaceRoot"] = taskContext.WorkspaceRoot,
+            ["currentDirectory"] = taskContext.CurrentDirectory,
+            ["workspaceStatus"] = taskContext.WorkspaceStatus,
+            ["currentDirectoryAllowed"] = taskContext.CurrentDirectoryErrorCode is null ? "true" : "false"
+        };
+        if (taskContext.CurrentDirectoryErrorCode is not null)
+        {
+            payload["currentDirectoryErrorCode"] = taskContext.CurrentDirectoryErrorCode;
+        }
+
+        events.Add(new AgentRunEvent(
+            Type: "context.workspace",
+            Sequence: events.Count,
+            Timestamp: utcNowProvider(),
+            Message: "Collected bounded workspace context.",
+            Summary: $"workspace={taskContext.WorkspaceRoot}",
+            Payload: payload,
+            ErrorCode: taskContext.CurrentDirectoryErrorCode,
+            Status: taskContext.CurrentDirectoryErrorCode is null
+                ? DiagnosticEventStatus.Success
+                : DiagnosticEventStatus.Warning));
+    }
+
+    private void RecordInstructionContext(
+        List<AgentRunEvent> events,
+        AgentTaskContext taskContext)
+    {
+        Dictionary<string, string> payload = new()
+        {
+            ["hasInstructions"] = string.IsNullOrWhiteSpace(taskContext.Instructions) ? "false" : "true",
+            ["instructionLength"] = (taskContext.Instructions?.Length ?? 0).ToString(System.Globalization.CultureInfo.InvariantCulture),
+            ["sourceCount"] = taskContext.InstructionSources.Count.ToString(System.Globalization.CultureInfo.InvariantCulture),
+            ["warningCount"] = taskContext.InstructionWarnings.Count.ToString(System.Globalization.CultureInfo.InvariantCulture)
+        };
+        if (taskContext.InstructionSources.Count > 0)
+        {
+            payload["sources"] = string.Join(";", taskContext.InstructionSources.Select(source => source.SourcePath));
+        }
+
+        if (taskContext.InstructionWarnings.Count > 0)
+        {
+            payload["warnings"] = string.Join(" | ", taskContext.InstructionWarnings);
+        }
+
+        events.Add(new AgentRunEvent(
+            Type: "context.instructions",
+            Sequence: events.Count,
+            Timestamp: utcNowProvider(),
+            Message: "Collected project instruction sources.",
+            Summary: taskContext.InstructionSources.Count == 0
+                ? "No project instruction file loaded."
+                : $"Loaded {taskContext.InstructionSources.Count.ToString(System.Globalization.CultureInfo.InvariantCulture)} instruction source(s).",
+            Payload: payload,
+            Status: taskContext.InstructionWarnings.Count == 0
+                ? DiagnosticEventStatus.Success
+                : DiagnosticEventStatus.Warning));
+    }
+
+    private void RecordSessionContext(
+        List<AgentRunEvent> events,
+        AgentTaskContext taskContext)
+    {
+        Dictionary<string, string> payload = new()
+        {
+            ["hasSession"] = string.IsNullOrWhiteSpace(taskContext.SessionName) ? "false" : "true",
+            ["hasTranscriptContext"] = taskContext.HasTranscriptContext ? "true" : "false"
+        };
+        if (!string.IsNullOrWhiteSpace(taskContext.SessionName))
+        {
+            payload["sessionName"] = taskContext.SessionName!;
+        }
+
+        events.Add(new AgentRunEvent(
+            Type: "context.session",
+            Sequence: events.Count,
+            Timestamp: utcNowProvider(),
+            Message: "Collected session resume context.",
+            Summary: taskContext.HasTranscriptContext
+                ? "Resumed transcript context is available."
+                : "No resumed transcript context.",
+            Payload: payload,
+            Status: DiagnosticEventStatus.Success));
+    }
+
+    private void RecordGitStatusContext(
+        List<AgentRunEvent> events,
+        AgentTaskContext taskContext)
+    {
+        AgentGitContextSummary git = taskContext.Git;
+        Dictionary<string, string> payload = new()
+        {
+            ["succeeded"] = git.StatusSucceeded ? "true" : "false",
+            ["dirty"] = git.IsDirty ? "true" : "false",
+            ["summaryTruncated"] = git.StatusSummaryTruncated ? "true" : "false"
+        };
+
+        events.Add(new AgentRunEvent(
+            Type: "context.git.status",
+            Sequence: events.Count,
+            Timestamp: utcNowProvider(),
+            Message: "Collected bounded git status summary.",
+            Summary: git.StatusSummary,
+            Payload: payload,
+            ErrorCode: git.StatusErrorCode,
+            Status: git.StatusSucceeded
+                ? git.IsDirty || git.StatusSummaryTruncated
+                    ? DiagnosticEventStatus.Warning
+                    : DiagnosticEventStatus.Success
+                : DiagnosticEventStatus.Failure));
+    }
+
+    private void RecordGitDiffContext(
+        List<AgentRunEvent> events,
+        AgentTaskContext taskContext)
+    {
+        AgentGitContextSummary git = taskContext.Git;
+        Dictionary<string, string> payload = new()
+        {
+            ["succeeded"] = git.DiffSucceeded ? "true" : "false",
+            ["outputTruncated"] = git.DiffOutputTruncated ? "true" : "false",
+            ["summaryTruncated"] = git.DiffSummaryTruncated ? "true" : "false"
+        };
+
+        events.Add(new AgentRunEvent(
+            Type: "context.git.diff",
+            Sequence: events.Count,
+            Timestamp: utcNowProvider(),
+            Message: "Collected bounded git diff summary.",
+            Summary: git.DiffSummary,
+            Payload: payload,
+            ErrorCode: git.DiffErrorCode,
+            Status: git.DiffSucceeded
+                ? git.DiffOutputTruncated || git.DiffSummaryTruncated
+                    ? DiagnosticEventStatus.Warning
+                    : DiagnosticEventStatus.Success
+                : DiagnosticEventStatus.Failure));
+    }
+
+    private void RecordStartupPlan(
+        List<AgentRunEvent> events,
+        string prompt,
+        AgentTaskContext taskContext)
+    {
+        AgentStartupPlan plan = AgentStartupPlanBuilder.Build(prompt, taskContext);
+        events.Add(new AgentRunEvent(
+            Type: "plan",
+            Sequence: events.Count,
+            Timestamp: utcNowProvider(),
+            Message: "Created read-only startup plan.",
+            Summary: plan.Summary,
+            Payload: new Dictionary<string, string>
+            {
+                ["source"] = "startup",
+                ["goal"] = plan.Goal,
+                ["candidateFiles"] = string.Join(";", plan.CandidateFiles),
+                ["expectedTools"] = string.Join(";", plan.ExpectedTools),
+                ["risks"] = string.Join(";", plan.Risks),
+                ["truncated"] = plan.Truncated ? "true" : "false"
+            },
+            Status: plan.Truncated ? DiagnosticEventStatus.Warning : DiagnosticEventStatus.Success));
+    }
+
     private void RecordToolCall(
         List<AgentRunEvent> events,
         AgentToolCallRequest toolCall,
@@ -535,6 +726,34 @@ public sealed class OfflineAgentRunner : IAgentRunner
             Status: result.Succeeded ? DiagnosticEventStatus.Success : DiagnosticEventStatus.Failure,
             DurationMs: durationMs,
             ApprovalDurationMs: result.ApprovalDurationMs,
+            StepIndex: step?.Index));
+    }
+
+    private void RecordPlanToolEvent(
+        List<AgentRunEvent> events,
+        AgentToolCallRequest toolCall,
+        ToolExecutionResult result,
+        AgentStep? step)
+    {
+        Dictionary<string, string> payload = new()
+        {
+            ["source"] = "tool",
+            ["callId"] = toolCall.CallId,
+            ["toolName"] = toolCall.ToolName
+        };
+        AddStructuredDiagnosticPayload(payload, result.StructuredPayload, "goal");
+        AddStructuredDiagnosticPayload(payload, result.StructuredPayload, "truncated");
+
+        bool truncated = payload.TryGetValue("truncated", out string? truncatedText) &&
+            string.Equals(truncatedText, "true", StringComparison.OrdinalIgnoreCase);
+        events.Add(new AgentRunEvent(
+            Type: "plan",
+            Sequence: events.Count,
+            Timestamp: utcNowProvider(),
+            Message: "Recorded agent-provided plan.",
+            Summary: result.Summary,
+            Payload: payload,
+            Status: truncated ? DiagnosticEventStatus.Warning : DiagnosticEventStatus.Success,
             StepIndex: step?.Index));
     }
 

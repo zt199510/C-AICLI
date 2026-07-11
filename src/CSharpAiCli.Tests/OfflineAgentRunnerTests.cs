@@ -173,6 +173,136 @@ public sealed class OfflineAgentRunnerTests
     }
 
     [Fact]
+    public void Run_records_task_context_and_startup_plan_before_model_turn()
+    {
+        ToolExecutor executor = new(new ToolRegistry());
+        FakeToolCallingModel model = new(
+            startTurn: AgentModelTurn.Final("done"),
+            continueFactory: _ => AgentModelTurn.Final("unused"));
+        DateTimeOffset now = DateTimeOffset.Parse("2024-01-01T00:00:05Z");
+        OfflineAgentRunner runner = new(model, executor, () => now);
+
+        AgentRunResult result = runner.Run(CreateRequest() with
+        {
+            Prompt = "update src/App.cs and verify tests",
+            TaskContext = CreateTaskContext(
+                instructions: "Use repo style.",
+                instructionSources: [new InstructionSource(Path.Combine("workspace-root", "AGENTS.md"), 0)],
+                git: new AgentGitContextSummary(
+                    " M src/App.cs",
+                    StatusSucceeded: true,
+                    StatusErrorCode: null,
+                    IsDirty: true,
+                    StatusSummaryTruncated: false,
+                    "src/App.cs | 2 +-",
+                    DiffSucceeded: true,
+                    DiffErrorCode: null,
+                    DiffOutputTruncated: true,
+                    DiffSummaryTruncated: false))
+        });
+
+        Assert.True(result.IsSuccess);
+        Assert.Equal(
+            new[]
+            {
+                "context.workspace",
+                "context.instructions",
+                "context.session",
+                "context.git.status",
+                "context.git.diff",
+                "plan",
+                "model.turn",
+                "final.response"
+            },
+            result.Events.Select(agentEvent => agentEvent.Type).ToArray());
+        Assert.Equal(new long[] { 0, 1, 2, 3, 4, 5, 6, 7 }, result.Events.Select(agentEvent => agentEvent.Sequence).ToArray());
+        Assert.All(result.Events, agentEvent => Assert.Equal(now, agentEvent.Timestamp));
+
+        AgentRunEvent instructionEvent = result.Events[1];
+        Assert.Equal("true", instructionEvent.Payload?["hasInstructions"]);
+        Assert.Contains("AGENTS.md", instructionEvent.Payload?["sources"], StringComparison.Ordinal);
+
+        AgentRunEvent gitStatusEvent = result.Events[3];
+        Assert.Equal("warning", gitStatusEvent.Status);
+        Assert.Equal("true", gitStatusEvent.Payload?["dirty"]);
+
+        AgentRunEvent gitDiffEvent = result.Events[4];
+        Assert.Equal("warning", gitDiffEvent.Status);
+        Assert.Equal("true", gitDiffEvent.Payload?["outputTruncated"]);
+
+        AgentRunEvent planEvent = result.Events[5];
+        Assert.Equal("success", planEvent.Status);
+        Assert.Equal("startup", planEvent.Payload?["source"]);
+        Assert.Contains("src/App.cs", planEvent.Summary, StringComparison.Ordinal);
+        Assert.Contains("workspace.apply_patch", planEvent.Payload?["expectedTools"], StringComparison.Ordinal);
+        Assert.Contains("workspace.run_shell", planEvent.Payload?["expectedTools"], StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Run_warns_when_startup_plan_is_truncated()
+    {
+        ToolExecutor executor = new(new ToolRegistry());
+        FakeToolCallingModel model = new(
+            startTurn: AgentModelTurn.Final("done"),
+            continueFactory: _ => AgentModelTurn.Final("unused"));
+        OfflineAgentRunner runner = new(model, executor, () => DateTimeOffset.Parse("2024-01-01T00:00:05Z"));
+        string prompt = string.Join(
+            " ",
+            Enumerable.Range(0, 20).Select(index =>
+                $"update src/Feature{index}/VeryLongFileNameWithExtraContextAndDetails{index}.cs"));
+
+        AgentRunResult result = runner.Run(CreateRequest() with
+        {
+            Prompt = prompt,
+            TaskContext = CreateTaskContext()
+        });
+
+        AgentRunEvent planEvent = Assert.Single(result.Events, agentEvent => agentEvent.Type == "plan");
+        Assert.Equal("warning", planEvent.Status);
+        Assert.Equal("true", planEvent.Payload?["truncated"]);
+        Assert.Contains(AgentStartupPlanBuilder.TruncationWarning, planEvent.Summary, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Run_records_agent_plan_tool_result_as_plan_event()
+    {
+        ToolRegistry registry = new();
+        registry.Register(new AgentPlanTool());
+        ToolExecutor executor = new(registry);
+        FakeToolCallingModel model = new(
+            startTurn: AgentModelTurn.RequestTools(new AgentToolCallRequest(
+                CallId: "call_plan_1",
+                ToolName: AgentPlanTool.ToolName,
+                ArgumentsJson: """
+                {
+                  "goal": "Update README",
+                  "candidateFiles": ["README.md"],
+                  "expectedTools": ["workspace.read_text", "workspace.apply_patch"],
+                  "risks": ["docs only"]
+                }
+                """)),
+            continueFactory: results =>
+            {
+                AgentToolCallResult result = Assert.Single(results);
+                Assert.True(result.Result.Succeeded);
+                return AgentModelTurn.Final("planned");
+            });
+        OfflineAgentRunner runner = new(model, executor, () => DateTimeOffset.Parse("2024-01-01T00:00:05Z"));
+
+        AgentRunResult result = runner.Run(CreateRequest());
+
+        Assert.True(result.IsSuccess);
+        Assert.Equal(
+            new[] { "model.turn", "tool.call", "tool.result", "plan", "model.turn", "final.response" },
+            result.Events.Select(agentEvent => agentEvent.Type).ToArray());
+        AgentRunEvent planEvent = result.Events[3];
+        Assert.Equal("tool", planEvent.Payload?["source"]);
+        Assert.Equal("call_plan_1", planEvent.Payload?["callId"]);
+        Assert.Equal("Update README", planEvent.Payload?["goal"]);
+        Assert.Contains("README.md", planEvent.Summary, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void Run_records_status_and_duration_for_model_and_tool_events()
     {
         DateTimeOffset now = DateTimeOffset.Parse("2024-01-01T00:00:00Z");
@@ -789,6 +919,35 @@ public sealed class OfflineAgentRunnerTests
             Prompt: "use a test tool",
             Workspace: workspace,
             Limits: limits);
+    }
+
+    private static AgentTaskContext CreateTaskContext(
+        string? instructions = null,
+        IReadOnlyList<InstructionSource>? instructionSources = null,
+        IReadOnlyList<string>? instructionWarnings = null,
+        AgentGitContextSummary? git = null)
+    {
+        return new AgentTaskContext(
+            CurrentDirectory: Path.GetTempPath(),
+            WorkspaceRoot: Path.GetTempPath(),
+            WorkspaceStatus: WorkspaceStatus.Ready.ToString(),
+            CurrentDirectoryErrorCode: null,
+            Instructions: instructions,
+            InstructionSources: instructionSources ?? [],
+            InstructionWarnings: instructionWarnings ?? [],
+            SessionName: "smoke",
+            HasTranscriptContext: true,
+            Git: git ?? new AgentGitContextSummary(
+                "working tree clean",
+                StatusSucceeded: true,
+                StatusErrorCode: null,
+                IsDirty: false,
+                StatusSummaryTruncated: false,
+                "no diff",
+                DiffSucceeded: true,
+                DiffErrorCode: null,
+                DiffOutputTruncated: false,
+                DiffSummaryTruncated: false));
     }
 
     private static long TimestampForMilliseconds(long milliseconds)

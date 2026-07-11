@@ -75,6 +75,11 @@ public static class ConversationTranscriptContextFormatter
                     builder.Append($" summary={NormalizeSingleLine(run.Summary)}");
                 }
 
+                if (!string.IsNullOrWhiteSpace(run.PlanSummary))
+                {
+                    builder.Append($" plan={NormalizeSingleLine(run.PlanSummary)}");
+                }
+
                 builder.AppendLine();
             }
         }

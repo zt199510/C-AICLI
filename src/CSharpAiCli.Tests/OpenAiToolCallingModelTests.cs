@@ -103,6 +103,41 @@ public sealed class OpenAiToolCallingModelTests
     }
 
     [Fact]
+    public void Start_with_task_context_includes_bounded_context_and_startup_plan()
+    {
+        ToolRegistry registry = new();
+        registry.Register(new StubTool("workspace.read_text", "Read a text file.", """{"type":"object"}"""));
+        FakeGateway gateway = new()
+        {
+            Responses =
+            [
+                new OpenAiResponseEnvelope(
+                    ResponseId: "resp_context",
+                    Model: "gpt-test",
+                    Text: "done")
+            ]
+        };
+        OpenAiToolCallingModel model = new(
+            model: "gpt-test",
+            instructions: null,
+            registry,
+            gateway);
+
+        model.Start(CreateRequest("fix src/App.cs") with
+        {
+            TaskContext = CreateTaskContext()
+        });
+
+        OpenAiAgentRequest sentRequest = Assert.Single(gateway.AgentRequests);
+        Assert.Contains("Bounded startup context:", sentRequest.Prompt, StringComparison.Ordinal);
+        Assert.Contains("Read-only startup plan:", sentRequest.Prompt, StringComparison.Ordinal);
+        Assert.Contains("workspace-root", sentRequest.Prompt, StringComparison.Ordinal);
+        Assert.Contains("AGENTS.md", sentRequest.Prompt, StringComparison.Ordinal);
+        Assert.Contains("src/App.cs", sentRequest.Prompt, StringComparison.Ordinal);
+        Assert.Contains("Current task:", sentRequest.Prompt, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void Continue_sends_safe_tool_result_outputs_and_returns_parsed_final_turn()
     {
         ToolRegistry registry = new();
@@ -356,6 +391,31 @@ public sealed class OpenAiToolCallingModelTests
             Status: WorkspaceStatus.Ready);
 
         return new AgentRunRequest(prompt, workspace, TranscriptContext: transcriptContext);
+    }
+
+    private static AgentTaskContext CreateTaskContext()
+    {
+        return new AgentTaskContext(
+            CurrentDirectory: Path.Combine("workspace-root", "src"),
+            WorkspaceRoot: "workspace-root",
+            WorkspaceStatus: WorkspaceStatus.Ready.ToString(),
+            CurrentDirectoryErrorCode: null,
+            Instructions: "Use repo style.",
+            InstructionSources: [new InstructionSource(Path.Combine("workspace-root", "AGENTS.md"), 0)],
+            InstructionWarnings: [],
+            SessionName: "smoke",
+            HasTranscriptContext: false,
+            Git: new AgentGitContextSummary(
+                " M src/App.cs",
+                StatusSucceeded: true,
+                StatusErrorCode: null,
+                IsDirty: true,
+                StatusSummaryTruncated: false,
+                "src/App.cs | 2 +-",
+                DiffSucceeded: true,
+                DiffErrorCode: null,
+                DiffOutputTruncated: false,
+                DiffSummaryTruncated: false));
     }
 
     private sealed class FakeGateway : IOpenAiResponsesGateway

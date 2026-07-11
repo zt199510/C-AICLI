@@ -38,6 +38,19 @@ public sealed class ToolExecutor : IToolExecutor
         }
 
         ITool executableTool = tool;
+        if (string.Equals(context.Phase, ToolExecutionPhase.Planning, StringComparison.Ordinal) &&
+            executableTool.Definition.RiskLevel != ToolRiskLevel.Read)
+        {
+            return ToolExecutionResult.Failure(
+                ToolErrorCode.PlanningPhaseWriteDenied,
+                "Only read tools can run during the planning phase.",
+                structuredPayload: ToolStructuredPayload.Create(
+                    ("toolName", executableTool.Definition.Name),
+                    ("phase", context.Phase),
+                    ("riskLevel", executableTool.Definition.RiskLevel.ToCanonicalName()),
+                    ("errorCode", ToolErrorCode.PlanningPhaseWriteDenied)));
+        }
+
         if (!TryNormalizeArguments(context.ArgumentsJson, out string normalizedArguments, out ToolExecutionResult? failure))
         {
             return failure;

@@ -1,0 +1,157 @@
+using System.Text;
+using System.Text.RegularExpressions;
+
+namespace CSharpAiCli.Core;
+
+internal static class AgentStartupPlanBuilder
+{
+    public const int MaxPlanSummaryCharacters = 1600;
+    public const string TruncationWarning = "WARNING: plan summary was truncated.";
+
+    private static readonly Regex CandidatePathPattern = new(
+        @"(?<![\w.-])(?:[A-Za-z0-9_.-]+[\\/])+[A-Za-z0-9_.-]+|(?<![\w.-])[A-Za-z0-9_.-]+\.(?:cs|csproj|sln|md|json|yml|yaml|ps1|sh|txt|xml)(?![\w.-])",
+        RegexOptions.CultureInvariant);
+
+    public static AgentStartupPlan Build(string prompt, AgentTaskContext taskContext)
+    {
+        ArgumentNullException.ThrowIfNull(taskContext);
+
+        string goal = NormalizeSingleLine(prompt, 500);
+        IReadOnlyList<string> candidateFiles = FindCandidateFiles(prompt);
+        IReadOnlyList<string> expectedTools = SelectExpectedTools(prompt);
+        IReadOnlyList<string> risks = SelectRisks(taskContext, prompt);
+        string summary = FormatSummary(goal, candidateFiles, expectedTools, risks);
+        bool truncated = false;
+        if (summary.Length > MaxPlanSummaryCharacters)
+        {
+            summary = summary[..MaxPlanSummaryCharacters].TrimEnd() +
+                Environment.NewLine +
+                TruncationWarning;
+            truncated = true;
+        }
+
+        return new AgentStartupPlan(goal, candidateFiles, expectedTools, risks, summary, truncated);
+    }
+
+    private static IReadOnlyList<string> FindCandidateFiles(string prompt)
+    {
+        string[] candidates = CandidatePathPattern
+            .Matches(prompt ?? string.Empty)
+            .Select(match => match.Value.Trim('\'', '"', '`', ',', ';', ':', '.', ')', '('))
+            .Where(value => !string.IsNullOrWhiteSpace(value))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .Take(20)
+            .ToArray();
+
+        return candidates.Length == 0 ? ["unknown until read/search"] : candidates;
+    }
+
+    private static IReadOnlyList<string> SelectExpectedTools(string prompt)
+    {
+        List<string> tools =
+        [
+            "git.status",
+            "git.diff",
+            "workspace.search_text",
+            "workspace.read_text"
+        ];
+
+        if (ContainsAny(prompt, "edit", "modify", "fix", "implement", "update", "create", "write", "patch", "add"))
+        {
+            tools.Add("workspace.apply_patch");
+        }
+
+        if (ContainsAny(prompt, "build", "test", "run", "verify"))
+        {
+            tools.Add("workspace.run_shell");
+        }
+
+        return tools;
+    }
+
+    private static IReadOnlyList<string> SelectRisks(AgentTaskContext taskContext, string prompt)
+    {
+        List<string> risks = [];
+        if (taskContext.Git.IsDirty)
+        {
+            risks.Add("workspace has uncommitted changes");
+        }
+
+        if (!taskContext.Git.StatusSucceeded)
+        {
+            risks.Add("git status unavailable: " + (taskContext.Git.StatusErrorCode ?? "unknown"));
+        }
+
+        if (!taskContext.Git.DiffSucceeded)
+        {
+            risks.Add("git diff summary unavailable: " + (taskContext.Git.DiffErrorCode ?? "unknown"));
+        }
+
+        if (taskContext.Git.DiffOutputTruncated || taskContext.Git.DiffSummaryTruncated)
+        {
+            risks.Add("git diff summary was truncated");
+        }
+
+        if (taskContext.CurrentDirectoryErrorCode is not null)
+        {
+            risks.Add("requested cwd was outside or unavailable: " + taskContext.CurrentDirectoryErrorCode);
+        }
+
+        if (taskContext.InstructionWarnings.Count > 0)
+        {
+            risks.Add("instruction loading reported warnings");
+        }
+
+        if (string.IsNullOrWhiteSpace(taskContext.Instructions))
+        {
+            risks.Add("no project instruction file loaded");
+        }
+
+        if (taskContext.HasTranscriptContext)
+        {
+            risks.Add("resumed transcript context may affect task scope");
+        }
+
+        if (ContainsAny(prompt, "edit", "modify", "fix", "implement", "update", "create", "write", "patch", "add", "run", "shell"))
+        {
+            risks.Add("write or shell tools may require approval");
+        }
+
+        return risks.Count == 0 ? ["normal bounded workspace task"] : risks;
+    }
+
+    private static string FormatSummary(
+        string goal,
+        IReadOnlyList<string> candidateFiles,
+        IReadOnlyList<string> expectedTools,
+        IReadOnlyList<string> risks)
+    {
+        StringBuilder builder = new();
+        builder.AppendLine("Goal: " + goal);
+        builder.AppendLine("Candidate files: " + string.Join(", ", candidateFiles));
+        builder.AppendLine("Expected tools: " + string.Join(", ", expectedTools));
+        builder.AppendLine("Risks: " + string.Join("; ", risks));
+        return builder.ToString().TrimEnd();
+    }
+
+    private static bool ContainsAny(string text, params string[] terms)
+    {
+        foreach (string term in terms)
+        {
+            if (text.Contains(term, StringComparison.OrdinalIgnoreCase))
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    private static string NormalizeSingleLine(string? value, int maxCharacters)
+    {
+        string normalized = Regex.Replace(value ?? string.Empty, @"\s+", " ").Trim();
+        return normalized.Length <= maxCharacters
+            ? normalized
+            : normalized[..maxCharacters];
+    }
+}

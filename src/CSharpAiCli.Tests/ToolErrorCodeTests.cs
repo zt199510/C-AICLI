@@ -12,6 +12,7 @@ public sealed class ToolErrorCodeTests
         Assert.Equal("invalid-tool-arguments", ToolErrorCode.InvalidToolArguments);
         Assert.Equal("tool-returned-null", ToolErrorCode.ToolReturnedNull);
         Assert.Equal("tool-execution-failed", ToolErrorCode.ToolExecutionFailed);
+        Assert.Equal("planning-phase-write-denied", ToolErrorCode.PlanningPhaseWriteDenied);
     }
 
     [Fact]

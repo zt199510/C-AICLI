@@ -139,6 +139,32 @@ public sealed class ConversationTranscriptRecorderTests
     }
 
     [Fact]
+    public void Agent_run_summary_captures_first_plan_event_for_transcript_context()
+    {
+        AgentRunResult result = AgentRunResult.Success(
+            "done",
+            [],
+            [
+                new AgentRunEvent(
+                    Type: "plan",
+                    Sequence: 0,
+                    Timestamp: DateTimeOffset.Parse("2024-01-01T00:00:01Z"),
+                    Summary: "Goal: update README.md"),
+                new AgentRunEvent(
+                    Type: "final.response",
+                    Sequence: 1,
+                    Timestamp: DateTimeOffset.Parse("2024-01-01T00:00:02Z"),
+                    Summary: "done")
+            ]);
+
+        ConversationAgentRun run = ConversationAgentRun.FromAgentResult(
+            result,
+            DateTimeOffset.Parse("2024-01-01T00:00:03Z"));
+
+        Assert.Equal("Goal: update README.md", run.PlanSummary);
+    }
+
+    [Fact]
     public void Record_success_appends_user_and_assistant_messages()
     {
         DateTimeOffset start = DateTimeOffset.Parse("2024-01-01T00:00:00Z");

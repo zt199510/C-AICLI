@@ -110,6 +110,12 @@ public static class ConversationTranscriptMarkdownFormatter
                 {
                     AppendFencedBlock(builder, RedactSecrets(run.Summary));
                 }
+
+                if (!string.IsNullOrWhiteSpace(run.PlanSummary))
+                {
+                    builder.AppendLine("  plan:");
+                    AppendFencedBlock(builder, RedactSecrets(run.PlanSummary));
+                }
             }
         }
 

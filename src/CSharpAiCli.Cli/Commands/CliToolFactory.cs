@@ -13,6 +13,7 @@ internal static class CliToolFactory
 
         WorkspaceGuard workspaceGuard = new();
         ToolRegistry registry = new();
+        RegisterIfEnabled(registry, snapshot, new AgentPlanTool());
         RegisterIfEnabled(registry, snapshot, new WorkspaceFileReadTool(workspaceGuard));
         RegisterIfEnabled(registry, snapshot, new WorkspaceSearchTool(workspaceGuard));
         RegisterIfEnabled(registry, snapshot, new WorkspacePatchTool(

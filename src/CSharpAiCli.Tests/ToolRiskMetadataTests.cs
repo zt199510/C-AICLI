@@ -10,6 +10,7 @@ public sealed class ToolRiskMetadataTests
         WorkspaceGuard guard = new();
         ITool[] tools =
         [
+            new AgentPlanTool(),
             new WorkspaceFileReadTool(guard),
             new WorkspaceSearchTool(guard),
             new GitStatusTool(guard),
@@ -22,6 +23,7 @@ public sealed class ToolRiskMetadataTests
             tool => tool.Definition.Name,
             tool => tool.Definition.RiskLevel);
 
+        Assert.Equal(ToolRiskLevel.Read, risks["agent.plan"]);
         Assert.Equal(ToolRiskLevel.Read, risks["workspace.read_text"]);
         Assert.Equal(ToolRiskLevel.Read, risks["workspace.search_text"]);
         Assert.Equal(ToolRiskLevel.Read, risks["git.status"]);
