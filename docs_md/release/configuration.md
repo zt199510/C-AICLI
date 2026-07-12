@@ -36,12 +36,12 @@ Priority for agent backend:
 3. `<workspace>\.caicli\config.json`
 4. `direct`
 
-Accepted backend values:
+Recognized backend config values:
 
 - `direct` or `openai`
 - `framework`, `maf`, or `agent-framework`
 
-The `framework` backend is currently an experimental adapter boundary. The release MVP uses `direct`.
+The `framework` aliases are currently parsed for the experimental adapter boundary, but the real Microsoft Agent Framework runtime backend is not enabled in the `0.3.0` release. Use `direct` for supported release behavior.
 
 Priority for approval mode:
 

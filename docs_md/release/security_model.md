@@ -4,6 +4,8 @@
 
 C# AI CLI is a local developer tool. It operates on the selected workspace and writes local logs and transcripts. It is not a sandbox, a multi-user service, or a replacement for code review.
 
+Model providers are outside the local trust boundary. `chat`, `review`, and real agentic `exec` send prompts and selected context to the configured provider. Agent tool calls returned by the provider are treated as requests, not authority: the CLI validates the tool name, disabled-tool settings, workspace path boundary, approval mode, shell policy, dangerous-command rules, loop limits, and timeouts before execution.
+
 ## Workspace Guard
 
 File and command tools resolve paths before use and require paths to stay inside the active workspace. Tests cover:
@@ -116,9 +118,15 @@ Agentic `exec` ends each run with a read-only review gate and final task report.
 
 Task reports sanitize all captured strings before output or persistence. When a secret-like value is detected, the report records only presence metadata, expressed as source and kind, and never stores the raw value.
 
+## Real And Fake Agent Contracts
+
+The offline/fake agent loop and the direct OpenAI Responses SDK agent path share the same tool schema, tool result, event, retry feedback, `review.gate`, and `taskReport` contracts. Normal tests and default smoke runs use fake/offline or local-only paths so they do not need network access or credentials. The opt-in real model smoke uses the same local safety controls with `--approval never` for a bounded read-only task.
+
+The direct OpenAI SDK agent tool loop is implemented for this release. It should not be treated as a Deferred capability. Provider quality, latency, quota, and availability are external dependencies, but local tool execution still stays behind the CLI security checks described in this document.
+
 ## Tool Disable Controls
 
-Users can disable tools through `disabledTools` in user or workspace config. Disabled tools are not registered in the CLI tool registry, so direct calls, agentic `exec` tool calls, and deterministic `run` tasks fail safely with `unknown-tool`.
+Users can disable tools through `disabledTools` in user or workspace config. Disabled tools are not offered to agentic `exec`; direct `tools call` requests for disabled tools fail safely with `tool-disabled`.
 
 ## Secrets
 
@@ -149,7 +157,7 @@ Users can disable tools through `disabledTools` in user or workspace config. Dis
 - Remote/http MCP transport remains Deferred.
 - Gerber/TIFF project pack status/profile support exists, but real Gerber execution is Deferred.
 
-These deferred capabilities do not block the `0.2.0` direct backend release.
+These deferred capabilities do not block the `0.3.0` direct backend release.
 
 ## Current Limitations
 
@@ -158,4 +166,4 @@ These deferred capabilities do not block the `0.2.0` direct backend release.
 - Dangerous command detection and shell policy use conservative text and pattern boundaries, not full shell parsing or semantic proof.
 - Allowlist entries are command text, not exact argv arrays. Unusual quoted arguments containing metacharacters may be conservatively blocked.
 - The release is Windows-focused.
-- Dotnet tool packaging is not enabled for the `0.2.0` package.
+- Dotnet tool packaging is not enabled for the `0.3.0` package.

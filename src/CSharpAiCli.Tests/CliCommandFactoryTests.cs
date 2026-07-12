@@ -3161,6 +3161,113 @@ public sealed class CliCommandFactoryTests
     }
 
     [Fact]
+    public void Exec_fake_model_smoke_runs_read_search_patch_verify_and_reports()
+    {
+        using TempDirectory temp = TempDirectory.Create();
+        InitializeGitRepository(temp.Path);
+        string fixtureDirectory = Path.Combine(temp.Path, "src", "BuggyApp");
+        Directory.CreateDirectory(fixtureDirectory);
+        string fixturePath = Path.Combine(fixtureDirectory, "Calculator.txt");
+        File.WriteAllText(
+            fixturePath,
+            """
+            name: BuggyApp calculator fixture
+            expected: 41
+            """);
+        RunGit(temp.Path, "add", "src/BuggyApp/Calculator.txt");
+        CommitAll(temp.Path, "add bugfix fixture");
+
+        using StringWriter output = new();
+        string verificationCommand = "git grep 42 -- src/BuggyApp/Calculator.txt";
+        CliEnvironmentSnapshot snapshot = CreateSnapshot(
+            workspacePath: temp.Path,
+            apiKey: "sk-test-secret",
+            apiKeySource: "OPENAI_API_KEY",
+            model: "gpt-test")
+            with
+            {
+                Instructions = InstructionLoadResult.Loaded(
+                    "VerificationCommand: " + verificationCommand,
+                    Path.Combine(temp.Path, "AGENTS.md"))
+            };
+        BugfixSmokeToolCallingModel model = new();
+
+        int exitCode = CliCommandFactory
+            .Create(
+                output,
+                _ => snapshot,
+                (_, _) => { },
+                _ => new FakeChatModelClient(ChatModelResult.Success(new ChatResponse("openai", "gpt-test", "resp", ""))),
+                writer => new TerminalChatStreamingRenderer(writer),
+                _ => new FakeConversationStore(),
+                () => DateTimeOffset.Parse("2024-01-01T00:00:00Z"),
+                (_, _, executor) => new OfflineAgentRunner(
+                    model,
+                    executor,
+                    () => DateTimeOffset.Parse("2024-01-01T00:00:00Z")))
+            .Parse([
+                "exec",
+                "--json",
+                "--trace",
+                "--workspace",
+                temp.Path,
+                "--approval",
+                "always",
+                "--max-turns",
+                "4",
+                "--max-tool-calls",
+                "5",
+                "fix BuggyApp expected value"
+            ])
+            .Invoke();
+
+        JsonObject[] jsonLines = output.ToString()
+            .TrimEnd()
+            .Split(Environment.NewLine, StringSplitOptions.RemoveEmptyEntries)
+            .Select(line => Assert.IsType<JsonObject>(JsonNode.Parse(line)))
+            .ToArray();
+        JsonObject result = jsonLines.Last(line => HasType(line, "exec.result"));
+        JsonObject resultPayload = Assert.IsType<JsonObject>(result["payload"]);
+        JsonObject taskReport = Assert.IsType<JsonObject>(resultPayload["taskReport"]);
+        JsonArray changedFiles = Assert.IsType<JsonArray>(taskReport["changedFiles"]);
+        JsonArray commands = Assert.IsType<JsonArray>(taskReport["commands"]);
+        JsonArray verification = Assert.IsType<JsonArray>(taskReport["verification"]);
+
+        Assert.Equal(0, exitCode);
+        Assert.True(model.ContinueObservedVerification);
+        Assert.Contains("expected: 42", File.ReadAllText(fixturePath), StringComparison.Ordinal);
+        Assert.Contains(jsonLines, line => HasType(line, "tool.call") && HasPayload(line, "toolName", "workspace.read_text"));
+        Assert.Contains(jsonLines, line => HasType(line, "tool.call") && HasPayload(line, "toolName", "workspace.search_text"));
+        Assert.Contains(jsonLines, line => HasType(line, "tool.call") && HasPayload(line, "toolName", "workspace.apply_patch"));
+        Assert.Contains(jsonLines, line => HasType(line, "patch.preview") && HasPayload(line, "path", "src/BuggyApp/Calculator.txt"));
+        Assert.Contains(jsonLines, line => HasType(line, "patch.approval") && HasPayload(line, "approvalStatus", "approved"));
+        Assert.Contains(jsonLines, line => HasType(line, "patch.apply") && HasPayload(line, "path", "src/BuggyApp/Calculator.txt"));
+        Assert.Contains(jsonLines, line => HasType(line, "changed.files") && HasPayload(line, "paths", "src/BuggyApp/Calculator.txt"));
+        Assert.Contains(jsonLines, line => HasType(line, "verification.result") && HasPayload(line, "command", verificationCommand));
+        Assert.Contains(jsonLines, line => HasType(line, "review.gate") && HasPayload(line, "readOnly", "true"));
+        Assert.Contains(jsonLines, line => HasType(line, "taskReport"));
+        Assert.Equal("success", resultPayload["status"]?.GetValue<string>());
+        Assert.Equal("success", taskReport["status"]?.GetValue<string>());
+        Assert.Equal("src/BuggyApp/Calculator.txt", changedFiles[0]?["path"]?.GetValue<string>());
+        Assert.Equal(verificationCommand, commands[0]?["command"]?.GetValue<string>());
+        Assert.Equal("success", verification[0]?["status"]?.GetValue<string>());
+        Assert.DoesNotContain("sk-test-secret", output.ToString(), StringComparison.Ordinal);
+
+        string tracePath = Path.Combine(temp.Path, ".caicli", "logs", "2024-01-01.trace.log");
+        Assert.Contains("\"taskReport\"", File.ReadAllText(tracePath), StringComparison.Ordinal);
+
+        static bool HasType(JsonObject line, string type)
+        {
+            return string.Equals(line["type"]?.GetValue<string>(), type, StringComparison.Ordinal);
+        }
+
+        static bool HasPayload(JsonObject line, string key, string value)
+        {
+            return string.Equals(line["payload"]?[key]?.GetValue<string>(), value, StringComparison.Ordinal);
+        }
+    }
+
+    [Fact]
     public void Exec_json_output_redacts_secret_bearing_stdout_events()
     {
         using TempDirectory temp = TempDirectory.Create();
@@ -8187,6 +8294,51 @@ public sealed class CliCommandFactoryTests
                 apiKeySource: "missing",
                 model: "gpt-test"), result.Error!);
             return result;
+        }
+    }
+
+    private sealed class BugfixSmokeToolCallingModel : IToolCallingModel
+    {
+        private const string VerificationCommand = "git grep 42 -- src/BuggyApp/Calculator.txt";
+
+        public bool ContinueObservedVerification { get; private set; }
+
+        public AgentModelTurn Start(
+            AgentRunRequest request,
+            CancellationToken cancellationToken = default)
+        {
+            return AgentModelTurn.RequestTools(
+                new AgentToolCallRequest(
+                    "call_read_bugfix_fixture",
+                    "workspace.read_text",
+                    """{"path":"src/BuggyApp/Calculator.txt"}"""),
+                new AgentToolCallRequest(
+                    "call_search_bugfix_fixture",
+                    "workspace.search_text",
+                    """{"query":"expected: 41","path":"src","maxResults":5}"""),
+                new AgentToolCallRequest(
+                    "call_patch_bugfix_fixture",
+                    "workspace.apply_patch",
+                    """{"path":"src/BuggyApp/Calculator.txt","find":"expected: 41","replace":"expected: 42"}"""));
+        }
+
+        public AgentModelTurn Continue(
+            AgentRunRequest request,
+            IReadOnlyList<AgentToolCallResult> toolResults,
+            CancellationToken cancellationToken = default)
+        {
+            Assert.Equal(3, toolResults.Count);
+            Assert.All(toolResults, result => Assert.True(result.Result.Succeeded));
+
+            AgentToolCallResult patch = toolResults[2];
+            Assert.Equal("workspace.apply_patch", patch.Request.ToolName);
+            var structuredPayload = patch.Result.StructuredPayload ?? throw new InvalidOperationException("Patch payload missing.");
+            var verification = structuredPayload["verification"];
+            Assert.Equal("success", verification.GetProperty("status").GetString());
+            Assert.Equal(VerificationCommand, verification.GetProperty("command").GetString());
+
+            ContinueObservedVerification = true;
+            return AgentModelTurn.Final("patched BuggyApp expected value");
         }
     }
 

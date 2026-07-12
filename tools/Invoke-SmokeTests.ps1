@@ -301,6 +301,21 @@ try {
     Set-Content -LiteralPath (Join-Path $workspace "AGENTS.md") -Value "Prefer concise smoke output." -Encoding UTF8
     New-Item -ItemType Directory -Path (Join-Path $workspace "src\app") -Force | Out-Null
     Set-Content -LiteralPath (Join-Path $workspace "src\app\AGENTS.md") -Value "Use app-specific smoke instructions." -Encoding UTF8
+    New-Item -ItemType Directory -Path (Join-Path $workspace "src\BuggyApp"), (Join-Path $workspace "tests") -Force | Out-Null
+    Set-Content -LiteralPath (Join-Path $workspace "src\BuggyApp\Calculator.txt") -Value @'
+name: BuggyApp calculator fixture
+expected: 41
+'@ -Encoding UTF8
+    Set-Content -LiteralPath (Join-Path $workspace "tests\Verify-BuggyApp.ps1") -Value @'
+$ErrorActionPreference = 'Stop'
+$text = Get-Content -LiteralPath (Join-Path $PSScriptRoot '..\src\BuggyApp\Calculator.txt') -Raw
+if ($text -notmatch 'expected:\s*42') {
+    Write-Error 'BuggyApp expected value was not fixed.'
+    exit 1
+}
+
+Write-Output 'bugfix verification passed'
+'@ -Encoding UTF8
 
     $env:USERPROFILE = $userProfile
     $env:CAICLI_USER_PROFILE = $userProfile
@@ -387,7 +402,18 @@ try {
     Invoke-Git -Name "git init" -Arguments @("-C", $workspace, "-c", "commit.gpgSign=false", "-c", "core.hooksPath=$emptyHooks", "init") | Out-Null
     Invoke-Git -Name "git config user email" -Arguments @("-C", $workspace, "config", "user.email", "smoke@example.test") | Out-Null
     Invoke-Git -Name "git config user name" -Arguments @("-C", $workspace, "config", "user.name", "CSharp AI CLI Smoke") | Out-Null
-    Invoke-Git -Name "git add" -Arguments @("-C", $workspace, "-c", "commit.gpgSign=false", "-c", "core.hooksPath=$emptyHooks", "add", "note.txt", "AGENTS.md", "src/app/AGENTS.md") | Out-Null
+    Invoke-Git -Name "git config core.autocrlf" -Arguments @("-C", $workspace, "config", "core.autocrlf", "false") | Out-Null
+    Invoke-Git -Name "git add" -Arguments @(
+        "-C", $workspace,
+        "-c", "commit.gpgSign=false",
+        "-c", "core.hooksPath=$emptyHooks",
+        "add",
+        "note.txt",
+        "AGENTS.md",
+        "src/app/AGENTS.md",
+        "src/BuggyApp/Calculator.txt",
+        "tests/Verify-BuggyApp.ps1"
+    ) | Out-Null
     Invoke-Git -Name "git commit" -Arguments @("-C", $workspace, "-c", "commit.gpgSign=false", "-c", "core.hooksPath=$emptyHooks", "commit", "--no-gpg-sign", "--no-verify", "-m", "Initial smoke commit") | Out-Null
     Add-Content -LiteralPath (Join-Path $workspace "note.txt") -Value "changed" -Encoding UTF8
 
@@ -506,6 +532,54 @@ try {
     Assert-Contains $readNote.Output "status: succeeded" "tools call --stdin read"
     Assert-Contains $readNote.Output "before" "tools call --stdin read"
 
+    $bugfixReadArguments = New-ArgumentsFile "bugfix-read-arguments.json" '{"path":"src/BuggyApp/Calculator.txt"}'
+    $bugfixRead = Invoke-CaiCli -Arguments @(
+        "tools", "call", "--workspace", $workspace,
+        "workspace.read_text",
+        "--arguments-file", $bugfixReadArguments
+    )
+    Assert-ExitCode $bugfixRead 0 "bugfix fixture read"
+    Assert-Contains $bugfixRead.Output "expected: 41" "bugfix fixture read"
+
+    $bugfixSearchArguments = New-ArgumentsFile "bugfix-search-arguments.json" '{"query":"expected: 41","path":"src","maxResults":5}'
+    $bugfixSearch = Invoke-CaiCli -Arguments @(
+        "tools", "call", "--workspace", $workspace,
+        "workspace.search_text",
+        "--arguments-file", $bugfixSearchArguments
+    )
+    Assert-ExitCode $bugfixSearch 0 "bugfix fixture search"
+    Assert-Contains $bugfixSearch.Output "status: succeeded" "bugfix fixture search"
+    Assert-Contains $bugfixSearch.Output "expected: 41" "bugfix fixture search"
+
+    $bugfixPatchArguments = New-ArgumentsFile "bugfix-patch-arguments.json" '{"path":"src/BuggyApp/Calculator.txt","find":"expected: 41","replace":"expected: 42"}'
+    $bugfixPatch = Invoke-CaiCli -Arguments @(
+        "tools", "call", "--workspace", $workspace, "--approval", "always",
+        "workspace.apply_patch",
+        "--arguments-file", $bugfixPatchArguments
+    )
+    Assert-ExitCode $bugfixPatch 0 "bugfix fixture patch"
+    Assert-Contains $bugfixPatch.Output "status: succeeded" "bugfix fixture patch"
+    Assert-Contains $bugfixPatch.Output "approvalStatus: approved" "bugfix fixture patch"
+
+    $bugfixVerifyCommand = "$(Get-SmokePowerShellExecutable) -NoLogo -NoProfile -NonInteractive -ExecutionPolicy Bypass -File tests\Verify-BuggyApp.ps1"
+    $bugfixVerifyArguments = New-ArgumentsFile "bugfix-verify-arguments.json" (@{
+        command = $bugfixVerifyCommand
+        timeoutMilliseconds = 10000
+    } | ConvertTo-Json -Compress)
+    $bugfixVerify = Invoke-CaiCli -Arguments @(
+        "tools", "call", "--workspace", $workspace, "--approval", "always",
+        "workspace.run_shell",
+        "--arguments-file", $bugfixVerifyArguments
+    )
+    Assert-ExitCode $bugfixVerify 0 "bugfix fixture verify"
+    Assert-Contains $bugfixVerify.Output "status: succeeded" "bugfix fixture verify"
+    Assert-Contains $bugfixVerify.Output "approvalStatus: approved" "bugfix fixture verify"
+    Assert-Contains $bugfixVerify.Output "bugfix verification passed" "bugfix fixture verify"
+
+    $bugfixDiffStat = Invoke-CaiCli -Arguments @("diff", "--stat", "--workspace", $workspace)
+    Assert-ExitCode $bugfixDiffStat 0 "bugfix fixture diff stat"
+    Assert-Contains $bugfixDiffStat.Output "Calculator.txt" "bugfix fixture diff stat"
+
     Set-Content -LiteralPath (Join-Path $workspaceConfigDir "config.json") -Encoding UTF8 -Value @'
 {
   "disabledTools": [ "workspace.run_shell" ]
@@ -518,7 +592,7 @@ try {
         "--arguments-file", $shellArguments
     )
     Assert-ExitCode $disabledTool 1 "disabled tool"
-    Assert-Contains $disabledTool.Output "errorCode: unknown-tool" "disabled tool"
+    Assert-Contains $disabledTool.Output "errorCode: tool-disabled" "disabled tool"
     Remove-Item -LiteralPath (Join-Path $workspaceConfigDir "config.json") -Force
 
     $isWindowsRuntime = [System.Environment]::OSVersion.Platform -eq [System.PlatformID]::Win32NT

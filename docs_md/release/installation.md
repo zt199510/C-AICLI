@@ -2,7 +2,7 @@
 
 ## Supported Package
 
-The `0.2.1` release candidate is a Windows `win-x64` self-contained package produced by:
+The `0.3.0` release candidate is a Windows `win-x64` self-contained package produced by:
 
 ```powershell
 powershell -NoProfile -ExecutionPolicy Bypass -File tools/Build-Release.ps1
@@ -11,7 +11,7 @@ powershell -NoProfile -ExecutionPolicy Bypass -File tools/Build-Release.ps1
 The script writes the executable to:
 
 ```text
-artifacts/release/caicli-0.2.1-win-x64/caicli.exe
+artifacts/release/caicli-0.3.0-win-x64/caicli.exe
 ```
 
 The package also includes `release-manifest.json`, which records the version, runtime, target framework, and executable name.
@@ -21,7 +21,7 @@ The package also includes `release-manifest.json`, which records the version, ru
 - Windows x64.
 - PowerShell for running the build and smoke scripts.
 - .NET SDK 9.0.x only if building from source or running tests.
-- An OpenAI API key only for real model calls such as `chat` and `review`. `doctor`, `config get`, `version`, MCP diagnostics, workflow diagnostics, and smoke tests can run without a key.
+- An OpenAI API key only for real model calls such as `chat`, `exec`, and `review`. `doctor`, `config get`, `version`, MCP diagnostics, workflow diagnostics, and default smoke tests can run without a key.
 
 ## Install From Local Release Artifacts
 
@@ -34,14 +34,14 @@ powershell -NoProfile -ExecutionPolicy Bypass -File tools/Build-Release.ps1
 2. Run the executable directly:
 
 ```powershell
-artifacts\release\caicli-0.2.1-win-x64\caicli.exe version
-artifacts\release\caicli-0.2.1-win-x64\caicli.exe doctor
+artifacts\release\caicli-0.3.0-win-x64\caicli.exe version
+artifacts\release\caicli-0.3.0-win-x64\caicli.exe doctor
 ```
 
 3. Optional: add the release directory to `PATH` for the current PowerShell session:
 
 ```powershell
-$env:PATH = "$(Resolve-Path artifacts\release\caicli-0.2.1-win-x64);$env:PATH"
+$env:PATH = "$(Resolve-Path artifacts\release\caicli-0.3.0-win-x64);$env:PATH"
 caicli version
 caicli doctor
 ```

@@ -2,11 +2,33 @@
 
 ## Unreleased
 
+No changes recorded.
+
+## 0.3.0 - 2026-07-12
+
 Added:
-- Direct OpenAI Responses SDK agent tool-call continuation for `exec`: unified tool schemas are sent as function tools, SDK function calls are parsed into the existing agent loop, and structured tool results are written back for model continuation.
+- Week 39 real agent loop completion for `exec`: configured direct OpenAI Responses SDK runs now use the same `IAgentRunner` surface as the fake/offline contract instead of stopping at the readiness gateway.
+- Week 39 SDK tool-call continuation: unified tool schemas are mapped to Responses function tools, SDK function calls are parsed into the existing agent loop, structured tool results are written back as function-call outputs, and the model can continue until final output or a bounded stop condition.
+- Week 40 state machine limits for agentic `exec`: runs enforce step/turn, tool-call, retry, and timeout budgets, and terminal results preserve `status` and `stopReason` so limit exits are explicit.
+- Week 41 bounded startup context and plan events: `exec` records workspace/cwd, instruction source order, session/resume context, and git status/diff summaries before write-capable work, while bounding oversized context and warning instead of expanding unboundedly.
+- Week 42 patch and verification workflow: patch and shell actions remain approval-gated and workspace-guarded, changed files are recorded, and verification results are attached to tool feedback.
+- Week 43 failure feedback retry: verification/tool failures can be summarized back to the model as bounded feedback, and retry is finite through `--max-retries`.
+- Week 44 read-only `review.gate` and final `taskReport` outputs for `exec`: JSON output emits structured events and terminal result payloads, while text output surfaces changed files, commands, verification status, remaining risks, and trace path when available.
+- Week 45 smoke, documentation, and release-boundary coverage for the real-agent release line: release docs now describe the direct SDK loop, offline/fake contract, opt-in real model smoke, retry behavior, review gate, task report, safety boundaries, and Deferred enhanced capabilities.
 
 Changed:
+- The default configured `exec` path no longer treats direct OpenAI SDK agent tool-call continuation as Deferred; it is current `0.3.0` behavior when model credentials are configured.
 - Release smoke keeps real model execution opt-in with `CAICLI_REAL_MODEL_SMOKE=1`; default smoke remains credential-free and local-only.
+- Failure retry does not bypass approval, workspace path guards, dirty-workspace checks, shell policy, dangerous-command detection, or timeout limits.
+- `review.gate` and `taskReport` are documented as diagnostics and release evidence, not correctness proofs or replacements for human diff review.
+
+Known deferred items:
+- Real Microsoft Agent Framework runtime backend.
+- Remote/http MCP transport.
+- Real Gerber/TIFF toolchain execution.
+- Dotnet tool packaging.
+- Standalone full markdown task report file emission by default; compact task report events and session metadata are included.
+- Interactive approval UI; non-interactive approval modes continue to report approval-required failures for write and shell actions.
 
 ## 0.2.1 - 2026-07-10
 

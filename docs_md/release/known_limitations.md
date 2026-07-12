@@ -2,9 +2,9 @@
 
 ## Release Scope
 
-- Version `0.2.1` is a local Windows release candidate.
+- Version `0.3.0` is a local Windows release candidate.
 - The primary supported package is `win-x64` self-contained single-file publish.
-- Dotnet tool packaging is not part of the `0.2.1` release package.
+- Dotnet tool packaging is not part of the `0.3.0` release package.
 
 ## Model And Agent Behavior
 
@@ -13,10 +13,12 @@
 - `run` remains the deterministic direct-tool compatibility and smoke entry.
 - The offline/fake model agent loop and OpenAI response parsing/writeback contracts are implemented and tested.
 - The default `exec` path reaches the direct OpenAI Responses SDK tool-call continuation when model and key are configured. Normal unit tests and default smoke tests still use fake/offline contracts or local-only checks; real model smoke is opt-in with `CAICLI_REAL_MODEL_SMOKE=1`.
+- Real model smoke is intentionally skipped unless `CAICLI_REAL_MODEL_SMOKE=1`, `OPENAI_API_KEY`, and `OPENAI_MODEL` are all present. A skip in that path does not mean the offline smoke failed.
 - `exec` failure feedback retry is finite, not an infinite auto-repair loop. The default retry budget is conservative, `--max-retries 0` disables retry, and budget exhaustion returns a failure summary with remaining risk, command history, and changed files.
 - Retry behavior is covered by fake/offline end-to-end tests. Real model repair quality still depends on the configured provider/model and remains opt-in for real-network smoke.
 - `chat --resume` and `exec --resume` provide prior transcript context only for existing local sessions. The context is normalized before use to reduce transcript section-spoofing risk.
 - `review` is workspace-read-only and does not execute patch or shell tools or write workspace files, logs, transcripts, or patches. Diff collection may use cleaned-up temp files outside the workspace. It sends the current git diff to the configured model and requires configured model credentials for real use.
+- `review.gate` and `taskReport` are implemented diagnostic outputs for `exec`; they summarize the final state but do not prove correctness and do not replace human diff review.
 - The Microsoft Agent Framework project is an adapter boundary and experimental stub; the real framework runtime backend is Deferred.
 
 ## MCP And Project Packs
@@ -37,6 +39,7 @@
 - There is no interactive approval UI. Non-interactive `on-request` and `on-failure` modes report approval-required failures for write and shell actions.
 - Retry does not bypass approval, workspace guard, dirty-workspace checks, shell policy, or dangerous-command detection. A retry can ask for another patch or shell command only through the same tool safety path.
 - Failure feedback is bounded/truncated before it is sent back through model continuation; long stdout/stderr or payload strings may require reading trace/session output or rerunning commands manually.
+- Trace logs are local diagnostic artifacts. Redaction is best-effort and users should still treat traces, command logs, and session exports as sensitive when prompts or diffs contain private code.
 - Shell policy and dangerous command detection run before approval/execution, including for MCP stdio startup commands, but users must still inspect commands.
 - Dangerous command detection and shell policy are conservative text/pattern checks, not complete shell parsing or semantic proof.
 - Shell allowlist entries are command text, not exact argv arrays; unusual quoted arguments with metacharacters may be conservatively blocked.

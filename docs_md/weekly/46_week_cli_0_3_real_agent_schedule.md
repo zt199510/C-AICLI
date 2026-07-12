@@ -1,6 +1,6 @@
 # C# AI CLI Week 39-46 0.3.0 真实 Agent 开发排期
 
-更新时间：2026-07-10
+更新时间：2026-07-12
 
 ## 目标
 
@@ -71,14 +71,14 @@
 
 | 周 | 计划文档 | 状态 | 主要目标 | 周末验收 |
 |---:|---|---|---|---|
-| 39 | `39_week_real_model_tool_continuation.plan.md` | 计划中 | 为 direct backend 实现真实模型 tool-call continuation，支持模型请求本地工具、工具结果回写、模型继续生成。 | fake model 与真实模型接口共用契约；真实模型 smoke opt-in；无 key 时错误清晰且脱敏。 |
-| 40 | `40_week_agent_state_machine_limits.plan.md` | 计划中 | 抽出 agent state machine，统一 step/tool/time/output budget、stop reason、loop error 和 JSON event。 | loop limit、tool failure、approval denied、model stop reason 均有稳定事件和测试。 |
-| 41 | `41_week_context_gathering_planning.plan.md` | 计划中 | 增强任务上下文收集：repo status、project instructions、relevant files、read/search 策略和有限 plan。 | `exec` 能先收集上下文并形成可追踪 plan；不会读取 workspace 外文件。 |
-| 42 | `42_week_patch_verify_workflow.plan.md` | 计划中 | 串联 patch、changed files、git diff、验证命令执行和验证结果回写。 | 小改动任务可修改文件、展示 changed files、运行验证命令并记录 result。 |
-| 43 | `43_week_failure_feedback_retry.plan.md` | 计划中 | 将测试失败、shell failure、tool error 反馈给模型，支持有限重试和明确失败收敛。 | fake end-to-end 覆盖一次失败后修复；超过 retry budget 时输出可复核失败报告。 |
-| 44 | `44_week_review_gate_task_report.plan.md` | 计划中 | 增加只读复核 gate 和任务报告：diff summary、commands、tests、risks、trace path。 | `exec` 最终回答包含可复核 summary；report 不泄露 secret；review gate 不写文件。 |
-| 45 | `45_week_real_agent_smoke_docs.plan.md` | 计划中 | 扩展 smoke：离线 end-to-end、opt-in real model、approval/security regression；更新 docs。 | smoke 覆盖真实 agent 关键路径；真实模型 smoke 默认跳过但文档清晰。 |
-| 46 | `46_week_cli_0_3_release_acceptance.plan.md` | 计划中 | 0.3.0 发布验收、版本元数据、CHANGELOG、capability status、release zip。 | build/test/smoke 通过；0.3.0 zip size/SHA256 记录；Deferred 边界准确。 |
+| 39 | `39_week_real_model_tool_continuation.plan.md` | 已稳固 | 为 direct backend 实现真实模型 tool-call continuation，支持模型请求本地工具、工具结果回写、模型继续生成。 | fake model 与真实模型接口共用契约；真实模型 smoke opt-in；无 key 时错误清晰且脱敏。 |
+| 40 | `40_week_agent_state_machine_limits.plan.md` | 已验收 | 抽出 agent state machine，统一 step/tool/time/output budget、stop reason、loop error 和 JSON event。 | loop limit、tool failure、approval denied、model stop reason 均有稳定事件和测试。 |
+| 41 | `41_week_context_gathering_planning.plan.md` | 已验收 | 增强任务上下文收集：repo status、project instructions、relevant files、read/search 策略和有限 plan。 | `exec` 能先收集上下文并形成可追踪 plan；不会读取 workspace 外文件。 |
+| 42 | `42_week_patch_verify_workflow.plan.md` | 已验收 | 串联 patch、changed files、git diff、验证命令执行和验证结果回写。 | 小改动任务可修改文件、展示 changed files、运行验证命令并记录 result。 |
+| 43 | `43_week_failure_feedback_retry.plan.md` | 已验收 | 将测试失败、shell failure、tool error 反馈给模型，支持有限重试和明确失败收敛。 | fake end-to-end 覆盖一次失败后修复；超过 retry budget 时输出可复核失败报告。 |
+| 44 | `44_week_review_gate_task_report.plan.md` | 已验收 | 增加只读复核 gate 和任务报告：diff summary、commands、tests、risks、trace path。 | `exec` 最终回答包含可复核 summary；report 不泄露 secret；review gate 不写文件。 |
+| 45 | `45_week_real_agent_smoke_docs.plan.md` | 已验收 | 扩展 smoke：离线 end-to-end、opt-in real model、approval/security regression；更新 docs。 | smoke 覆盖真实 agent 关键路径；真实模型 smoke 默认跳过但文档清晰。 |
+| 46 | `46_week_cli_0_3_release_acceptance.plan.md` | 已验收 | 0.3.0 发布验收、版本元数据、CHANGELOG、capability status、release zip。 | build/test/smoke 通过；0.3.0 zip size/SHA256 记录；Deferred 边界准确。 |
 
 ## 关键设计原则
 
