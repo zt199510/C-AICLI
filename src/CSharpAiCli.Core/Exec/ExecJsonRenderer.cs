@@ -127,6 +127,11 @@ public sealed class ExecJsonRenderer
             };
         }
 
+        if (result.TaskReport is not null)
+        {
+            payload["taskReport"] = RedactTaskReportPayload(result.TaskReport);
+        }
+
         envelope["payload"] = payload;
 
         writer.WriteLine(JsonSerializer.Serialize(envelope, JsonOptions));
@@ -192,6 +197,46 @@ public sealed class ExecJsonRenderer
         }
 
         return envelope;
+    }
+
+    private static IReadOnlyDictionary<string, object?> RedactTaskReportPayload(AgentTaskReport report)
+    {
+        Dictionary<string, object?> payload = new(StringComparer.Ordinal);
+        foreach (KeyValuePair<string, object?> pair in AgentTaskReportBuilder.ToJsonPayload(report))
+        {
+            payload[pair.Key] = RedactJsonValue(pair.Value);
+        }
+
+        return payload;
+    }
+
+    private static object? RedactJsonValue(object? value)
+    {
+        return value switch
+        {
+            null => null,
+            string text => ExecOutputRedactor.Redact(text),
+            Dictionary<string, object?> dictionary => dictionary.ToDictionary(
+                pair => ExecOutputRedactor.Redact(pair.Key),
+                pair => RedactJsonValue(pair.Value),
+                StringComparer.Ordinal),
+            IReadOnlyDictionary<string, object?> dictionary => dictionary.ToDictionary(
+                pair => ExecOutputRedactor.Redact(pair.Key),
+                pair => RedactJsonValue(pair.Value),
+                StringComparer.Ordinal),
+            IEnumerable<Dictionary<string, object?>> dictionaries => dictionaries
+                .Select(dictionary => RedactJsonValue(dictionary))
+                .ToArray(),
+            IEnumerable<IReadOnlyDictionary<string, object?>> dictionaries => dictionaries
+                .Select(dictionary => RedactJsonValue(dictionary))
+                .ToArray(),
+            IEnumerable<string> strings => strings.Select(ExecOutputRedactor.Redact).ToArray(),
+            System.Collections.IEnumerable values when value is not string => values
+                .Cast<object?>()
+                .Select(RedactJsonValue)
+                .ToArray(),
+            _ => value
+        };
     }
 }
 

@@ -143,7 +143,7 @@ MCP config/list/doctor are available. User-configured stdio MCP servers can be d
 
 ## 10. Run An Agentic Exec Task
 
-`exec` is the agentic v1 surface and contract. It is routed through `IAgentRunner`, emits model/tool/final/error events in the newline-delimited `--json` stream, supports loop limits and session transcripts, and returns exit code `0` on success, `1` on task failure, and `2` on argument error.
+`exec` is the agentic v1 surface and contract. It is routed through `IAgentRunner`, emits model/tool/final/error/review/report events in the newline-delimited `--json` stream, supports loop limits and session transcripts, and returns exit code `0` on success, `1` on task failure, and `2` on argument error.
 
 At startup, `exec` builds bounded task context before write-capable work begins. The collected context includes the resolved workspace/cwd, project instruction source list, session or resume state, and a bounded git status/diff summary. The generated plan is emitted as a traceable `plan` event so text, NDJSON, session, and trace consumers can correlate the task goal, candidate files, expected tools, and risks before later model/tool events.
 
@@ -152,6 +152,12 @@ The offline/fake agent loop and the direct OpenAI Responses SDK path share the s
 After a successful `workspace.apply_patch` tool call, `exec` records patch lifecycle events (`patch.preview`, `patch.approval`, and `patch.apply`), collects a `changed.files` summary from git status/diff, and adds changed-file details to text, NDJSON, trace, and session run summaries. If an explicit verification command is configured, `exec` runs it through `workspace.run_shell` and records `verification.result`; the shell approval mode, shell policy allowlist/denylist, timeout cap, dangerous-command detector, cwd guard, and output truncation rules still apply.
 
 Automatic verification uses only explicit commands. Project instructions take priority when they contain a line such as `VerificationCommand: dotnet test` or `ValidationCommand: dotnet test`. If instructions do not define a command, a single unambiguous workflow profile `validationCommand` can be used. When no explicit command exists, `exec` records verification as skipped and does not guess a build or test command.
+
+At completion, `exec` runs a read-only `review.gate` over the final git diff summary. The gate uses the read-only `git.diff` tool path, does not call patch or shell tools, and does not write workspace files. The event payload includes `readOnly=true`, `toolName=git.diff`, `hasDiff`, and `truncated`.
+
+Every agentic `exec` run also records a final `AgentTaskReport`. Text output includes the report-derived `changedFiles`, `commands`, `verificationStatus`, `remainingRisks`, and `tracePath` fields when available. JSON output emits a `taskReport` event and includes the full `payload.taskReport` object on the terminal `exec.result`. The report payload contains status/stop reason, prompt, plan, tools, changed files, commands, verification, risks, trace path, and optional review gate data.
+
+When `--trace` is enabled, the task report is written into the trace result payload. When `--session` is used, the report is attached to the session transcript's agent run summary. Report redaction records secret presence/source/kind only and never raw secret values. A standalone full markdown task report is deferred; `session export --format markdown` currently prints compact task report counts and the trace path when present.
 
 ```powershell
 artifacts\release\caicli-0.2.1-win-x64\caicli.exe exec --workspace . "read README.md"

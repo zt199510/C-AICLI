@@ -71,7 +71,7 @@ public sealed class ExecRendererTests
 
         Assert.Equal("event: tool.started seq=1 ts=2026-06-09T10:30:00.0000000+00:00 status=started message=Running tests. approvalStatus=approved payload.command=dotnet test", lines[0]);
         Assert.Equal("event: task.completed seq=2 ts=2026-06-09T10:31:00.0000000+00:00 status=success durationMs=60000 summary=Done.", lines[1]);
-        Assert.Equal("result: success exitCode=0 summary=All good. approvalStatus=approved events=2", lines[2]);
+        Assert.Equal("result: success exitCode=0 summary=All good. approvalStatus=approved changedFiles=none events=2", lines[2]);
     }
 
     [Fact]
@@ -217,7 +217,7 @@ public sealed class ExecRendererTests
         Assert.Contains("payload.path=note.txt", output, StringComparison.Ordinal);
         Assert.Contains("message=message password=[redacted] authorization=Bearer [redacted]", output, StringComparison.Ordinal);
         Assert.Contains("summary=summary apiKey=[redacted]", output, StringComparison.Ordinal);
-        Assert.Contains("result: success exitCode=0 summary=result apiKey=[redacted] approvalStatus=approved events=1", output, StringComparison.Ordinal);
+        Assert.Contains("result: success exitCode=0 summary=result apiKey=[redacted] approvalStatus=approved changedFiles=none events=1", output, StringComparison.Ordinal);
         Assert.DoesNotContain(RendererRawSecrets, secret => output.Contains(secret, StringComparison.Ordinal));
     }
 
@@ -252,6 +252,131 @@ public sealed class ExecRendererTests
         Assert.Equal("success", result.GetProperty("payload").GetProperty("status").GetString());
         Assert.Equal(0, result.GetProperty("payload").GetProperty("exitCode").GetInt32());
         Assert.Equal(1, result.GetProperty("payload").GetProperty("eventCount").GetInt32());
+    }
+
+    [Fact]
+    public void Renderers_write_task_report_event_and_final_summary_fields()
+    {
+        AgentTaskReport report = CreateNoChangeTaskReport();
+        ExecResult result = ExecResult.Success("done", []).WithTaskReport(
+            report,
+            DateTimeOffset.Parse("2024-01-01T00:00:01Z"));
+
+        using StringWriter textWriter = new();
+        ExecTextRenderer textRenderer = new(textWriter);
+        foreach (ExecEvent execEvent in result.Events)
+        {
+            textRenderer.WriteEvent(execEvent);
+        }
+
+        textRenderer.WriteResult(result);
+
+        string text = textWriter.ToString();
+        Assert.Contains("event: taskReport", text, StringComparison.Ordinal);
+        Assert.Contains("changedFiles=none", text, StringComparison.Ordinal);
+        Assert.Contains("commands=none", text, StringComparison.Ordinal);
+        Assert.Contains("verificationStatus=none", text, StringComparison.Ordinal);
+        Assert.Contains("remainingRisks=none", text, StringComparison.Ordinal);
+
+        using StringWriter jsonWriter = new();
+        ExecJsonRenderer jsonRenderer = new(jsonWriter);
+        foreach (ExecEvent execEvent in result.Events)
+        {
+            jsonRenderer.WriteEvent(execEvent);
+        }
+
+        jsonRenderer.WriteResult(result);
+
+        string[] jsonLines = jsonWriter.ToString().TrimEnd().Split(Environment.NewLine);
+        Assert.Equal(2, jsonLines.Length);
+        JsonElement eventJson = JsonSerializer.Deserialize<JsonElement>(jsonLines[0]);
+        JsonElement resultJson = JsonSerializer.Deserialize<JsonElement>(jsonLines[1]);
+        Assert.Equal("taskReport", eventJson.GetProperty("type").GetString());
+        JsonElement taskReport = resultJson.GetProperty("payload").GetProperty("taskReport");
+        Assert.Equal("success", taskReport.GetProperty("status").GetString());
+        Assert.Empty(taskReport.GetProperty("changedFiles").EnumerateArray());
+        Assert.Empty(taskReport.GetProperty("commands").EnumerateArray());
+        Assert.Empty(taskReport.GetProperty("verification").EnumerateArray());
+    }
+
+    [Fact]
+    public void Renderers_redact_task_report_secret_values()
+    {
+        AgentTaskReport report = new(
+            Status: "success",
+            StopReason: "completed",
+            Prompt: "prompt apiKey=report-prompt-secret",
+            Plan: "plan password=report-plan-secret",
+            Tools: ["workspace.run_shell"],
+            ChangedFiles:
+            [
+                new ChangedFileSummary(
+                    Path: "src/App.cs",
+                    Status: "modified",
+                    SourceToolCallId: "call_patch",
+                    DiffStat: "token=report-diff-secret")
+            ],
+            Commands:
+            [
+                new AgentTaskCommandReport(
+                    Source: "verification",
+                    Command: "dotnet test --password report-command-secret")
+            ],
+            Verification:
+            [
+                new AgentTaskVerificationReport(
+                    Status: "success",
+                    Source: "project-instructions",
+                    Command: "dotnet test",
+                    WorkingDirectory: ".",
+                    Succeeded: true,
+                    ApprovalStatus: "approved",
+                    ErrorCode: null,
+                    ExitCode: 0,
+                    TimedOut: false,
+                    Summary: "ok client_secret=report-verification-secret")
+            ],
+            Risks: ["risk access_token=report-risk-secret"],
+            TracePath: "D:/trace.log",
+            Secrets: [new AgentTaskSecretPresence("prompt", "key-value")],
+            Summary: "done secret=report-summary-secret",
+            ReviewGate: new AgentTaskReviewGateReport(
+                Status: "success",
+                Summary: "review Bearer report-review-secret",
+                HasDiff: true,
+                Truncated: false));
+        ExecResult result = ExecResult.Success("done", []).WithTaskReport(
+            report,
+            DateTimeOffset.Parse("2024-01-01T00:00:01Z"));
+
+        using StringWriter textWriter = new();
+        ExecTextRenderer textRenderer = new(textWriter);
+        foreach (ExecEvent execEvent in result.Events)
+        {
+            textRenderer.WriteEvent(execEvent);
+        }
+
+        textRenderer.WriteResult(result);
+
+        using StringWriter jsonWriter = new();
+        ExecJsonRenderer jsonRenderer = new(jsonWriter);
+        foreach (ExecEvent execEvent in result.Events)
+        {
+            jsonRenderer.WriteEvent(execEvent);
+        }
+
+        jsonRenderer.WriteResult(result);
+
+        string output = textWriter + jsonWriter.ToString();
+        Assert.Contains("[redacted]", output, StringComparison.Ordinal);
+        Assert.DoesNotContain("report-prompt-secret", output, StringComparison.Ordinal);
+        Assert.DoesNotContain("report-plan-secret", output, StringComparison.Ordinal);
+        Assert.DoesNotContain("report-diff-secret", output, StringComparison.Ordinal);
+        Assert.DoesNotContain("report-command-secret", output, StringComparison.Ordinal);
+        Assert.DoesNotContain("report-verification-secret", output, StringComparison.Ordinal);
+        Assert.DoesNotContain("report-risk-secret", output, StringComparison.Ordinal);
+        Assert.DoesNotContain("report-summary-secret", output, StringComparison.Ordinal);
+        Assert.DoesNotContain("report-review-secret", output, StringComparison.Ordinal);
     }
 
     [Theory]
@@ -300,5 +425,21 @@ public sealed class ExecRendererTests
             Status: "started",
             DurationMs: 42,
             ApprovalDurationMs: 5);
+    }
+
+    private static AgentTaskReport CreateNoChangeTaskReport()
+    {
+        return new AgentTaskReport(
+            Status: "success",
+            StopReason: "completed",
+            Prompt: "inspect workspace",
+            Plan: null,
+            Tools: [],
+            ChangedFiles: [],
+            Commands: [],
+            Verification: [],
+            Risks: [],
+            TracePath: "D:/trace.log",
+            Summary: "nothing changed");
     }
 }

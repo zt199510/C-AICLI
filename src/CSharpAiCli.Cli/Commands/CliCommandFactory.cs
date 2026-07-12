@@ -1110,9 +1110,26 @@ public static class CliCommandFactory
             IAgentRunner runner = execAgentRunnerFactory(snapshot, registry, executor);
             AgentRunResult agentResult = runner.Run(request, transcript);
             ExecResult execResult = AgentExecResultAdapter.FromAgentResult(agentResult);
+            AgentTaskReviewGateReport reviewGate = RunReadOnlyReviewGate(snapshot.Workspace, executor);
+            ExecEvent reviewGateEvent = CreateReviewGateEvent(
+                reviewGate,
+                execResult.Events.Count == 0 ? 0 : execResult.Events[^1].Sequence + 1,
+                utcNowProvider());
+            string? tracePath = traceContext is null
+                ? null
+                : TraceLogger.ResolveTracePath(snapshot, traceContext.TimestampUtc);
+            AgentTaskReport taskReport = AgentTaskReportBuilder.Build(
+                request,
+                agentResult,
+                tracePath,
+                reviewGate);
+            execResult = execResult.WithTaskReport(
+                taskReport,
+                utcNowProvider(),
+                [reviewGateEvent]);
             if (sessionName is not null && transcript is not null && conversationStore is not null)
             {
-                transcript.AddAgentRun(ConversationAgentRun.FromAgentResult(agentResult, utcNowProvider()));
+                transcript.AddAgentRun(ConversationAgentRun.FromAgentResult(agentResult, utcNowProvider(), taskReport));
                 try
                 {
                     conversationStore.Save(sessionName, transcript);
@@ -1837,6 +1854,94 @@ public static class CliCommandFactory
     private static bool IsSupportedApiKeySource(string apiKeySource)
     {
         return apiKeySource is "OPENAI_API_KEY" or "user config";
+    }
+
+    private static AgentTaskReviewGateReport RunReadOnlyReviewGate(
+        WorkspaceContext workspace,
+        IToolExecutor executor)
+    {
+        ArgumentNullException.ThrowIfNull(workspace);
+        ArgumentNullException.ThrowIfNull(executor);
+
+        ToolExecutionResult gitDiff = executor.Execute(
+            "git.diff",
+            new ToolExecutionContext(
+                CallId: "review_gate_diff",
+                Workspace: workspace,
+                ArgumentsJson: """{"stat":true}""",
+                Phase: ToolExecutionPhase.Planning));
+        bool truncated = ReadBool(gitDiff.StructuredPayload, "truncated");
+        bool hasDiff = gitDiff.Succeeded &&
+            !string.IsNullOrWhiteSpace(gitDiff.Summary) &&
+            !string.Equals(gitDiff.Summary.Trim(), "no diff", StringComparison.OrdinalIgnoreCase);
+
+        if (!gitDiff.Succeeded)
+        {
+            return new AgentTaskReviewGateReport(
+                Status: "warning",
+                Summary: "Review gate could not read final diff: " + gitDiff.Summary,
+                HasDiff: false,
+                Truncated: truncated,
+                ErrorCode: gitDiff.ErrorCode);
+        }
+
+        return new AgentTaskReviewGateReport(
+            Status: truncated ? "warning" : "success",
+            Summary: hasDiff ? gitDiff.Summary : "No diff to review.",
+            HasDiff: hasDiff,
+            Truncated: truncated,
+            ErrorCode: gitDiff.ErrorCode);
+    }
+
+    private static ExecEvent CreateReviewGateEvent(
+        AgentTaskReviewGateReport reviewGate,
+        long sequence,
+        DateTimeOffset timestampUtc)
+    {
+        ArgumentNullException.ThrowIfNull(reviewGate);
+
+        Dictionary<string, string> payload = new(StringComparer.Ordinal)
+        {
+            ["phase"] = "review",
+            ["readOnly"] = "true",
+            ["toolName"] = "git.diff",
+            ["hasDiff"] = reviewGate.HasDiff ? "true" : "false",
+            ["truncated"] = reviewGate.Truncated ? "true" : "false"
+        };
+        if (!string.IsNullOrWhiteSpace(reviewGate.ErrorCode))
+        {
+            payload["errorCode"] = reviewGate.ErrorCode;
+        }
+
+        return new ExecEvent(
+            Type: "review.gate",
+            Sequence: sequence,
+            Timestamp: timestampUtc,
+            Message: "Read-only review gate summarized the final diff.",
+            Summary: reviewGate.Summary,
+            Payload: payload,
+            ErrorCode: reviewGate.ErrorCode,
+            Status: reviewGate.Status);
+    }
+
+    private static bool ReadBool(
+        IReadOnlyDictionary<string, JsonElement>? structuredPayload,
+        string key)
+    {
+        if (structuredPayload is null ||
+            !structuredPayload.TryGetValue(key, out JsonElement value))
+        {
+            return false;
+        }
+
+        if (value.ValueKind is JsonValueKind.True or JsonValueKind.False)
+        {
+            return value.GetBoolean();
+        }
+
+        return value.ValueKind == JsonValueKind.String &&
+            bool.TryParse(value.GetString(), out bool parsed) &&
+            parsed;
     }
 
     private static void AddPositiveIntegerValidator(Option<int?> option, string optionName)

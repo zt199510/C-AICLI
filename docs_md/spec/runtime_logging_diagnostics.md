@@ -110,6 +110,14 @@ For agentic `exec`, `status` is the coarse terminal outcome (`success`, `failure
 
 Agent event order is shared by text output, NDJSON output, and trace output. `model.turn`, `tool.call`, and `tool.result` events can include `stepIndex`; terminal `final.response` and `agent.error` events include `stopReason`. Session transcript v1 is not a full event log, but agentic exec sessions add `agentRuns[]` summaries with final `status`, `stopReason`, optional `errorCode`, summary, event count, and tool call count.
 
+Week 44 adds final review/report diagnostics for every agentic `exec` run:
+
+- `review.gate` summarizes the final git diff through the read-only `git.diff` planning-phase path. Its payload includes `readOnly=true`, `toolName=git.diff`, `hasDiff`, and `truncated`. It must not call shell, patch, or workspace write tools.
+- `taskReport` records the final report as an event. Its payload includes status, stop reason, prompt, plan, tools, changed file count/list, command count/list, verification count/statuses, risk count/list, trace path when trace is enabled, optional review gate status, and secret presence metadata.
+- The terminal `exec.result.payload.taskReport` contains the structured report payload used by JSON consumers and trace readers.
+- Session transcript `agentRuns[]` stores the same task report summary object when `exec --session` is used. Markdown session export renders compact task report counts and trace path only.
+- Full standalone markdown task report files are not written by default and remain deferred.
+
 Trace and verbose diagnostics must redact secrets before writing output. Redaction covers API keys, access/refresh tokens, passwords, `Authorization` headers and common variants, `secretKey`, `privateKey`, nested or escaped `argumentsJson`, OpenAI `sk-...` keys, and GitHub token formats such as `ghp_...` and `github_pat_...`. Diagnostics may record key presence and source, but never raw key values.
 
 `logs path` prints the resolved CLI log directory. It must not create the directory just to print the path.

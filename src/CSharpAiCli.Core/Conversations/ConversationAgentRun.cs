@@ -16,7 +16,8 @@ public sealed record ConversationAgentRun
         IReadOnlyList<ChangedFileSummary>? ChangedFiles = null,
         IReadOnlyList<VerificationResultSummary>? VerificationResults = null,
         IReadOnlyList<AgentRetryAttempt>? RetryAttempts = null,
-        AgentFailureSummary? FailureSummary = null)
+        AgentFailureSummary? FailureSummary = null,
+        AgentTaskReport? TaskReport = null)
     {
         this.CompletedAtUtc = CompletedAtUtc;
         this.Status = Status;
@@ -30,6 +31,7 @@ public sealed record ConversationAgentRun
         this.VerificationResults = new ReadOnlyCollection<VerificationResultSummary>((VerificationResults ?? []).ToArray());
         this.RetryAttempts = new ReadOnlyCollection<AgentRetryAttempt>((RetryAttempts ?? []).ToArray());
         this.FailureSummary = FailureSummary;
+        this.TaskReport = TaskReport;
     }
 
     public DateTimeOffset CompletedAtUtc { get; }
@@ -56,9 +58,12 @@ public sealed record ConversationAgentRun
 
     public AgentFailureSummary? FailureSummary { get; }
 
+    public AgentTaskReport? TaskReport { get; }
+
     public static ConversationAgentRun FromAgentResult(
         AgentRunResult result,
-        DateTimeOffset completedAtUtc)
+        DateTimeOffset completedAtUtc,
+        AgentTaskReport? taskReport = null)
     {
         ArgumentNullException.ThrowIfNull(result);
 
@@ -74,7 +79,8 @@ public sealed record ConversationAgentRun
             ChangedFiles: result.ChangedFiles,
             VerificationResults: result.VerificationResults,
             RetryAttempts: result.RetryAttempts,
-            FailureSummary: result.FailureSummary);
+            FailureSummary: result.FailureSummary,
+            TaskReport: taskReport);
     }
 
     private static string? FindPlanSummary(IReadOnlyList<AgentRunEvent> events)

@@ -208,6 +208,32 @@ public sealed class ConversationTranscriptRecorderTests
     }
 
     [Fact]
+    public void Agent_run_summary_captures_task_report_for_session_transcript()
+    {
+        AgentRunResult result = AgentRunResult.Success("done", [], []);
+        AgentTaskReport report = new(
+            Status: "success",
+            StopReason: "completed",
+            Prompt: "inspect workspace",
+            Plan: null,
+            Tools: [],
+            ChangedFiles: [],
+            Commands: [],
+            Verification: [],
+            Risks: [],
+            TracePath: "D:/trace.log",
+            Summary: "nothing changed");
+
+        ConversationAgentRun run = ConversationAgentRun.FromAgentResult(
+            result,
+            DateTimeOffset.Parse("2024-01-01T00:00:03Z"),
+            report);
+
+        Assert.Same(report, run.TaskReport);
+        Assert.Equal("D:/trace.log", run.TaskReport?.TracePath);
+    }
+
+    [Fact]
     public void Record_success_appends_user_and_assistant_messages()
     {
         DateTimeOffset start = DateTimeOffset.Parse("2024-01-01T00:00:00Z");

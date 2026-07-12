@@ -234,6 +234,39 @@ public sealed class ConversationTranscriptMarkdownFormatterTests
     }
 
     [Fact]
+    public void Format_includes_agent_run_task_report_summary()
+    {
+        ConversationTranscript transcript = ConversationTranscript.Create(
+            "smoke",
+            DateTimeOffset.Parse("2024-01-01T00:00:00Z"));
+        transcript.AddAgentRun(new ConversationAgentRun(
+            CompletedAtUtc: DateTimeOffset.Parse("2024-01-01T00:00:05Z"),
+            Status: "success",
+            StopReason: "completed",
+            ErrorCode: null,
+            Summary: "done",
+            EventCount: 2,
+            ToolCallCount: 0,
+            TaskReport: new AgentTaskReport(
+                Status: "success",
+                StopReason: "completed",
+                Prompt: "inspect workspace",
+                Plan: null,
+                Tools: [],
+                ChangedFiles: [],
+                Commands: [],
+                Verification: [],
+                Risks: [],
+                TracePath: "D:/trace.log",
+                Summary: "nothing changed")));
+
+        string markdown = ConversationTranscriptMarkdownFormatter.Format(transcript);
+
+        Assert.Contains("taskReport: status=success stopReason=completed changedFiles=0 commands=0 verification=0 risks=0", markdown, StringComparison.Ordinal);
+        Assert.Contains("tracePath: D:/trace.log", markdown, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void Format_redacts_common_oauth_and_cloud_secret_names()
     {
         ConversationTranscript transcript = ConversationTranscript.Create(

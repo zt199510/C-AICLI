@@ -101,6 +101,21 @@ Verification command selection is conservative:
 
 Verification execution always goes through `workspace.run_shell`. Approval mode, shell policy allowlist/denylist, timeout limits, dangerous-command detection, cwd guard, stdout/stderr truncation, and safe error codes are reused. Verification results are written back as structured tool payload data for model continuation and as `verification.result` events for text, NDJSON, trace, and session consumers.
 
+## Review Gate And Task Reports
+
+Agentic `exec` ends each run with a read-only review gate and final task report.
+
+- The `review.gate` event summarizes the final git diff through the read-only `git.diff` tool path.
+- The review gate payload marks `readOnly=true` and `toolName=git.diff`.
+- The review gate does not call patch tools, shell tools, or workspace write paths.
+- The review gate can report `success` or `warning`; warning covers cases such as failed or truncated diff collection.
+- The final `AgentTaskReport` records status, stop reason, prompt, plan, tools, changed files, commands, verification, remaining risks, trace path, summary, error code, and optional review gate details.
+- Text output, NDJSON output, trace result payloads, and session transcript agent run summaries all carry report-derived data.
+- The report is diagnostic and review-oriented; it is not an automatic rollback or correctness guarantee.
+- A standalone full markdown task report file is not written by default. Full markdown task reports remain Deferred; session markdown export only includes compact task report counts and trace path metadata.
+
+Task reports sanitize all captured strings before output or persistence. When a secret-like value is detected, the report records only presence metadata, expressed as source and kind, and never stores the raw value.
+
 ## Tool Disable Controls
 
 Users can disable tools through `disabledTools` in user or workspace config. Disabled tools are not registered in the CLI tool registry, so direct calls, agentic `exec` tool calls, and deterministic `run` tasks fail safely with `unknown-tool`.
@@ -111,12 +126,15 @@ Users can disable tools through `disabledTools` in user or workspace config. Dis
 - `OPENAI_API_KEY` or user config may provide the key.
 - Workspace `apiKey` is ignored and reported as a warning.
 - Logs record key presence and source, not key value.
+- Task reports record secret presence source/kind only, not secret values.
 
 ## Sessions And Logs
 
 - Command logs are written under `<workspace>\.caicli\logs` when the workspace is usable.
 - Chat transcripts are written under `%USERPROFILE%\.caicli\sessions`.
 - `exec --session` records agent transcripts, including tool call requests and summarized tool results.
+- `exec --session` also records the final task report on the transcript agent run summary.
+- `exec --trace` writes the final task report into the trace result payload.
 - `CAICLI_USER_PROFILE` can redirect user config and sessions for smoke tests or portable verification.
 - Transcript file names are derived from validated session names and cannot traverse directories.
 

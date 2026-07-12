@@ -505,6 +505,72 @@ public sealed class TraceLoggerTests
     }
 
     [Fact]
+    public void AppendExecResult_writes_task_report_payload_and_redacts_secret_values()
+    {
+        string tempRoot = CreateTempDirectory();
+
+        try
+        {
+            string workspaceRoot = Path.Combine(tempRoot, "workspace");
+            Directory.CreateDirectory(workspaceRoot);
+            CliEnvironmentSnapshot snapshot = CreateSnapshot(
+                workspaceRoot: workspaceRoot,
+                userProfile: Path.Combine(tempRoot, "home"));
+            DiagnosticContext context = new(
+                CommandId: "cmd-report",
+                SessionId: "session-report",
+                Workspace: workspaceRoot,
+                TimestampUtc: DateTimeOffset.Parse("2026-07-10T10:30:00Z"));
+            AgentTaskReport report = new(
+                Status: "success",
+                StopReason: "completed",
+                Prompt: "prompt apiKey=trace-report-secret",
+                Plan: null,
+                Tools: ["workspace.run_shell"],
+                ChangedFiles: [],
+                Commands:
+                [
+                    new AgentTaskCommandReport(
+                        Source: "verification",
+                        Command: "dotnet test --token trace-command-secret")
+                ],
+                Verification: [],
+                Risks: ["risk password=trace-risk-secret"],
+                TracePath: TraceLogger.ResolveTracePath(snapshot, context.TimestampUtc),
+                Secrets: [new AgentTaskSecretPresence("prompt", "key-value")],
+                Summary: "done secret=trace-summary-secret");
+            ExecResult result = ExecResult.Success("done", []).WithTaskReport(
+                report,
+                DateTimeOffset.Parse("2026-07-10T10:30:01Z"));
+
+            TraceLogger.AppendExecResult("exec", snapshot, context, result);
+
+            string tracePath = Path.Combine(workspaceRoot, ".caicli", "logs", "2026-07-10.trace.log");
+            string trace = File.ReadAllText(tracePath);
+            string[] lines = File.ReadAllLines(tracePath);
+            JsonObject taskReportEvent = Assert.IsType<JsonObject>(JsonNode.Parse(lines[0]));
+            JsonObject final = Assert.IsType<JsonObject>(JsonNode.Parse(lines[1]));
+            JsonObject taskReport = Assert.IsType<JsonObject>(final["payload"]?["taskReport"]);
+
+            Assert.Equal("taskReport", taskReportEvent["type"]?.GetValue<string>());
+            Assert.Equal("success", taskReport["status"]?.GetValue<string>());
+            Assert.Equal("completed", taskReport["stopReason"]?.GetValue<string>());
+            Assert.Equal(1, taskReport["commands"]?.AsArray().Count);
+            JsonArray secrets = Assert.IsType<JsonArray>(taskReport["secrets"]);
+            Assert.Equal("prompt", secrets[0]?["source"]?.GetValue<string>());
+            Assert.Contains("[redacted]", trace, StringComparison.Ordinal);
+            Assert.DoesNotContain("trace-report-secret", trace, StringComparison.Ordinal);
+            Assert.DoesNotContain("trace-command-secret", trace, StringComparison.Ordinal);
+            Assert.DoesNotContain("trace-risk-secret", trace, StringComparison.Ordinal);
+            Assert.DoesNotContain("trace-summary-secret", trace, StringComparison.Ordinal);
+        }
+        finally
+        {
+            Directory.Delete(tempRoot, recursive: true);
+        }
+    }
+
+    [Fact]
     public void AppendCommandEvent_writes_start_and_complete_records()
     {
         string tempRoot = CreateTempDirectory();

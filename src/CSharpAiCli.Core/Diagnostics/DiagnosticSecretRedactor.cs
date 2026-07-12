@@ -22,6 +22,10 @@ internal static class DiagnosticSecretRedactor
         $$"""(?<![A-Za-z0-9_-])(?<prefix>(?:\\?["'](?i:{{AuthorizationKeyNamePattern}})\\?["']|(?i:{{AuthorizationKeyNamePattern}}))(?![A-Za-z0-9_-])\s*[:=]\s*)(?<value>{{QuotedSecretValuePattern}}|{{BearerSecretValuePattern}}|{{AuthorizationSchemeSecretValuePattern}}|{{PlainSecretValuePattern}})|(?<![A-Za-z0-9_-])(?<prefix>(?:\\?["'](?i:{{SecretKeyNamePattern}})\\?["']|(?i:{{SecretKeyNamePattern}}))(?![A-Za-z0-9_-])\s*[:=]\s*)(?<value>{{QuotedSecretValuePattern}}|{{BearerSecretValuePattern}}|{{PlainSecretValuePattern}})""",
         RegexOptions.CultureInvariant | RegexOptions.IgnoreCase);
 
+    private static readonly Regex SecretOptionPattern = new(
+        $$"""(?<![A-Za-z0-9_-])(?<prefix>-{1,2}(?i:{{SecretKeyNamePattern}})(?![A-Za-z0-9_-])(?:[=\s]+))(?<value>{{QuotedSecretValuePattern}}|{{BearerSecretValuePattern}}|{{PlainSecretValuePattern}})""",
+        RegexOptions.CultureInvariant | RegexOptions.IgnoreCase);
+
     private static readonly Regex AuthorizationSchemeSecretPattern = new(
         @"^(?<scheme>[A-Za-z][A-Za-z0-9._~-]*)\s+(?:\[redacted\]|[^\r\n}\]]+)$",
         RegexOptions.CultureInvariant | RegexOptions.IgnoreCase);
@@ -41,10 +45,26 @@ internal static class DiagnosticSecretRedactor
     public static string Redact(string value)
     {
         string redacted = RedactKeyValueSecrets(value);
+        redacted = RedactOptionSecrets(redacted);
         redacted = BearerTokenPattern.Replace(redacted, "Bearer [redacted]");
         redacted = OpenAiKeyPattern.Replace(redacted, "[redacted]");
         redacted = GitHubTokenPattern.Replace(redacted, "[redacted]");
         return redacted;
+    }
+
+    private static string RedactOptionSecrets(string value)
+    {
+        return SecretOptionPattern.Replace(value, match =>
+        {
+            Group prefix = match.Groups["prefix"];
+            Group secretValue = match.Groups["value"];
+            if (!prefix.Success || !secretValue.Success)
+            {
+                return match.Value;
+            }
+
+            return prefix.Value + RedactMatchedValue(secretValue.Value);
+        });
     }
 
     public static bool IsSecretName(string value)

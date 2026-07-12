@@ -7,6 +7,15 @@ public static class TraceLogger
 {
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web);
 
+    public static string ResolveTracePath(CliEnvironmentSnapshot snapshot, DateTimeOffset timestampUtc)
+    {
+        ArgumentNullException.ThrowIfNull(snapshot);
+
+        string logDirectory = LogPathResolver.ResolveLogDirectory(snapshot);
+        string fileName = timestampUtc.UtcDateTime.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture) + ".trace.log";
+        return Path.Combine(logDirectory, fileName);
+    }
+
     public static void AppendCommandEvent(
         string commandName,
         CliEnvironmentSnapshot snapshot,
@@ -156,6 +165,11 @@ public static class TraceLogger
             }).ToArray();
         }
 
+        if (result.TaskReport is not null)
+        {
+            payload["taskReport"] = CreateSafeTaskReportPayload(result.TaskReport);
+        }
+
         record["payload"] = payload;
         return record;
     }
@@ -191,6 +205,46 @@ public static class TraceLogger
         return safePayload;
     }
 
+    private static IReadOnlyDictionary<string, object?> CreateSafeTaskReportPayload(AgentTaskReport report)
+    {
+        Dictionary<string, object?> payload = new(StringComparer.Ordinal);
+        foreach (KeyValuePair<string, object?> pair in AgentTaskReportBuilder.ToJsonPayload(report))
+        {
+            payload[Sanitize(pair.Key)] = SanitizeJsonValue(pair.Value);
+        }
+
+        return payload;
+    }
+
+    private static object? SanitizeJsonValue(object? value)
+    {
+        return value switch
+        {
+            null => null,
+            string text => Sanitize(text),
+            Dictionary<string, object?> dictionary => dictionary.ToDictionary(
+                pair => Sanitize(pair.Key),
+                pair => SanitizeJsonValue(pair.Value),
+                StringComparer.Ordinal),
+            IReadOnlyDictionary<string, object?> dictionary => dictionary.ToDictionary(
+                pair => Sanitize(pair.Key),
+                pair => SanitizeJsonValue(pair.Value),
+                StringComparer.Ordinal),
+            IEnumerable<Dictionary<string, object?>> dictionaries => dictionaries
+                .Select(dictionary => SanitizeJsonValue(dictionary))
+                .ToArray(),
+            IEnumerable<IReadOnlyDictionary<string, object?>> dictionaries => dictionaries
+                .Select(dictionary => SanitizeJsonValue(dictionary))
+                .ToArray(),
+            IEnumerable<string> strings => strings.Select(Sanitize).ToArray(),
+            System.Collections.IEnumerable values when value is not string => values
+                .Cast<object?>()
+                .Select(SanitizeJsonValue)
+                .ToArray(),
+            _ => value
+        };
+    }
+
     private static string MakeUniqueKey(IReadOnlyDictionary<string, string> payload, string key)
     {
         if (!payload.ContainsKey(key))
@@ -224,8 +278,7 @@ public static class TraceLogger
         string logDirectory = LogPathResolver.ResolveLogDirectory(snapshot);
         Directory.CreateDirectory(logDirectory);
 
-        string fileName = timestampUtc.UtcDateTime.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture) + ".trace.log";
-        string logPath = Path.Combine(logDirectory, fileName);
+        string logPath = ResolveTracePath(snapshot, timestampUtc);
         string content = string.Join(
             Environment.NewLine,
             records.Select(record => JsonSerializer.Serialize(record, JsonOptions)));

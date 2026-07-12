@@ -3034,7 +3034,7 @@ public sealed class CliCommandFactoryTests
             .Split(Environment.NewLine, StringSplitOptions.RemoveEmptyEntries);
 
         Assert.Equal(0, exitCode);
-        Assert.Equal(2, lines.Length);
+        Assert.Equal(4, lines.Length);
         foreach (string line in lines)
         {
             JsonNode? node = JsonNode.Parse(line);
@@ -3042,14 +3042,122 @@ public sealed class CliCommandFactoryTests
         }
 
         JsonObject modelTurn = Assert.IsType<JsonObject>(JsonNode.Parse(lines[0]));
+        JsonObject reviewGate = Assert.IsType<JsonObject>(JsonNode.Parse(lines[1]));
+        JsonObject taskReport = Assert.IsType<JsonObject>(JsonNode.Parse(lines[2]));
         JsonObject result = Assert.IsType<JsonObject>(JsonNode.Parse(lines[^1]));
         Assert.Equal("model.turn", modelTurn["type"]?.GetValue<string>());
         Assert.Equal("0", modelTurn["payload"]?["toolCallCount"]?.GetValue<string>());
+        Assert.Equal("review.gate", reviewGate["type"]?.GetValue<string>());
+        Assert.Equal("taskReport", taskReport["type"]?.GetValue<string>());
         Assert.Equal("exec.result", result["type"]?.GetValue<string>());
         Assert.Equal("json agent summary", result["summary"]?.GetValue<string>());
         Assert.Equal("success", result["payload"]?["status"]?.GetValue<string>());
         Assert.Equal(0, result["payload"]?["exitCode"]?.GetValue<int>());
+        Assert.Equal("success", result["payload"]?["taskReport"]?["status"]?.GetValue<string>());
         Assert.DoesNotContain("sk-test-secret", output.ToString(), StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Exec_trace_session_json_writes_task_report_and_read_only_review_gate()
+    {
+        using TempDirectory temp = TempDirectory.Create();
+        using StringWriter output = new();
+        FakeConversationStore store = new()
+        {
+            Transcript = ConversationTranscript.Create(
+                "smoke",
+                DateTimeOffset.Parse("2024-01-01T00:00:00Z"))
+        };
+        AgentRunResult agentResult = AgentRunResult.Success(
+            "agent completed task",
+            [],
+            [
+                new AgentRunEvent(
+                    Type: "final.response",
+                    Sequence: 0,
+                    Timestamp: DateTimeOffset.Parse("2024-01-01T00:00:01Z"),
+                    Summary: "agent completed task",
+                    Status: "success")
+            ],
+            changedFiles:
+            [
+                new ChangedFileSummary(
+                    Path: "src/App.cs",
+                    Status: "modified",
+                    SourceToolCallId: "call_patch")
+            ],
+            verificationResults:
+            [
+                new VerificationResultSummary(
+                    Status: "success",
+                    Source: "project-instructions",
+                    Command: "dotnet test",
+                    WorkingDirectory: ".",
+                    Succeeded: true,
+                    ApprovalStatus: "approved",
+                    ErrorCode: null,
+                    ExitCode: 0,
+                    TimedOut: false,
+                    StdoutTruncated: false,
+                    StderrTruncated: false,
+                    Stdout: "passed",
+                    Stderr: "",
+                    Summary: "Shell command completed.")
+            ]);
+        FakeAgentRunner agentRunner = new(agentResult);
+        CliEnvironmentSnapshot snapshot = CreateSnapshot(
+            workspacePath: temp.Path,
+            apiKey: "sk-test-secret",
+            apiKeySource: "OPENAI_API_KEY",
+            model: "gpt-test");
+
+        int exitCode = CliCommandFactory
+            .Create(
+                output,
+                _ => snapshot,
+                (_, _) => { },
+                _ => new FakeChatModelClient(ChatModelResult.Success(new ChatResponse("openai", "gpt-test", "resp", ""))),
+                writer => new TerminalChatStreamingRenderer(writer),
+                _ => store,
+                () => DateTimeOffset.Parse("2024-01-01T00:00:00Z"),
+                (_, _, _) => agentRunner)
+            .Parse(["exec", "--json", "--trace", "--session", "smoke", "--workspace", temp.Path, "summarize workspace"])
+            .Invoke();
+
+        string[] outputLines = output.ToString()
+            .TrimEnd()
+            .Split(Environment.NewLine, StringSplitOptions.RemoveEmptyEntries);
+        JsonObject reviewGate = Assert.IsType<JsonObject>(JsonNode.Parse(outputLines[1]));
+        JsonObject taskReportEvent = Assert.IsType<JsonObject>(JsonNode.Parse(outputLines[2]));
+        JsonObject result = Assert.IsType<JsonObject>(JsonNode.Parse(outputLines[^1]));
+        JsonObject resultTaskReport = Assert.IsType<JsonObject>(result["payload"]?["taskReport"]);
+
+        Assert.Equal(0, exitCode);
+        Assert.Equal("review.gate", reviewGate["type"]?.GetValue<string>());
+        Assert.Equal("true", reviewGate["payload"]?["readOnly"]?.GetValue<string>());
+        Assert.Equal("git.diff", reviewGate["payload"]?["toolName"]?.GetValue<string>());
+        Assert.Equal("taskReport", taskReportEvent["type"]?.GetValue<string>());
+        Assert.Equal("success", resultTaskReport["status"]?.GetValue<string>());
+        JsonArray resultChangedFiles = Assert.IsType<JsonArray>(resultTaskReport["changedFiles"]);
+        JsonArray resultCommands = Assert.IsType<JsonArray>(resultTaskReport["commands"]);
+        JsonArray resultVerification = Assert.IsType<JsonArray>(resultTaskReport["verification"]);
+        Assert.Equal("src/App.cs", resultChangedFiles[0]?["path"]?.GetValue<string>());
+        Assert.Equal("dotnet test", resultCommands[0]?["command"]?.GetValue<string>());
+        Assert.Equal("success", resultVerification[0]?["status"]?.GetValue<string>());
+
+        ConversationAgentRun savedRun = Assert.Single(store.SavedTranscript?.AgentRuns ?? []);
+        Assert.NotNull(savedRun.TaskReport);
+        Assert.Equal("src/App.cs", Assert.Single(savedRun.TaskReport!.ChangedFiles).Path);
+        Assert.Equal("dotnet test", Assert.Single(savedRun.TaskReport.Commands).Command);
+
+        string tracePath = Path.Combine(temp.Path, ".caicli", "logs", "2024-01-01.trace.log");
+        string[] traceLines = File.ReadAllLines(tracePath);
+        JsonObject traceResult = Assert.IsType<JsonObject>(JsonNode.Parse(traceLines[^1]));
+        JsonObject traceTaskReport = Assert.IsType<JsonObject>(traceResult["payload"]?["taskReport"]);
+        Assert.Equal("success", traceTaskReport["status"]?.GetValue<string>());
+        JsonArray traceChangedFiles = Assert.IsType<JsonArray>(traceTaskReport["changedFiles"]);
+        Assert.Equal("src/App.cs", traceChangedFiles[0]?["path"]?.GetValue<string>());
+        Assert.DoesNotContain("sk-test-secret", File.ReadAllText(tracePath), StringComparison.Ordinal);
     }
 
     [Fact]
@@ -3080,7 +3188,7 @@ public sealed class CliCommandFactoryTests
         string[] lines = text.TrimEnd().Split(Environment.NewLine, StringSplitOptions.RemoveEmptyEntries);
 
         Assert.Equal(0, exitCode);
-        Assert.Equal(2, lines.Length);
+        Assert.Equal(4, lines.Length);
         foreach (string line in lines)
         {
             JsonNode? node = JsonNode.Parse(line);
@@ -3089,6 +3197,7 @@ public sealed class CliCommandFactoryTests
 
         JsonObject toolCall = Assert.IsType<JsonObject>(JsonNode.Parse(lines[0]));
         JsonObject payload = Assert.IsType<JsonObject>(toolCall["payload"]);
+        JsonObject taskReport = Assert.IsType<JsonObject>(JsonNode.Parse(lines[2]));
         JsonObject result = Assert.IsType<JsonObject>(JsonNode.Parse(lines[^1]));
         Assert.Equal("tool.call", toolCall["type"]?.GetValue<string>());
         Assert.Contains("[redacted]", toolCall["message"]?.GetValue<string>(), StringComparison.Ordinal);
@@ -3101,6 +3210,7 @@ public sealed class CliCommandFactoryTests
         Assert.Equal("[redacted]", payload["authorization"]?.GetValue<string>());
         Assert.Equal("[redacted]", payload["secretKey"]?.GetValue<string>());
         Assert.Equal("[redacted]", payload["privateKey"]?.GetValue<string>());
+        Assert.Equal("taskReport", taskReport["type"]?.GetValue<string>());
         Assert.Equal("exec.result", result["type"]?.GetValue<string>());
         Assert.Contains("[redacted]", result["summary"]?.GetValue<string>(), StringComparison.Ordinal);
         Assert.Equal("success", result["payload"]?["status"]?.GetValue<string>());
@@ -3184,7 +3294,7 @@ public sealed class CliCommandFactoryTests
             .Split(Environment.NewLine, StringSplitOptions.RemoveEmptyEntries);
 
         Assert.Equal(0, exitCode);
-        Assert.Equal(2, lines.Length);
+        Assert.Equal(4, lines.Length);
         foreach (string line in lines)
         {
             JsonNode? node = JsonNode.Parse(line);
@@ -3255,7 +3365,7 @@ public sealed class CliCommandFactoryTests
             .TrimEnd()
             .Split(Environment.NewLine, StringSplitOptions.RemoveEmptyEntries);
         Assert.Equal(0, exitCode);
-        Assert.Equal(3, outputLines.Length);
+        Assert.Equal(5, outputLines.Length);
         foreach (string line in outputLines)
         {
             JsonNode? node = JsonNode.Parse(line);
@@ -3266,10 +3376,14 @@ public sealed class CliCommandFactoryTests
         string[] traceLines = File.ReadAllLines(tracePath);
         JsonObject modelTurn = Assert.IsType<JsonObject>(JsonNode.Parse(traceLines[0]));
         JsonObject toolCompleted = Assert.IsType<JsonObject>(JsonNode.Parse(traceLines[1]));
-        JsonObject result = Assert.IsType<JsonObject>(JsonNode.Parse(traceLines[2]));
+        JsonObject reviewGate = Assert.IsType<JsonObject>(JsonNode.Parse(traceLines[2]));
+        JsonObject taskReport = Assert.IsType<JsonObject>(JsonNode.Parse(traceLines[3]));
+        JsonObject result = Assert.IsType<JsonObject>(JsonNode.Parse(traceLines[^1]));
 
         Assert.Equal("model.turn", modelTurn["type"]?.GetValue<string>());
         Assert.Equal("tool.completed", toolCompleted["type"]?.GetValue<string>());
+        Assert.Equal("review.gate", reviewGate["type"]?.GetValue<string>());
+        Assert.Equal("taskReport", taskReport["type"]?.GetValue<string>());
         Assert.Equal("exec.result", result["type"]?.GetValue<string>());
         Assert.Equal("exec", modelTurn["command"]?.GetValue<string>());
         Assert.False(string.IsNullOrWhiteSpace(modelTurn["commandId"]?.GetValue<string>()));
@@ -3281,6 +3395,7 @@ public sealed class CliCommandFactoryTests
         Assert.Equal(7, toolCompleted["approvalDurationMs"]?.GetValue<long>());
         Assert.Equal("json trace summary", result["summary"]?.GetValue<string>());
         Assert.Equal("success", result["status"]?.GetValue<string>());
+        Assert.Equal("success", result["payload"]?["taskReport"]?["status"]?.GetValue<string>());
         Assert.DoesNotContain("sk-test-secret", File.ReadAllText(tracePath), StringComparison.Ordinal);
     }
 
@@ -3474,24 +3589,32 @@ public sealed class CliCommandFactoryTests
 
         string[] outputLines = output.ToString().TrimEnd().Split(Environment.NewLine, StringSplitOptions.RemoveEmptyEntries);
         JsonObject outputEvent = Assert.IsType<JsonObject>(JsonNode.Parse(outputLines[0]));
-        JsonObject outputResult = Assert.IsType<JsonObject>(JsonNode.Parse(outputLines[1]));
+        JsonObject outputReviewGate = Assert.IsType<JsonObject>(JsonNode.Parse(outputLines[1]));
+        JsonObject outputTaskReport = Assert.IsType<JsonObject>(JsonNode.Parse(outputLines[2]));
+        JsonObject outputResult = Assert.IsType<JsonObject>(JsonNode.Parse(outputLines[^1]));
         string[] traceLines = File.ReadAllLines(Path.Combine(temp.Path, ".caicli", "logs", "2024-01-01.trace.log"));
         JsonObject traceEvent = Assert.IsType<JsonObject>(JsonNode.Parse(traceLines[0]));
-        JsonObject traceResult = Assert.IsType<JsonObject>(JsonNode.Parse(traceLines[1]));
+        JsonObject traceReviewGate = Assert.IsType<JsonObject>(JsonNode.Parse(traceLines[1]));
+        JsonObject traceTaskReport = Assert.IsType<JsonObject>(JsonNode.Parse(traceLines[2]));
+        JsonObject traceResult = Assert.IsType<JsonObject>(JsonNode.Parse(traceLines[^1]));
 
         Assert.Equal(1, exitCode);
-        Assert.Equal(2, outputLines.Length);
+        Assert.Equal(4, outputLines.Length);
         Assert.Equal("model.turn", outputEvent["type"]?.GetValue<string>());
+        Assert.Equal("review.gate", outputReviewGate["type"]?.GetValue<string>());
+        Assert.Equal("taskReport", outputTaskReport["type"]?.GetValue<string>());
         Assert.Equal("exec.result", outputResult["type"]?.GetValue<string>());
         Assert.Equal("session-store-error", outputResult["errorCode"]?.GetValue<string>());
         Assert.Equal("failure", outputResult["payload"]?["status"]?.GetValue<string>());
-        Assert.Equal(1, outputResult["payload"]?["eventCount"]?.GetValue<int>());
-        Assert.Equal(2, traceLines.Length);
+        Assert.Equal(3, outputResult["payload"]?["eventCount"]?.GetValue<int>());
+        Assert.Equal(4, traceLines.Length);
         Assert.Equal("model.turn", traceEvent["type"]?.GetValue<string>());
+        Assert.Equal("review.gate", traceReviewGate["type"]?.GetValue<string>());
+        Assert.Equal("taskReport", traceTaskReport["type"]?.GetValue<string>());
         Assert.Equal("exec.result", traceResult["type"]?.GetValue<string>());
         Assert.Equal("failure", traceResult["status"]?.GetValue<string>());
         Assert.Equal("session-store-error", traceResult["errorCode"]?.GetValue<string>());
-        Assert.Equal(1, traceResult["payload"]?["eventCount"]?.GetValue<int>());
+        Assert.Equal(3, traceResult["payload"]?["eventCount"]?.GetValue<int>());
         Assert.Equal("smoke", store.SavedSessionName?.Value);
         Assert.NotNull(agentRunner.LastRequest);
         Assert.DoesNotContain("C:\\secret", output.ToString(), StringComparison.Ordinal);
@@ -3530,11 +3653,15 @@ public sealed class CliCommandFactoryTests
             .Split(Environment.NewLine, StringSplitOptions.RemoveEmptyEntries);
 
         Assert.Equal(0, exitCode);
-        Assert.Equal(2, lines.Length);
+        Assert.Equal(4, lines.Length);
         JsonObject toolEvent = Assert.IsType<JsonObject>(JsonNode.Parse(lines[0]));
+        JsonObject reviewGate = Assert.IsType<JsonObject>(JsonNode.Parse(lines[1]));
+        JsonObject taskReport = Assert.IsType<JsonObject>(JsonNode.Parse(lines[2]));
         JsonObject result = Assert.IsType<JsonObject>(JsonNode.Parse(lines[^1]));
         Assert.Equal("tool.completed", toolEvent["type"]?.GetValue<string>());
         Assert.Equal("approved", toolEvent["approvalStatus"]?.GetValue<string>());
+        Assert.Equal("review.gate", reviewGate["type"]?.GetValue<string>());
+        Assert.Equal("taskReport", taskReport["type"]?.GetValue<string>());
         Assert.Equal("exec.result", result["type"]?.GetValue<string>());
         Assert.Equal("approved", result["approvalStatus"]?.GetValue<string>());
         Assert.Equal("success", result["payload"]?["status"]?.GetValue<string>());
@@ -3971,7 +4098,7 @@ public sealed class CliCommandFactoryTests
             ["exec", "--json", "--workspace", temp.Path, "--resume", "", "summarize workspace"],
             output);
 
-        JsonObject result = AssertSingleExecJsonResult(output);
+        JsonObject result = AssertLastExecJsonResult(output);
         Assert.Equal(1, exitCode);
         Assert.Equal("invalid-session-name", result["errorCode"]?.GetValue<string>());
         Assert.Equal("Session name must not be empty.", result["summary"]?.GetValue<string>());
@@ -4065,7 +4192,7 @@ public sealed class CliCommandFactoryTests
             ["exec", "--workspace", temp.Path, "--output", "json", "--session", " ", "summarize workspace"],
             output);
 
-        JsonObject result = AssertSingleExecJsonResult(output);
+        JsonObject result = AssertLastExecJsonResult(output);
         Assert.Equal(1, exitCode);
         Assert.Equal("invalid-session-name", result["errorCode"]?.GetValue<string>());
         Assert.Equal("Session name must not be empty.", result["summary"]?.GetValue<string>());
@@ -4310,7 +4437,7 @@ public sealed class CliCommandFactoryTests
             .Parse(["exec", "--json", "--workspace", temp.Path, "--session", "smoke", "summarize workspace"])
             .Invoke();
 
-        JsonObject result = AssertSingleExecJsonResult(output);
+        JsonObject result = AssertLastExecJsonResult(output);
         Assert.Equal(1, exitCode);
         Assert.Equal("session-store-error", result["errorCode"]?.GetValue<string>());
         Assert.Equal("Conversation session store operation failed.", result["summary"]?.GetValue<string>());
@@ -7642,6 +7769,16 @@ public sealed class CliCommandFactoryTests
     {
         string[] lines = output.ToString().TrimEnd().Split(Environment.NewLine);
         JsonObject result = Assert.IsType<JsonObject>(JsonNode.Parse(Assert.Single(lines)));
+        Assert.Equal("exec.result", result["type"]?.GetValue<string>());
+        return result;
+    }
+
+    private static JsonObject AssertLastExecJsonResult(StringWriter output)
+    {
+        string[] lines = output.ToString()
+            .TrimEnd()
+            .Split(Environment.NewLine, StringSplitOptions.RemoveEmptyEntries);
+        JsonObject result = Assert.IsType<JsonObject>(JsonNode.Parse(lines[^1]));
         Assert.Equal("exec.result", result["type"]?.GetValue<string>());
         return result;
     }

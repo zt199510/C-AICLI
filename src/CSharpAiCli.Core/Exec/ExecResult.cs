@@ -15,7 +15,8 @@ public sealed record ExecResult
         IReadOnlyList<ChangedFileSummary>? ChangedFiles = null,
         IReadOnlyList<VerificationResultSummary>? VerificationResults = null,
         IReadOnlyList<AgentRetryAttempt>? RetryAttempts = null,
-        AgentFailureSummary? FailureSummary = null)
+        AgentFailureSummary? FailureSummary = null,
+        AgentTaskReport? TaskReport = null)
     {
         this.IsSuccess = IsSuccess;
         this.ExitCode = ExitCode;
@@ -28,6 +29,7 @@ public sealed record ExecResult
         this.VerificationResults = new ReadOnlyCollection<VerificationResultSummary>((VerificationResults ?? []).ToArray());
         this.RetryAttempts = new ReadOnlyCollection<AgentRetryAttempt>((RetryAttempts ?? []).ToArray());
         this.FailureSummary = FailureSummary;
+        this.TaskReport = TaskReport;
     }
 
     public bool IsSuccess { get; }
@@ -52,6 +54,8 @@ public sealed record ExecResult
 
     public AgentFailureSummary? FailureSummary { get; }
 
+    public AgentTaskReport? TaskReport { get; }
+
     public static ExecResult Success(
         string? Summary,
         IReadOnlyList<ExecEvent> Events,
@@ -59,7 +63,8 @@ public sealed record ExecResult
         string? StopReason = null,
         IReadOnlyList<ChangedFileSummary>? ChangedFiles = null,
         IReadOnlyList<VerificationResultSummary>? VerificationResults = null,
-        IReadOnlyList<AgentRetryAttempt>? RetryAttempts = null)
+        IReadOnlyList<AgentRetryAttempt>? RetryAttempts = null,
+        AgentTaskReport? TaskReport = null)
     {
         ArgumentNullException.ThrowIfNull(Events);
 
@@ -73,7 +78,8 @@ public sealed record ExecResult
             Events,
             ChangedFiles,
             VerificationResults,
-            RetryAttempts);
+            RetryAttempts,
+            TaskReport: TaskReport);
     }
 
     public static ExecResult Failure(
@@ -86,7 +92,8 @@ public sealed record ExecResult
         IReadOnlyList<ChangedFileSummary>? ChangedFiles = null,
         IReadOnlyList<VerificationResultSummary>? VerificationResults = null,
         IReadOnlyList<AgentRetryAttempt>? RetryAttempts = null,
-        AgentFailureSummary? FailureSummary = null)
+        AgentFailureSummary? FailureSummary = null,
+        AgentTaskReport? TaskReport = null)
     {
         if (ExitCode == 0)
         {
@@ -111,6 +118,57 @@ public sealed record ExecResult
             ChangedFiles,
             VerificationResults,
             RetryAttempts,
-            FailureSummary);
+            FailureSummary,
+            TaskReport);
+    }
+
+    public ExecResult WithTaskReport(
+        AgentTaskReport taskReport,
+        DateTimeOffset timestampUtc,
+        IReadOnlyList<ExecEvent>? additionalEvents = null)
+    {
+        ArgumentNullException.ThrowIfNull(taskReport);
+
+        List<ExecEvent> events = Events.ToList();
+        if (additionalEvents is not null)
+        {
+            events.AddRange(additionalEvents);
+        }
+
+        long sequence = events.Count == 0
+            ? 0
+            : events[^1].Sequence + 1;
+        AgentRunEvent taskReportEvent = AgentTaskReportBuilder.CreateTaskReportEvent(
+            taskReport,
+            sequence,
+            timestampUtc);
+        events.Add(new ExecEvent(
+            Type: taskReportEvent.Type,
+            Sequence: taskReportEvent.Sequence,
+            Timestamp: taskReportEvent.Timestamp,
+            Message: taskReportEvent.Message,
+            Summary: taskReportEvent.Summary,
+            Payload: taskReportEvent.Payload,
+            ErrorCode: taskReportEvent.ErrorCode,
+            ApprovalStatus: taskReportEvent.ApprovalStatus,
+            Status: taskReportEvent.Status,
+            DurationMs: taskReportEvent.DurationMs,
+            ApprovalDurationMs: taskReportEvent.ApprovalDurationMs,
+            StepIndex: taskReportEvent.StepIndex,
+            StopReason: taskReportEvent.StopReason));
+
+        return new ExecResult(
+            IsSuccess,
+            ExitCode,
+            Summary,
+            ErrorCode,
+            ApprovalStatus,
+            StopReason,
+            events,
+            ChangedFiles,
+            VerificationResults,
+            RetryAttempts,
+            FailureSummary,
+            taskReport);
     }
 }
