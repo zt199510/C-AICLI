@@ -466,6 +466,114 @@ public static class CliCommandFactory
             return result.Succeeded ? 0 : 1;
         });
 
+        Command changesCommand = new("changes", "Show a read-only changes view for the workspace.");
+        Option<bool> changesJsonOption = new("--json")
+        {
+            Description = "Write a single JSON changes view object.",
+        };
+        Option<string> changesOutputOption = new("--output")
+        {
+            Description = "Select text or json output.",
+        };
+        Option<string> changesSessionOption = new("--session")
+        {
+            Description = "Include the latest task report from a named session transcript.",
+        };
+        changesOutputOption.DefaultValueFactory = _ => "text";
+        changesOutputOption.Validators.Add(result =>
+        {
+            string outputMode = result.GetValueOrDefault<string>() ?? "text";
+            if (!string.Equals(outputMode, "text", StringComparison.OrdinalIgnoreCase) &&
+                !string.Equals(outputMode, "json", StringComparison.OrdinalIgnoreCase))
+            {
+                result.AddError("Invalid value for --output. Allowed values are text and json.");
+            }
+        });
+        changesCommand.Options.Add(changesJsonOption);
+        changesCommand.Options.Add(changesOutputOption);
+        changesCommand.Options.Add(changesSessionOption);
+        changesCommand.SetAction(parseResult =>
+        {
+            string? workspacePath = parseResult.GetValue(workspaceOption);
+            bool jsonRequested = parseResult.GetValue(changesJsonOption);
+            string outputMode = parseResult.GetValue(changesOutputOption) ?? "text";
+            string? session = parseResult.GetValue(changesSessionOption);
+            CliEnvironmentSnapshot snapshot = workspaceSnapshotProvider(workspacePath);
+            DiagnosticContext? traceContext = CreateTraceContext(parseResult, snapshot);
+            WriteVerboseDiagnostics(
+                parseResult,
+                "changes",
+                snapshot,
+                humanReadableOutput: !IsJsonOutputRequested(jsonRequested, outputMode));
+
+            GitStatusTool gitStatusTool = new(new WorkspaceGuard());
+            ToolExecutionResult gitStatus = gitStatusTool.Execute(new ToolExecutionContext(
+                "changes_git_status",
+                snapshot.Workspace,
+                "{}",
+                ToolExecutionPhase.Planning));
+            GitDiffTool gitDiffTool = new(new WorkspaceGuard());
+            ToolExecutionResult gitDiffStat = gitDiffTool.Execute(new ToolExecutionContext(
+                "changes_git_diff_stat",
+                snapshot.Workspace,
+                """{"stat":true}""",
+                ToolExecutionPhase.Planning));
+
+            ConversationTranscript? transcript = null;
+            string? sessionPath = null;
+            string? sessionWarning = null;
+            if (!string.IsNullOrWhiteSpace(session))
+            {
+                if (!TryParseSessionName(output, session, out ConversationSessionName sessionName))
+                {
+                    return 1;
+                }
+
+                sessionPath = ResolveSessionPath(snapshot, sessionName);
+                try
+                {
+                    IConversationStore conversationStore = conversationStoreFactory(snapshot);
+                    if (!conversationStore.TryLoad(sessionName, out transcript) || transcript is null)
+                    {
+                        sessionWarning = "Session transcript was not found.";
+                    }
+                }
+                catch (Exception exception) when (IsConversationStoreException(exception))
+                {
+                    sessionWarning = "Conversation session store operation failed.";
+                }
+            }
+
+            ChangesViewReport report = ChangesViewReport.Create(
+                snapshot.Workspace,
+                gitStatus,
+                gitDiffStat,
+                transcript,
+                session,
+                sessionPath,
+                sessionWarning);
+            TryWriteTraceCommandEvent(
+                "changes",
+                snapshot,
+                traceContext,
+                "changes.view",
+                0,
+                report.Status,
+                report.Summary,
+                timestampUtc: utcNowProvider());
+
+            if (IsJsonOutputRequested(jsonRequested, outputMode))
+            {
+                new ChangesJsonRenderer(output).Write(report);
+            }
+            else
+            {
+                new ChangesTextRenderer(output).Write(report);
+            }
+
+            return report.ExitCode;
+        });
+
         Command reviewCommand = new("review", "Review the current git diff with the configured model.");
         Option<bool> reviewJsonOption = new("--json")
         {
@@ -1089,7 +1197,8 @@ public static class CliCommandFactory
                 snapshot.Instructions,
                 cwdPath,
                 effectiveSession,
-                transcriptContext is not null);
+                transcriptContext is not null,
+                task);
 
             AgentRunRequest request = new(
                 task,
@@ -1107,14 +1216,53 @@ public static class CliCommandFactory
                 TaskContext: taskContext,
                 WorkflowConfiguration: WorkflowProfileLoader.Load(snapshot.Configuration));
 
+            WorkflowReferenceResolution references = taskContext.References ?? WorkflowReferenceResolution.Empty;
+            if (references.HasErrors)
+            {
+                AgentRunResult referenceFailure = CreateWorkflowReferenceFailureResult(
+                    references,
+                    utcNowProvider());
+                ExecResult referenceExecResult = AgentExecResultAdapter.FromAgentResult(referenceFailure);
+                string? referenceTracePath = traceContext is null
+                    ? null
+                    : TraceLogger.ResolveTracePath(snapshot, traceContext.TimestampUtc);
+                AgentTaskReport referenceTaskReport = AgentTaskReportBuilder.Build(
+                    request,
+                    referenceFailure,
+                    referenceTracePath);
+                referenceExecResult = referenceExecResult.WithTaskReport(
+                    referenceTaskReport,
+                    utcNowProvider());
+                return WriteExecResultWithTrace(referenceExecResult);
+            }
+
             IAgentRunner runner = execAgentRunnerFactory(snapshot, registry, executor);
             AgentRunResult agentResult = runner.Run(request, transcript);
             ExecResult execResult = AgentExecResultAdapter.FromAgentResult(agentResult);
             AgentTaskReviewGateReport reviewGate = RunReadOnlyReviewGate(snapshot.Workspace, executor);
+            List<ExecEvent> additionalReportEvents = [];
+            ExecEvent? referenceEvent = CreateReferenceContextEventIfMissing(
+                execResult.Events,
+                references,
+                utcNowProvider());
+            if (referenceEvent is not null)
+            {
+                additionalReportEvents.Add(referenceEvent);
+            }
+
+            long nextSequence = execResult.Events.Count == 0
+                ? 0
+                : execResult.Events[^1].Sequence + 1;
+            if (additionalReportEvents.Count > 0)
+            {
+                nextSequence = additionalReportEvents[^1].Sequence + 1;
+            }
+
             ExecEvent reviewGateEvent = CreateReviewGateEvent(
                 reviewGate,
-                execResult.Events.Count == 0 ? 0 : execResult.Events[^1].Sequence + 1,
+                nextSequence,
                 utcNowProvider());
+            additionalReportEvents.Add(reviewGateEvent);
             string? tracePath = traceContext is null
                 ? null
                 : TraceLogger.ResolveTracePath(snapshot, traceContext.TimestampUtc);
@@ -1126,7 +1274,7 @@ public static class CliCommandFactory
             execResult = execResult.WithTaskReport(
                 taskReport,
                 utcNowProvider(),
-                [reviewGateEvent]);
+                additionalReportEvents);
             if (sessionName is not null && transcript is not null && conversationStore is not null)
             {
                 transcript.AddAgentRun(ConversationAgentRun.FromAgentResult(agentResult, utcNowProvider(), taskReport));
@@ -1466,6 +1614,7 @@ public static class CliCommandFactory
         rootCommand.Subcommands.Add(statusCommand);
         rootCommand.Subcommands.Add(modelsCommand);
         rootCommand.Subcommands.Add(diffCommand);
+        rootCommand.Subcommands.Add(changesCommand);
         rootCommand.Subcommands.Add(reviewCommand);
         rootCommand.Subcommands.Add(configCommand);
         rootCommand.Subcommands.Add(mcpCommand);
@@ -1922,6 +2071,75 @@ public static class CliCommandFactory
             Payload: payload,
             ErrorCode: reviewGate.ErrorCode,
             Status: reviewGate.Status);
+    }
+
+    private static AgentRunResult CreateWorkflowReferenceFailureResult(
+        WorkflowReferenceResolution references,
+        DateTimeOffset timestampUtc)
+    {
+        ArgumentNullException.ThrowIfNull(references);
+
+        string errorCode = references.FirstErrorCode ?? WorkflowReferenceErrorCode.ResolutionFailed;
+        AgentError error = new(
+            errorCode,
+            "Workflow reference resolution failed.",
+            Retryable: false);
+        AgentRunEvent referenceEvent = WorkflowReferenceEventFactory.Create(
+            references,
+            sequence: 0,
+            timestampUtc);
+        AgentRunEvent errorEvent = new(
+            Type: "agent.error",
+            Sequence: 1,
+            Timestamp: timestampUtc,
+            Message: error.SafeMessage,
+            ErrorCode: error.LocalErrorCode,
+            Status: "failure",
+            StopReason: AgentStopReason.FromErrorCode(error.LocalErrorCode));
+
+        return AgentRunResult.Failure(
+            error,
+            [],
+            [referenceEvent, errorEvent],
+            stopReason: AgentStopReason.FromErrorCode(error.LocalErrorCode),
+            status: "failure");
+    }
+
+    private static ExecEvent? CreateReferenceContextEventIfMissing(
+        IReadOnlyList<ExecEvent> existingEvents,
+        WorkflowReferenceResolution references,
+        DateTimeOffset timestampUtc)
+    {
+        ArgumentNullException.ThrowIfNull(existingEvents);
+        ArgumentNullException.ThrowIfNull(references);
+
+        if (!references.HasReferences ||
+            existingEvents.Any(execEvent => string.Equals(execEvent.Type, "context.references", StringComparison.Ordinal)))
+        {
+            return null;
+        }
+
+        long sequence = existingEvents.Count == 0
+            ? 0
+            : existingEvents[^1].Sequence + 1;
+        AgentRunEvent referenceEvent = WorkflowReferenceEventFactory.Create(
+            references,
+            sequence,
+            timestampUtc);
+        return new ExecEvent(
+            Type: referenceEvent.Type,
+            Sequence: referenceEvent.Sequence,
+            Timestamp: referenceEvent.Timestamp,
+            Message: referenceEvent.Message,
+            Summary: referenceEvent.Summary,
+            Payload: referenceEvent.Payload,
+            ErrorCode: referenceEvent.ErrorCode,
+            ApprovalStatus: referenceEvent.ApprovalStatus,
+            Status: referenceEvent.Status,
+            DurationMs: referenceEvent.DurationMs,
+            ApprovalDurationMs: referenceEvent.ApprovalDurationMs,
+            StepIndex: referenceEvent.StepIndex,
+            StopReason: referenceEvent.StopReason);
     }
 
     private static bool ReadBool(

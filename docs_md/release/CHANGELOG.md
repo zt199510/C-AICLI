@@ -2,7 +2,17 @@
 
 ## Unreleased
 
-No changes recorded.
+Added:
+- Week 47 workflow inputs for `exec`: inline `@file:<path>` and `@folder:<path>` references are resolved inside the workspace before model execution, bounded by file count, byte count, depth, binary-file, and workspace-guard checks, and recorded in text, JSON, trace, session, and `taskReport` metadata without persisting raw referenced content in reports.
+- Week 47 read-only `caicli changes`: summarizes git status/diff stat, changed files, optional latest session task report, commands, verification, remaining risks, trace path, and warnings in text or JSON without calling a model, running shell/patch tools, starting MCP, or writing command logs by default.
+
+Changed:
+- `exec` task reports now include workflow reference metadata and final text output includes a compact reference summary when references are present.
+- Default smoke coverage now includes `changes`, `changes --output json`, `changes --session` warning behavior, and `exec @file` reference diagnostics without requiring model credentials.
+
+Known deferred items:
+- `@file` / `@folder` references are scoped to `exec`; `chat` references, URL references, glob expansion, semantic retrieval, and workflow-pack references remain Deferred.
+- Standalone markdown reports, expert profiles, local skills, and workflow packs remain outside the 0.3.1 scope.
 
 ## 0.3.0 - 2026-07-12
 

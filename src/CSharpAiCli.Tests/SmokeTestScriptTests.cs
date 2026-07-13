@@ -57,6 +57,11 @@ public sealed class SmokeTestScriptTests
         Assert.Contains("\"diff\", \"--stat\", \"--workspace\", $workspace", script, StringComparison.Ordinal);
         Assert.Contains("diff --git", script, StringComparison.Ordinal);
         Assert.Contains("1 file changed", script, StringComparison.Ordinal);
+        Assert.Contains("\"changes\", \"--workspace\", $workspace", script, StringComparison.Ordinal);
+        Assert.Contains("\"changes\", \"--output\", \"json\", \"--workspace\", $workspace", script, StringComparison.Ordinal);
+        Assert.Contains("\"type\":\"changes.view\"", script, StringComparison.Ordinal);
+        Assert.Contains("context.references", script, StringComparison.Ordinal);
+        Assert.Contains("references=count=1", script, StringComparison.Ordinal);
         Assert.Contains("commit.gpgSign=false", script, StringComparison.Ordinal);
         Assert.Contains("core.autocrlf", script, StringComparison.Ordinal);
         Assert.Contains("--no-gpg-sign", script, StringComparison.Ordinal);
@@ -76,6 +81,8 @@ public sealed class SmokeTestScriptTests
         Assert.Contains("session", script, StringComparison.Ordinal);
         Assert.Contains("\"session\", \"list\", \"--workspace\", $workspace", script, StringComparison.Ordinal);
         Assert.Contains("\"session\", \"show\", \"--workspace\", $workspace, \"smoke\"", script, StringComparison.Ordinal);
+        Assert.Contains("\"changes\", \"--session\", \"smoke\", \"--workspace\", $workspace", script, StringComparison.Ordinal);
+        Assert.Contains("Session transcript does not contain an agent task report.", script, StringComparison.Ordinal);
         Assert.Contains("\"session\", \"export\", \"--format\", \"markdown\"", script, StringComparison.Ordinal);
         Assert.Contains("\"session\", \"rename\", \"--workspace\", $workspace, \"smoke\", \"smoke-archive\"", script, StringComparison.Ordinal);
         Assert.Contains("\"session\", \"delete\", \"--workspace\", $workspace, \"smoke-archive\"", script, StringComparison.Ordinal);

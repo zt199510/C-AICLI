@@ -25,7 +25,7 @@ public sealed class ExecTextRenderer
 
         string status = result.IsSuccess ? "success" : "failure";
         writer.WriteLine(
-            $"result: {status} exitCode={result.ExitCode}{FormatOptional("summary", result.Summary, redact: true)}{FormatOptional("errorCode", result.ErrorCode)}{FormatOptional("approvalStatus", result.ApprovalStatus)}{FormatOptional("stopReason", result.StopReason)}{FormatOptional("changedFiles", FormatChangedFiles(result), redact: true)}{FormatOptional("commands", FormatCommands(result), redact: true)}{FormatOptional("verificationStatus", FormatVerificationStatus(result))}{FormatOptional("remainingRisks", FormatRemainingRisks(result), redact: true)}{FormatOptional("tracePath", result.TaskReport?.TracePath, redact: true)}{FormatOptional("retryCount", FormatRetryCount(result.RetryAttempts))}{FormatOptional("failureKind", result.FailureSummary?.FailureKind)} events={result.Events.Count}");
+            $"result: {status} exitCode={result.ExitCode}{FormatOptional("summary", result.Summary, redact: true)}{FormatOptional("errorCode", result.ErrorCode)}{FormatOptional("approvalStatus", result.ApprovalStatus)}{FormatOptional("stopReason", result.StopReason)}{FormatOptional("references", FormatReferences(result), redact: true)}{FormatOptional("changedFiles", FormatChangedFiles(result), redact: true)}{FormatOptional("commands", FormatCommands(result), redact: true)}{FormatOptional("verificationStatus", FormatVerificationStatus(result))}{FormatOptional("remainingRisks", FormatRemainingRisks(result), redact: true)}{FormatOptional("tracePath", result.TaskReport?.TracePath, redact: true)}{FormatOptional("retryCount", FormatRetryCount(result.RetryAttempts))}{FormatOptional("failureKind", result.FailureSummary?.FailureKind)} events={result.Events.Count}");
     }
 
     private static string FormatEvent(ExecEvent execEvent)
@@ -159,5 +159,21 @@ public sealed class ExecTextRenderer
         }
 
         return result.FailureSummary?.RemainingRisk;
+    }
+
+    private static string? FormatReferences(ExecResult result)
+    {
+        if (result.TaskReport is null || result.TaskReport.References.Count == 0)
+        {
+            return null;
+        }
+
+        int files = result.TaskReport.References.Sum(reference => reference.IncludedFileCount);
+        int skipped = result.TaskReport.References.Sum(reference => reference.SkippedFileCount);
+        bool truncated = result.TaskReport.References.Any(reference => reference.Truncated);
+        string paths = string.Join(
+            ",",
+            result.TaskReport.References.Select(reference => reference.ResolvedPath ?? reference.RequestedPath));
+        return $"count={result.TaskReport.References.Count} files={files} skipped={skipped} truncated={(truncated ? "true" : "false")} paths={paths}";
     }
 }

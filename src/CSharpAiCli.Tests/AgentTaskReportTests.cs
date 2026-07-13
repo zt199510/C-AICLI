@@ -188,6 +188,75 @@ public sealed class AgentTaskReportTests
         Assert.Equal("failure", Assert.Single(report.Verification).Status);
     }
 
+    [Fact]
+    public void Build_records_reference_metadata_without_raw_reference_content()
+    {
+        WorkspaceContext workspace = CreateWorkspace();
+        WorkflowReferenceResolution references = new(
+        [
+            new WorkflowReferenceEntry(
+                Kind: "file",
+                SourceToken: "@file:secret.txt",
+                RequestedPath: "secret.txt",
+                ResolvedPath: "secret.txt",
+                Status: "warning",
+                Files:
+                [
+                    new WorkflowReferenceFile(
+                        Path: "secret.txt",
+                        ByteCount: 18,
+                        CharacterCount: 18,
+                        Truncated: true,
+                        Content: "apiKey=raw-secret")
+                ],
+                Warnings:
+                [
+                    new WorkflowReferenceWarning(
+                        WorkflowReferenceErrorCode.TooLarge,
+                        "file truncated",
+                        "secret.txt")
+                ])
+        ]);
+        AgentTaskContext taskContext = new(
+            CurrentDirectory: workspace.RootPath,
+            WorkspaceRoot: workspace.RootPath,
+            WorkspaceStatus: workspace.Status.ToString(),
+            CurrentDirectoryErrorCode: null,
+            Instructions: null,
+            InstructionSources: [],
+            InstructionWarnings: [],
+            SessionName: null,
+            HasTranscriptContext: false,
+            Git: new AgentGitContextSummary(
+                StatusSummary: "working tree clean",
+                StatusSucceeded: true,
+                StatusErrorCode: null,
+                IsDirty: false,
+                StatusSummaryTruncated: false,
+                DiffSummary: "no diff",
+                DiffSucceeded: true,
+                DiffErrorCode: null,
+                DiffOutputTruncated: false,
+                DiffSummaryTruncated: false),
+            References: references);
+        AgentRunRequest request = new(
+            Prompt: "inspect @file:secret.txt",
+            Workspace: workspace,
+            TaskContext: taskContext);
+        AgentRunResult result = AgentRunResult.Success("done", [], []);
+
+        AgentTaskReport report = AgentTaskReportBuilder.Build(request, result);
+        IReadOnlyDictionary<string, object?> payload = AgentTaskReportBuilder.ToJsonPayload(report);
+        string flattened = System.Text.Json.JsonSerializer.Serialize(payload);
+
+        AgentTaskReferenceReport reference = Assert.Single(report.References);
+        Assert.Equal("file", reference.Kind);
+        Assert.Equal("secret.txt", reference.ResolvedPath);
+        Assert.True(reference.Truncated);
+        Assert.DoesNotContain("raw-secret", flattened, StringComparison.Ordinal);
+        Assert.DoesNotContain("apiKey=raw-secret", flattened, StringComparison.Ordinal);
+    }
+
     private static WorkspaceContext CreateWorkspace()
     {
         return new WorkspaceContext(

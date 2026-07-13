@@ -10,4 +10,5 @@ public sealed record AgentTaskContext(
     IReadOnlyList<string> InstructionWarnings,
     string? SessionName,
     bool HasTranscriptContext,
-    AgentGitContextSummary Git);
+    AgentGitContextSummary Git,
+    WorkflowReferenceResolution? References = null);

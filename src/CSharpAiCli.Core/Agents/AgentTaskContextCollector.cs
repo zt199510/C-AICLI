@@ -9,6 +9,7 @@ public sealed class AgentTaskContextCollector
     private readonly IWorkspaceGuard workspaceGuard;
     private readonly GitStatusTool gitStatusTool;
     private readonly GitDiffTool gitDiffTool;
+    private readonly WorkflowReferenceResolver referenceResolver;
 
     public AgentTaskContextCollector()
         : this(new WorkspaceGuard())
@@ -18,12 +19,14 @@ public sealed class AgentTaskContextCollector
     internal AgentTaskContextCollector(
         IWorkspaceGuard workspaceGuard,
         GitStatusTool? gitStatusTool = null,
-        GitDiffTool? gitDiffTool = null)
+        GitDiffTool? gitDiffTool = null,
+        WorkflowReferenceResolver? referenceResolver = null)
     {
         ArgumentNullException.ThrowIfNull(workspaceGuard);
         this.workspaceGuard = workspaceGuard;
         this.gitStatusTool = gitStatusTool ?? new GitStatusTool(workspaceGuard);
         this.gitDiffTool = gitDiffTool ?? new GitDiffTool(workspaceGuard);
+        this.referenceResolver = referenceResolver ?? new WorkflowReferenceResolver(workspaceGuard);
     }
 
     public AgentTaskContext Collect(
@@ -31,14 +34,18 @@ public sealed class AgentTaskContextCollector
         InstructionLoadResult instructions,
         string? currentDirectory = null,
         string? sessionName = null,
-        bool hasTranscriptContext = false)
+        bool hasTranscriptContext = false,
+        string? prompt = null)
     {
         ArgumentNullException.ThrowIfNull(workspace);
         ArgumentNullException.ThrowIfNull(instructions);
 
         (string resolvedCurrentDirectory, string? currentDirectoryErrorCode) =
             ResolveCurrentDirectory(workspace, currentDirectory);
-        AgentGitContextSummary git = CollectGitSummary(workspace);
+        WorkflowReferenceResolution references = referenceResolver.Resolve(workspace, prompt);
+        AgentGitContextSummary git = references.HasErrors
+            ? CreateSkippedGitSummary(references)
+            : CollectGitSummary(workspace);
 
         return new AgentTaskContext(
             CurrentDirectory: resolvedCurrentDirectory,
@@ -50,7 +57,8 @@ public sealed class AgentTaskContextCollector
             InstructionWarnings: instructions.Warnings.ToArray(),
             SessionName: sessionName,
             HasTranscriptContext: hasTranscriptContext,
-            Git: git);
+            Git: git,
+            References: references);
     }
 
     private (string CurrentDirectory, string? ErrorCode) ResolveCurrentDirectory(
@@ -99,6 +107,22 @@ public sealed class AgentTaskContextCollector
             DiffErrorCode: diff.ErrorCode,
             DiffOutputTruncated: IsDiffOutputTruncated(diff),
             DiffSummaryTruncated: diffSummary.Truncated);
+    }
+
+    private static AgentGitContextSummary CreateSkippedGitSummary(WorkflowReferenceResolution references)
+    {
+        string errorCode = references.FirstErrorCode ?? WorkflowReferenceErrorCode.ResolutionFailed;
+        return new AgentGitContextSummary(
+            StatusSummary: "Git status was not collected because workflow reference resolution failed.",
+            StatusSucceeded: false,
+            StatusErrorCode: errorCode,
+            IsDirty: false,
+            StatusSummaryTruncated: false,
+            DiffSummary: "Git diff summary was not collected because workflow reference resolution failed.",
+            DiffSucceeded: false,
+            DiffErrorCode: errorCode,
+            DiffOutputTruncated: false,
+            DiffSummaryTruncated: false);
     }
 
     private static bool IsCleanStatus(string summary)

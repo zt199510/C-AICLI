@@ -425,6 +425,17 @@ Write-Output 'bugfix verification passed'
     Assert-ExitCode $diffStat 0 "diff stat"
     Assert-Contains $diffStat.Output "1 file changed" "diff stat"
 
+    $changes = Invoke-CaiCli -Arguments @("changes", "--workspace", $workspace)
+    Assert-ExitCode $changes 0 "changes"
+    Assert-Contains $changes.Output "C# AI CLI changes" "changes"
+    Assert-Contains $changes.Output "status: dirty" "changes"
+    Assert-Contains $changes.Output "note.txt" "changes"
+
+    $changesJson = Invoke-CaiCli -Arguments @("changes", "--output", "json", "--workspace", $workspace)
+    Assert-ExitCode $changesJson 0 "changes json"
+    Assert-Contains $changesJson.Output '"type":"changes.view"' "changes json"
+    Assert-Contains $changesJson.Output '"status":"dirty"' "changes json"
+
     $missingModel = Invoke-CaiCli -Arguments @("chat", "--workspace", $workspace, "hello")
     Assert-ExitCode $missingModel 1 "chat missing model"
     Assert-Contains $missingModel.Output "localErrorCode: missing-model" "chat missing model"
@@ -438,10 +449,12 @@ Write-Output 'bugfix verification passed'
     $execMissingModel = Invoke-CaiCli -Arguments @(
         "exec", "--workspace", $workspace, "--cwd", "src\app",
         "--max-turns", "1", "--max-tool-calls", "1", "--timeout-seconds", "5",
-        "summarize workspace"
+        "summarize workspace with @file:note.txt"
     )
     Assert-ExitCode $execMissingModel 1 "exec missing model"
     Assert-Contains $execMissingModel.Output "errorCode=missing-model" "exec missing model"
+    Assert-Contains $execMissingModel.Output "context.references" "exec missing model reference context"
+    Assert-Contains $execMissingModel.Output "references=count=1" "exec missing model reference summary"
 
     $env:OPENAI_MODEL = "gpt-smoke"
     $execMissingKey = Invoke-CaiCli -Arguments @(
@@ -651,6 +664,11 @@ Write-Output 'bugfix verification passed'
     $sessionShow = Invoke-CaiCli -Arguments @("session", "show", "--workspace", $workspace, "smoke")
     Assert-ExitCode $sessionShow 0 "session show"
     Assert-Contains $sessionShow.Output "name: smoke" "session show"
+
+    $changesMissingTaskReport = Invoke-CaiCli -Arguments @("changes", "--session", "smoke", "--workspace", $workspace)
+    Assert-ExitCode $changesMissingTaskReport 0 "changes missing task report"
+    Assert-Contains $changesMissingTaskReport.Output "taskReportSource: session:smoke" "changes missing task report"
+    Assert-Contains $changesMissingTaskReport.Output "Session transcript does not contain an agent task report." "changes missing task report"
 
     $export = Invoke-CaiCli -Arguments @("session", "export", "--workspace", $workspace, "smoke")
     Assert-ExitCode $export 0 "session export"

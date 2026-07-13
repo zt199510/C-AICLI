@@ -106,6 +106,91 @@ public sealed class CliCommandFactoryTests
     }
 
     [Fact]
+    public void Changes_command_writes_dirty_workspace_view_without_command_log()
+    {
+        using TempDirectory temp = TempDirectory.Create();
+        string filePath = InitializeGitRepository(temp.Path);
+        File.AppendAllText(filePath, "changed\n");
+        using StringWriter output = new();
+        List<string> loggedCommands = [];
+
+        int exitCode = CliCommandFactory
+            .Create(
+                output,
+                workspacePath => CreateSnapshot(workspacePath),
+                (commandName, _) => loggedCommands.Add(commandName))
+            .Parse(["changes", "--workspace", temp.Path])
+            .Invoke();
+
+        string text = output.ToString();
+        Assert.Equal(0, exitCode);
+        Assert.Empty(loggedCommands);
+        Assert.Contains("C# AI CLI changes", text, StringComparison.Ordinal);
+        Assert.Contains("status: dirty", text, StringComparison.Ordinal);
+        Assert.Contains("changedFiles:", text, StringComparison.Ordinal);
+        Assert.Contains("tracked.txt", text, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Changes_command_writes_json_with_session_task_report()
+    {
+        using TempDirectory temp = TempDirectory.Create();
+        InitializeGitRepository(temp.Path);
+        using StringWriter output = new();
+        ConversationTranscript transcript = ConversationTranscript.Create(
+            "smoke",
+            DateTimeOffset.Parse("2024-01-01T00:00:00Z"));
+        transcript.AddAgentRun(new ConversationAgentRun(
+            CompletedAtUtc: DateTimeOffset.Parse("2024-01-01T00:00:05Z"),
+            Status: "success",
+            StopReason: "completed",
+            ErrorCode: null,
+            Summary: "done",
+            EventCount: 2,
+            ToolCallCount: 0,
+            TaskReport: new AgentTaskReport(
+                Status: "success",
+                StopReason: "completed",
+                Prompt: "inspect",
+                Plan: null,
+                Tools: [],
+                ChangedFiles: [],
+                Commands:
+                [
+                    new AgentTaskCommandReport(
+                        Source: "verification",
+                        Command: "dotnet test",
+                        Status: "success")
+                ],
+                Verification: [],
+                Risks: [],
+                TracePath: "D:/trace.log")));
+        FakeConversationStore store = new() { Transcript = transcript };
+        RootCommand command = CliCommandFactory.Create(
+            output,
+            workspacePath => CreateSnapshot(workspacePath),
+            (_, _) => { },
+            _ => throw new InvalidOperationException("changes must not create a model client"),
+            writer => new TerminalChatStreamingRenderer(writer),
+            _ => store,
+            () => DateTimeOffset.Parse("2024-01-01T00:00:00Z"));
+
+        int exitCode = CliCommandFactory.Invoke(
+            command,
+            ["changes", "--output", "json", "--session", "smoke", "--workspace", temp.Path],
+            output);
+
+        JsonObject result = Assert.IsType<JsonObject>(JsonNode.Parse(output.ToString()));
+        Assert.Equal(0, exitCode);
+        Assert.Equal("changes.view", result["type"]?.GetValue<string>());
+        Assert.Equal("clean", result["status"]?.GetValue<string>());
+        JsonObject taskReport = Assert.IsType<JsonObject>(result["taskReport"]);
+        Assert.Equal("success", taskReport["status"]?.GetValue<string>());
+        Assert.Contains("dotnet test", output.ToString(), StringComparison.Ordinal);
+        Assert.Equal("smoke", store.TryLoadedSessionName?.Value);
+    }
+
+    [Fact]
     public void Diff_command_with_default_logger_writes_no_diff_for_clean_git_workspace()
     {
         using TempDirectory temp = TempDirectory.Create();
@@ -2954,6 +3039,83 @@ public sealed class CliCommandFactoryTests
         Assert.EndsWith(Path.Combine("src", "app"), agentRunner.LastRequest?.TaskContext?.CurrentDirectory, StringComparison.OrdinalIgnoreCase);
         Assert.DoesNotContain("Root rules", output.ToString(), StringComparison.Ordinal);
         Assert.DoesNotContain("sk-test-secret", output.ToString(), StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Exec_command_records_file_reference_in_json_output_and_task_report()
+    {
+        using TempDirectory temp = TempDirectory.Create();
+        File.WriteAllText(Path.Combine(temp.Path, "note.txt"), "hello reference");
+        using StringWriter output = new();
+        FakeAgentRunner agentRunner = new(AgentRunResult.Success("agent completed task", []));
+        RootCommand command = CliCommandFactory.Create(
+            output,
+            workspacePath => CreateSnapshot(
+                workspacePath,
+                apiKey: "sk-test",
+                apiKeySource: "OPENAI_API_KEY",
+                model: "gpt-test"),
+            (_, _) => { },
+            _ => new FakeChatModelClient(ChatModelResult.Success(new ChatResponse("openai", "gpt-test", "resp", ""))),
+            writer => new TerminalChatStreamingRenderer(writer),
+            _ => new FakeConversationStore(),
+            () => DateTimeOffset.Parse("2024-01-01T00:00:00Z"),
+            (_, _, _) => agentRunner);
+
+        int exitCode = CliCommandFactory.Invoke(
+            command,
+            ["exec", "--output", "json", "--workspace", temp.Path, "summarize @file:note.txt"],
+            output);
+
+        string text = output.ToString();
+        JsonObject result = AssertLastExecJsonResult(output);
+        JsonObject payload = Assert.IsType<JsonObject>(result["payload"]);
+        JsonObject taskReport = Assert.IsType<JsonObject>(payload["taskReport"]);
+        JsonArray references = Assert.IsType<JsonArray>(taskReport["references"]);
+
+        Assert.Equal(0, exitCode);
+        Assert.Contains("\"type\":\"context.references\"", text, StringComparison.Ordinal);
+        Assert.Single(agentRunner.LastRequest?.TaskContext?.References?.References ?? []);
+        Assert.Single(references);
+        Assert.Contains("note.txt", text, StringComparison.Ordinal);
+        Assert.DoesNotContain("hello reference", text, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Exec_command_rejects_reference_outside_workspace_before_agent_runner()
+    {
+        using TempDirectory temp = TempDirectory.Create();
+        using StringWriter output = new();
+        bool runnerCreated = false;
+        RootCommand command = CliCommandFactory.Create(
+            output,
+            workspacePath => CreateSnapshot(
+                workspacePath,
+                apiKey: "sk-test",
+                apiKeySource: "OPENAI_API_KEY",
+                model: "gpt-test"),
+            (_, _) => { },
+            _ => new FakeChatModelClient(ChatModelResult.Success(new ChatResponse("openai", "gpt-test", "resp", ""))),
+            writer => new TerminalChatStreamingRenderer(writer),
+            _ => new FakeConversationStore(),
+            () => DateTimeOffset.Parse("2024-01-01T00:00:00Z"),
+            (_, _, _) =>
+            {
+                runnerCreated = true;
+                return new FakeAgentRunner(AgentRunResult.Success("should not run", []));
+            });
+
+        int exitCode = CliCommandFactory.Invoke(
+            command,
+            ["exec", "--workspace", temp.Path, "summarize @file:../outside.txt"],
+            output);
+
+        string text = output.ToString();
+        Assert.Equal(1, exitCode);
+        Assert.False(runnerCreated);
+        Assert.Contains("event: context.references", text, StringComparison.Ordinal);
+        Assert.Contains("errorCode=workflow-reference-boundary-denied", text, StringComparison.Ordinal);
+        Assert.Contains("result: failure", text, StringComparison.Ordinal);
     }
 
     [Fact]

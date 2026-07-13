@@ -25,6 +25,19 @@ For each directory from the workspace root to the target directory, the loader s
 
 `doctor`, `config get`, and `config list` report instruction source paths, source order, and warnings, but they do not print instruction contents. Instruction contents may still be visible to the configured model provider because they are part of the model request.
 
+## Workflow References
+
+Agentic `exec` supports inline `@file:<path>` and `@folder:<path>` workflow references. These references are bounded local context inputs, not permissions.
+
+- References are resolved before model execution and must stay inside the active workspace.
+- Explicit `@file` references fail safely for outside paths, missing files, binary files, and unreadable files.
+- Large explicit text files are truncated and marked with warning metadata before they enter model context.
+- `@folder` references are bounded by recursion depth, file count, single-file bytes, and total bytes.
+- Folder references skip binary or unreadable child files with warnings, and skip common generated/private directories such as `.git`, `.caicli`, `bin`, `obj`, and `node_modules`.
+- Reference metadata is recorded in text output, NDJSON, trace, session task reports, and `changes` views, but raw referenced content is not persisted in reports.
+
+References do not bypass disabled-tool settings, approval mode, workspace guard, dirty-workspace checks, shell policy, dangerous-command detection, MCP startup policy, loop limits, or timeouts. A model may still ask for write or shell tools after reading referenced context, but those requests go through the same approval and safety path as any other `exec` run.
+
 ## Approval Modes And Tool Risk
 
 The CLI uses an approval mode plus per-tool risk metadata to decide whether a tool call may run. Config JSON supports `approvalMode` values:
@@ -111,12 +124,24 @@ Agentic `exec` ends each run with a read-only review gate and final task report.
 - The review gate payload marks `readOnly=true` and `toolName=git.diff`.
 - The review gate does not call patch tools, shell tools, or workspace write paths.
 - The review gate can report `success` or `warning`; warning covers cases such as failed or truncated diff collection.
-- The final `AgentTaskReport` records status, stop reason, prompt, plan, tools, changed files, commands, verification, remaining risks, trace path, summary, error code, and optional review gate details.
+- The final `AgentTaskReport` records status, stop reason, prompt, plan, tools, workflow reference metadata, changed files, commands, verification, remaining risks, trace path, summary, error code, and optional review gate details.
 - Text output, NDJSON output, trace result payloads, and session transcript agent run summaries all carry report-derived data.
 - The report is diagnostic and review-oriented; it is not an automatic rollback or correctness guarantee.
 - A standalone full markdown task report file is not written by default. Full markdown task reports remain Deferred; session markdown export only includes compact task report counts and trace path metadata.
 
 Task reports sanitize all captured strings before output or persistence. When a secret-like value is detected, the report records only presence metadata, expressed as source and kind, and never stores the raw value.
+
+## Changes View
+
+`caicli changes` is a read-only local review entry point. It combines git status/diff stat, changed files, and optional latest session `taskReport` data.
+
+- It does not call a model.
+- It does not run shell, patch, write, or MCP tools.
+- It does not write workspace files or session transcripts.
+- It does not write command logs by default.
+- It writes trace diagnostics only when the user explicitly passes recursive `--trace` or sets `CAICLI_TRACE=1`.
+
+The command is a diagnostic view, not a proof of correctness. Users should still inspect diffs and tests before trusting changes.
 
 ## Real And Fake Agent Contracts
 

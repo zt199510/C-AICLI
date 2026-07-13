@@ -19,6 +19,7 @@ internal static class AgentTaskContextPromptFormatter
         builder.AppendLine("- Git status: " + taskContext.Git.StatusSummary);
         builder.AppendLine("- Git diff summary:");
         builder.AppendLine(taskContext.Git.DiffSummary);
+        AppendReferences(builder, taskContext.References ?? WorkflowReferenceResolution.Empty);
         builder.AppendLine();
         builder.AppendLine("Read-only startup plan:");
         builder.AppendLine(plan.Summary);
@@ -50,5 +51,30 @@ internal static class AgentTaskContextPromptFormatter
         return taskContext.HasTranscriptContext
             ? taskContext.SessionName + " (resumed)"
             : taskContext.SessionName;
+    }
+
+    private static void AppendReferences(StringBuilder builder, WorkflowReferenceResolution references)
+    {
+        builder.AppendLine("- Workflow references: " + (references.HasReferences ? references.References.Count.ToString(System.Globalization.CultureInfo.InvariantCulture) : "none"));
+        if (!references.HasReferences)
+        {
+            return;
+        }
+
+        foreach (WorkflowReferenceEntry reference in references.References)
+        {
+            builder.AppendLine($"  - {reference.Kind}:{reference.ResolvedPath ?? reference.RequestedPath} status={reference.Status} files={reference.IncludedFileCount.ToString(System.Globalization.CultureInfo.InvariantCulture)} skipped={reference.SkippedFileCount.ToString(System.Globalization.CultureInfo.InvariantCulture)} truncated={(reference.Truncated ? "true" : "false")}");
+            foreach (WorkflowReferenceWarning warning in reference.Warnings)
+            {
+                builder.AppendLine($"    warning: {warning.ErrorCode} {warning.Path}");
+            }
+
+            foreach (WorkflowReferenceFile file in reference.Files)
+            {
+                builder.AppendLine($"    file: {file.Path} bytes={file.ByteCount.ToString(System.Globalization.CultureInfo.InvariantCulture)} truncated={(file.Truncated ? "true" : "false")}");
+                builder.AppendLine("    content:");
+                builder.AppendLine(file.Content);
+            }
+        }
     }
 }

@@ -117,9 +117,17 @@ artifacts\release\caicli-0.3.0-win-x64\caicli.exe status --workspace .
 artifacts\release\caicli-0.3.0-win-x64\caicli.exe models --workspace .
 artifacts\release\caicli-0.3.0-win-x64\caicli.exe diff --workspace .
 artifacts\release\caicli-0.3.0-win-x64\caicli.exe diff --stat --workspace .
+artifacts\release\caicli-0.3.0-win-x64\caicli.exe changes --workspace .
+artifacts\release\caicli-0.3.0-win-x64\caicli.exe changes --output json --workspace .
 ```
 
-`status` reports workspace, git, and effective configuration state. `models` is local-only: it prints the current model, base URL, sources, and static examples without calling a model list API and without requiring an API key. `diff` prints the current git diff, or a stat summary with `--stat`.
+`status` reports workspace, git, and effective configuration state. `models` is local-only: it prints the current model, base URL, sources, and static examples without calling a model list API and without requiring an API key. `diff` prints the current git diff, or a stat summary with `--stat`. `changes` is a read-only changes view that combines git status/diff stat, changed files, and optional session task report data without calling a model or running shell/patch tools.
+
+To include the latest task report from an `exec --session` transcript:
+
+```powershell
+artifacts\release\caicli-0.3.0-win-x64\caicli.exe changes --workspace . --session smoke-exec
+```
 
 Use `review` when you want model-assisted feedback on the current diff:
 
@@ -147,6 +155,15 @@ MCP config/list/doctor are available. User-configured stdio MCP servers can be d
 
 At startup, `exec` builds bounded task context before write-capable work begins. The collected context includes the resolved workspace/cwd, project instruction source list, session or resume state, and a bounded git status/diff summary. The generated plan is emitted as a traceable `plan` event so text, NDJSON, session, and trace consumers can correlate the task goal, candidate files, expected tools, and risks before later model/tool events.
 
+`exec` also accepts bounded inline workflow references:
+
+```powershell
+artifacts\release\caicli-0.3.0-win-x64\caicli.exe exec --workspace . "Summarize @file:README.md"
+artifacts\release\caicli-0.3.0-win-x64\caicli.exe exec --workspace . "Review parser flow in @folder:src/CSharpAiCli.Core/Agents"
+```
+
+`@file:<path>` and `@folder:<path>` are resolved inside the workspace before the model runs. Explicit files outside the workspace, missing files, and binary files fail safely. Folder references are recursive but bounded by file count, total bytes, single-file bytes, and depth, and common generated or private directories such as `.git`, `.caicli`, `bin`, `obj`, and `node_modules` are skipped. Reference metadata appears in text, JSON, trace, session, and `taskReport`; raw referenced content is not written into reports.
+
 The offline/fake agent loop and the direct OpenAI Responses SDK path share the same tool-call contract. With model access configured, `exec` can expose local tool schemas to the model, execute requested tools, write structured tool results back, and continue to a final response. Normal tests do not require network access; the release smoke script only runs the real model path when `CAICLI_REAL_MODEL_SMOKE=1` is set with caller-provided `OPENAI_API_KEY` and `OPENAI_MODEL`.
 
 After a successful `workspace.apply_patch` tool call, `exec` records patch lifecycle events (`patch.preview`, `patch.approval`, and `patch.apply`), collects a `changed.files` summary from git status/diff, and adds changed-file details to text, NDJSON, trace, and session run summaries. If an explicit verification command is configured, `exec` runs it through `workspace.run_shell` and records `verification.result`; the shell approval mode, shell policy allowlist/denylist, timeout cap, dangerous-command detector, cwd guard, and output truncation rules still apply.
@@ -155,7 +172,7 @@ Automatic verification uses only explicit commands. Project instructions take pr
 
 At completion, `exec` runs a read-only `review.gate` over the final git diff summary. The gate uses the read-only `git.diff` tool path, does not call patch or shell tools, and does not write workspace files. The event payload includes `readOnly=true`, `toolName=git.diff`, `hasDiff`, and `truncated`.
 
-Every agentic `exec` run also records a final `AgentTaskReport`. Text output includes the report-derived `changedFiles`, `commands`, `verificationStatus`, `remainingRisks`, and `tracePath` fields when available. JSON output emits a `taskReport` event and includes the full `payload.taskReport` object on the terminal `exec.result`. The report payload contains status/stop reason, prompt, plan, tools, changed files, commands, verification, risks, trace path, and optional review gate data.
+Every agentic `exec` run also records a final `AgentTaskReport`. Text output includes the report-derived `references`, `changedFiles`, `commands`, `verificationStatus`, `remainingRisks`, and `tracePath` fields when available. JSON output emits a `taskReport` event and includes the full `payload.taskReport` object on the terminal `exec.result`. The report payload contains status/stop reason, prompt, plan, tools, workflow reference metadata, changed files, commands, verification, risks, trace path, and optional review gate data.
 
 When `--trace` is enabled, the task report is written into the trace result payload. When `--session` is used, the report is attached to the session transcript's agent run summary. Report redaction records secret presence/source/kind only and never raw secret values. A standalone full markdown task report is deferred; `session export --format markdown` currently prints compact task report counts and the trace path when present.
 
@@ -216,6 +233,7 @@ After an agentic task, review the local change set before committing or copying 
 ```powershell
 artifacts\release\caicli-0.3.0-win-x64\caicli.exe diff --workspace .
 artifacts\release\caicli-0.3.0-win-x64\caicli.exe diff --stat --workspace .
+artifacts\release\caicli-0.3.0-win-x64\caicli.exe changes --workspace .
 artifacts\release\caicli-0.3.0-win-x64\caicli.exe review --workspace .
 ```
 

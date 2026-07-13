@@ -19,6 +19,7 @@ public sealed record AgentTaskReport
         IReadOnlyList<string>? Risks,
         string? TracePath,
         IReadOnlyList<AgentTaskSecretPresence>? Secrets = null,
+        IReadOnlyList<AgentTaskReferenceReport>? References = null,
         string? Summary = null,
         string? ErrorCode = null,
         AgentTaskReviewGateReport? ReviewGate = null)
@@ -37,6 +38,7 @@ public sealed record AgentTaskReport
         this.Risks = new ReadOnlyCollection<string>((Risks ?? []).ToArray());
         this.TracePath = TracePath;
         this.Secrets = new ReadOnlyCollection<AgentTaskSecretPresence>((Secrets ?? []).ToArray());
+        this.References = new ReadOnlyCollection<AgentTaskReferenceReport>((References ?? []).ToArray());
         this.Summary = Summary;
         this.ErrorCode = ErrorCode;
         this.ReviewGate = ReviewGate;
@@ -63,6 +65,8 @@ public sealed record AgentTaskReport
     public string? TracePath { get; }
 
     public IReadOnlyList<AgentTaskSecretPresence> Secrets { get; }
+
+    public IReadOnlyList<AgentTaskReferenceReport> References { get; }
 
     public string? Summary { get; }
 
@@ -100,6 +104,18 @@ public sealed record AgentTaskReviewGateReport(
 public sealed record AgentTaskSecretPresence(
     string Source,
     string Kind);
+
+public sealed record AgentTaskReferenceReport(
+    string Kind,
+    string RequestedPath,
+    string? ResolvedPath,
+    string Status,
+    int IncludedFileCount,
+    int SkippedFileCount,
+    long ByteCount,
+    bool Truncated,
+    IReadOnlyList<string> Warnings,
+    string? ErrorCode = null);
 
 public static class AgentTaskReportBuilder
 {
@@ -156,6 +172,9 @@ public static class AgentTaskReportBuilder
             .ToArray();
 
         IReadOnlyList<string> risks = CreateRisks(result, verification, reviewGate, secrets);
+        IReadOnlyList<AgentTaskReferenceReport> references = CreateReferenceReports(
+            request.TaskContext?.References,
+            secrets);
 
         AgentTaskReviewGateReport? safeReviewGate = reviewGate is null
             ? null
@@ -178,6 +197,7 @@ public static class AgentTaskReportBuilder
             Risks: risks,
             TracePath: Bound(secrets.Sanitize(tracePath, "tracePath"), MaxItemCharacters),
             Secrets: secrets.ToPresenceList(),
+            References: references,
             Summary: summary,
             ErrorCode: result.Error?.LocalErrorCode,
             ReviewGate: safeReviewGate);
@@ -202,12 +222,16 @@ public static class AgentTaskReportBuilder
             ["verification"] = string.Join(";", report.Verification.Select(verification => verification.Status)),
             ["riskCount"] = report.Risks.Count.ToString(CultureInfo.InvariantCulture),
             ["risks"] = string.Join(" | ", report.Risks),
+            ["referenceCount"] = report.References.Count.ToString(CultureInfo.InvariantCulture),
+            ["referenceFileCount"] = report.References.Sum(reference => reference.IncludedFileCount).ToString(CultureInfo.InvariantCulture),
+            ["referenceSkippedCount"] = report.References.Sum(reference => reference.SkippedFileCount).ToString(CultureInfo.InvariantCulture),
             ["secretPresenceCount"] = report.Secrets.Count.ToString(CultureInfo.InvariantCulture)
         };
 
         AddIfPresent(payload, "prompt", report.Prompt);
         AddIfPresent(payload, "plan", report.Plan);
         AddIfPresent(payload, "tools", string.Join(";", report.Tools));
+        AddIfPresent(payload, "references", string.Join(";", report.References.Select(reference => reference.ResolvedPath ?? reference.RequestedPath)));
         AddIfPresent(payload, "tracePath", report.TracePath);
         AddIfPresent(payload, "summary", report.Summary);
         AddIfPresent(payload, "errorCode", report.ErrorCode);
@@ -280,6 +304,19 @@ public static class AgentTaskReportBuilder
                 ["summary"] = verification.Summary
             }).ToArray(),
             ["risks"] = report.Risks.ToArray(),
+            ["references"] = report.References.Select(reference => new Dictionary<string, object?>
+            {
+                ["kind"] = reference.Kind,
+                ["requestedPath"] = reference.RequestedPath,
+                ["resolvedPath"] = reference.ResolvedPath,
+                ["status"] = reference.Status,
+                ["includedFileCount"] = reference.IncludedFileCount,
+                ["skippedFileCount"] = reference.SkippedFileCount,
+                ["byteCount"] = reference.ByteCount,
+                ["truncated"] = reference.Truncated,
+                ["warnings"] = reference.Warnings.ToArray(),
+                ["errorCode"] = reference.ErrorCode
+            }).ToArray(),
             ["tracePath"] = report.TracePath,
             ["secrets"] = report.Secrets.Select(secret => new Dictionary<string, object?>
             {
@@ -321,8 +358,11 @@ public static class AgentTaskReportBuilder
         string risks = report.Risks.Count == 0
             ? "none"
             : string.Join(" | ", report.Risks);
+        string references = report.References.Count == 0
+            ? "none"
+            : string.Join(",", report.References.Select(reference => reference.ResolvedPath ?? reference.RequestedPath));
 
-        return $"status={report.Status} changedFiles={changedFiles} commands={commands} verification={verification} risks={risks}";
+        return $"status={report.Status} references={references} changedFiles={changedFiles} commands={commands} verification={verification} risks={risks}";
     }
 
     private static string? FindPlanSummary(IReadOnlyList<AgentRunEvent> events)
@@ -389,6 +429,35 @@ public static class AgentTaskReportBuilder
         return commands
             .GroupBy(command => command.Command, StringComparer.Ordinal)
             .Select(group => group.First())
+            .ToArray();
+    }
+
+    private static IReadOnlyList<AgentTaskReferenceReport> CreateReferenceReports(
+        WorkflowReferenceResolution? references,
+        SecretPresenceCollector secrets)
+    {
+        references ??= WorkflowReferenceResolution.Empty;
+        return references.References
+            .Select(reference => new AgentTaskReferenceReport(
+                Kind: Bound(secrets.Sanitize(reference.Kind, "references"), MaxItemCharacters) ?? string.Empty,
+                RequestedPath: Bound(secrets.Sanitize(reference.RequestedPath, "references.path"), MaxItemCharacters) ?? string.Empty,
+                ResolvedPath: Bound(secrets.Sanitize(reference.ResolvedPath, "references.path"), MaxItemCharacters),
+                Status: Bound(secrets.Sanitize(reference.Status, "references"), MaxItemCharacters) ?? string.Empty,
+                IncludedFileCount: reference.IncludedFileCount,
+                SkippedFileCount: reference.SkippedFileCount,
+                ByteCount: reference.ByteCount,
+                Truncated: reference.Truncated,
+                Warnings: reference.Warnings
+                    .Select(warning => Bound(
+                        secrets.Sanitize(
+                            string.IsNullOrWhiteSpace(warning.Path)
+                                ? warning.ErrorCode
+                                : warning.ErrorCode + ":" + warning.Path,
+                            "references.warning"),
+                        MaxItemCharacters) ?? string.Empty)
+                    .Where(warning => !string.IsNullOrWhiteSpace(warning))
+                    .ToArray(),
+                ErrorCode: Bound(secrets.Sanitize(reference.ErrorCode, "references"), MaxItemCharacters)))
             .ToArray();
     }
 

@@ -17,7 +17,7 @@ internal static class AgentStartupPlanBuilder
         ArgumentNullException.ThrowIfNull(taskContext);
 
         string goal = NormalizeSingleLine(prompt, 500);
-        IReadOnlyList<string> candidateFiles = FindCandidateFiles(prompt);
+        IReadOnlyList<string> candidateFiles = FindCandidateFiles(prompt, taskContext);
         IReadOnlyList<string> expectedTools = SelectExpectedTools(prompt);
         IReadOnlyList<string> risks = SelectRisks(taskContext, prompt);
         string summary = FormatSummary(goal, candidateFiles, expectedTools, risks);
@@ -33,17 +33,28 @@ internal static class AgentStartupPlanBuilder
         return new AgentStartupPlan(goal, candidateFiles, expectedTools, risks, summary, truncated);
     }
 
-    private static IReadOnlyList<string> FindCandidateFiles(string prompt)
+    private static IReadOnlyList<string> FindCandidateFiles(string prompt, AgentTaskContext taskContext)
     {
-        string[] candidates = CandidatePathPattern
+        List<string> candidates = CandidatePathPattern
             .Matches(prompt ?? string.Empty)
             .Select(match => match.Value.Trim('\'', '"', '`', ',', ';', ':', '.', ')', '('))
             .Where(value => !string.IsNullOrWhiteSpace(value))
             .Distinct(StringComparer.OrdinalIgnoreCase)
             .Take(20)
-            .ToArray();
+            .ToList();
 
-        return candidates.Length == 0 ? ["unknown until read/search"] : candidates;
+        WorkflowReferenceResolution references = taskContext.References ?? WorkflowReferenceResolution.Empty;
+        foreach (string referencePath in references.References
+            .Select(reference => reference.ResolvedPath ?? reference.RequestedPath)
+            .Where(value => !string.IsNullOrWhiteSpace(value)))
+        {
+            if (!candidates.Contains(referencePath, StringComparer.OrdinalIgnoreCase))
+            {
+                candidates.Add(referencePath);
+            }
+        }
+
+        return candidates.Count == 0 ? ["unknown until read/search"] : candidates.Take(20).ToArray();
     }
 
     private static IReadOnlyList<string> SelectExpectedTools(string prompt)
@@ -110,6 +121,17 @@ internal static class AgentStartupPlanBuilder
         if (taskContext.HasTranscriptContext)
         {
             risks.Add("resumed transcript context may affect task scope");
+        }
+
+        WorkflowReferenceResolution references = taskContext.References ?? WorkflowReferenceResolution.Empty;
+        if (references.HasWarnings || references.Truncated)
+        {
+            risks.Add("workflow references were bounded or truncated");
+        }
+
+        if (references.HasErrors)
+        {
+            risks.Add("workflow reference resolution failed: " + (references.FirstErrorCode ?? "unknown"));
         }
 
         if (ContainsAny(prompt, "edit", "modify", "fix", "implement", "update", "create", "write", "patch", "add", "run", "shell"))

@@ -35,6 +35,24 @@ If the task stops early, inspect:
 
 Loop-limit failures usually mean the prompt needs a smaller task, or `--max-turns`, `--max-tool-calls`, or `--timeout-seconds` needs a deliberate increase.
 
+## Workflow References
+
+Use `@file:<path>` and `@folder:<path>` only with `exec`:
+
+```powershell
+artifacts\release\caicli-0.3.0-win-x64\caicli.exe exec --workspace . "Inspect @file:README.md"
+artifacts\release\caicli-0.3.0-win-x64\caicli.exe exec --workspace . "Review @folder:src/CSharpAiCli.Core/Agents"
+```
+
+Common reference failures:
+
+- `workflow-reference-boundary-denied`: keep the referenced path inside `--workspace`.
+- `workflow-reference-not-found`: check the path relative to the workspace.
+- `workflow-reference-binary-not-supported`: explicit `@file` references must be text.
+- `workflow-reference-too-large`: the reference was bounded or truncated.
+
+Reference failures happen before model execution. They do not call the model, run shell or patch tools, start MCP, or save a partial session agent run.
+
 ## Tool And Approval Failures
 
 Read tools do not require approval. Patch and shell tools do.
@@ -78,10 +96,14 @@ Always inspect the local diff after write-capable work:
 ```powershell
 artifacts\release\caicli-0.3.0-win-x64\caicli.exe diff --workspace .
 artifacts\release\caicli-0.3.0-win-x64\caicli.exe diff --stat --workspace .
+artifacts\release\caicli-0.3.0-win-x64\caicli.exe changes --workspace .
+artifacts\release\caicli-0.3.0-win-x64\caicli.exe changes --session smoke-exec --workspace .
 artifacts\release\caicli-0.3.0-win-x64\caicli.exe review --workspace .
 ```
 
 `review` sends the current git diff to the configured model. It is read-only for the workspace and does not run shell or patch tools.
+
+`changes` is local and read-only. It does not call a model and can still return exit code `0` for clean workspaces, non-git workspaces, or missing session task reports while surfacing warnings in text/JSON output.
 
 ## Traces, Logs, And Sessions
 

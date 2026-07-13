@@ -1,6 +1,6 @@
 # C-AICLI 产品定位与路线护栏
 
-更新时间：2026-07-09
+更新时间：2026-07-12
 
 ## 一句话定位
 
@@ -96,6 +96,8 @@ C-AICLI 的价值在于可控性和工程化：
 
 ### 0.3.0：真实 Agent 开发闭环
 
+状态：已完成，已在 2026-07-12 验收为当前 release。
+
 目标：从“有 agent 基础设施”升级到“真实模型可以驱动工具完成小型开发任务”。
 
 推荐首个场景：修 bug / 小改动。
@@ -112,18 +114,24 @@ C-AICLI 的价值在于可控性和工程化：
 
 0.3.0 的成功标准不是命令数量，而是一个真实任务能稳定走完“读代码 -> 改代码 -> 跑测试 -> 总结”的闭环。
 
+完成确认：
+
+- 版本元数据已更新到 `0.3.0`，当前 release artifact 为 `artifacts/release/caicli-0.3.0-win-x64.zip`。
+- `docs_md/release/final_acceptance_0.3.0.md` 已记录 0.3.0 final acceptance、deterministic zip size/SHA256、packaged smoke 和 Deferred 边界。
+- 当前复核通过：`dotnet build src\CSharpAiCli.sln -c Release`、`dotnet test src\CSharpAiCli.sln -c Release --no-build` 和 `tools\Invoke-SmokeTests.ps1` 均通过；真实模型 smoke 仍按设计需要 `CAICLI_REAL_MODEL_SMOKE=1` 显式启用。
+- 当前能力边界：direct OpenAI SDK agent tool-call continuation、fake/offline agent contract、bounded `exec`、patch/verification/failure retry、`review.gate`、`taskReport`、user-configured stdio MCP v1 是 0.3.0 当前能力；Microsoft Agent Framework real backend、remote/http MCP、Gerber/TIFF real execution、dotnet tool package、独立 full markdown report 和交互式 approval UI 仍 Deferred。
+
 ### 0.3.1-0.3.3：Developer Workflow Packs
 
 目标：借鉴 WorkBuddy 的 Skills、Experts 和可交付结果思路，但保持 CLI 形态。
 
-候选范围：
+详细排期统一维护在 `docs_md/weekly/47_week_cli_0_3_developer_workflow_packs_schedule.md`，路线图只保留版本方向，避免同一范围在多个文档里重复漂移。
 
-- `@file`、`@folder` 引用。
-- `exec --report markdown`。
-- `caicli changes` 或 `exec --preview`。
-- `--expert bugfix/reviewer/tester/security/refactor`。
-- 轻量本地 `skills list/run`。
-- 常见 .NET 工作流包，例如 test-fix、review-only、upgrade-package、doc-sync。
+版本方向：
+
+- `0.3.1`：Workflow Inputs 与 Changes View，重点是 `@file`/`@folder` bounded reference 和只读 changes view。
+- `0.3.2`：Reports 与 Expert Profiles，重点是按需 markdown report 和本地 `--expert` profiles。
+- `0.3.3`：Local Skills 与 .NET Workflow Packs，重点是轻量本地 `skills list/run` 和首批 .NET workflow packs。
 
 0.3.3 可以借鉴 WorkBuddy 的“专家和技能包”，但不应复制 WorkBuddy 的桌面工作台、IM 控制或办公套件形态。
 

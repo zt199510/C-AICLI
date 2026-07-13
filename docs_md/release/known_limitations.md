@@ -19,6 +19,8 @@
 - `chat --resume` and `exec --resume` provide prior transcript context only for existing local sessions. The context is normalized before use to reduce transcript section-spoofing risk.
 - `review` is workspace-read-only and does not execute patch or shell tools or write workspace files, logs, transcripts, or patches. Diff collection may use cleaned-up temp files outside the workspace. It sends the current git diff to the configured model and requires configured model credentials for real use.
 - `review.gate` and `taskReport` are implemented diagnostic outputs for `exec`; they summarize the final state but do not prove correctness and do not replace human diff review.
+- Inline `@file:<path>` and `@folder:<path>` workflow references are available for `exec` only. They are bounded local context hints, not new tool permissions. `chat` references, URL references, glob expansion, semantic retrieval, and workflow-pack references remain Deferred.
+- `caicli changes` is read-only and local. It summarizes current git/session/taskReport state but does not call a model, prove correctness, generate markdown reports, or keep historical timelines.
 - The Microsoft Agent Framework project is an adapter boundary and experimental stub; the real framework runtime backend is Deferred.
 
 ## MCP And Project Packs
@@ -38,6 +40,7 @@
 - Patch writes remain approval-gated and recheck file content before apply, but previews do not make patching risk-free.
 - There is no interactive approval UI. Non-interactive `on-request` and `on-failure` modes report approval-required failures for write and shell actions.
 - Retry does not bypass approval, workspace guard, dirty-workspace checks, shell policy, or dangerous-command detection. A retry can ask for another patch or shell command only through the same tool safety path.
+- `@file` / `@folder` resolution does not bypass workspace guard. Outside paths are rejected, explicit binary files fail, folder binary/unreadable children are skipped with warnings, and large inputs are bounded or truncated before model execution.
 - Failure feedback is bounded/truncated before it is sent back through model continuation; long stdout/stderr or payload strings may require reading trace/session output or rerunning commands manually.
 - Trace logs are local diagnostic artifacts. Redaction is best-effort and users should still treat traces, command logs, and session exports as sensitive when prompts or diffs contain private code.
 - Shell policy and dangerous command detection run before approval/execution, including for MCP stdio startup commands, but users must still inspect commands.

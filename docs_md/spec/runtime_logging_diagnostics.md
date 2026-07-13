@@ -113,10 +113,17 @@ Agent event order is shared by text output, NDJSON output, and trace output. `mo
 Week 44 adds final review/report diagnostics for every agentic `exec` run:
 
 - `review.gate` summarizes the final git diff through the read-only `git.diff` planning-phase path. Its payload includes `readOnly=true`, `toolName=git.diff`, `hasDiff`, and `truncated`. It must not call shell, patch, or workspace write tools.
-- `taskReport` records the final report as an event. Its payload includes status, stop reason, prompt, plan, tools, changed file count/list, command count/list, verification count/statuses, risk count/list, trace path when trace is enabled, optional review gate status, and secret presence metadata.
+- `taskReport` records the final report as an event. Its payload includes status, stop reason, prompt, plan, tools, workflow reference count/list, changed file count/list, command count/list, verification count/statuses, risk count/list, trace path when trace is enabled, optional review gate status, and secret presence metadata.
 - The terminal `exec.result.payload.taskReport` contains the structured report payload used by JSON consumers and trace readers.
 - Session transcript `agentRuns[]` stores the same task report summary object when `exec --session` is used. Markdown session export renders compact task report counts and trace path only.
 - Full standalone markdown task report files are not written by default and remain deferred.
+
+Week 47 adds workflow reference and changes-view diagnostics:
+
+- `context.references` records bounded `@file` / `@folder` resolution for `exec`. Its payload includes reference count, included file count, skipped file count, byte count, truncation status, kinds, paths, and warning summaries. It is emitted before model/tool work for normal agent runs and before terminal failure for reference validation failures.
+- `exec.result.payload.taskReport.references[]` records reference metadata only: kind, requested path, resolved path, status, included/skipped file counts, byte count, truncation flag, warnings, and optional error code. Raw referenced file content is not persisted in task reports, traces, or session exports.
+- `caicli changes --output json` emits a single JSON object with `type="changes.view"`, `status`, `git`, `changedFiles`, optional `taskReport`, optional `session`, and `warnings`.
+- `caicli changes --trace` or `CAICLI_TRACE=1` writes a redacted `changes.view` trace command event. `changes` does not write command logs by default.
 
 Trace and verbose diagnostics must redact secrets before writing output. Redaction covers API keys, access/refresh tokens, passwords, `Authorization` headers and common variants, `secretKey`, `privateKey`, nested or escaped `argumentsJson`, OpenAI `sk-...` keys, and GitHub token formats such as `ghp_...` and `github_pat_...`. Diagnostics may record key presence and source, but never raw key values.
 

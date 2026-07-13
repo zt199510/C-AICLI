@@ -1337,6 +1337,7 @@ public sealed class OfflineAgentRunner : IAgentRunner
         RecordWorkspaceContext(events, taskContext);
         RecordInstructionContext(events, taskContext);
         RecordSessionContext(events, taskContext);
+        RecordReferenceContext(events, taskContext);
         RecordGitStatusContext(events, taskContext);
         RecordGitDiffContext(events, taskContext);
         RecordStartupPlan(events, request.Prompt, taskContext);
@@ -1457,6 +1458,22 @@ public sealed class OfflineAgentRunner : IAgentRunner
                     ? DiagnosticEventStatus.Warning
                     : DiagnosticEventStatus.Success
                 : DiagnosticEventStatus.Failure));
+    }
+
+    private void RecordReferenceContext(
+        List<AgentRunEvent> events,
+        AgentTaskContext taskContext)
+    {
+        WorkflowReferenceResolution references = taskContext.References ?? WorkflowReferenceResolution.Empty;
+        if (!references.HasReferences)
+        {
+            return;
+        }
+
+        events.Add(WorkflowReferenceEventFactory.Create(
+            references,
+            events.Count,
+            utcNowProvider()));
     }
 
     private void RecordGitDiffContext(
