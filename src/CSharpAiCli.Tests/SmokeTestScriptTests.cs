@@ -87,6 +87,12 @@ public sealed class SmokeTestScriptTests
         Assert.Contains("Assert-ExitCode $ciCheck 1 \"ci check failed job\"", script, StringComparison.Ordinal);
         Assert.Contains("Assert-ExitCode $ciMissing 2 \"ci check config error\"", script, StringComparison.Ordinal);
         Assert.Contains(".caicli\\reports\\ci-summary.md", script, StringComparison.Ordinal);
+        Assert.Contains("smoke-storage-secret", script, StringComparison.Ordinal);
+        Assert.Contains("corrupt-job-record", script, StringComparison.Ordinal);
+        Assert.Contains("corrupt-queue-record", script, StringComparison.Ordinal);
+        Assert.Contains("jobs corrupt diagnostic redaction", script, StringComparison.Ordinal);
+        Assert.Contains("queue corrupt diagnostic redaction", script, StringComparison.Ordinal);
+        Assert.Contains("queue cleanup must preserve corrupt records", script, StringComparison.Ordinal);
         Assert.Contains("\"queue\", \"list\", \"--output\", \"json\", \"--workspace\", $workspace", script, StringComparison.Ordinal);
         Assert.Contains("\"queue\", \"add\", \"exec\"", script, StringComparison.Ordinal);
         Assert.Contains("\"queue\", \"add\", \"skill\", \"review-only\"", script, StringComparison.Ordinal);

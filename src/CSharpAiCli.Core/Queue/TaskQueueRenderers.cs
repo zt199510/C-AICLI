@@ -181,7 +181,7 @@ public sealed class TaskQueueJsonRenderer
         type = "queue.list",
         status = "succeeded",
         items = result.Items.Select(ToListItem).ToArray(),
-        diagnostics = result.Diagnostics
+        diagnostics = result.Diagnostics.Select(ToDiagnostic).ToArray()
     });
 
     public void WriteShow(TaskQueueItem item) => Write(new
@@ -203,10 +203,10 @@ public sealed class TaskQueueJsonRenderer
         type = "queue.cleanup",
         status = result.Succeeded ? "succeeded" : "failed",
         deletedCount = result.DeletedCount,
-        deletedQueueIds = result.DeletedQueueIds,
-        diagnostics = result.Diagnostics,
-        errorCode = result.ErrorCode,
-        summary = result.Summary
+        deletedQueueIds = result.DeletedQueueIds.Select(Safe).ToArray(),
+        diagnostics = result.Diagnostics.Select(ToDiagnostic).ToArray(),
+        errorCode = SafeOrNull(result.ErrorCode),
+        summary = SafeOrNull(result.Summary)
     });
 
     private void Write(object value) => output.WriteLine(JsonSerializer.Serialize(value, JsonOptions));
@@ -226,4 +226,18 @@ public sealed class TaskQueueJsonRenderer
         item.UpdatedAtUtc,
         item.CompletedAtUtc
     };
+
+    private static object ToDiagnostic(TaskQueueDiagnostic diagnostic) => new
+    {
+        errorCode = Safe(diagnostic.ErrorCode),
+        summary = Safe(diagnostic.Summary),
+        path = SafeOrNull(diagnostic.Path),
+        queueId = SafeOrNull(diagnostic.QueueId)
+    };
+
+    private static string Safe(string value) =>
+        DiagnosticSecretRedactor.Redact(value ?? string.Empty);
+
+    private static string? SafeOrNull(string? value) =>
+        string.IsNullOrWhiteSpace(value) ? null : Safe(value);
 }

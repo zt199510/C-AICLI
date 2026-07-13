@@ -22,11 +22,12 @@ The daemon is not a sandbox and does not make CLI execution safe for remote cont
 - Wildcard, LAN, public, hostname, IPv6, and `0.0.0.0` bind requests are rejected before server startup.
 - The default port is `8787`; valid ports are `1024` through `65535`.
 - Server headers are disabled, request bodies are not part of the v1 read-only contract, list sizes are bounded, and concurrent connections are limited.
+- Request Host is restricted to `localhost` or `127.0.0.1`; request header count/total size and header timeout are explicitly bounded.
 - Process termination stops the listener. There is no detached mode, service registration, auto-restart, queue lease, or recovery worker.
 
 ## Permission Boundary
 
-All Preview routes are read-only. They reuse `JobRecordStore`, `TaskQueueStore`, `JobsJsonRenderer`, and `TaskQueueJsonRenderer`, so API data comes from the same bounded, redacted DTO and rendering path as the CLI. The API does not accept a workspace path per request and does not expose queue run/cancel/cleanup, automation run, pipeline run, CI file writes, shell, patch, MCP, model, session contents, trace contents, report contents, or artifact file contents.
+All Preview routes are read-only. They reuse `JobRecordStore`, `TaskQueueStore`, `JobsJsonRenderer`, and `TaskQueueJsonRenderer`, so API data and corrupt-record diagnostics come from the same bounded, redacted DTO and rendering path as the CLI. The API does not accept a workspace path per request and does not expose queue run/cancel/cleanup, automation run, pipeline run, CI file writes, shell, patch, MCP, model, session contents, trace contents, report contents, or artifact file contents.
 
 Because v1 has no execution routes, it cannot inject `--approve`, `--approval`, or configuration overrides. Any future control route must re-enter the existing CLI command/service path and preserve approval, workspace guard, dirty-workspace checks, shell policy, dangerous-command detection, disabled tools, expert/skill boundaries, MCP startup policy, trace/session/report flow, job recording, and redaction. Such routes are Deferred rather than implied by this Preview.
 

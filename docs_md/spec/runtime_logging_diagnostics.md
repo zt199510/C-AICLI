@@ -159,6 +159,19 @@ Week 52 adds local multi-role pipeline v1:
 - Reviewer and security roles remain read-only through the existing expert/skill boundary: patch/shell tools are not registered, MCP discovery is skipped, and executor enforcement rejects patch, shell, and `mcp.*` calls. Pipeline orchestration does not inject approval overrides or bypass workspace/dirty checks, shell policy, disabled tools, trace/session/report, or credential checks.
 - Pipeline v1 uses fixed role definitions and the caller's configured provider/model. Automatic role routing, provider assignment, parallel workers, retry/resume, scheduling, daemon/API/SSE, and remote collaboration are not enabled.
 
+Week 53-54 add automation and CI correlation without a second diagnostic truth:
+
+- Automation dry-run is non-persistent. Manual runs attach bounded redacted automation name/run/source/target metadata to the existing queue/job path and add an `inline:automation/<run-id>` job artifact pointer.
+- Pipeline role reports and automation results reference queue ids, job ids, task-report summaries, warnings, remaining risks, and existing artifact pointers; they do not persist raw event payloads or full diffs.
+- `ci summarize/check` read one job and render provider-neutral JSON/markdown. They do not write command logs or create execution state; explicit `--markdown-path` is the only workspace write and uses workspace guard/no-overwrite behavior.
+
+Week 55-56 add Preview and storage diagnostics hardening:
+
+- `daemon doctor` and `api routes` are static diagnostics and do not create a workspace snapshot or listener. `daemon start --preview` is a foreground, IPv4-loopback-only opt-in; default smoke never starts it.
+- The read-only API reuses job/queue stores and renderers. Corrupt record diagnostics are returned alongside valid records with secret-like path/id/summary values redacted; no artifact content is read.
+- The Preview rejects unsupported method/body/Host/filter/route inputs with bounded JSON errors and applies no-store/nosniff, no-server-header, no-CORS, connection/request/header limits.
+- Default smoke clears model credentials and exercises credential-free job/queue/pipeline/automation/CI artifact paths. Real model and daemon/API smoke remain independent opt-ins through `CAICLI_REAL_MODEL_SMOKE=1` and `CAICLI_DAEMON_SMOKE=1`.
+
 Trace and verbose diagnostics must redact secrets before writing output. Redaction covers API keys, access/refresh tokens, passwords, `Authorization` headers and common variants, `secretKey`, `privateKey`, nested or escaped `argumentsJson`, OpenAI `sk-...` keys, and GitHub token formats such as `ghp_...` and `github_pat_...`. Diagnostics may record key presence and source, but never raw key values.
 
 `logs path` prints the resolved CLI log directory. It must not create the directory just to print the path.

@@ -136,6 +136,13 @@ public sealed class LocalApiPreviewTests
                 "inspect apiKey=daemon-queue-secret",
                 workspace));
         TaskQueueStore.Create(snapshot).Create(queueItem);
+        const string diagnosticSecret = "api-diagnostic-secret";
+        File.WriteAllText(
+            Path.Combine(JobRecordStore.Create(snapshot).JobDirectory, $"apiKey={diagnosticSecret}.job.json"),
+            "{ not-json");
+        File.WriteAllText(
+            Path.Combine(TaskQueueStore.Create(snapshot).QueueDirectory, $"apiKey={diagnosticSecret}.queue.json"),
+            "{ not-json");
 
         int port = GetAvailableLoopbackPort();
         using CancellationTokenSource cancellation = new(TimeSpan.FromSeconds(15));
@@ -162,6 +169,9 @@ public sealed class LocalApiPreviewTests
                 Content = new StringContent("{}", Encoding.UTF8, "application/json"),
             };
             HttpResponseMessage bodyResponse = await client.SendAsync(getWithBody, cancellation.Token);
+            using HttpRequestMessage invalidHostRequest = new(HttpMethod.Get, "/v1/health");
+            invalidHostRequest.Headers.Host = "example.test";
+            HttpResponseMessage invalidHost = await client.SendAsync(invalidHostRequest, cancellation.Token);
 
             Assert.Equal("jobs.list", JsonNode.Parse(jobsList)?["type"]?.GetValue<string>());
             Assert.Equal("jobs.show", JsonNode.Parse(jobShow)?["type"]?.GetValue<string>());
@@ -169,12 +179,20 @@ public sealed class LocalApiPreviewTests
             Assert.Equal("queue.show", JsonNode.Parse(queueShow)?["type"]?.GetValue<string>());
             Assert.DoesNotContain("daemon-job-secret", jobShow, StringComparison.Ordinal);
             Assert.DoesNotContain("daemon-queue-secret", queueShow, StringComparison.Ordinal);
+            Assert.DoesNotContain(diagnosticSecret, jobsList, StringComparison.Ordinal);
+            Assert.DoesNotContain(diagnosticSecret, queueList, StringComparison.Ordinal);
             Assert.Contains("[redacted]", jobShow, StringComparison.Ordinal);
             Assert.Contains("[redacted]", queueShow, StringComparison.Ordinal);
+            Assert.Contains("[redacted]", jobsList, StringComparison.Ordinal);
+            Assert.Contains("[redacted]", queueList, StringComparison.Ordinal);
             Assert.Equal(HttpStatusCode.BadRequest, invalidLimit.StatusCode);
             Assert.Equal(HttpStatusCode.NotFound, missingRoute.StatusCode);
             Assert.Equal(HttpStatusCode.MethodNotAllowed, post.StatusCode);
             Assert.Equal(HttpStatusCode.BadRequest, bodyResponse.StatusCode);
+            Assert.Equal(HttpStatusCode.BadRequest, invalidHost.StatusCode);
+            Assert.Equal("no-store", invalidLimit.Headers.CacheControl?.ToString());
+            Assert.True(invalidLimit.Headers.TryGetValues("X-Content-Type-Options", out IEnumerable<string>? values));
+            Assert.Contains("nosniff", values);
             Assert.DoesNotContain("Server", invalidLimit.Headers.Select(header => header.Key));
             Assert.DoesNotContain("Access-Control-Allow-Origin", invalidLimit.Headers.Select(header => header.Key));
         }
@@ -183,6 +201,24 @@ public sealed class LocalApiPreviewTests
             await cancellation.CancelAsync();
             Assert.Equal(0, await daemonTask.WaitAsync(TimeSpan.FromSeconds(5)));
         }
+    }
+
+    [Fact]
+    public async Task Daemon_port_in_use_fails_without_displacing_existing_listener()
+    {
+        using TempDirectory temp = TempDirectory.Create();
+        string workspace = temp.CreateDirectory("workspace");
+        CliEnvironmentSnapshot snapshot = CreateSnapshot(workspace, temp.UserConfigPath);
+        using TcpListener listener = new(IPAddress.Loopback, 0);
+        listener.Start();
+        int port = ((IPEndPoint)listener.LocalEndpoint).Port;
+        using StringWriter output = new();
+
+        int exitCode = await LocalApiDaemonHost.RunAsync(snapshot, port, output);
+
+        Assert.Equal(1, exitCode);
+        Assert.Contains("listener could not be started", output.ToString(), StringComparison.Ordinal);
+        Assert.True(listener.Server.IsBound);
     }
 
     private static async Task WaitForReadyAsync(HttpClient client, CancellationToken cancellationToken)

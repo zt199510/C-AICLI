@@ -99,7 +99,7 @@ Common job failures and diagnostics:
 - `job-record-unreadable`: the record could not be read because of a local file/access race.
 - `job-record-write-failed`: explicit `--record-job` persistence could not be created or finalized; the execution command does not hide recording loss.
 
-The default directory is `%USERPROFILE%\.caicli\jobs`. `CAICLI_USER_PROFILE` selects an isolated profile for smoke or portable verification. Week 50 has no `jobs delete` or automatic retention command; remove obsolete record files manually only after confirming the resolved user profile and job directory.
+The default directory is `%USERPROFILE%\.caicli\jobs`. `CAICLI_USER_PROFILE` selects an isolated profile for smoke or portable verification. There is no `jobs delete`, job/artifact cleanup, or automatic retention command; remove obsolete record files manually only after confirming the resolved user profile and job directory.
 
 ## Task Queue
 
@@ -122,6 +122,8 @@ Common queue failures and diagnostics:
 - `queue-cleanup-status-unsafe`: cleanup only accepts succeeded, failed, or canceled.
 
 A failed item can be rerun and receives a new attempt/job pointer. A running item cannot be canceled by task queue v1. If a process is terminated while running, inspect the queue/job files before manual recovery; there is no lease or daemon recovery protocol. Queue cleanup does not delete job records or artifacts.
+
+`queue list` and `queue cleanup` report corrupt records while continuing with valid items. Diagnostics are redacted in text/JSON and corrupt files are deliberately preserved; do not rename or delete one until the active user profile, file path, and any linked job evidence have been reviewed.
 
 ## Multi-role Pipelines
 
@@ -286,6 +288,7 @@ Common daemon failures:
 - `--preview is required`: the API is default-off. Add `--preview` only after reviewing the local unauthenticated threat model.
 - `remote and wildcard binds are disabled`: use `--bind localhost` or `--bind 127.0.0.1`. `0.0.0.0`, IPv6, LAN/public addresses, and hostnames are intentionally unsupported.
 - `listener could not be started`: another process may already use the port. Choose an unused port from `1024` through `65535`.
+- `invalid-host`: the request Host must be `localhost` or `127.0.0.1`. Do not place the Preview behind a reverse proxy, port forward, or alternate hostname.
 - `api smoke failed`: start the daemon explicitly on the same port, then retry `api smoke --port <port>`.
 
 Default smoke does not start a daemon. To run the packaged localhost API smoke explicitly:

@@ -156,7 +156,7 @@ Queue records are user-level local state under `%USERPROFILE%\.caicli\queue`, or
 
 Each completed attempt records its terminal status, bounded error metadata, exit code, and job id. The queue item also stores the latest job id; job records use the queue id as their label. Queue files do not store raw referenced contents, raw tool arguments, raw secrets, full diffs, or approval overrides.
 
-Cancel is pending-only and never attempts to terminate an active process. Cleanup accepts only succeeded, failed, or canceled queue status. It preserves pending, running, corrupt, and unknown records, and it does not delete job history or artifacts. Task queue v1 has no execution daemon, scheduler, concurrent worker pool, remote runner, or permission elevation mechanism. The separate local API Preview is read-only and never runs queue items.
+Cancel is pending-only and never attempts to terminate an active process. Cleanup accepts only succeeded, failed, or canceled queue status. It preserves pending, running, corrupt, and unknown records, and it does not delete job history or artifacts. List/cleanup diagnostics are projected through the queue renderer and redact secret-like path, id, and summary values before text/JSON output. Task queue v1 has no execution daemon, scheduler, concurrent worker pool, remote runner, or permission elevation mechanism. The separate local API Preview is read-only and never runs queue items.
 
 ## Local Multi-role Pipelines
 
@@ -190,7 +190,7 @@ JSON and stdout markdown are non-persistent. `--markdown-path` explicitly reuses
 
 The local HTTP daemon is disabled by default and starts only through explicit `daemon start --preview`. Bind input is restricted to `localhost` or `127.0.0.1` and normalized to an IPv4 `127.0.0.1` Kestrel listener; wildcard, LAN, public, hostname, IPv6, and `0.0.0.0` binds are rejected before workspace snapshot or server startup. Ordinary CLI commands never start the listener.
 
-The v1 routes are GET-only health, jobs list/show, and queue list/show. They reuse `JobRecordStore`, `TaskQueueStore`, `JobsJsonRenderer`, and `TaskQueueJsonRenderer`. The API does not create a tool registry, call a model, start MCP, run shell/patch, write workspace files, create/transition queue or job records, read artifact contents, or accept approval/configuration overrides. Unsupported methods, request bodies, invalid filters, over-limit lists, and unknown routes fail with bounded JSON errors. Server headers are disabled and connections/request sizes are bounded.
+The v1 routes are GET-only health, jobs list/show, and queue list/show. They reuse `JobRecordStore`, `TaskQueueStore`, `JobsJsonRenderer`, and `TaskQueueJsonRenderer`, including corrupt/unreadable record diagnostics and renderer-level redaction. The API does not create a tool registry, call a model, start MCP, run shell/patch, write workspace files, create/transition queue or job records, read artifact contents, or accept approval/configuration overrides. Unsupported methods, request bodies, invalid filters, over-limit lists, unknown routes, and Host values other than `localhost` or `127.0.0.1` fail with bounded JSON errors. Server headers are disabled; connection count, request body size, request header count/total size, and header timeout are explicitly bounded.
 
 Loopback is a network binding restriction, not authentication. The Preview has no authentication, authorization, TLS, multi-user isolation, or protection from another process running as the same operating-system user. Returned workspace paths, bounded redacted task metadata, job/queue ids, and artifact pointers remain sensitive local data. The listener must not be exposed through a port forward or reverse proxy.
 
@@ -265,7 +265,7 @@ Users can disable tools through `disabledTools` in user or workspace config. Dis
 - Remote/http MCP transport remains Deferred.
 - Gerber/TIFF project pack status/profile support exists, but real Gerber execution is Deferred.
 
-These deferred capabilities do not block the `0.3.3` direct backend release.
+These deferred capabilities remain outside the `0.4.0` candidate boundary and do not alter the accepted `0.3.3` release decision.
 
 ## Current Limitations
 

@@ -1,4 +1,5 @@
 using CSharpAiCli.Core;
+using System.Text.Json.Nodes;
 
 namespace CSharpAiCli.Tests;
 
@@ -126,6 +127,37 @@ public sealed class TaskQueueStoreTests
 
         Assert.Single(result.Items);
         Assert.Equal(TaskQueueErrorCode.CorruptRecord, Assert.Single(result.Diagnostics).ErrorCode);
+    }
+
+    [Fact]
+    public void Json_list_and_cleanup_redact_corrupt_record_diagnostics()
+    {
+        using TempDirectory temp = TempDirectory.Create();
+        TaskQueueStore store = new(Path.Combine(temp.Path, "queue"));
+        Directory.CreateDirectory(store.QueueDirectory);
+        const string secret = "queue-diagnostic-secret";
+        File.WriteAllText(
+            Path.Combine(store.QueueDirectory, $"apiKey={secret}.queue.json"),
+            "{ not-json");
+        TaskQueueListResult list = store.List();
+        TaskQueueCleanupResult cleanup = store.Cleanup(
+            TaskQueueStatus.Failed,
+            DateTimeOffset.MaxValue);
+        using StringWriter listOutput = new();
+        using StringWriter cleanupOutput = new();
+
+        new TaskQueueJsonRenderer(listOutput).WriteList(list);
+        new TaskQueueJsonRenderer(cleanupOutput).WriteCleanup(cleanup);
+        JsonObject listJson = Assert.IsType<JsonObject>(JsonNode.Parse(listOutput.ToString()));
+        JsonObject cleanupJson = Assert.IsType<JsonObject>(JsonNode.Parse(cleanupOutput.ToString()));
+
+        Assert.Single(Assert.IsType<JsonArray>(listJson["diagnostics"]));
+        Assert.Single(Assert.IsType<JsonArray>(cleanupJson["diagnostics"]));
+        Assert.DoesNotContain(secret, listOutput.ToString(), StringComparison.Ordinal);
+        Assert.DoesNotContain(secret, cleanupOutput.ToString(), StringComparison.Ordinal);
+        Assert.Contains("[redacted]", listOutput.ToString(), StringComparison.Ordinal);
+        Assert.Contains("[redacted]", cleanupOutput.ToString(), StringComparison.Ordinal);
+        Assert.True(File.Exists(Path.Combine(store.QueueDirectory, $"apiKey={secret}.queue.json")));
     }
 
     private static TaskQueueItem CreatePending(DateTimeOffset created) =>

@@ -146,6 +146,8 @@ C-AICLI 的价值在于可控性和工程化：
 
 ### 0.4.0：工程自动化平台化
 
+状态：Week 50-56 的本地 job/queue/pipeline/automation/CI artifact 已实现并完成 hardening；只读 localhost daemon/API 保持 Preview；Week 57 仅进行 release acceptance、版本元数据与 deterministic package 验收。
+
 目标：在真实 agent 闭环稳定后，引入更强的任务编排。
 
 详细排期统一维护在 `docs_md/weekly/50_week_cli_0_4_engineering_automation_platform_schedule.md`，路线图只保留版本方向，避免同一范围在多个文档里重复漂移。

@@ -34,6 +34,8 @@ public static class LocalApiDaemonHost
                 options.Limits.MaxConcurrentConnections = 16;
                 options.Limits.MaxConcurrentUpgradedConnections = 0;
                 options.Limits.MaxRequestBodySize = 16 * 1024;
+                options.Limits.MaxRequestHeaderCount = 32;
+                options.Limits.MaxRequestHeadersTotalSize = 16 * 1024;
                 options.Limits.RequestHeadersTimeout = TimeSpan.FromSeconds(10);
                 options.Listen(IPAddress.Loopback, port);
             });
@@ -63,6 +65,13 @@ public static class LocalApiDaemonHost
         {
             context.Response.Headers.CacheControl = "no-store";
             context.Response.Headers.XContentTypeOptions = "nosniff";
+            if (!IsAllowedHost(context.Request.Host.Host))
+            {
+                await WriteErrorAsync(context, StatusCodes.Status400BadRequest, "invalid-host",
+                    "Host must be localhost or 127.0.0.1 for the local API Preview.").ConfigureAwait(false);
+                return;
+            }
+
             if (!HttpMethods.IsGet(context.Request.Method))
             {
                 await WriteErrorAsync(context, StatusCodes.Status405MethodNotAllowed, "method-not-allowed",
@@ -147,6 +156,10 @@ public static class LocalApiDaemonHost
         app.MapFallback(() => ApiError(StatusCodes.Status404NotFound, "route-not-found",
             "The requested API Preview route was not found."));
     }
+
+    private static bool IsAllowedHost(string? host) =>
+        string.Equals(host, "localhost", StringComparison.OrdinalIgnoreCase) ||
+        string.Equals(host, LocalApiPreviewConstants.BindAddress, StringComparison.Ordinal);
 
     private static bool TryReadLimit(HttpContext context, out int limit)
     {

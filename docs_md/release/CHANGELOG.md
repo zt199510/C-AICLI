@@ -25,6 +25,9 @@ Added:
 - Week 47 read-only `caicli changes`: summarizes git status/diff stat, changed files, optional latest session task report, commands, verification, remaining risks, trace path, and warnings in text or JSON without calling a model, running shell/patch tools, starting MCP, or writing command logs by default.
 
 Changed:
+- Week 56 hardens queue corrupt-record JSON diagnostics with renderer-level secret redaction. List and cleanup continue with valid records, preserve corrupt files, and never cascade cleanup to jobs or artifacts.
+- The Local API Preview now rejects non-loopback Host values and explicitly bounds request header count/total size. Security regression covers corrupt store diagnostics, response headers, port-in-use, cancellation, and the existing no-control/no-CORS boundary.
+- Default smoke now verifies credential-free corrupt job/queue diagnostics, redaction, valid-record continuity, and cleanup preservation in addition to job/queue/pipeline/automation/CI artifact paths. Daemon/API listener and real-model smoke remain independent opt-ins.
 - Default smoke checks daemon doctor/routes, default-off behavior, and remote-bind rejection without starting a server. Real daemon/API smoke starts the packaged localhost Preview only when `CAICLI_DAEMON_SMOKE=1`; real model smoke remains separately opt-in.
 - Default smoke now generates credential-free CI JSON/markdown from a controlled local failed job, verifies raw-reference/tool-argument/full-diff exclusion declarations, writes one workspace-guarded markdown file, and checks failure/config-error exit codes. Real-model and external-provider smoke remain opt-in/not enabled.
 - Default smoke coverage now includes credential-free automation list/validate/plan/dry-run and a controlled missing-model manual skill trigger with queue/job correlation and automation artifact checks. Real model smoke remains opt-in.

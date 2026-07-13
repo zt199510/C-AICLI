@@ -2,8 +2,8 @@
 
 ## Release Scope
 
-- Version `0.3.3` is a local Windows release candidate.
-- The primary supported package is `win-x64` self-contained single-file publish.
+- Version `0.3.3` is the last accepted local Windows release. Week 50-56 capabilities are implemented on the `0.4.0` candidate line and are not retroactively part of the `0.3.3` artifact.
+- The primary supported artifact remains the `win-x64` self-contained single-file package; Week 57 owns the final `0.4.0` package decision.
 - Dotnet tool packaging is not part of the `0.3.3` release package.
 
 ## Model And Agent Behavior
@@ -26,6 +26,7 @@
 - Job retention, rotation, delete, cleanup, and workspace relocation commands remain Deferred. Queue cleanup deletes matching terminal queue records only; it does not delete referenced job records or artifacts. Local paths in records/exports should still be treated as sensitive metadata.
 - Local task queue v1 is manual and single-process oriented. The read-only API Preview is not a queue worker. The queue has no execution daemon, scheduler, concurrent worker pool, lease/heartbeat recovery, remote runner, or automatic recovery for a process terminated while an item is running.
 - Failed queue items can be manually rerun as a new attempt. Cancel is pending-only and does not terminate a running process. Cleanup accepts only succeeded, failed, or canceled records; pending, running, corrupt, and unknown records are preserved.
+- Corrupt job/queue files are not repaired or deleted automatically. List/cleanup and read-only API diagnostics continue with valid records and redact secret-like diagnostic metadata, but local paths remain sensitive and manual recovery must verify the active `CAICLI_USER_PROFILE` first.
 - Local multi-role pipeline v1 provides only the fixed `fix-review-test`, `review-test`, and `security-review` catalogs. Roles execute sequentially with the same configured provider/model; there is no automatic model role routing, provider assignment, parallel worker, background resume, or remote collaboration.
 - Pipeline execution stops after the first failed role. Completed queue attempts, jobs, task-report summaries, and artifact pointers remain available, but pipeline-level retry/resume and a separate persistent pipeline history store are not implemented. The aggregate report is command output, not a correctness or security proof.
 - `pipeline list/plan` are credential-free local read paths. `pipeline run` requires the same model configuration as its delegated exec/skill roles; without credentials it returns a stable failed report and linked queue/job evidence.
@@ -33,6 +34,7 @@
 - Automation `schedule` fields are preview and validation data only. There is no background scheduler, Windows Task Scheduler registration, daemon worker, automatic retry/resume, webhook, remote trigger, or team automation. CI/PR providers, API control routes, SSE, and remote job control remain Deferred.
 - Provider-neutral `ci summarize/check` can render only an existing local job record. It does not run a job, aggregate multiple jobs into a new persistent pipeline history, call GitHub/GitLab/Azure DevOps APIs, create PR comments, upload artifacts, or send webhooks/callbacks. Provider annotations and check APIs remain Deferred.
 - The local API/daemon is Preview, default-off, unauthenticated, and HTTP-only. It always binds `127.0.0.1`, exposes only health and read-only existing job/queue metadata through bounded renderers, and has no same-user process isolation. Local paths and redacted task metadata remain sensitive. Control routes, SSE, CORS/browser integration, authentication/TLS, IPv6, remote bind, reverse-proxy deployment, service installation, detached mode, and auto-restart are Deferred.
+- The Preview rejects Host values other than `localhost` and `127.0.0.1` and bounds request headers/body/connections, but these controls are not authentication and do not protect against a malicious same-user local process.
 - CI artifact summaries and pointers are redacted and bounded, but local paths can still reveal repository layout. `--markdown-path` is explicit, workspace-only, and no-overwrite; retention, cleanup, publishing, and remote storage remain caller responsibilities.
 - Automation safety declarations must cover the selected target's built-in capabilities, but they do not grant permissions and are not a sandbox. Manual runs still depend on configured approval, workspace guard, dirty-workspace checks, shell policy, disabled tools, MCP startup policy, and expert/skill boundaries.
 - `caicli changes` is read-only and local. It summarizes current git/session/taskReport state but does not call a model, prove correctness, generate standalone markdown reports, or keep historical timelines.

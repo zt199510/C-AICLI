@@ -328,7 +328,7 @@ Invoke-RestMethod http://127.0.0.1:8787/v1/jobs?limit=50
 Invoke-RestMethod http://127.0.0.1:8787/v1/queue?limit=50
 ```
 
-`--preview` is mandatory. Only `localhost` and `127.0.0.1` are accepted as bind input, and the listener always uses `127.0.0.1`; `0.0.0.0`, IPv6, hostnames, LAN, and public addresses are rejected before startup. This Preview has no authentication or TLS and must not be exposed through a reverse proxy or port forward. It exposes bounded redacted job/queue metadata and local artifact pointers, not artifact contents. Control routes, SSE, queue workers, remote access, service installation, and browser UI are Deferred. See `docs_md/release/local_api_daemon_preview.md` for the threat model and route contract.
+`--preview` is mandatory. Only `localhost` and `127.0.0.1` are accepted as bind and HTTP Host values, and the listener always uses `127.0.0.1`; `0.0.0.0`, IPv6, hostnames, LAN, and public addresses are rejected. Requests, headers, and connections are bounded, but this Preview still has no authentication or TLS and must not be exposed through a reverse proxy or port forward. It exposes bounded redacted job/queue metadata, corrupt-record diagnostics, and local artifact pointers, not artifact contents. Control routes, SSE, queue workers, remote access, service installation, and browser UI are Deferred. See `docs_md/release/local_api_daemon_preview.md` for the threat model and route contract.
 
 ```powershell
 artifacts\release\caicli-0.3.3-win-x64\caicli.exe exec --workspace . "read README.md"

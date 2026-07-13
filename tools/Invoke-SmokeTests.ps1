@@ -758,6 +758,39 @@ Write-Output 'bugfix verification passed'
     Assert-Contains $ciMissing.Output '"type":"caicli.ci.error"' "ci check config error"
     Assert-Contains $ciMissing.Output '"outcome":"config-error"' "ci check config error outcome"
 
+    $corruptDiagnosticSecret = "smoke-storage-secret"
+    $jobStoreDirectory = Join-Path $userProfile ".caicli\jobs"
+    $queueStoreDirectory = Join-Path $userProfile ".caicli\queue"
+    $corruptJobPath = Join-Path $jobStoreDirectory "apiKey=$corruptDiagnosticSecret.job.json"
+    $corruptQueuePath = Join-Path $queueStoreDirectory "apiKey=$corruptDiagnosticSecret.queue.json"
+    Set-Content -LiteralPath $corruptJobPath -Value "{ not-json" -Encoding UTF8
+    Set-Content -LiteralPath $corruptQueuePath -Value "{ not-json" -Encoding UTF8
+
+    $jobsCorruptList = Invoke-CaiCli -Arguments @("jobs", "list", "--output", "json", "--workspace", $workspace)
+    Assert-ExitCode $jobsCorruptList 0 "jobs corrupt diagnostic"
+    Assert-Contains $jobsCorruptList.Output '"errorCode":"corrupt-job-record"' "jobs corrupt diagnostic"
+    Assert-Contains $jobsCorruptList.Output "[redacted]" "jobs corrupt diagnostic redaction"
+    Assert-NotContains $jobsCorruptList.Output $corruptDiagnosticSecret "jobs corrupt diagnostic redaction"
+    Assert-Contains $jobsCorruptList.Output $recordedJobId "jobs corrupt keeps valid records"
+
+    $queueCorruptList = Invoke-CaiCli -Arguments @("queue", "list", "--output", "json", "--workspace", $workspace)
+    Assert-ExitCode $queueCorruptList 0 "queue corrupt diagnostic"
+    Assert-Contains $queueCorruptList.Output '"errorCode":"corrupt-queue-record"' "queue corrupt diagnostic"
+    Assert-Contains $queueCorruptList.Output "[redacted]" "queue corrupt diagnostic redaction"
+    Assert-NotContains $queueCorruptList.Output $corruptDiagnosticSecret "queue corrupt diagnostic redaction"
+    Assert-Contains $queueCorruptList.Output $queuedExecId "queue corrupt keeps valid records"
+
+    $queueCorruptCleanup = Invoke-CaiCli -Arguments @(
+        "queue", "cleanup", "--status", "succeeded", "--older-than-days", "1",
+        "--output", "json", "--workspace", $workspace
+    )
+    Assert-ExitCode $queueCorruptCleanup 0 "queue cleanup preserves corrupt record"
+    Assert-Contains $queueCorruptCleanup.Output '"errorCode":"corrupt-queue-record"' "queue cleanup corrupt diagnostic"
+    Assert-NotContains $queueCorruptCleanup.Output $corruptDiagnosticSecret "queue cleanup diagnostic redaction"
+    if (-not (Test-Path -LiteralPath $corruptQueuePath -PathType Leaf)) {
+        throw "queue cleanup must preserve corrupt records for manual diagnosis."
+    }
+
     if (-not $daemonSmokeOptIn) {
         Write-Host "daemon/API smoke skipped: set CAICLI_DAEMON_SMOKE=1 to start the localhost-only read-only Preview."
     } else {
