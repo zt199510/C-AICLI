@@ -3,6 +3,8 @@
 ## Unreleased
 
 Added:
+- Week 51 local task queue v1 and run control: `queue add exec|skill`, `queue list/show`, `queue run`, pending-only `queue cancel`, and terminal-only `queue cleanup` use user-level schema-v1 records with pending/running/succeeded/failed/canceled status and per-run attempts.
+- Queue execution re-enters the existing `exec` or `skills run` safety path, always records a job, and stores queue-to-job pointers without persisting approval overrides, raw references, raw tool arguments, raw secrets, or full diffs.
 - Week 50 local job history and artifact index foundation: `caicli jobs list/show/export` reads user-level job records from `%USERPROFILE%\.caicli\jobs`, and `exec` / `skills run` can opt in to recording with `--record-job` plus optional `--job-name`.
 - Job records store redacted metadata and artifact pointers only: command family, workspace/cwd, status, timestamps, exit/error/stop reason, task report summary, and trace/session/report pointers. They do not store raw referenced content, raw tool arguments, raw secrets, or full diffs.
 - Week 49 local skills/workflow packs: `caicli skills list` lists built-in and workspace-local packs, and `caicli skills run <name> --dry-run -- <task>` expands a pack into a reviewable plan without calling a model, writing files, running shell, or starting MCP. Non-dry-run skill runs route through the existing agentic `exec` safety path and record skill metadata in text, JSON, trace, session task reports, and markdown reports.
@@ -13,6 +15,7 @@ Added:
 - Week 47 read-only `caicli changes`: summarizes git status/diff stat, changed files, optional latest session task report, commands, verification, remaining risks, trace path, and warnings in text or JSON without calling a model, running shell/patch tools, starting MCP, or writing command logs by default.
 
 Changed:
+- Default smoke coverage now includes credential-free queue add/list/show, a controlled missing-model queue run with job pointer, pending-only cancel, and safe recent-item cleanup. Real model smoke remains opt-in.
 - Default smoke coverage now includes credential-free job history checks: empty `jobs list`, `exec --record-job` missing-model recording, `skills run --record-job --dry-run`, `jobs show`, and `jobs export --format markdown`.
 - Ordinary `exec` and `skills run` persistence remains unchanged. `--record-job` is explicit; for skill dry-run it writes compact user-level plan metadata without model/tool execution or workspace writes.
 - Default smoke coverage now includes credential-free `skills list`, `skills list --output json`, and `skills run review-only --dry-run` paths.
@@ -22,8 +25,8 @@ Changed:
 - Default smoke coverage now includes `changes`, `changes --output json`, `changes --session` warning behavior, and `exec @file` reference diagnostics without requiring model credentials.
 
 Known deferred items:
-- Job queue execution, retry/cancel queue state, multi-role pipelines, automation schedules, CI/PR providers, daemon/API/SSE, and remote control remain Deferred.
-- Job retention, rotation, delete, cleanup, and remote/shared stores remain Deferred; Week 50 records remain local user-level files.
+- Multi-role pipelines, automation schedules, CI/PR providers, daemon/API/SSE, concurrent workers, remote runners, and remote control remain Deferred.
+- Job retention, rotation, delete, cleanup, and remote/shared stores remain Deferred. Queue cleanup only removes matching terminal queue records and does not remove jobs/artifacts.
 - `@file` / `@folder` references are scoped to `exec`; `chat` references, URL references, glob expansion, semantic retrieval, and workflow-pack references remain Deferred.
 - Remote skill marketplaces, automatic skill updates, signed trust chains, custom expert files, automatic model role routing, user-level skill directories, YAML manifests, and Gerber/TIFF real execution remain Deferred.
 

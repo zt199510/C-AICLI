@@ -142,6 +142,15 @@ Week 50 adds opt-in local job history and artifact indexing:
 - `jobs list/show/export` do not call a model, run shell/patch/MCP tools, start MCP servers, write command logs, or write workspace files. A missing job directory is an empty successful list and is not created by read commands.
 - `skills run --record-job --dry-run` is the explicit persistence exception to ordinary dry-run behavior. It finishes with status `dry-run` and an `inline:skills.runPlan` pointer, but still does not call a model, run tools, create a report, start MCP, save a session, or write the workspace.
 
+Week 51 adds local task queue v1 and run control:
+
+- Queue ids use `queue_yyyyMMddTHHmmssfffZ_<8hex>`. Schema-v1 records live under `%USERPROFILE%\.caicli\queue` (or the `CAICLI_USER_PROFILE` state root) with pending/running/succeeded/failed/canceled status, bounded redacted request metadata, attempts, warnings, and queue-to-job pointers.
+- `queue add exec|skill` only persists a pending request. `queue list/show` are local read surfaces with text/JSON output. These commands do not call a model, run tools, start MCP, write command logs, or write workspace files.
+- `queue run` accepts pending or failed items, creates a new running attempt, and invokes the existing `exec` or `skills run` command path with mandatory job recording. It does not persist or inject approval overrides. The delegated path retains approval, workspace/dirty checks, shell policy, dangerous-command detection, disabled tools, MCP startup, expert/skill, trace/session/report, and credential boundaries.
+- A completed attempt stores exit/error metadata and its job id. The queue item stores the latest job id, and the corresponding job uses the queue id as its label. Failure paths, including missing model credentials, still reach a queue terminal state and produce job history when job recording succeeds.
+- `queue cancel` is pending-only. Failed items can be manually retried by `queue run`. `queue cleanup` only accepts succeeded, failed, or canceled status and preserves pending, running, corrupt, and unknown records. It never deletes referenced jobs or artifacts.
+- Queue v1 is manual and local. There is no daemon, scheduler, concurrent worker pool, lease/heartbeat recovery, remote runner, CI provider, or API/SSE control surface.
+
 Trace and verbose diagnostics must redact secrets before writing output. Redaction covers API keys, access/refresh tokens, passwords, `Authorization` headers and common variants, `secretKey`, `privateKey`, nested or escaped `argumentsJson`, OpenAI `sk-...` keys, and GitHub token formats such as `ghp_...` and `github_pat_...`. Diagnostics may record key presence and source, but never raw key values.
 
 `logs path` prints the resolved CLI log directory. It must not create the directory just to print the path.

@@ -68,6 +68,17 @@ public sealed class SmokeTestScriptTests
         Assert.Contains("\"type\":\"jobs.list\"", script, StringComparison.Ordinal);
         Assert.Contains("\"type\":\"jobs.show\"", script, StringComparison.Ordinal);
         Assert.Contains("# C# AI CLI Job", script, StringComparison.Ordinal);
+        Assert.Contains("\"queue\", \"list\", \"--output\", \"json\", \"--workspace\", $workspace", script, StringComparison.Ordinal);
+        Assert.Contains("\"queue\", \"add\", \"exec\"", script, StringComparison.Ordinal);
+        Assert.Contains("\"queue\", \"add\", \"skill\", \"review-only\"", script, StringComparison.Ordinal);
+        Assert.Contains("\"queue\", \"show\", $queuedExecId", script, StringComparison.Ordinal);
+        Assert.Contains("\"queue\", \"run\", $queuedExecId", script, StringComparison.Ordinal);
+        Assert.Contains("\"queue\", \"cancel\", $queuedSkillId", script, StringComparison.Ordinal);
+        Assert.Contains("\"queue\", \"cleanup\", \"--status\", \"canceled\"", script, StringComparison.Ordinal);
+        Assert.Contains("\"type\":\"queue.run.completed\"", script, StringComparison.Ordinal);
+        Assert.Contains("\"errorCode\":\"queue-invalid-state\"", script, StringComparison.Ordinal);
+        Assert.Contains("latestJobId", script, StringComparison.Ordinal);
+        Assert.Contains("\"deletedCount\":0", script, StringComparison.Ordinal);
         Assert.Contains("\"status\", \"--workspace\", $workspace", script, StringComparison.Ordinal);
         Assert.Contains("\"models\", \"--workspace\", $workspace", script, StringComparison.Ordinal);
         Assert.Contains("modelListApi: not called", script, StringComparison.Ordinal);

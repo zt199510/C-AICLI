@@ -432,6 +432,68 @@ Write-Output 'bugfix verification passed'
     Assert-ExitCode $jobsEmpty 0 "jobs list empty json"
     Assert-Contains $jobsEmpty.Output '"type":"jobs.list"' "jobs list empty json"
 
+    $queueEmpty = Invoke-CaiCli -Arguments @("queue", "list", "--output", "json", "--workspace", $workspace)
+    Assert-ExitCode $queueEmpty 0 "queue list empty json"
+    Assert-Contains $queueEmpty.Output '"type":"queue.list"' "queue list empty json"
+
+    $queueAdd = Invoke-CaiCli -Arguments @(
+        "queue", "add", "exec", "--expert", "reviewer", "--output", "json", "--workspace", $workspace,
+        "--", "Review", "@file:note.txt"
+    )
+    Assert-ExitCode $queueAdd 0 "queue add exec json"
+    Assert-Contains $queueAdd.Output '"type":"queue.add"' "queue add exec json"
+    Assert-Contains $queueAdd.Output '"status":"pending"' "queue add exec json"
+    $queueAddJson = $queueAdd.Output | ConvertFrom-Json
+    $queuedExecId = [string]$queueAddJson.item.queueId
+
+    $queueList = Invoke-CaiCli -Arguments @("queue", "list", "--output", "json", "--workspace", $workspace)
+    Assert-ExitCode $queueList 0 "queue list json"
+    Assert-Contains $queueList.Output $queuedExecId "queue list json"
+
+    $queueShow = Invoke-CaiCli -Arguments @("queue", "show", $queuedExecId, "--output", "json", "--workspace", $workspace)
+    Assert-ExitCode $queueShow 0 "queue show pending json"
+    Assert-Contains $queueShow.Output '"type":"queue.show"' "queue show pending json"
+    Assert-Contains $queueShow.Output '"status":"pending"' "queue show pending json"
+
+    $queueRun = Invoke-CaiCli -Arguments @("queue", "run", $queuedExecId, "--output", "json", "--workspace", $workspace)
+    Assert-ExitCode $queueRun 1 "queue run missing model"
+    Assert-Contains $queueRun.Output '"type":"queue.run.started"' "queue run started"
+    Assert-Contains $queueRun.Output '"type":"queue.run.completed"' "queue run completed"
+    Assert-Contains $queueRun.Output '"errorCode":"missing-model"' "queue run missing model"
+
+    $queueShowCompleted = Invoke-CaiCli -Arguments @("queue", "show", $queuedExecId, "--output", "json", "--workspace", $workspace)
+    Assert-ExitCode $queueShowCompleted 0 "queue show completed json"
+    $queueCompletedJson = $queueShowCompleted.Output | ConvertFrom-Json
+    if ([string]::IsNullOrWhiteSpace([string]$queueCompletedJson.item.latestJobId)) {
+        throw "queue show completed expected latestJobId. Output:`n$($queueShowCompleted.Output)"
+    }
+    Assert-Contains $queueShowCompleted.Output '"status":"failed"' "queue show completed json"
+    Assert-Contains $queueShowCompleted.Output '"errorCode":"missing-model"' "queue show completed json"
+
+    $queueAddSkill = Invoke-CaiCli -Arguments @(
+        "queue", "add", "skill", "review-only", "--output", "json", "--workspace", $workspace,
+        "--", "Review", "@file:note.txt"
+    )
+    Assert-ExitCode $queueAddSkill 0 "queue add skill json"
+    $queueAddSkillJson = $queueAddSkill.Output | ConvertFrom-Json
+    $queuedSkillId = [string]$queueAddSkillJson.item.queueId
+
+    $queueCancel = Invoke-CaiCli -Arguments @("queue", "cancel", $queuedSkillId, "--output", "json", "--workspace", $workspace)
+    Assert-ExitCode $queueCancel 0 "queue cancel pending"
+    Assert-Contains $queueCancel.Output '"status":"canceled"' "queue cancel pending"
+
+    $queueCancelAgain = Invoke-CaiCli -Arguments @("queue", "cancel", $queuedSkillId, "--output", "json", "--workspace", $workspace)
+    Assert-ExitCode $queueCancelAgain 1 "queue cancel non-pending"
+    Assert-Contains $queueCancelAgain.Output '"errorCode":"queue-invalid-state"' "queue cancel non-pending"
+
+    $queueCleanup = Invoke-CaiCli -Arguments @(
+        "queue", "cleanup", "--status", "canceled", "--older-than-days", "30",
+        "--output", "json", "--workspace", $workspace
+    )
+    Assert-ExitCode $queueCleanup 0 "queue cleanup recent canceled"
+    Assert-Contains $queueCleanup.Output '"type":"queue.cleanup"' "queue cleanup recent canceled"
+    Assert-Contains $queueCleanup.Output '"deletedCount":0' "queue cleanup recent canceled"
+
     $execRecordedJob = Invoke-CaiCli -Arguments @(
         "exec", "--record-job", "--job-name", "smoke-missing-model",
         "--workspace", $workspace, "--cwd", "src\app",

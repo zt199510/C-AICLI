@@ -101,6 +101,28 @@ Common job failures and diagnostics:
 
 The default directory is `%USERPROFILE%\.caicli\jobs`. `CAICLI_USER_PROFILE` selects an isolated profile for smoke or portable verification. Week 50 has no `jobs delete` or automatic retention command; remove obsolete record files manually only after confirming the resolved user profile and job directory.
 
+## Task Queue
+
+Inspect the user-level queue before running an item:
+
+```powershell
+artifacts\release\caicli-0.3.3-win-x64\caicli.exe queue list --output json --workspace .
+artifacts\release\caicli-0.3.3-win-x64\caicli.exe queue show <queue-id> --output json --workspace .
+artifacts\release\caicli-0.3.3-win-x64\caicli.exe queue run <queue-id> --workspace .
+```
+
+Common queue failures and diagnostics:
+
+- `queue-item-not-found`: the id is malformed or no matching record exists in the active user-level store.
+- `corrupt-queue-record` / `queue-record-unreadable`: a record is invalid or cannot be read. List and cleanup continue with valid records and preserve the problematic file.
+- `queue-record-write-failed`: the queue state could not be created or atomically updated.
+- `queue-invalid-state`: the requested transition is not allowed. Run accepts pending or failed; cancel accepts pending only.
+- `queue-execution-failed`: the delegated command threw or stopped before it could finalize a normal result; inspect the linked job and local diagnostics.
+- `queue-job-record-missing`: the delegated exec/skills command did not produce its required job audit record, so the queue attempt fails.
+- `queue-cleanup-status-unsafe`: cleanup only accepts succeeded, failed, or canceled.
+
+A failed item can be rerun and receives a new attempt/job pointer. A running item cannot be canceled by task queue v1. If a process is terminated while running, inspect the queue/job files before manual recovery; there is no lease or daemon recovery protocol. Queue cleanup does not delete job records or artifacts.
+
 ## Tool And Approval Failures
 
 Read tools do not require approval. Patch and shell tools do.

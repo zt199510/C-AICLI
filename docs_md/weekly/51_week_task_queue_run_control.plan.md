@@ -1,6 +1,6 @@
 # 第 51 周 Task Queue 与 Run Control Implementation Plan
 
-状态：计划中
+状态：已验收
 
 **Goal:** 在 Week 50 job history/artifact store 底座之上，引入本地 task queue v1 和 run control，让工程自动化任务可以形成 pending/running/succeeded/failed/canceled 的可审计状态流，同时保持所有实际执行仍走现有 `exec`/`skills` 安全路径。
 
@@ -40,16 +40,16 @@ caicli queue cleanup --status succeeded --older-than-days 30
 
 ## 任务清单
 
-- [ ] Step 1: 定义 queue item、status、attempt、error code 和 JSON schema。
-- [ ] Step 2: 实现本地 queue store，复用 Week 50 storage/redaction 策略。
-- [ ] Step 3: 增加 `queue add/list/show` text/json 命令。
-- [ ] Step 4: 实现 `queue run <id>`，将 queue item 展开为受控 `exec` 或 `skills run`。
-- [ ] Step 5: 实现 `queue cancel <id>` 的 pending-only 语义和稳定错误码。
-- [ ] Step 6: 实现最小 cleanup，避免删除 running/unknown 状态。
-- [ ] Step 7: 将 queue run 结果写入 job history，并建立 queue->job pointer。
-- [ ] Step 8: 增加 queue store、CLI、state transition、redaction 和 security boundary tests。
-- [ ] Step 9: 更新 smoke script 与 release docs。
-- [ ] Step 10: 运行 build/test/smoke 并创建 `51_week_review.md`。
+- [x] Step 1: 定义 queue item、status、attempt、error code 和 JSON schema。
+- [x] Step 2: 实现本地 queue store，复用 Week 50 storage/redaction 策略。
+- [x] Step 3: 增加 `queue add/list/show` text/json 命令。
+- [x] Step 4: 实现 `queue run <id>`，将 queue item 展开为受控 `exec` 或 `skills run`。
+- [x] Step 5: 实现 `queue cancel <id>` 的 pending-only 语义和稳定错误码。
+- [x] Step 6: 实现最小 cleanup，避免删除 running/unknown 状态。
+- [x] Step 7: 将 queue run 结果写入 job history，并建立 queue->job pointer。
+- [x] Step 8: 增加 queue store、CLI、state transition、redaction 和 security boundary tests。
+- [x] Step 9: 更新 smoke script 与 release docs。
+- [x] Step 10: 运行 build/test/smoke 并创建 `51_week_review.md`。
 
 ## 验收标准
 

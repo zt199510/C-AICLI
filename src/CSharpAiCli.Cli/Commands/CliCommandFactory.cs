@@ -742,6 +742,434 @@ public static class CliCommandFactory
         jobsCommand.Subcommands.Add(jobsShowCommand);
         jobsCommand.Subcommands.Add(jobsExportCommand);
 
+        Command queueCommand = new("queue", "Manage the local task queue.");
+        Command queueAddCommand = new("add", "Add a pending request to the local task queue.");
+        Command queueAddExecCommand = new("exec", "Add a pending exec request.");
+        Argument<string[]> queueAddExecTaskArgument = new("task")
+        {
+            Description = "Task text. Tokens after -- are joined so quoting is optional.",
+            Arity = ArgumentArity.ZeroOrMore,
+        };
+        Option<string> queueAddExecCwdOption = new("--cwd")
+        {
+            Description = "Use a working context path when the queue item runs.",
+        };
+        Option<string> queueAddExecExpertOption = new("--expert")
+        {
+            Description = "Select a local expert profile when the queue item runs.",
+        };
+        Option<string> queueAddExecReportOption = new("--report")
+        {
+            Description = "Select none or markdown report output when the queue item runs.",
+            DefaultValueFactory = _ => "none",
+        };
+        Option<bool> queueAddExecJsonOption = new("--json")
+        {
+            Description = "Write a single JSON queue add object.",
+        };
+        Option<string> queueAddExecOutputOption = new("--output")
+        {
+            Description = "Select text or json output.",
+            DefaultValueFactory = _ => "text",
+        };
+        AddTextJsonOutputValidator(queueAddExecOutputOption);
+        queueAddExecExpertOption.Validators.Add(result =>
+        {
+            string? expert = result.GetValueOrDefault<string>();
+            if (!string.IsNullOrWhiteSpace(expert) && !ExpertProfileCatalog.TryGet(expert, out _))
+            {
+                result.AddError("Invalid value for --expert. Allowed values are bugfix, refactor, reviewer, security, and tester.");
+            }
+        });
+        queueAddExecReportOption.Validators.Add(result =>
+        {
+            string report = result.GetValueOrDefault<string>() ?? "none";
+            if (!ExecReportModeParser.TryParse(report, out _))
+            {
+                result.AddError("Invalid value for --report. Allowed values are none and markdown.");
+            }
+        });
+        queueAddExecCommand.Arguments.Add(queueAddExecTaskArgument);
+        queueAddExecCommand.Options.Add(queueAddExecCwdOption);
+        queueAddExecCommand.Options.Add(queueAddExecExpertOption);
+        queueAddExecCommand.Options.Add(queueAddExecReportOption);
+        queueAddExecCommand.Options.Add(queueAddExecJsonOption);
+        queueAddExecCommand.Options.Add(queueAddExecOutputOption);
+        queueAddExecCommand.SetAction(parseResult =>
+        {
+            string? workspacePath = parseResult.GetValue(workspaceOption);
+            string? cwd = parseResult.GetValue(queueAddExecCwdOption);
+            string task = string.Join(" ", parseResult.GetValue(queueAddExecTaskArgument) ?? []).Trim();
+            string? expert = parseResult.GetValue(queueAddExecExpertOption);
+            string report = parseResult.GetValue(queueAddExecReportOption) ?? "none";
+            bool jsonOutput = IsJsonOutputRequested(
+                parseResult.GetValue(queueAddExecJsonOption),
+                parseResult.GetValue(queueAddExecOutputOption) ?? "text");
+            CliEnvironmentSnapshot snapshot = snapshotProvider(workspacePath, cwd);
+            WriteVerboseDiagnostics(parseResult, "queue add exec", snapshot, !jsonOutput);
+            if (string.IsNullOrWhiteSpace(task))
+            {
+                WriteQueueFailure(output, TaskQueueErrorCode.InvalidRequest, "Queue task is empty.", jsonOutput, "queue.add");
+                return 1;
+            }
+
+            try
+            {
+                DateTimeOffset nowUtc = utcNowProvider();
+                TaskQueueRequest request = new(
+                    TaskQueueCommandFamily.Exec,
+                    task,
+                    snapshot.Workspace.RootPath,
+                    cwd,
+                    Expert: expert,
+                    ReportMode: report);
+                IReadOnlyList<string> warnings = string.Equals(task, request.Task, StringComparison.Ordinal)
+                    ? []
+                    : ["Secret-like task content was stored in redacted form."];
+                TaskQueueItem item = TaskQueueItem.CreatePending(
+                    TaskQueueIdGenerator.Create(nowUtc),
+                    nowUtc,
+                    request,
+                    warnings);
+                TaskQueueStore.Create(snapshot).Create(item);
+                if (jsonOutput)
+                {
+                    new TaskQueueJsonRenderer(output).WriteAdded(item);
+                }
+                else
+                {
+                    new TaskQueueTextRenderer(output).WriteAdded(item);
+                }
+
+                return 0;
+            }
+            catch (Exception exception) when (IsQueueStoreException(exception))
+            {
+                WriteQueueFailure(output, TaskQueueErrorCode.RecordWriteFailed, "Queue record could not be created.", jsonOutput, "queue.add");
+                return 1;
+            }
+        });
+
+        Command queueAddSkillCommand = new("skill", "Add a pending skills run request.");
+        Argument<string> queueAddSkillNameArgument = new("name")
+        {
+            Description = "Skill pack name.",
+        };
+        Argument<string[]> queueAddSkillTaskArgument = new("task")
+        {
+            Description = "Task text. Tokens after -- are joined so quoting is optional.",
+            Arity = ArgumentArity.ZeroOrMore,
+        };
+        Option<string> queueAddSkillCwdOption = new("--cwd")
+        {
+            Description = "Use a working context path when the queue item runs.",
+        };
+        Option<string> queueAddSkillReportOption = new("--report")
+        {
+            Description = "Override the skill report mode: none or markdown.",
+        };
+        Option<bool> queueAddSkillJsonOption = new("--json")
+        {
+            Description = "Write a single JSON queue add object.",
+        };
+        Option<string> queueAddSkillOutputOption = new("--output")
+        {
+            Description = "Select text or json output.",
+            DefaultValueFactory = _ => "text",
+        };
+        AddTextJsonOutputValidator(queueAddSkillOutputOption);
+        queueAddSkillReportOption.Validators.Add(result =>
+        {
+            string? report = result.GetValueOrDefault<string>();
+            if (!string.IsNullOrWhiteSpace(report) && !ExecReportModeParser.TryParse(report, out _))
+            {
+                result.AddError("Invalid value for --report. Allowed values are none and markdown.");
+            }
+        });
+        queueAddSkillCommand.Arguments.Add(queueAddSkillNameArgument);
+        queueAddSkillCommand.Arguments.Add(queueAddSkillTaskArgument);
+        queueAddSkillCommand.Options.Add(queueAddSkillCwdOption);
+        queueAddSkillCommand.Options.Add(queueAddSkillReportOption);
+        queueAddSkillCommand.Options.Add(queueAddSkillJsonOption);
+        queueAddSkillCommand.Options.Add(queueAddSkillOutputOption);
+        queueAddSkillCommand.SetAction(parseResult =>
+        {
+            string? workspacePath = parseResult.GetValue(workspaceOption);
+            string? cwd = parseResult.GetValue(queueAddSkillCwdOption);
+            string skill = parseResult.GetValue(queueAddSkillNameArgument) ?? string.Empty;
+            string task = string.Join(" ", parseResult.GetValue(queueAddSkillTaskArgument) ?? []).Trim();
+            string? report = parseResult.GetValue(queueAddSkillReportOption);
+            bool jsonOutput = IsJsonOutputRequested(
+                parseResult.GetValue(queueAddSkillJsonOption),
+                parseResult.GetValue(queueAddSkillOutputOption) ?? "text");
+            CliEnvironmentSnapshot snapshot = snapshotProvider(workspacePath, cwd);
+            WriteVerboseDiagnostics(parseResult, "queue add skill", snapshot, !jsonOutput);
+            if (string.IsNullOrWhiteSpace(skill) || string.IsNullOrWhiteSpace(task))
+            {
+                WriteQueueFailure(output, TaskQueueErrorCode.InvalidRequest, "Queue skill name and task are required.", jsonOutput, "queue.add");
+                return 1;
+            }
+
+            try
+            {
+                DateTimeOffset nowUtc = utcNowProvider();
+                TaskQueueRequest request = new(
+                    TaskQueueCommandFamily.Skill,
+                    task,
+                    snapshot.Workspace.RootPath,
+                    cwd,
+                    Skill: skill,
+                    ReportMode: report);
+                IReadOnlyList<string> warnings = string.Equals(task, request.Task, StringComparison.Ordinal)
+                    ? []
+                    : ["Secret-like task content was stored in redacted form."];
+                TaskQueueItem item = TaskQueueItem.CreatePending(
+                    TaskQueueIdGenerator.Create(nowUtc),
+                    nowUtc,
+                    request,
+                    warnings);
+                TaskQueueStore.Create(snapshot).Create(item);
+                if (jsonOutput)
+                {
+                    new TaskQueueJsonRenderer(output).WriteAdded(item);
+                }
+                else
+                {
+                    new TaskQueueTextRenderer(output).WriteAdded(item);
+                }
+
+                return 0;
+            }
+            catch (Exception exception) when (IsQueueStoreException(exception))
+            {
+                WriteQueueFailure(output, TaskQueueErrorCode.RecordWriteFailed, "Queue record could not be created.", jsonOutput, "queue.add");
+                return 1;
+            }
+        });
+        queueAddCommand.Subcommands.Add(queueAddExecCommand);
+        queueAddCommand.Subcommands.Add(queueAddSkillCommand);
+
+        Command queueListCommand = new("list", "List local queue items.");
+        Option<bool> queueListJsonOption = new("--json")
+        {
+            Description = "Write a single JSON queue list object.",
+        };
+        Option<string> queueListOutputOption = new("--output")
+        {
+            Description = "Select text or json output.",
+            DefaultValueFactory = _ => "text",
+        };
+        Option<int?> queueListLimitOption = new("--limit")
+        {
+            Description = "Maximum number of queue items to list.",
+        };
+        Option<string> queueListStatusOption = new("--status")
+        {
+            Description = "Filter by pending, running, succeeded, failed, or canceled status.",
+        };
+        AddTextJsonOutputValidator(queueListOutputOption);
+        AddPositiveIntegerValidator(queueListLimitOption, "--limit");
+        queueListStatusOption.Validators.Add(result =>
+        {
+            string? status = result.GetValueOrDefault<string>();
+            if (!string.IsNullOrWhiteSpace(status) && !TaskQueueStatus.IsKnown(status))
+            {
+                result.AddError("Invalid value for --status. Allowed values are pending, running, succeeded, failed, and canceled.");
+            }
+        });
+        queueListCommand.Options.Add(queueListJsonOption);
+        queueListCommand.Options.Add(queueListOutputOption);
+        queueListCommand.Options.Add(queueListLimitOption);
+        queueListCommand.Options.Add(queueListStatusOption);
+        queueListCommand.SetAction(parseResult =>
+        {
+            string? workspacePath = parseResult.GetValue(workspaceOption);
+            bool jsonOutput = IsJsonOutputRequested(
+                parseResult.GetValue(queueListJsonOption),
+                parseResult.GetValue(queueListOutputOption) ?? "text");
+            int? limit = parseResult.GetValue(queueListLimitOption);
+            string? status = parseResult.GetValue(queueListStatusOption);
+            CliEnvironmentSnapshot snapshot = workspaceSnapshotProvider(workspacePath);
+            WriteVerboseDiagnostics(parseResult, "queue list", snapshot, !jsonOutput);
+            TaskQueueListResult result = TaskQueueStore.Create(snapshot).List(limit, status);
+            if (jsonOutput)
+            {
+                new TaskQueueJsonRenderer(output).WriteList(result);
+            }
+            else
+            {
+                new TaskQueueTextRenderer(output).WriteList(result);
+            }
+
+            return 0;
+        });
+
+        Command queueShowCommand = new("show", "Show one local queue item.");
+        Argument<string> queueShowIdArgument = new("queue-id")
+        {
+            Description = "Queue id.",
+        };
+        Option<bool> queueShowJsonOption = new("--json")
+        {
+            Description = "Write a single JSON queue show object.",
+        };
+        Option<string> queueShowOutputOption = new("--output")
+        {
+            Description = "Select text or json output.",
+            DefaultValueFactory = _ => "text",
+        };
+        AddTextJsonOutputValidator(queueShowOutputOption);
+        queueShowCommand.Arguments.Add(queueShowIdArgument);
+        queueShowCommand.Options.Add(queueShowJsonOption);
+        queueShowCommand.Options.Add(queueShowOutputOption);
+        queueShowCommand.SetAction(parseResult =>
+        {
+            string? workspacePath = parseResult.GetValue(workspaceOption);
+            string queueId = parseResult.GetValue(queueShowIdArgument) ?? string.Empty;
+            bool jsonOutput = IsJsonOutputRequested(
+                parseResult.GetValue(queueShowJsonOption),
+                parseResult.GetValue(queueShowOutputOption) ?? "text");
+            CliEnvironmentSnapshot snapshot = workspaceSnapshotProvider(workspacePath);
+            WriteVerboseDiagnostics(parseResult, "queue show", snapshot, !jsonOutput);
+            TaskQueueReadResult result = TaskQueueStore.Create(snapshot).Read(queueId);
+            if (!result.Succeeded || result.Item is null)
+            {
+                WriteQueueFailure(output, result.Diagnostic, jsonOutput, "queue.show");
+                return 1;
+            }
+
+            if (jsonOutput)
+            {
+                new TaskQueueJsonRenderer(output).WriteShow(result.Item);
+            }
+            else
+            {
+                new TaskQueueTextRenderer(output).WriteShow(result.Item);
+            }
+
+            return 0;
+        });
+
+        Command queueCancelCommand = new("cancel", "Cancel one pending queue item.");
+        Argument<string> queueCancelIdArgument = new("queue-id")
+        {
+            Description = "Queue id.",
+        };
+        Option<bool> queueCancelJsonOption = new("--json")
+        {
+            Description = "Write a single JSON queue cancel object.",
+        };
+        Option<string> queueCancelOutputOption = new("--output")
+        {
+            Description = "Select text or json output.",
+            DefaultValueFactory = _ => "text",
+        };
+        AddTextJsonOutputValidator(queueCancelOutputOption);
+        queueCancelCommand.Arguments.Add(queueCancelIdArgument);
+        queueCancelCommand.Options.Add(queueCancelJsonOption);
+        queueCancelCommand.Options.Add(queueCancelOutputOption);
+        queueCancelCommand.SetAction(parseResult =>
+        {
+            string queueId = parseResult.GetValue(queueCancelIdArgument) ?? string.Empty;
+            bool jsonOutput = IsJsonOutputRequested(
+                parseResult.GetValue(queueCancelJsonOption),
+                parseResult.GetValue(queueCancelOutputOption) ?? "text");
+            string? workspacePath = parseResult.GetValue(workspaceOption);
+            CliEnvironmentSnapshot snapshot = workspaceSnapshotProvider(workspacePath);
+            WriteVerboseDiagnostics(parseResult, "queue cancel", snapshot, !jsonOutput);
+            TaskQueueTransitionResult result = TaskQueueStore.Create(snapshot).Cancel(queueId, utcNowProvider());
+            if (!result.Succeeded || result.Item is null)
+            {
+                WriteQueueFailure(output, result.Diagnostic, jsonOutput, "queue.cancel");
+                return 1;
+            }
+
+            if (jsonOutput)
+            {
+                new TaskQueueJsonRenderer(output).WriteTransition("queue.cancel", result.Item);
+            }
+            else
+            {
+                new TaskQueueTextRenderer(output).WriteTransition("C# AI CLI queue item canceled", result.Item);
+            }
+
+            return 0;
+        });
+
+        Command queueCleanupCommand = new("cleanup", "Delete old terminal queue items.");
+        Option<string> queueCleanupStatusOption = new("--status")
+        {
+            Description = "Terminal status to delete: succeeded, failed, or canceled.",
+        };
+        Option<int?> queueCleanupOlderThanDaysOption = new("--older-than-days")
+        {
+            Description = "Delete matching items completed at least this many days ago.",
+            DefaultValueFactory = _ => 30,
+        };
+        Option<bool> queueCleanupJsonOption = new("--json")
+        {
+            Description = "Write a single JSON queue cleanup object.",
+        };
+        Option<string> queueCleanupOutputOption = new("--output")
+        {
+            Description = "Select text or json output.",
+            DefaultValueFactory = _ => "text",
+        };
+        queueCleanupStatusOption.Validators.Add(result =>
+        {
+            string? status = result.GetValueOrDefault<string>();
+            if (!string.IsNullOrWhiteSpace(status) && !TaskQueueStatus.IsTerminal(status))
+            {
+                result.AddError("Invalid value for --status. Allowed values are succeeded, failed, and canceled.");
+            }
+        });
+        AddPositiveIntegerValidator(queueCleanupOlderThanDaysOption, "--older-than-days");
+        AddTextJsonOutputValidator(queueCleanupOutputOption);
+        queueCleanupCommand.Options.Add(queueCleanupStatusOption);
+        queueCleanupCommand.Options.Add(queueCleanupOlderThanDaysOption);
+        queueCleanupCommand.Options.Add(queueCleanupJsonOption);
+        queueCleanupCommand.Options.Add(queueCleanupOutputOption);
+        queueCleanupCommand.SetAction(parseResult =>
+        {
+            string? status = parseResult.GetValue(queueCleanupStatusOption);
+            int olderThanDays = parseResult.GetValue(queueCleanupOlderThanDaysOption) ?? 30;
+            bool jsonOutput = IsJsonOutputRequested(
+                parseResult.GetValue(queueCleanupJsonOption),
+                parseResult.GetValue(queueCleanupOutputOption) ?? "text");
+            string? workspacePath = parseResult.GetValue(workspaceOption);
+            CliEnvironmentSnapshot snapshot = workspaceSnapshotProvider(workspacePath);
+            WriteVerboseDiagnostics(parseResult, "queue cleanup", snapshot, !jsonOutput);
+            if (string.IsNullOrWhiteSpace(status))
+            {
+                WriteQueueFailure(
+                    output,
+                    TaskQueueErrorCode.UnsafeCleanupStatus,
+                    "Cleanup requires --status succeeded, failed, or canceled.",
+                    jsonOutput,
+                    "queue.cleanup");
+                return 1;
+            }
+
+            TaskQueueCleanupResult result = TaskQueueStore.Create(snapshot).Cleanup(
+                status,
+                utcNowProvider().AddDays(-olderThanDays));
+            if (jsonOutput)
+            {
+                new TaskQueueJsonRenderer(output).WriteCleanup(result);
+            }
+            else
+            {
+                new TaskQueueTextRenderer(output).WriteCleanup(result);
+            }
+
+            return result.Succeeded ? 0 : 1;
+        });
+        queueCommand.Subcommands.Add(queueAddCommand);
+        queueCommand.Subcommands.Add(queueListCommand);
+        queueCommand.Subcommands.Add(queueShowCommand);
+        queueCommand.Subcommands.Add(queueCancelCommand);
+        queueCommand.Subcommands.Add(queueCleanupCommand);
+
         Command reviewCommand = new("review", "Review the current git diff with the configured model.");
         Option<bool> reviewJsonOption = new("--json")
         {
@@ -2337,6 +2765,161 @@ public static class CliCommandFactory
             return WriteExecResultWithTrace(execResult);
         });
 
+        Command queueRunCommand = new("run", "Run one queued request through the controlled exec or skills path.");
+        Argument<string> queueRunIdArgument = new("queue-id")
+        {
+            Description = "Queue id.",
+        };
+        Option<bool> queueRunJsonOption = new("--json")
+        {
+            Description = "Write newline-delimited JSON execution events and queue state.",
+        };
+        Option<string> queueRunOutputOption = new("--output")
+        {
+            Description = "Select text or json output.",
+            DefaultValueFactory = _ => "text",
+        };
+        AddTextJsonOutputValidator(queueRunOutputOption);
+        queueRunCommand.Arguments.Add(queueRunIdArgument);
+        queueRunCommand.Options.Add(queueRunJsonOption);
+        queueRunCommand.Options.Add(queueRunOutputOption);
+        queueRunCommand.SetAction(parseResult =>
+        {
+            string queueId = parseResult.GetValue(queueRunIdArgument) ?? string.Empty;
+            bool jsonOutput = IsJsonOutputRequested(
+                parseResult.GetValue(queueRunJsonOption),
+                parseResult.GetValue(queueRunOutputOption) ?? "text");
+            string? workspacePath = parseResult.GetValue(workspaceOption);
+            CliEnvironmentSnapshot queueSnapshot = workspaceSnapshotProvider(workspacePath);
+            WriteVerboseDiagnostics(parseResult, "queue run", queueSnapshot, !jsonOutput);
+            TaskQueueStore queueStore = TaskQueueStore.Create(queueSnapshot);
+            TaskQueueReadResult read = queueStore.Read(queueId);
+            if (!read.Succeeded || read.Item is null)
+            {
+                WriteQueueFailure(output, read.Diagnostic, jsonOutput, "queue.run");
+                return 1;
+            }
+
+            TaskQueueTransitionResult started = queueStore.Start(queueId, utcNowProvider());
+            if (!started.Succeeded || started.Item is null)
+            {
+                WriteQueueFailure(output, started.Diagnostic, jsonOutput, "queue.run");
+                return 1;
+            }
+
+            TaskQueueItem runningItem = started.Item;
+            int attempt = runningItem.Attempts[^1].Attempt;
+            if (jsonOutput)
+            {
+                new TaskQueueJsonRenderer(output).WriteTransition("queue.run.started", runningItem);
+            }
+            else
+            {
+                new TaskQueueTextRenderer(output).WriteTransition("C# AI CLI queue run started", runningItem);
+            }
+
+            JobRecordStore? jobStore = null;
+            HashSet<string> existingJobIds = new(StringComparer.Ordinal);
+            int innerExitCode = 1;
+            string? executionErrorCode = null;
+            string? executionSummary = null;
+            try
+            {
+                CliEnvironmentSnapshot executionSnapshot = snapshotProvider(
+                    runningItem.Request.WorkspaceRoot,
+                    runningItem.Request.Cwd);
+                jobStore = JobRecordStore.Create(executionSnapshot);
+                existingJobIds = jobStore.List().Records
+                    .Select(record => record.JobId)
+                    .ToHashSet(StringComparer.Ordinal);
+                IReadOnlyList<string> innerArguments = BuildQueuedCommandArguments(
+                    runningItem,
+                    jsonOutput,
+                    parseResult.GetValue(verboseOption),
+                    IsTraceEnabled(parseResult));
+                innerExitCode = rootCommand.Parse(innerArguments).Invoke();
+            }
+            catch (Exception)
+            {
+                executionErrorCode = TaskQueueErrorCode.ExecutionFailed;
+                executionSummary = "Queued execution failed before the delegated command reached a terminal result.";
+            }
+
+            JobRecord? jobRecord = null;
+            if (jobStore is not null)
+            {
+                try
+                {
+                    jobRecord = jobStore.List().Records
+                        .Where(record => !existingJobIds.Contains(record.JobId))
+                        .Where(record => string.Equals(record.JobName, queueId, StringComparison.Ordinal))
+                        .OrderByDescending(record => record.CreatedAtUtc)
+                        .ThenByDescending(record => record.JobId, StringComparer.Ordinal)
+                        .FirstOrDefault();
+                    if (jobRecord?.Status == JobStatus.Running)
+                    {
+                        executionErrorCode ??= TaskQueueErrorCode.ExecutionFailed;
+                        executionSummary ??= "Queued execution stopped before the delegated command finalized its job record.";
+                        JobRecord failedJob = jobRecord.WithStatus(
+                            JobStatus.Failed,
+                            utcNowProvider(),
+                            exitCode: 1,
+                            stopReason: "queue-execution-failed",
+                            errorCode: executionErrorCode,
+                            summary: executionSummary);
+                        jobStore.Update(failedJob);
+                        jobRecord = failedJob;
+                    }
+                }
+                catch (Exception exception) when (IsJobStoreException(exception))
+                {
+                    executionErrorCode ??= TaskQueueErrorCode.ExecutionFailed;
+                    executionSummary ??= "Queued execution job history could not be finalized.";
+                }
+            }
+
+            string? completionErrorCode = executionErrorCode ?? jobRecord?.ErrorCode;
+            string? completionSummary = executionSummary ?? jobRecord?.Summary;
+            int completionExitCode = innerExitCode;
+            if (executionErrorCode is not null)
+            {
+                completionExitCode = 1;
+            }
+            else if (jobRecord is null)
+            {
+                completionExitCode = 1;
+                completionErrorCode = TaskQueueErrorCode.JobRecordMissing;
+                completionSummary = "Queued execution did not produce the required job history record.";
+            }
+
+            TaskQueueTransitionResult completed = queueStore.Complete(
+                queueId,
+                attempt,
+                utcNowProvider(),
+                completionExitCode,
+                jobRecord?.JobId,
+                completionErrorCode,
+                completionSummary);
+            if (!completed.Succeeded || completed.Item is null)
+            {
+                WriteQueueFailure(output, completed.Diagnostic, jsonOutput, "queue.run");
+                return 1;
+            }
+
+            if (jsonOutput)
+            {
+                new TaskQueueJsonRenderer(output).WriteTransition("queue.run.completed", completed.Item);
+            }
+            else
+            {
+                output.WriteLine();
+                new TaskQueueTextRenderer(output).WriteTransition("C# AI CLI queue run completed", completed.Item);
+            }
+
+            return completionExitCode;
+        });
+        queueCommand.Subcommands.Add(queueRunCommand);
+
         Command runCommand = new("run", "Run a deterministic local workspace task through the direct tool layer.");
         Argument<string> taskArgument = new("task")
         {
@@ -2659,6 +3242,7 @@ public static class CliCommandFactory
         rootCommand.Subcommands.Add(diffCommand);
         rootCommand.Subcommands.Add(changesCommand);
         rootCommand.Subcommands.Add(jobsCommand);
+        rootCommand.Subcommands.Add(queueCommand);
         rootCommand.Subcommands.Add(reviewCommand);
         rootCommand.Subcommands.Add(configCommand);
         rootCommand.Subcommands.Add(mcpCommand);
@@ -2858,6 +3442,65 @@ public static class CliCommandFactory
     private static bool IsJsonOutputRequested(bool jsonRequested, string outputMode)
     {
         return jsonRequested || string.Equals(outputMode, "json", StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static IReadOnlyList<string> BuildQueuedCommandArguments(
+        TaskQueueItem item,
+        bool jsonOutput,
+        bool verbose,
+        bool trace)
+    {
+        ArgumentNullException.ThrowIfNull(item);
+        List<string> arguments = [];
+        if (item.Request.Family == TaskQueueCommandFamily.Exec)
+        {
+            arguments.Add("exec");
+        }
+        else
+        {
+            arguments.Add("skills");
+            arguments.Add("run");
+            arguments.Add(item.Request.Skill ?? string.Empty);
+        }
+
+        arguments.Add("--record-job");
+        arguments.Add("--job-name");
+        arguments.Add(item.QueueId);
+        arguments.Add("--workspace");
+        arguments.Add(item.Request.WorkspaceRoot);
+        arguments.Add("--output");
+        arguments.Add(jsonOutput ? "json" : "text");
+        if (!string.IsNullOrWhiteSpace(item.Request.Cwd))
+        {
+            arguments.Add("--cwd");
+            arguments.Add(item.Request.Cwd);
+        }
+
+        if (item.Request.Family == TaskQueueCommandFamily.Exec && !string.IsNullOrWhiteSpace(item.Request.Expert))
+        {
+            arguments.Add("--expert");
+            arguments.Add(item.Request.Expert);
+        }
+
+        if (!string.IsNullOrWhiteSpace(item.Request.ReportMode))
+        {
+            arguments.Add("--report");
+            arguments.Add(item.Request.ReportMode);
+        }
+
+        if (verbose)
+        {
+            arguments.Add("--verbose");
+        }
+
+        if (trace)
+        {
+            arguments.Add("--trace");
+        }
+
+        arguments.Add("--");
+        arguments.Add(item.Request.Task);
+        return arguments;
     }
 
     private static ApprovalMode? GetApprovalOverride(
@@ -3262,6 +3905,19 @@ public static class CliCommandFactory
         });
     }
 
+    private static void AddTextJsonOutputValidator(Option<string> option)
+    {
+        option.Validators.Add(result =>
+        {
+            string outputMode = result.GetValueOrDefault<string>() ?? "text";
+            if (!string.Equals(outputMode, "text", StringComparison.OrdinalIgnoreCase) &&
+                !string.Equals(outputMode, "json", StringComparison.OrdinalIgnoreCase))
+            {
+                result.AddError("Invalid value for --output. Allowed values are text and json.");
+            }
+        });
+    }
+
     private static void AddNonNegativeIntegerValidator(Option<int?> option, string optionName)
     {
         option.Validators.Add(result =>
@@ -3508,6 +4164,48 @@ public static class CliCommandFactory
         WriteSafeFailure(output, errorCode, summary);
     }
 
+    private static void WriteQueueFailure(
+        TextWriter output,
+        TaskQueueDiagnostic? diagnostic,
+        bool jsonOutput,
+        string type)
+    {
+        WriteQueueFailure(
+            output,
+            diagnostic?.ErrorCode ?? TaskQueueErrorCode.NotFound,
+            diagnostic?.Summary ?? "Queue item was not found.",
+            jsonOutput,
+            type,
+            diagnostic?.QueueId,
+            diagnostic?.Path);
+    }
+
+    private static void WriteQueueFailure(
+        TextWriter output,
+        string errorCode,
+        string summary,
+        bool jsonOutput,
+        string type,
+        string? queueId = null,
+        string? path = null)
+    {
+        if (jsonOutput)
+        {
+            output.WriteLine(JsonSerializer.Serialize(new Dictionary<string, object?>
+            {
+                ["type"] = type,
+                ["status"] = "failed",
+                ["errorCode"] = DiagnosticSecretRedactor.Redact(errorCode),
+                ["summary"] = DiagnosticSecretRedactor.Redact(summary),
+                ["queueId"] = string.IsNullOrWhiteSpace(queueId) ? null : DiagnosticSecretRedactor.Redact(queueId),
+                ["path"] = string.IsNullOrWhiteSpace(path) ? null : DiagnosticSecretRedactor.Redact(path)
+            }, JsonOptions));
+            return;
+        }
+
+        WriteSafeFailure(output, errorCode, summary);
+    }
+
     private static ExecResult CompleteRecordedJob(
         JobRecordStore? jobStore,
         JobRecord? currentRecord,
@@ -3596,6 +4294,8 @@ public static class CliCommandFactory
             or ArgumentException
             or InvalidOperationException;
     }
+
+    private static bool IsQueueStoreException(Exception exception) => IsJobStoreException(exception);
 
     private static void WriteSessionList(TextWriter output, IReadOnlyList<ConversationTranscriptSummary> summaries)
     {

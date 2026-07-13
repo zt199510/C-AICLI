@@ -150,6 +150,8 @@ artifacts\release\caicli-0.3.3-win-x64\caicli.exe skills list --output json
 artifacts\release\caicli-0.3.3-win-x64\caicli.exe skills run review-only --dry-run -- "@file:README.md"
 artifacts\release\caicli-0.3.3-win-x64\caicli.exe jobs list
 artifacts\release\caicli-0.3.3-win-x64\caicli.exe jobs list --output json
+artifacts\release\caicli-0.3.3-win-x64\caicli.exe queue list
+artifacts\release\caicli-0.3.3-win-x64\caicli.exe queue list --output json
 ```
 
 MCP config/list/doctor are available. User-configured stdio MCP servers can be discovered and called through ordinary registry/tool paths, while workspace-configured MCP servers are not auto-started by `tools list`, `tools call`, `exec`, or `run`. `mcp doctor` can explicitly diagnose configured stdio servers.
@@ -217,6 +219,20 @@ Skill runs use the same opt-in flags. A normal dry-run remains non-persistent; `
 ```powershell
 artifacts\release\caicli-0.3.3-win-x64\caicli.exe skills run review-only --record-job --job-name readme-plan --dry-run --workspace . -- "Review @file:README.md"
 ```
+
+Queue requests are local user-level records. Adding an item does not execute it. Running an item later uses the stored workspace/task metadata but resolves the current approval mode, disabled tools, shell policy, workspace/dirty checks, MCP startup policy, and skill/expert boundary through the existing execution command.
+
+```powershell
+artifacts\release\caicli-0.3.3-win-x64\caicli.exe queue add exec --workspace . -- "Review @folder:src"
+artifacts\release\caicli-0.3.3-win-x64\caicli.exe queue add skill review-only --workspace . -- "Review @file:README.md"
+artifacts\release\caicli-0.3.3-win-x64\caicli.exe queue list --output json
+artifacts\release\caicli-0.3.3-win-x64\caicli.exe queue show <queue-id> --output json
+artifacts\release\caicli-0.3.3-win-x64\caicli.exe queue run <queue-id>
+artifacts\release\caicli-0.3.3-win-x64\caicli.exe queue cancel <queue-id>
+artifacts\release\caicli-0.3.3-win-x64\caicli.exe queue cleanup --status succeeded --older-than-days 30
+```
+
+`queue run` always creates a job record and stores its id on the attempt. Failed items can be run again as a new attempt. Cancel is pending-only. Cleanup accepts only succeeded, failed, or canceled queue status and does not delete job history or artifacts.
 
 ```powershell
 artifacts\release\caicli-0.3.3-win-x64\caicli.exe exec --workspace . "read README.md"

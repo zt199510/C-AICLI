@@ -148,6 +148,16 @@ Job records store redacted metadata and artifact pointers only. They can include
 
 If `--record-job` cannot create the initial job record, the execution command fails before model/tool work. If the final job update fails after execution, the command returns `job-record-write-failed` so explicit recording loss is not hidden.
 
+## Local Task Queue
+
+Queue records are user-level local state under `%USERPROFILE%\.caicli\queue`, or the state root selected by `CAICLI_USER_PROFILE`. `queue add` stores a bounded redacted request in `pending` state and does not call a model, run tools, start MCP, or write the workspace. Approval overrides are not part of the queue schema.
+
+`queue run` transitions one pending or failed item to running, then re-enters the existing `exec` or `skills run` command factory with mandatory `--record-job`. It does not add `--approve` or `--approval`; the effective approval mode is resolved from the current configuration. Workspace guard, dirty workspace checks, shell policy, dangerous-command detection, disabled tools, MCP startup policy, expert/skill tool boundaries, trace/session/report flow, and model credential checks remain owned by the reused execution path.
+
+Each completed attempt records its terminal status, bounded error metadata, exit code, and job id. The queue item also stores the latest job id; job records use the queue id as their label. Queue files do not store raw referenced contents, raw tool arguments, raw secrets, full diffs, or approval overrides.
+
+Cancel is pending-only and never attempts to terminate an active process. Cleanup accepts only succeeded, failed, or canceled queue status. It preserves pending, running, corrupt, and unknown records, and it does not delete job history or artifacts. Task queue v1 has no daemon, scheduler, concurrent worker pool, remote runner, or permission elevation mechanism.
+
 ## Expert Profiles
 
 `exec --expert` selects a built-in local profile. It is local policy and prompt/report guidance, not provider/model routing.
