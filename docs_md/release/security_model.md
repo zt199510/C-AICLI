@@ -158,6 +158,16 @@ Each completed attempt records its terminal status, bounded error metadata, exit
 
 Cancel is pending-only and never attempts to terminate an active process. Cleanup accepts only succeeded, failed, or canceled queue status. It preserves pending, running, corrupt, and unknown records, and it does not delete job history or artifacts. Task queue v1 has no daemon, scheduler, concurrent worker pool, remote runner, or permission elevation mechanism.
 
+## Local Multi-role Pipelines
+
+`pipeline list` and `pipeline plan` read the fixed built-in catalog and render text/JSON only. They do not call a model, construct a tool registry, run tools, start MCP, create queue/job state, write command logs, or write the workspace.
+
+`pipeline run` creates one queue item per role and invokes the existing `queue run` command path. Each queue attempt delegates to `exec` or `skills run` with mandatory job recording. Pipeline orchestration does not persist or inject approval overrides and cannot expand the effective approval mode, workspace guard, dirty-workspace checks, shell policy, dangerous-command detection, disabled tools, MCP startup policy, expert/skill tool boundary, trace/session/report path, or credential boundary.
+
+Reviewer and security stages are read-only invariants in the built-in catalog. Their expert/skill execution paths do not register patch or shell tools, skip MCP discovery, and configure the executor to reject patch, shell, and `mcp.*` requests with `tool-disabled`. Tester and implementer stages can use the ordinary exec tool set, but every write/shell/MCP action remains subject to the existing policy and approval checks.
+
+Pipeline reports aggregate bounded redacted job/task-report metadata, queue/job pointers, warnings, remaining risks, and artifact pointers. They do not persist raw referenced contents, raw tool arguments, raw secrets, or full diffs. Execution is sequential and stops at the first failed role without deleting earlier role evidence. Pipeline v1 has no automatic model/provider routing, parallel workers, scheduler, daemon, remote runner, or remote collaboration path.
+
 ## Expert Profiles
 
 `exec --expert` selects a built-in local profile. It is local policy and prompt/report guidance, not provider/model routing.

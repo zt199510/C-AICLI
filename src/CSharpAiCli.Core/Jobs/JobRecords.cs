@@ -269,7 +269,9 @@ public sealed record JobTaskReportSummary
         int SecretPresenceCount,
         IReadOnlyList<string>? ChangedFiles = null,
         IReadOnlyList<string>? VerificationStatuses = null,
-        IReadOnlyList<string>? Risks = null)
+        IReadOnlyList<string>? Risks = null,
+        IReadOnlyList<string>? Commands = null,
+        IReadOnlyList<string>? Verification = null)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(Status);
         ArgumentException.ThrowIfNullOrWhiteSpace(StopReason);
@@ -287,6 +289,8 @@ public sealed record JobTaskReportSummary
         this.ChangedFiles = new ReadOnlyCollection<string>((ChangedFiles ?? []).Select(Safe).ToArray());
         this.VerificationStatuses = new ReadOnlyCollection<string>((VerificationStatuses ?? []).Select(Safe).ToArray());
         this.Risks = new ReadOnlyCollection<string>((Risks ?? []).Select(Safe).ToArray());
+        this.Commands = new ReadOnlyCollection<string>((Commands ?? []).Select(Safe).ToArray());
+        this.Verification = new ReadOnlyCollection<string>((Verification ?? []).Select(Safe).ToArray());
     }
 
     public string Status { get; }
@@ -315,6 +319,10 @@ public sealed record JobTaskReportSummary
 
     public IReadOnlyList<string> Risks { get; }
 
+    public IReadOnlyList<string> Commands { get; }
+
+    public IReadOnlyList<string> Verification { get; }
+
     public static JobTaskReportSummary FromTaskReport(AgentTaskReport report)
     {
         ArgumentNullException.ThrowIfNull(report);
@@ -332,7 +340,17 @@ public sealed record JobTaskReportSummary
             report.Secrets.Count,
             report.ChangedFiles.Select(file => $"{file.Path} status={file.Status}").ToArray(),
             report.Verification.Select(verification => verification.Status).ToArray(),
-            report.Risks.ToArray());
+            report.Risks.ToArray(),
+            report.Commands.Select(command =>
+                $"source={command.Source} command={command.Command}" +
+                (string.IsNullOrWhiteSpace(command.WorkingDirectory) ? string.Empty : $" cwd={command.WorkingDirectory}") +
+                (string.IsNullOrWhiteSpace(command.Status) ? string.Empty : $" status={command.Status}") +
+                (string.IsNullOrWhiteSpace(command.ErrorCode) ? string.Empty : $" errorCode={command.ErrorCode}")).ToArray(),
+            report.Verification.Select(verification =>
+                $"status={verification.Status} source={verification.Source}" +
+                (string.IsNullOrWhiteSpace(verification.Command) ? string.Empty : $" command={verification.Command}") +
+                $" succeeded={verification.Succeeded.ToString().ToLowerInvariant()}" +
+                (string.IsNullOrWhiteSpace(verification.ErrorCode) ? string.Empty : $" errorCode={verification.ErrorCode}")).ToArray());
     }
 
     private static string Safe(string value)
@@ -1100,6 +1118,15 @@ public sealed class JobsTextRenderer
         writer.WriteLine("- risks: " + taskReport.RiskCount.ToString(CultureInfo.InvariantCulture));
         writer.WriteLine("- references: " + taskReport.ReferenceCount.ToString(CultureInfo.InvariantCulture));
         writer.WriteLine("- secretPresence: " + taskReport.SecretPresenceCount.ToString(CultureInfo.InvariantCulture));
+        foreach (string command in taskReport.Commands)
+        {
+            writer.WriteLine("- command: " + Safe(command));
+        }
+
+        foreach (string verification in taskReport.Verification)
+        {
+            writer.WriteLine("- verificationDetail: " + Safe(verification));
+        }
     }
 
     private void WriteArtifacts(IReadOnlyList<JobArtifact> artifacts)
@@ -1267,7 +1294,9 @@ public sealed class JobsJsonRenderer
             ["secretPresenceCount"] = report.SecretPresenceCount,
             ["changedFiles"] = report.ChangedFiles.Select(Safe).ToArray(),
             ["verificationStatuses"] = report.VerificationStatuses.Select(Safe).ToArray(),
-            ["risks"] = report.Risks.Select(Safe).ToArray()
+            ["risks"] = report.Risks.Select(Safe).ToArray(),
+            ["commands"] = report.Commands.Select(Safe).ToArray(),
+            ["verification"] = report.Verification.Select(Safe).ToArray()
         };
     }
 

@@ -123,6 +123,27 @@ Common queue failures and diagnostics:
 
 A failed item can be rerun and receives a new attempt/job pointer. A running item cannot be canceled by task queue v1. If a process is terminated while running, inspect the queue/job files before manual recovery; there is no lease or daemon recovery protocol. Queue cleanup does not delete job records or artifacts.
 
+## Multi-role Pipelines
+
+Inspect a plan before execution, then use JSON output to correlate roles with queue and job records:
+
+```powershell
+artifacts\release\caicli-0.3.3-win-x64\caicli.exe pipeline list --output json
+artifacts\release\caicli-0.3.3-win-x64\caicli.exe pipeline plan fix-review-test --workspace . -- "Fix failing tests"
+artifacts\release\caicli-0.3.3-win-x64\caicli.exe pipeline run fix-review-test --output json --workspace . -- "Fix failing tests"
+artifacts\release\caicli-0.3.3-win-x64\caicli.exe queue show <role-queue-id> --output json --workspace .
+artifacts\release\caicli-0.3.3-win-x64\caicli.exe jobs show <role-job-id> --output json --workspace .
+```
+
+Common pipeline failures and diagnostics:
+
+- `pipeline-not-found`: the name is not one of `fix-review-test`, `review-test`, or `security-review`.
+- `pipeline-invalid-request`: the task is empty.
+- `pipeline-execution-failed`: local queue/job state could not be created or read; inspect the active user profile and filesystem access.
+- A delegated role error such as `missing-model`, `missing-openai-api-key`, `approval-denied`, `tool-disabled`, or a shell/workspace error appears on that role report and linked job. Later roles are skipped after the first failure.
+
+Reviewer and security roles should report `boundary.isReadOnly=true`, with writes, shell, MCP, and MCP discovery disabled. A `tool-disabled` result from these roles is an enforced boundary, not a signal to rerun with elevated permissions. There is no pipeline-level retry/resume; inspect the preserved role queue/job/artifact pointers, correct the cause, and start a new pipeline run when appropriate.
+
 ## Tool And Approval Failures
 
 Read tools do not require approval. Patch and shell tools do.

@@ -428,6 +428,36 @@ Write-Output 'bugfix verification passed'
     Assert-Contains $skillsDryRunJson.Output '"dryRun":true' "skills run dry-run json"
     Assert-Contains $skillsDryRunJson.Output '"expert":"reviewer"' "skills run dry-run json"
 
+    $pipelineList = Invoke-CaiCli -Arguments @("pipeline", "list", "--workspace", $workspace)
+    Assert-ExitCode $pipelineList 0 "pipeline list"
+    Assert-Contains $pipelineList.Output "C# AI CLI built-in pipelines" "pipeline list"
+    Assert-Contains $pipelineList.Output "fix-review-test" "pipeline list"
+    Assert-Contains $pipelineList.Output "security-review" "pipeline list"
+
+    $pipelineListJson = Invoke-CaiCli -Arguments @("pipeline", "list", "--output", "json", "--workspace", $workspace)
+    Assert-ExitCode $pipelineListJson 0 "pipeline list json"
+    Assert-Contains $pipelineListJson.Output '"type":"pipeline.list"' "pipeline list json"
+    Assert-Contains $pipelineListJson.Output '"name":"review-test"' "pipeline list json"
+
+    $pipelinePlan = Invoke-CaiCli -Arguments @(
+        "pipeline", "plan", "security-review", "--workspace", $workspace,
+        "--", "Review", "@file:note.txt"
+    )
+    Assert-ExitCode $pipelinePlan 0 "pipeline plan"
+    Assert-Contains $pipelinePlan.Output "C# AI CLI pipeline plan" "pipeline plan"
+    Assert-Contains $pipelinePlan.Output "security -> reviewer" "pipeline plan"
+    Assert-Contains $pipelinePlan.Output "execution: plan-only; no model or tools invoked" "pipeline plan"
+
+    $pipelinePlanJson = Invoke-CaiCli -Arguments @(
+        "pipeline", "plan", "fix-review-test", "--output", "json", "--workspace", $workspace,
+        "--", "Fix", "@file:note.txt"
+    )
+    Assert-ExitCode $pipelinePlanJson 0 "pipeline plan json"
+    Assert-Contains $pipelinePlanJson.Output '"type":"pipeline.plan"' "pipeline plan json"
+    Assert-Contains $pipelinePlanJson.Output '"role":"implementer"' "pipeline plan json"
+    Assert-Contains $pipelinePlanJson.Output '"role":"reviewer"' "pipeline plan json"
+    Assert-Contains $pipelinePlanJson.Output '"isReadOnly":true' "pipeline plan json"
+
     $jobsEmpty = Invoke-CaiCli -Arguments @("jobs", "list", "--output", "json", "--workspace", $workspace)
     Assert-ExitCode $jobsEmpty 0 "jobs list empty json"
     Assert-Contains $jobsEmpty.Output '"type":"jobs.list"' "jobs list empty json"
@@ -493,6 +523,50 @@ Write-Output 'bugfix verification passed'
     Assert-ExitCode $queueCleanup 0 "queue cleanup recent canceled"
     Assert-Contains $queueCleanup.Output '"type":"queue.cleanup"' "queue cleanup recent canceled"
     Assert-Contains $queueCleanup.Output '"deletedCount":0' "queue cleanup recent canceled"
+
+    $pipelineRun = Invoke-CaiCli -Arguments @(
+        "pipeline", "run", "security-review", "--output", "json", "--workspace", $workspace,
+        "--", "Review", "@file:note.txt"
+    )
+    Assert-ExitCode $pipelineRun 1 "pipeline run missing model"
+    Assert-Contains $pipelineRun.Output '"type":"pipeline.result"' "pipeline run missing model"
+    Assert-Contains $pipelineRun.Output '"status":"failed"' "pipeline run missing model"
+    Assert-Contains $pipelineRun.Output '"role":"security"' "pipeline run missing model"
+    Assert-Contains $pipelineRun.Output '"isReadOnly":true' "pipeline run read-only boundary"
+    Assert-Contains $pipelineRun.Output '"allowWrites":false' "pipeline run read-only boundary"
+    Assert-Contains $pipelineRun.Output '"allowShell":false' "pipeline run read-only boundary"
+    Assert-Contains $pipelineRun.Output '"allowMcp":false' "pipeline run read-only boundary"
+    Assert-Contains $pipelineRun.Output '"errorCode":"missing-model"' "pipeline run missing model"
+    Assert-Contains $pipelineRun.Output '"kind":"task-report"' "pipeline run artifact"
+    Assert-Contains $pipelineRun.Output '"remainingRisks":[' "pipeline run risks"
+    $pipelineRunJson = $pipelineRun.Output | ConvertFrom-Json
+    $pipelineRole = @($pipelineRunJson.report.roles)[0]
+    if ([string]::IsNullOrWhiteSpace([string]$pipelineRole.queueId) -or
+        [string]::IsNullOrWhiteSpace([string]$pipelineRole.jobId)) {
+        throw "pipeline run expected queue and job pointers. Output:`n$($pipelineRun.Output)"
+    }
+
+    if (@($pipelineRunJson.report.roles).Count -ne 1) {
+        throw "pipeline run missing-model expected reviewer short-circuit. Output:`n$($pipelineRun.Output)"
+    }
+
+    $pipelineQueueShow = Invoke-CaiCli -Arguments @(
+        "queue", "show", ([string]$pipelineRole.queueId), "--output", "json", "--workspace", $workspace
+    )
+    Assert-ExitCode $pipelineQueueShow 0 "pipeline queue pointer"
+    Assert-Contains $pipelineQueueShow.Output ([string]$pipelineRole.jobId) "pipeline queue pointer"
+
+    $pipelineMarkdown = Invoke-CaiCli -Arguments @(
+        "pipeline", "run", "security-review", "--report", "markdown", "--workspace", $workspace,
+        "--", "Review", "@file:note.txt"
+    )
+    Assert-ExitCode $pipelineMarkdown 1 "pipeline markdown missing model"
+    Assert-Contains $pipelineMarkdown.Output "C# AI CLI pipeline result" "pipeline markdown"
+    Assert-Contains $pipelineMarkdown.Output "# Pipeline report: security-review" "pipeline markdown"
+    Assert-Contains $pipelineMarkdown.Output "## Roles" "pipeline markdown"
+    Assert-Contains $pipelineMarkdown.Output "## Artifacts" "pipeline markdown"
+    Assert-Contains $pipelineMarkdown.Output "## Remaining risks" "pipeline markdown"
+    Assert-Contains $pipelineMarkdown.Output "missing-model" "pipeline markdown"
 
     $execRecordedJob = Invoke-CaiCli -Arguments @(
         "exec", "--record-job", "--job-name", "smoke-missing-model",

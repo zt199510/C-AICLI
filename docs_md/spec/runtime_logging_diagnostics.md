@@ -151,6 +151,14 @@ Week 51 adds local task queue v1 and run control:
 - `queue cancel` is pending-only. Failed items can be manually retried by `queue run`. `queue cleanup` only accepts succeeded, failed, or canceled status and preserves pending, running, corrupt, and unknown records. It never deletes referenced jobs or artifacts.
 - Queue v1 is manual and local. There is no daemon, scheduler, concurrent worker pool, lease/heartbeat recovery, remote runner, CI provider, or API/SSE control surface.
 
+Week 52 adds local multi-role pipeline v1:
+
+- `pipeline list` emits text or a single `pipeline.list` JSON object from the fixed built-in catalog. `pipeline plan` emits an auditable text or `pipeline.plan` JSON object with role order, expert, entry path, instructions, and tool boundary. These commands do not call a model, run tools, start MCP, create queue/job state, or write the workspace.
+- `pipeline run` executes built-in roles sequentially by creating a queue item for each role and re-entering `queue run`, which delegates to the existing `exec` or `skills run` path with mandatory job recording. Each role report carries its queue id/attempt, job id, expert, boundary, status/error, task-report summary, artifacts, warnings, and remaining risks.
+- The terminal text/JSON/markdown aggregate uses schema-v1 `PipelineFinalReport`. It contains bounded redacted metadata and artifact pointers only, not raw references, raw tool arguments, raw secrets, or full diffs. A failed role short-circuits later roles while preserving earlier evidence.
+- Reviewer and security roles remain read-only through the existing expert/skill boundary: patch/shell tools are not registered, MCP discovery is skipped, and executor enforcement rejects patch, shell, and `mcp.*` calls. Pipeline orchestration does not inject approval overrides or bypass workspace/dirty checks, shell policy, disabled tools, trace/session/report, or credential checks.
+- Pipeline v1 uses fixed role definitions and the caller's configured provider/model. Automatic role routing, provider assignment, parallel workers, retry/resume, scheduling, daemon/API/SSE, and remote collaboration are not enabled.
+
 Trace and verbose diagnostics must redact secrets before writing output. Redaction covers API keys, access/refresh tokens, passwords, `Authorization` headers and common variants, `secretKey`, `privateKey`, nested or escaped `argumentsJson`, OpenAI `sk-...` keys, and GitHub token formats such as `ghp_...` and `github_pat_...`. Diagnostics may record key presence and source, but never raw key values.
 
 `logs path` prints the resolved CLI log directory. It must not create the directory just to print the path.

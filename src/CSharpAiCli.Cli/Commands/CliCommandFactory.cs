@@ -2920,6 +2920,284 @@ public static class CliCommandFactory
         });
         queueCommand.Subcommands.Add(queueRunCommand);
 
+        Command pipelineCommand = new("pipeline", "Plan and run built-in local multi-role pipelines.");
+        Command pipelineListCommand = new("list", "List built-in pipelines without invoking a model or tools.");
+        Option<bool> pipelineListJsonOption = new("--json")
+        {
+            Description = "Write a single JSON pipeline catalog object.",
+        };
+        Option<string> pipelineListOutputOption = new("--output")
+        {
+            Description = "Select text or json output.",
+            DefaultValueFactory = _ => "text",
+        };
+        AddTextJsonOutputValidator(pipelineListOutputOption);
+        pipelineListCommand.Options.Add(pipelineListJsonOption);
+        pipelineListCommand.Options.Add(pipelineListOutputOption);
+        pipelineListCommand.SetAction(parseResult =>
+        {
+            bool jsonOutput = IsJsonOutputRequested(
+                parseResult.GetValue(pipelineListJsonOption),
+                parseResult.GetValue(pipelineListOutputOption) ?? "text");
+            IReadOnlyList<PipelineManifest> pipelines = BuiltInPipelineCatalog.List();
+            if (jsonOutput)
+            {
+                new PipelineJsonRenderer(output).WriteList(pipelines);
+            }
+            else
+            {
+                new PipelineTextRenderer(output).WriteList(pipelines);
+            }
+
+            return 0;
+        });
+
+        Command pipelinePlanCommand = new("plan", "Render an auditable pipeline plan without invoking a model or tools.");
+        Argument<string> pipelinePlanNameArgument = new("pipeline")
+        {
+            Description = "Built-in pipeline name.",
+        };
+        Argument<string[]> pipelinePlanTaskArgument = new("task")
+        {
+            Description = "Task text. Tokens after -- are joined so quoting is optional.",
+            Arity = ArgumentArity.ZeroOrMore,
+        };
+        Option<string> pipelinePlanCwdOption = new("--cwd")
+        {
+            Description = "Use a working context path when the pipeline runs.",
+        };
+        Option<bool> pipelinePlanJsonOption = new("--json")
+        {
+            Description = "Write a single JSON pipeline plan object.",
+        };
+        Option<string> pipelinePlanOutputOption = new("--output")
+        {
+            Description = "Select text or json output.",
+            DefaultValueFactory = _ => "text",
+        };
+        AddTextJsonOutputValidator(pipelinePlanOutputOption);
+        pipelinePlanCommand.Arguments.Add(pipelinePlanNameArgument);
+        pipelinePlanCommand.Arguments.Add(pipelinePlanTaskArgument);
+        pipelinePlanCommand.Options.Add(pipelinePlanCwdOption);
+        pipelinePlanCommand.Options.Add(pipelinePlanJsonOption);
+        pipelinePlanCommand.Options.Add(pipelinePlanOutputOption);
+        pipelinePlanCommand.SetAction(parseResult =>
+        {
+            string pipelineName = parseResult.GetValue(pipelinePlanNameArgument) ?? string.Empty;
+            string task = string.Join(" ", parseResult.GetValue(pipelinePlanTaskArgument) ?? []).Trim();
+            bool jsonOutput = IsJsonOutputRequested(
+                parseResult.GetValue(pipelinePlanJsonOption),
+                parseResult.GetValue(pipelinePlanOutputOption) ?? "text");
+            if (!BuiltInPipelineCatalog.TryGet(pipelineName, out PipelineManifest? pipeline) || pipeline is null)
+            {
+                WritePipelineFailure(output, "pipeline-not-found", "Built-in pipeline was not found.", jsonOutput, "pipeline.plan", pipelineName);
+                return 1;
+            }
+
+            if (string.IsNullOrWhiteSpace(task))
+            {
+                WritePipelineFailure(output, "pipeline-invalid-request", "Pipeline task is empty.", jsonOutput, "pipeline.plan", pipelineName);
+                return 1;
+            }
+
+            string? workspacePath = parseResult.GetValue(workspaceOption);
+            string? cwd = parseResult.GetValue(pipelinePlanCwdOption);
+            CliEnvironmentSnapshot snapshot = snapshotProvider(workspacePath, cwd);
+            WriteVerboseDiagnostics(parseResult, "pipeline plan", snapshot, !jsonOutput);
+            PipelinePlan plan = new(pipeline, task, snapshot.Workspace.RootPath, cwd);
+            if (jsonOutput)
+            {
+                new PipelineJsonRenderer(output).WritePlan(plan);
+            }
+            else
+            {
+                new PipelineTextRenderer(output).WritePlan(plan);
+            }
+
+            return 0;
+        });
+        Command pipelineRunCommand = new("run", "Run a built-in pipeline sequentially through queue, job, exec, and skills boundaries.");
+        Argument<string> pipelineRunNameArgument = new("pipeline")
+        {
+            Description = "Built-in pipeline name.",
+        };
+        Argument<string[]> pipelineRunTaskArgument = new("task")
+        {
+            Description = "Task text. Tokens after -- are joined so quoting is optional.",
+            Arity = ArgumentArity.ZeroOrMore,
+        };
+        Option<string> pipelineRunCwdOption = new("--cwd")
+        {
+            Description = "Use a working context path for every role.",
+        };
+        Option<string> pipelineRunReportOption = new("--report")
+        {
+            Description = "Select none or markdown aggregate report output.",
+            DefaultValueFactory = _ => "none",
+        };
+        pipelineRunReportOption.Validators.Add(result =>
+        {
+            string report = result.GetValueOrDefault<string>() ?? "none";
+            if (!ExecReportModeParser.TryParse(report, out _))
+            {
+                result.AddError("Invalid value for --report. Allowed values are none and markdown.");
+            }
+        });
+        Option<bool> pipelineRunJsonOption = new("--json")
+        {
+            Description = "Write a single JSON pipeline result object.",
+        };
+        Option<string> pipelineRunOutputOption = new("--output")
+        {
+            Description = "Select text or json output.",
+            DefaultValueFactory = _ => "text",
+        };
+        AddTextJsonOutputValidator(pipelineRunOutputOption);
+        pipelineRunCommand.Arguments.Add(pipelineRunNameArgument);
+        pipelineRunCommand.Arguments.Add(pipelineRunTaskArgument);
+        pipelineRunCommand.Options.Add(pipelineRunCwdOption);
+        pipelineRunCommand.Options.Add(pipelineRunReportOption);
+        pipelineRunCommand.Options.Add(pipelineRunJsonOption);
+        pipelineRunCommand.Options.Add(pipelineRunOutputOption);
+        pipelineRunCommand.SetAction(parseResult =>
+        {
+            string pipelineName = parseResult.GetValue(pipelineRunNameArgument) ?? string.Empty;
+            string task = string.Join(" ", parseResult.GetValue(pipelineRunTaskArgument) ?? []).Trim();
+            bool jsonOutput = IsJsonOutputRequested(
+                parseResult.GetValue(pipelineRunJsonOption),
+                parseResult.GetValue(pipelineRunOutputOption) ?? "text");
+            if (!BuiltInPipelineCatalog.TryGet(pipelineName, out PipelineManifest? pipeline) || pipeline is null)
+            {
+                WritePipelineFailure(output, "pipeline-not-found", "Built-in pipeline was not found.", jsonOutput, "pipeline.run", pipelineName);
+                return 1;
+            }
+
+            if (string.IsNullOrWhiteSpace(task))
+            {
+                WritePipelineFailure(output, "pipeline-invalid-request", "Pipeline task is empty.", jsonOutput, "pipeline.run", pipelineName);
+                return 1;
+            }
+
+            string? workspacePath = parseResult.GetValue(workspaceOption);
+            string? cwd = parseResult.GetValue(pipelineRunCwdOption);
+            string reportMode = parseResult.GetValue(pipelineRunReportOption) ?? "none";
+            CliEnvironmentSnapshot snapshot = snapshotProvider(workspacePath, cwd);
+            TryWriteCommandLog(commandLogger, "pipeline run", snapshot);
+            WriteVerboseDiagnostics(parseResult, "pipeline run", snapshot, !jsonOutput);
+            PipelinePlan plan = new(pipeline, task, snapshot.Workspace.RootPath, cwd);
+            DelegatePipelineRoleExecutor roleExecutor = new(
+                request => ExecutePipelineRole(
+                    request,
+                    parseResult.GetValue(verboseOption),
+                    IsTraceEnabled(parseResult)));
+            PipelineFinalReport report;
+            try
+            {
+                report = new PipelineRunner(roleExecutor, utcNowProvider).Run(plan);
+            }
+            catch (Exception exception) when (IsQueueStoreException(exception))
+            {
+                WritePipelineFailure(
+                    output,
+                    "pipeline-execution-failed",
+                    "Pipeline execution could not create or read its queue/job records.",
+                    jsonOutput,
+                    "pipeline.run",
+                    pipelineName);
+                return 1;
+            }
+
+            if (jsonOutput)
+            {
+                new PipelineJsonRenderer(output).WriteFinalReport(report);
+            }
+            else
+            {
+                PipelineTextRenderer renderer = new(output);
+                renderer.WriteFinalReport(report);
+                if (string.Equals(reportMode, "markdown", StringComparison.OrdinalIgnoreCase))
+                {
+                    output.WriteLine();
+                    renderer.WriteMarkdown(report);
+                }
+            }
+
+            return string.Equals(report.Status, PipelineStatus.Succeeded, StringComparison.Ordinal) ? 0 : 1;
+
+            PipelineRoleExecutionResult ExecutePipelineRole(
+                PipelineRoleExecutionRequest request,
+                bool verbose,
+                bool trace)
+            {
+                CliEnvironmentSnapshot roleSnapshot = snapshotProvider(
+                    request.Plan.WorkspaceRoot,
+                    request.Plan.Cwd);
+                TaskQueueStore queueStore = TaskQueueStore.Create(roleSnapshot);
+                DateTimeOffset nowUtc = utcNowProvider();
+                string family = string.Equals(
+                    request.Step.CommandFamily,
+                    PipelineCommandFamily.Skill,
+                    StringComparison.Ordinal)
+                    ? TaskQueueCommandFamily.Skill
+                    : TaskQueueCommandFamily.Exec;
+                TaskQueueRequest queueRequest = new(
+                    family,
+                    request.Task,
+                    request.Plan.WorkspaceRoot,
+                    request.Plan.Cwd,
+                    Skill: request.Step.Skill,
+                    Expert: family == TaskQueueCommandFamily.Exec ? request.Step.Expert : null,
+                    ReportMode: "none");
+                TaskQueueItem pending = TaskQueueItem.CreatePending(
+                    TaskQueueIdGenerator.Create(nowUtc),
+                    nowUtc,
+                    queueRequest,
+                    warnings: [$"pipeline={request.RunId};step={request.Step.StepId};role={request.Step.Role}"]);
+                queueStore.Create(pending);
+
+                using StringWriter delegatedOutput = new(CultureInfo.InvariantCulture);
+                RootCommand delegatedRoot = Create(
+                    delegatedOutput,
+                    snapshotProvider,
+                    commandLogger,
+                    chatModelClientFactory,
+                    streamingRendererFactory,
+                    conversationStoreFactory,
+                    utcNowProvider,
+                    execAgentRunnerFactory,
+                    input,
+                    environmentVariableProvider);
+                List<string> arguments = [
+                    "queue", "run", pending.QueueId,
+                    "--workspace", request.Plan.WorkspaceRoot,
+                    "--output", "json"
+                ];
+                if (verbose)
+                {
+                    arguments.Add("--verbose");
+                }
+
+                if (trace)
+                {
+                    arguments.Add("--trace");
+                }
+
+                delegatedRoot.Parse(arguments).Invoke();
+                TaskQueueItem completed = queueStore.Read(pending.QueueId).Item ??
+                    throw new InvalidOperationException("Pipeline queue item could not be read after execution.");
+                JobRecord? job = null;
+                if (!string.IsNullOrWhiteSpace(completed.LatestJobId))
+                {
+                    job = JobRecordStore.Create(roleSnapshot).Read(completed.LatestJobId).Record;
+                }
+
+                return new PipelineRoleExecutionResult(completed, job);
+            }
+        });
+        pipelineCommand.Subcommands.Add(pipelineListCommand);
+        pipelineCommand.Subcommands.Add(pipelinePlanCommand);
+        pipelineCommand.Subcommands.Add(pipelineRunCommand);
+
         Command runCommand = new("run", "Run a deterministic local workspace task through the direct tool layer.");
         Argument<string> taskArgument = new("task")
         {
@@ -3243,6 +3521,7 @@ public static class CliCommandFactory
         rootCommand.Subcommands.Add(changesCommand);
         rootCommand.Subcommands.Add(jobsCommand);
         rootCommand.Subcommands.Add(queueCommand);
+        rootCommand.Subcommands.Add(pipelineCommand);
         rootCommand.Subcommands.Add(reviewCommand);
         rootCommand.Subcommands.Add(configCommand);
         rootCommand.Subcommands.Add(mcpCommand);
@@ -4200,6 +4479,23 @@ public static class CliCommandFactory
                 ["queueId"] = string.IsNullOrWhiteSpace(queueId) ? null : DiagnosticSecretRedactor.Redact(queueId),
                 ["path"] = string.IsNullOrWhiteSpace(path) ? null : DiagnosticSecretRedactor.Redact(path)
             }, JsonOptions));
+            return;
+        }
+
+        WriteSafeFailure(output, errorCode, summary);
+    }
+
+    private static void WritePipelineFailure(
+        TextWriter output,
+        string errorCode,
+        string summary,
+        bool jsonOutput,
+        string type,
+        string? pipeline = null)
+    {
+        if (jsonOutput)
+        {
+            new PipelineJsonRenderer(output).WriteFailure(type, errorCode, summary, pipeline);
             return;
         }
 

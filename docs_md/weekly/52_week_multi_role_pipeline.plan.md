@@ -1,6 +1,6 @@
 # 第 52 周 Multi-role Pipeline Implementation Plan
 
-状态：计划中
+状态：已验收
 
 **Goal:** 基于 0.3.3 expert profiles 和 0.4.0 job/queue 底座，实现本地多角色 pipeline v1，使 implementer/reviewer/tester 等角色可以按固定顺序协作，并保留每个角色的工具边界、报告和 artifact。
 
@@ -36,15 +36,15 @@ caicli pipeline run security-review --report markdown --workspace . -- "@folder:
 
 ## 任务清单
 
-- [ ] Step 1: 定义 pipeline DTO、role step、role boundary 和 final report schema。
-- [ ] Step 2: 新增 built-in pipeline catalog。
-- [ ] Step 3: 实现 `pipeline list/plan` text/json，不调用模型、不运行工具。
-- [ ] Step 4: 实现 `pipeline run` 顺序执行，复用 queue/job/exec/skills path。
-- [ ] Step 5: 确保 reviewer/security role 不注册 patch/shell/MCP write-capable tools。
-- [ ] Step 6: 合并 role reports、artifacts、warnings 和 remaining risks。
-- [ ] Step 7: 增加 fake/offline pipeline tests。
-- [ ] Step 8: 更新 smoke/docs。
-- [ ] Step 9: 运行 build/test/smoke 并创建 `52_week_review.md`。
+- [x] Step 1: 定义 pipeline DTO、role step、role boundary 和 final report schema。
+- [x] Step 2: 新增 built-in pipeline catalog。
+- [x] Step 3: 实现 `pipeline list/plan` text/json，不调用模型、不运行工具。
+- [x] Step 4: 实现 `pipeline run` 顺序执行，复用 queue/job/exec/skills path。
+- [x] Step 5: 确保 reviewer/security role 不注册 patch/shell/MCP write-capable tools。
+- [x] Step 6: 合并 role reports、artifacts、warnings 和 remaining risks。
+- [x] Step 7: 增加 fake/offline pipeline tests。
+- [x] Step 8: 更新 smoke/docs。
+- [x] Step 9: 运行 build/test/smoke 并创建 `52_week_review.md`。
 
 ## 验收标准
 

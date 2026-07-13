@@ -73,7 +73,7 @@ job record -> task plan -> controlled execution -> artifact/report -> review/che
 |---:|---|---|---|---|
 | 50 | `50_week_job_history_artifact_store.plan.md` | 已验收 | 定义 job record、artifact index、job store 与 `jobs list/show/export` 只读入口；先不做 queue 执行。 | `exec`/`skills` 可选择性记录 redacted job metadata；jobs text/json 可读；不写 workspace、不泄露 raw references/secrets。 |
 | 51 | `51_week_task_queue_run_control.plan.md` | 已验收 | 增加本地 task queue v1、job state transitions、cancel/retry/cleanup 语义和 fake/offline queue runner。 | pending/running/succeeded/failed/canceled 状态可测试；queue 不绕过 approval/security。 |
-| 52 | `52_week_multi_role_pipeline.plan.md` | 计划中 | 复用 expert profiles 组成 implementer/reviewer/tester pipeline，明确每个 role 的 tool boundary 和 report 合并策略。 | fake pipeline 覆盖实现->复核->验证；reviewer/security 保持只读；最终 artifact 可复核。 |
+| 52 | `52_week_multi_role_pipeline.plan.md` | 已验收 | 复用 expert profiles 组成 implementer/reviewer/tester pipeline，明确每个 role 的 tool boundary 和 report 合并策略。 | fake pipeline 覆盖实现->复核->验证；reviewer/security 保持只读；最终 artifact 可复核。 |
 | 53 | `53_week_local_automation_commands.plan.md` | 计划中 | 增加 local automation 配置、dry-run、manual trigger 和 schedule preview；不做后台常驻。 | automation list/validate/run --dry-run 稳定；不会默认定时执行或远程执行。 |
 | 54 | `54_week_ci_pr_artifacts.plan.md` | 计划中 | 输出 CI/PR 友好的 JSON/markdown/check summary artifacts，并提供 deterministic exit-code policy。 | CI smoke 可在无模型凭据下验证 schema；report/check 不写出 raw secrets。 |
 | 55 | `55_week_local_api_daemon_preview.plan.md` | 计划中 | 评估本地 daemon/HTTP API/SSE preview，默认关闭，仅绑定 localhost，复用 job store 和 approval boundaries。 | preview 不影响默认 CLI；API 不能扩大工具权限；docs 明确 Deferred/Preview。 |
