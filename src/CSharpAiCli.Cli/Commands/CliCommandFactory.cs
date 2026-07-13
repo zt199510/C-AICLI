@@ -2870,6 +2870,12 @@ public static class CliCommandFactory
                         jobStore.Update(failedJob);
                         jobRecord = failedJob;
                     }
+
+                    if (jobRecord is not null && runningItem.Request.Automation is not null)
+                    {
+                        jobRecord = jobRecord.WithAutomation(runningItem.Request.Automation);
+                        jobStore.Update(jobRecord);
+                    }
                 }
                 catch (Exception exception) when (IsJobStoreException(exception))
                 {
@@ -2919,6 +2925,419 @@ public static class CliCommandFactory
             return completionExitCode;
         });
         queueCommand.Subcommands.Add(queueRunCommand);
+
+        Command automationCommand = new("automation", "Inspect and manually run workspace-local automations.");
+        Command automationListCommand = new("list", "List valid workspace-local automation manifests.");
+        Option<bool> automationListJsonOption = new("--json")
+        {
+            Description = "Write a single JSON automation catalog object.",
+        };
+        Option<string> automationListOutputOption = new("--output")
+        {
+            Description = "Select text or json output.",
+            DefaultValueFactory = _ => "text",
+        };
+        AddTextJsonOutputValidator(automationListOutputOption);
+        automationListCommand.Options.Add(automationListJsonOption);
+        automationListCommand.Options.Add(automationListOutputOption);
+        automationListCommand.SetAction(parseResult =>
+        {
+            bool jsonOutput = IsJsonOutputRequested(
+                parseResult.GetValue(automationListJsonOption),
+                parseResult.GetValue(automationListOutputOption) ?? "text");
+            CliEnvironmentSnapshot snapshot = workspaceSnapshotProvider(parseResult.GetValue(workspaceOption));
+            WriteVerboseDiagnostics(parseResult, "automation list", snapshot, !jsonOutput);
+            AutomationCatalog catalog = AutomationCatalog.Load(snapshot.Workspace);
+            if (jsonOutput)
+            {
+                new AutomationJsonRenderer(output).WriteList(catalog);
+            }
+            else
+            {
+                new AutomationTextRenderer(output).WriteList(catalog);
+            }
+
+            return 0;
+        });
+
+        Command automationValidateCommand = new("validate", "Validate all workspace-local automation manifests.");
+        Option<bool> automationValidateJsonOption = new("--json")
+        {
+            Description = "Write a single JSON automation validation object.",
+        };
+        Option<string> automationValidateOutputOption = new("--output")
+        {
+            Description = "Select text or json output.",
+            DefaultValueFactory = _ => "text",
+        };
+        AddTextJsonOutputValidator(automationValidateOutputOption);
+        automationValidateCommand.Options.Add(automationValidateJsonOption);
+        automationValidateCommand.Options.Add(automationValidateOutputOption);
+        automationValidateCommand.SetAction(parseResult =>
+        {
+            bool jsonOutput = IsJsonOutputRequested(
+                parseResult.GetValue(automationValidateJsonOption),
+                parseResult.GetValue(automationValidateOutputOption) ?? "text");
+            CliEnvironmentSnapshot snapshot = workspaceSnapshotProvider(parseResult.GetValue(workspaceOption));
+            WriteVerboseDiagnostics(parseResult, "automation validate", snapshot, !jsonOutput);
+            AutomationCatalog catalog = AutomationCatalog.Load(snapshot.Workspace);
+            if (jsonOutput)
+            {
+                new AutomationJsonRenderer(output).WriteValidation(catalog);
+            }
+            else
+            {
+                new AutomationTextRenderer(output).WriteValidation(catalog);
+            }
+
+            return catalog.Diagnostics.Count == 0 ? 0 : 1;
+        });
+
+        Command automationPlanCommand = new("plan", "Render a local automation and schedule preview without execution.");
+        Argument<string> automationPlanNameArgument = new("automation")
+        {
+            Description = "Workspace-local automation name.",
+        };
+        Option<bool> automationPlanJsonOption = new("--json")
+        {
+            Description = "Write a single JSON automation plan object.",
+        };
+        Option<string> automationPlanOutputOption = new("--output")
+        {
+            Description = "Select text or json output.",
+            DefaultValueFactory = _ => "text",
+        };
+        AddTextJsonOutputValidator(automationPlanOutputOption);
+        automationPlanCommand.Arguments.Add(automationPlanNameArgument);
+        automationPlanCommand.Options.Add(automationPlanJsonOption);
+        automationPlanCommand.Options.Add(automationPlanOutputOption);
+        automationPlanCommand.SetAction(parseResult =>
+        {
+            string automationName = parseResult.GetValue(automationPlanNameArgument) ?? string.Empty;
+            bool jsonOutput = IsJsonOutputRequested(
+                parseResult.GetValue(automationPlanJsonOption),
+                parseResult.GetValue(automationPlanOutputOption) ?? "text");
+            CliEnvironmentSnapshot snapshot = workspaceSnapshotProvider(parseResult.GetValue(workspaceOption));
+            WriteVerboseDiagnostics(parseResult, "automation plan", snapshot, !jsonOutput);
+            AutomationCatalog catalog = AutomationCatalog.Load(snapshot.Workspace);
+            if (!catalog.TryGet(automationName, out AutomationCatalogItem? item) || item is null)
+            {
+                WriteAutomationFailure(
+                    output,
+                    AutomationErrorCode.NotFound,
+                    "Valid workspace-local automation was not found. Run automation validate for diagnostics.",
+                    jsonOutput,
+                    "automation.plan",
+                    automationName);
+                return 1;
+            }
+
+            AutomationPlan plan = new(
+                item,
+                snapshot.Workspace.RootPath,
+                AutomationManifestValidator.CreateSchedulePreview(item.Manifest.Trigger!));
+            if (jsonOutput)
+            {
+                new AutomationJsonRenderer(output).WritePlan(plan);
+            }
+            else
+            {
+                new AutomationTextRenderer(output).WritePlan(plan);
+            }
+
+            return 0;
+        });
+
+        Command automationRunCommand = new("run", "Dry-run or manually trigger a workspace-local automation.");
+        Argument<string> automationRunNameArgument = new("automation")
+        {
+            Description = "Workspace-local automation name.",
+        };
+        Option<bool> automationRunDryRunOption = new("--dry-run")
+        {
+            Description = "Render the validated automation plan without model, tools, or persistence.",
+        };
+        Option<bool> automationRunManualOption = new("--manual")
+        {
+            Description = "Manually execute the target through existing queue or pipeline paths.",
+        };
+        Option<bool> automationRunJsonOption = new("--json")
+        {
+            Description = "Write a single JSON automation result object.",
+        };
+        Option<string> automationRunOutputOption = new("--output")
+        {
+            Description = "Select text or json output.",
+            DefaultValueFactory = _ => "text",
+        };
+        AddTextJsonOutputValidator(automationRunOutputOption);
+        automationRunCommand.Arguments.Add(automationRunNameArgument);
+        automationRunCommand.Options.Add(automationRunDryRunOption);
+        automationRunCommand.Options.Add(automationRunManualOption);
+        automationRunCommand.Options.Add(automationRunJsonOption);
+        automationRunCommand.Options.Add(automationRunOutputOption);
+        automationRunCommand.SetAction(parseResult =>
+        {
+            string automationName = parseResult.GetValue(automationRunNameArgument) ?? string.Empty;
+            bool dryRun = parseResult.GetValue(automationRunDryRunOption);
+            bool manual = parseResult.GetValue(automationRunManualOption);
+            bool jsonOutput = IsJsonOutputRequested(
+                parseResult.GetValue(automationRunJsonOption),
+                parseResult.GetValue(automationRunOutputOption) ?? "text");
+            if (dryRun == manual)
+            {
+                WriteAutomationFailure(
+                    output,
+                    AutomationErrorCode.InvalidRunMode,
+                    "Specify exactly one of --dry-run or --manual.",
+                    jsonOutput,
+                    "automation.run",
+                    automationName);
+                return 1;
+            }
+
+            CliEnvironmentSnapshot snapshot = workspaceSnapshotProvider(parseResult.GetValue(workspaceOption));
+            WriteVerboseDiagnostics(parseResult, "automation run", snapshot, !jsonOutput);
+            AutomationCatalog catalog = AutomationCatalog.Load(snapshot.Workspace);
+            if (!catalog.TryGet(automationName, out AutomationCatalogItem? item) || item is null)
+            {
+                WriteAutomationFailure(
+                    output,
+                    AutomationErrorCode.NotFound,
+                    "Valid workspace-local automation was not found. Run automation validate for diagnostics.",
+                    jsonOutput,
+                    "automation.run",
+                    automationName);
+                return 1;
+            }
+
+            AutomationPlan plan = new(
+                item,
+                snapshot.Workspace.RootPath,
+                AutomationManifestValidator.CreateSchedulePreview(item.Manifest.Trigger!),
+                dryRun ? AutomationRunMode.DryRun : AutomationRunMode.Manual);
+            if (dryRun)
+            {
+                if (jsonOutput)
+                {
+                    new AutomationJsonRenderer(output).WriteDryRun(plan);
+                }
+                else
+                {
+                    new AutomationTextRenderer(output).WriteDryRun(plan);
+                }
+
+                return 0;
+            }
+
+            TryWriteCommandLog(commandLogger, "automation run", snapshot);
+            string automationRunId = AutomationRunIdGenerator.Create(utcNowProvider());
+            AutomationRunMetadata metadata = new(
+                item.Manifest.Name!,
+                automationRunId,
+                AutomationRunMode.Manual,
+                item.Source.Path,
+                item.Manifest.Target!.Type!);
+            AutomationRunResult result;
+            try
+            {
+                result = string.Equals(
+                    item.Manifest.Target.Type,
+                    AutomationTargetType.Pipeline,
+                    StringComparison.Ordinal)
+                    ? ExecutePipelineTarget(item.Manifest.Target, metadata)
+                    : ExecuteQueueTarget(item.Manifest.Target, metadata);
+            }
+            catch (Exception exception) when (IsQueueStoreException(exception) || exception is JsonException)
+            {
+                WriteAutomationFailure(
+                    output,
+                    AutomationErrorCode.ExecutionFailed,
+                    "Manual automation could not create or read its queue/job artifacts.",
+                    jsonOutput,
+                    "automation.run",
+                    automationName);
+                return 1;
+            }
+
+            if (jsonOutput)
+            {
+                new AutomationJsonRenderer(output).WriteRunResult(result);
+            }
+            else
+            {
+                new AutomationTextRenderer(output).WriteRunResult(result);
+            }
+
+            return result.ExitCode;
+
+            AutomationRunResult ExecuteQueueTarget(AutomationTarget target, AutomationRunMetadata runMetadata)
+            {
+                bool skillTarget = string.Equals(target.Type, AutomationTargetType.Skill, StringComparison.Ordinal) ||
+                    (string.Equals(target.Type, AutomationTargetType.Queue, StringComparison.Ordinal) &&
+                     string.Equals(target.Family, "skill", StringComparison.Ordinal));
+                string family = skillTarget ? TaskQueueCommandFamily.Skill : TaskQueueCommandFamily.Exec;
+                TaskQueueRequest request = new(
+                    family,
+                    target.Task!,
+                    snapshot.Workspace.RootPath,
+                    target.Cwd,
+                    Skill: skillTarget ? target.Name : null,
+                    Expert: skillTarget ? null : target.Expert,
+                    ReportMode: target.Report ?? "none",
+                    Automation: runMetadata);
+                DateTimeOffset nowUtc = utcNowProvider();
+                TaskQueueItem pending = TaskQueueItem.CreatePending(
+                    TaskQueueIdGenerator.Create(nowUtc),
+                    nowUtc,
+                    request,
+                    warnings: [$"automation={runMetadata.Automation};run={runMetadata.RunId};target={runMetadata.TargetType}"]);
+                TaskQueueStore queueStore = TaskQueueStore.Create(snapshot);
+                queueStore.Create(pending);
+
+                using StringWriter delegatedOutput = new(CultureInfo.InvariantCulture);
+                RootCommand delegatedRoot = Create(
+                    delegatedOutput,
+                    snapshotProvider,
+                    commandLogger,
+                    chatModelClientFactory,
+                    streamingRendererFactory,
+                    conversationStoreFactory,
+                    utcNowProvider,
+                    execAgentRunnerFactory,
+                    input,
+                    environmentVariableProvider);
+                List<string> arguments = [
+                    "queue", "run", pending.QueueId,
+                    "--workspace", snapshot.Workspace.RootPath,
+                    "--output", "json"
+                ];
+                if (parseResult.GetValue(verboseOption))
+                {
+                    arguments.Add("--verbose");
+                }
+
+                if (IsTraceEnabled(parseResult))
+                {
+                    arguments.Add("--trace");
+                }
+
+                int exitCode = delegatedRoot.Parse(arguments).Invoke();
+                TaskQueueItem completed = queueStore.Read(pending.QueueId).Item ??
+                    throw new InvalidOperationException("Automation queue item could not be read after execution.");
+                return new AutomationRunResult(
+                    runMetadata.RunId,
+                    runMetadata.Automation,
+                    runMetadata.TargetType,
+                    exitCode == 0 ? "succeeded" : "failed",
+                    exitCode,
+                    QueueIds: [completed.QueueId],
+                    JobIds: string.IsNullOrWhiteSpace(completed.LatestJobId) ? [] : [completed.LatestJobId],
+                    Summary: completed.Summary,
+                    Warnings: completed.Warnings);
+            }
+
+            AutomationRunResult ExecutePipelineTarget(AutomationTarget target, AutomationRunMetadata runMetadata)
+            {
+                using StringWriter delegatedOutput = new(CultureInfo.InvariantCulture);
+                RootCommand delegatedRoot = Create(
+                    delegatedOutput,
+                    snapshotProvider,
+                    commandLogger,
+                    chatModelClientFactory,
+                    streamingRendererFactory,
+                    conversationStoreFactory,
+                    utcNowProvider,
+                    execAgentRunnerFactory,
+                    input,
+                    environmentVariableProvider);
+                List<string> arguments = [
+                    "pipeline", "run", target.Name!,
+                    "--workspace", snapshot.Workspace.RootPath,
+                    "--output", "json",
+                    "--automation-name", runMetadata.Automation,
+                    "--automation-run-id", runMetadata.RunId,
+                    "--automation-source", runMetadata.SourcePath,
+                    "--automation-target", runMetadata.TargetType
+                ];
+                if (!string.IsNullOrWhiteSpace(target.Cwd))
+                {
+                    arguments.Add("--cwd");
+                    arguments.Add(target.Cwd);
+                }
+
+                if (!string.IsNullOrWhiteSpace(target.Report))
+                {
+                    arguments.Add("--report");
+                    arguments.Add(target.Report);
+                }
+
+                if (parseResult.GetValue(verboseOption))
+                {
+                    arguments.Add("--verbose");
+                }
+
+                if (IsTraceEnabled(parseResult))
+                {
+                    arguments.Add("--trace");
+                }
+
+                arguments.Add("--");
+                arguments.Add(target.Task!);
+                int exitCode = delegatedRoot.Parse(arguments).Invoke();
+                using JsonDocument document = JsonDocument.Parse(delegatedOutput.ToString());
+                JsonElement root = document.RootElement;
+                string? pipelineRunId = null;
+                List<string> queueIds = [];
+                List<string> jobIds = [];
+                List<string> warnings = [];
+                if (root.TryGetProperty("report", out JsonElement report))
+                {
+                    if (report.TryGetProperty("runId", out JsonElement runIdElement))
+                    {
+                        pipelineRunId = runIdElement.GetString();
+                    }
+
+                    if (report.TryGetProperty("roles", out JsonElement roles))
+                    {
+                        foreach (JsonElement role in roles.EnumerateArray())
+                        {
+                            if (role.TryGetProperty("queueId", out JsonElement queueId) && !string.IsNullOrWhiteSpace(queueId.GetString()))
+                            {
+                                queueIds.Add(queueId.GetString()!);
+                            }
+
+                            if (role.TryGetProperty("jobId", out JsonElement jobId) && !string.IsNullOrWhiteSpace(jobId.GetString()))
+                            {
+                                jobIds.Add(jobId.GetString()!);
+                            }
+                        }
+                    }
+
+                    if (report.TryGetProperty("warnings", out JsonElement reportWarnings))
+                    {
+                        warnings.AddRange(reportWarnings.EnumerateArray()
+                            .Select(value => DiagnosticSecretRedactor.Redact(value.GetString() ?? string.Empty)));
+                    }
+                }
+
+                return new AutomationRunResult(
+                    runMetadata.RunId,
+                    runMetadata.Automation,
+                    runMetadata.TargetType,
+                    exitCode == 0 ? "succeeded" : "failed",
+                    exitCode,
+                    queueIds,
+                    jobIds,
+                    pipelineRunId,
+                    exitCode == 0 ? "Pipeline automation completed." : "Pipeline automation failed.",
+                    warnings);
+            }
+        });
+        automationCommand.Subcommands.Add(automationListCommand);
+        automationCommand.Subcommands.Add(automationValidateCommand);
+        automationCommand.Subcommands.Add(automationPlanCommand);
+        automationCommand.Subcommands.Add(automationRunCommand);
 
         Command pipelineCommand = new("pipeline", "Plan and run built-in local multi-role pipelines.");
         Command pipelineListCommand = new("list", "List built-in pipelines without invoking a model or tools.");
@@ -3052,6 +3471,22 @@ public static class CliCommandFactory
             Description = "Select text or json output.",
             DefaultValueFactory = _ => "text",
         };
+        Option<string> pipelineRunAutomationNameOption = new("--automation-name")
+        {
+            Description = "Carry local automation correlation metadata into pipeline queue/job artifacts.",
+        };
+        Option<string> pipelineRunAutomationRunIdOption = new("--automation-run-id")
+        {
+            Description = "Carry a validated local automation run id.",
+        };
+        Option<string> pipelineRunAutomationSourceOption = new("--automation-source")
+        {
+            Description = "Carry the redacted workspace-local automation source path.",
+        };
+        Option<string> pipelineRunAutomationTargetOption = new("--automation-target")
+        {
+            Description = "Carry the local automation target type.",
+        };
         AddTextJsonOutputValidator(pipelineRunOutputOption);
         pipelineRunCommand.Arguments.Add(pipelineRunNameArgument);
         pipelineRunCommand.Arguments.Add(pipelineRunTaskArgument);
@@ -3059,6 +3494,10 @@ public static class CliCommandFactory
         pipelineRunCommand.Options.Add(pipelineRunReportOption);
         pipelineRunCommand.Options.Add(pipelineRunJsonOption);
         pipelineRunCommand.Options.Add(pipelineRunOutputOption);
+        pipelineRunCommand.Options.Add(pipelineRunAutomationNameOption);
+        pipelineRunCommand.Options.Add(pipelineRunAutomationRunIdOption);
+        pipelineRunCommand.Options.Add(pipelineRunAutomationSourceOption);
+        pipelineRunCommand.Options.Add(pipelineRunAutomationTargetOption);
         pipelineRunCommand.SetAction(parseResult =>
         {
             string pipelineName = parseResult.GetValue(pipelineRunNameArgument) ?? string.Empty;
@@ -3081,6 +3520,38 @@ public static class CliCommandFactory
             string? workspacePath = parseResult.GetValue(workspaceOption);
             string? cwd = parseResult.GetValue(pipelineRunCwdOption);
             string reportMode = parseResult.GetValue(pipelineRunReportOption) ?? "none";
+            string? automationName = parseResult.GetValue(pipelineRunAutomationNameOption);
+            string? automationRunId = parseResult.GetValue(pipelineRunAutomationRunIdOption);
+            string? automationSource = parseResult.GetValue(pipelineRunAutomationSourceOption);
+            string? automationTarget = parseResult.GetValue(pipelineRunAutomationTargetOption);
+            bool anyAutomationMetadata = !string.IsNullOrWhiteSpace(automationName) ||
+                !string.IsNullOrWhiteSpace(automationRunId) ||
+                !string.IsNullOrWhiteSpace(automationSource) ||
+                !string.IsNullOrWhiteSpace(automationTarget);
+            bool completeAutomationMetadata = !string.IsNullOrWhiteSpace(automationName) &&
+                AutomationRunIdGenerator.IsValid(automationRunId) &&
+                !string.IsNullOrWhiteSpace(automationSource) &&
+                string.Equals(automationTarget, AutomationTargetType.Pipeline, StringComparison.Ordinal);
+            if (anyAutomationMetadata && !completeAutomationMetadata)
+            {
+                WritePipelineFailure(
+                    output,
+                    AutomationErrorCode.ManifestInvalid,
+                    "Pipeline automation correlation metadata is incomplete or invalid.",
+                    jsonOutput,
+                    "pipeline.run",
+                    pipelineName);
+                return 1;
+            }
+
+            AutomationRunMetadata? automationMetadata = completeAutomationMetadata
+                ? new AutomationRunMetadata(
+                    automationName!,
+                    automationRunId!,
+                    AutomationRunMode.Manual,
+                    automationSource!,
+                    automationTarget!)
+                : null;
             CliEnvironmentSnapshot snapshot = snapshotProvider(workspacePath, cwd);
             TryWriteCommandLog(commandLogger, "pipeline run", snapshot);
             WriteVerboseDiagnostics(parseResult, "pipeline run", snapshot, !jsonOutput);
@@ -3147,7 +3618,8 @@ public static class CliCommandFactory
                     request.Plan.Cwd,
                     Skill: request.Step.Skill,
                     Expert: family == TaskQueueCommandFamily.Exec ? request.Step.Expert : null,
-                    ReportMode: "none");
+                    ReportMode: "none",
+                    Automation: automationMetadata);
                 TaskQueueItem pending = TaskQueueItem.CreatePending(
                     TaskQueueIdGenerator.Create(nowUtc),
                     nowUtc,
@@ -3521,6 +3993,7 @@ public static class CliCommandFactory
         rootCommand.Subcommands.Add(changesCommand);
         rootCommand.Subcommands.Add(jobsCommand);
         rootCommand.Subcommands.Add(queueCommand);
+        rootCommand.Subcommands.Add(automationCommand);
         rootCommand.Subcommands.Add(pipelineCommand);
         rootCommand.Subcommands.Add(reviewCommand);
         rootCommand.Subcommands.Add(configCommand);
@@ -4500,6 +4973,23 @@ public static class CliCommandFactory
         }
 
         WriteSafeFailure(output, errorCode, summary);
+    }
+
+    private static void WriteAutomationFailure(
+        TextWriter output,
+        string errorCode,
+        string summary,
+        bool jsonOutput,
+        string type,
+        string? automation = null)
+    {
+        if (jsonOutput)
+        {
+            new AutomationJsonRenderer(output).WriteFailure(type, errorCode, summary, automation);
+            return;
+        }
+
+        new AutomationTextRenderer(output).WriteFailure(errorCode, summary);
     }
 
     private static ExecResult CompleteRecordedJob(

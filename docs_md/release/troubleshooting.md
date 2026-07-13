@@ -144,6 +144,31 @@ Common pipeline failures and diagnostics:
 
 Reviewer and security roles should report `boundary.isReadOnly=true`, with writes, shell, MCP, and MCP discovery disabled. A `tool-disabled` result from these roles is an enforced boundary, not a signal to rerun with elevated permissions. There is no pipeline-level retry/resume; inspect the preserved role queue/job/artifact pointers, correct the cause, and start a new pipeline run when appropriate.
 
+## Workspace-local Automation
+
+Inspect and validate manifests before manual execution:
+
+```powershell
+artifacts\release\caicli-0.3.3-win-x64\caicli.exe automation list --workspace .
+artifacts\release\caicli-0.3.3-win-x64\caicli.exe automation validate --output json --workspace .
+artifacts\release\caicli-0.3.3-win-x64\caicli.exe automation plan nightly-review --workspace .
+artifacts\release\caicli-0.3.3-win-x64\caicli.exe automation run nightly-review --dry-run --workspace .
+artifacts\release\caicli-0.3.3-win-x64\caicli.exe automation run nightly-review --manual --output json --workspace .
+```
+
+Common automation diagnostics:
+
+- `automation-manifest-invalid`: a required field, strict JSON field, cron preview, time zone, target shape, or report value is invalid. Manifest `script`, `command`, and approval fields are not accepted.
+- `automation-unsafe-target`: `manualOnly` is false, `cwd` escapes the workspace, or the safety declaration understates a selected target capability.
+- `automation-target-unavailable`: the named skill, expert, or built-in pipeline is not available.
+- `automation-not-found`: the requested name did not enter the valid catalog; run `automation validate` to see its source diagnostic.
+- `automation-run-mode-invalid`: specify exactly one of `--dry-run` or `--manual`.
+- `automation-execution-failed`: queue/job artifacts could not be created or read. Inspect the active `CAICLI_USER_PROFILE` and filesystem access.
+
+Schedule output always reports `enabled=false`. This is intentional: the schedule is preview data, not a background registration. Do not expect Windows Task Scheduler entries, daemon processes, API/webhook triggers, or automatic retries.
+
+Dry-run is non-persistent and should not create queue/job/log state. Manual execution can return delegated errors such as `missing-model`, `tool-disabled`, `approval-denied`, or `shell-policy-denied`; these show that the existing target boundary was preserved. Inspect the returned queue/job ids with `queue show` and `jobs show` rather than rerunning with broader permissions.
+
 ## Tool And Approval Failures
 
 Read tools do not require approval. Patch and shell tools do.

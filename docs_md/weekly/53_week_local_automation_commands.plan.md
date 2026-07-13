@@ -1,6 +1,6 @@
 # 第 53 周 Local Automation Commands Implementation Plan
 
-状态：计划中
+状态：已验收
 
 **Goal:** 在 queue/job/pipeline 稳定后，引入本地 automation 配置、验证、dry-run 和手动触发入口，为定时检查、定时 review、定时报告预留 CLI-first 自动化能力，但不启动后台常驻服务。
 
@@ -37,15 +37,15 @@ caicli automation run nightly-review --manual --workspace .
 
 ## 任务清单
 
-- [ ] Step 1: 定义 automation manifest、trigger、target、safety DTO。
-- [ ] Step 2: 实现 workspace-local manifest loading 与 validation diagnostics。
-- [ ] Step 3: 增加 `automation list/validate/plan` text/json。
-- [ ] Step 4: 增加 `automation run --dry-run`，不调用模型、不运行工具。
-- [ ] Step 5: 增加 `automation run --manual`，复用 queue/pipeline/exec 安全路径。
-- [ ] Step 6: 将 automation metadata 写入 job/queue artifacts。
-- [ ] Step 7: 增加 tests 覆盖 invalid manifest、unsafe target、disabled tools、redaction。
-- [ ] Step 8: 更新 smoke/docs。
-- [ ] Step 9: 运行 build/test/smoke 并创建 `53_week_review.md`。
+- [x] Step 1: 定义 automation manifest、trigger、target、safety DTO。
+- [x] Step 2: 实现 workspace-local manifest loading 与 validation diagnostics。
+- [x] Step 3: 增加 `automation list/validate/plan` text/json。
+- [x] Step 4: 增加 `automation run --dry-run`，不调用模型、不运行工具。
+- [x] Step 5: 增加 `automation run --manual`，复用 queue/pipeline/exec 安全路径。
+- [x] Step 6: 将 automation metadata 写入 job/queue artifacts。
+- [x] Step 7: 增加 tests 覆盖 invalid manifest、unsafe target、disabled tools、redaction。
+- [x] Step 8: 更新 smoke/docs。
+- [x] Step 9: 运行 build/test/smoke 并创建 `53_week_review.md`。
 
 ## 验收标准
 

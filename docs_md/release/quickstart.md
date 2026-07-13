@@ -249,6 +249,47 @@ artifacts\release\caicli-0.3.3-win-x64\caicli.exe pipeline run security-review -
 
 Pipeline v1 uses fixed local role definitions and the caller's configured provider/model. It does not perform automatic model routing, provider assignment, parallel workers, background scheduling, or remote collaboration. Without model credentials, `pipeline run` returns a stable failed report with queue/job/task-report evidence; `list` and `plan` remain credential-free.
 
+## Workspace-local Automation
+
+Place strict JSON manifests under `.caicli/automations`. A manifest selects a queue, skill, or built-in pipeline target and declares its trigger and safety envelope. Manifests are data only: they cannot contain scripts or approval overrides. A `schedule` trigger is preview metadata and is never executed automatically.
+
+```json
+{
+  "schemaVersion": 1,
+  "name": "nightly-review",
+  "description": "Review the workspace using a local schedule preview.",
+  "trigger": {
+    "type": "schedule",
+    "schedule": "0 2 * * *",
+    "timeZone": "UTC"
+  },
+  "target": {
+    "type": "skill",
+    "name": "review-only",
+    "task": "Review @folder:src",
+    "report": "none"
+  },
+  "safety": {
+    "manualOnly": true,
+    "allowWrites": false,
+    "allowShell": false,
+    "allowMcp": false
+  }
+}
+```
+
+```powershell
+artifacts\release\caicli-0.3.3-win-x64\caicli.exe automation list --workspace .
+artifacts\release\caicli-0.3.3-win-x64\caicli.exe automation validate --workspace .
+artifacts\release\caicli-0.3.3-win-x64\caicli.exe automation plan nightly-review --output json --workspace .
+artifacts\release\caicli-0.3.3-win-x64\caicli.exe automation run nightly-review --dry-run --workspace .
+artifacts\release\caicli-0.3.3-win-x64\caicli.exe automation run nightly-review --manual --workspace .
+```
+
+List, validate, plan, and dry-run are credential-free and do not call a model, run tools, start MCP, create queue/job records, or write the workspace. Manual run delegates to the existing queue or pipeline path, so approval, workspace and dirty-workspace checks, shell policy, disabled tools, MCP startup policy, trace/session/report, and model credentials are unchanged. Manual runs record redacted automation correlation in queue/job metadata and an inline job artifact pointer.
+
+C-AICLI does not include a background scheduler, Windows Task Scheduler registration, daemon worker, API/webhook trigger, remote execution, or team automation. To run a schedule preview, a user must still invoke `automation run --manual` explicitly.
+
 ```powershell
 artifacts\release\caicli-0.3.3-win-x64\caicli.exe exec --workspace . "read README.md"
 artifacts\release\caicli-0.3.3-win-x64\caicli.exe exec --json --workspace . "read README.md"

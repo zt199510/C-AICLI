@@ -299,6 +299,31 @@ try {
     Set-Content -LiteralPath (Join-Path $workspace "note.txt") -Value "before" -Encoding UTF8
     Set-Content -LiteralPath $outside -Value "outside" -Encoding UTF8
     Set-Content -LiteralPath (Join-Path $workspace "AGENTS.md") -Value "Prefer concise smoke output." -Encoding UTF8
+    New-Item -ItemType Directory -Path (Join-Path $workspace ".caicli\automations") -Force | Out-Null
+    Set-Content -LiteralPath (Join-Path $workspace ".caicli\automations\nightly-review.json") -Value @'
+{
+  "schemaVersion": 1,
+  "name": "nightly-review",
+  "description": "Review the workspace using a schedule preview and manual trigger.",
+  "trigger": {
+    "type": "schedule",
+    "schedule": "0 2 * * *",
+    "timeZone": "UTC"
+  },
+  "target": {
+    "type": "skill",
+    "name": "review-only",
+    "task": "Review @file:note.txt",
+    "report": "none"
+  },
+  "safety": {
+    "manualOnly": true,
+    "allowWrites": false,
+    "allowShell": false,
+    "allowMcp": false
+  }
+}
+'@ -Encoding UTF8
     New-Item -ItemType Directory -Path (Join-Path $workspace "src\app") -Force | Out-Null
     Set-Content -LiteralPath (Join-Path $workspace "src\app\AGENTS.md") -Value "Use app-specific smoke instructions." -Encoding UTF8
     New-Item -ItemType Directory -Path (Join-Path $workspace "src\BuggyApp"), (Join-Path $workspace "tests") -Force | Out-Null
@@ -458,6 +483,37 @@ Write-Output 'bugfix verification passed'
     Assert-Contains $pipelinePlanJson.Output '"role":"reviewer"' "pipeline plan json"
     Assert-Contains $pipelinePlanJson.Output '"isReadOnly":true' "pipeline plan json"
 
+    $automationList = Invoke-CaiCli -Arguments @("automation", "list", "--workspace", $workspace)
+    Assert-ExitCode $automationList 0 "automation list"
+    Assert-Contains $automationList.Output "C# AI CLI local automations" "automation list"
+    Assert-Contains $automationList.Output "nightly-review" "automation list"
+
+    $automationListJson = Invoke-CaiCli -Arguments @("automation", "list", "--output", "json", "--workspace", $workspace)
+    Assert-ExitCode $automationListJson 0 "automation list json"
+    Assert-Contains $automationListJson.Output '"type":"automation.list"' "automation list json"
+    Assert-Contains $automationListJson.Output '"name":"nightly-review"' "automation list json"
+
+    $automationValidate = Invoke-CaiCli -Arguments @("automation", "validate", "--output", "json", "--workspace", $workspace)
+    Assert-ExitCode $automationValidate 0 "automation validate json"
+    Assert-Contains $automationValidate.Output '"type":"automation.validate"' "automation validate json"
+    Assert-Contains $automationValidate.Output '"diagnosticCount":0' "automation validate json"
+
+    $automationPlan = Invoke-CaiCli -Arguments @(
+        "automation", "plan", "nightly-review", "--output", "json", "--workspace", $workspace
+    )
+    Assert-ExitCode $automationPlan 0 "automation plan json"
+    Assert-Contains $automationPlan.Output '"type":"automation.plan"' "automation plan json"
+    Assert-Contains $automationPlan.Output '"enabled":false' "automation schedule preview"
+    Assert-Contains $automationPlan.Output '"schedule":"0 2 * * *"' "automation schedule preview"
+    Assert-Contains $automationPlan.Output 'preview only' "automation schedule preview"
+
+    $automationDryRun = Invoke-CaiCli -Arguments @(
+        "automation", "run", "nightly-review", "--dry-run", "--output", "json", "--workspace", $workspace
+    )
+    Assert-ExitCode $automationDryRun 0 "automation dry-run json"
+    Assert-Contains $automationDryRun.Output '"type":"automation.run.dry-run"' "automation dry-run json"
+    Assert-Contains $automationDryRun.Output '"execution":"none"' "automation dry-run json"
+
     $jobsEmpty = Invoke-CaiCli -Arguments @("jobs", "list", "--output", "json", "--workspace", $workspace)
     Assert-ExitCode $jobsEmpty 0 "jobs list empty json"
     Assert-Contains $jobsEmpty.Output '"type":"jobs.list"' "jobs list empty json"
@@ -567,6 +623,35 @@ Write-Output 'bugfix verification passed'
     Assert-Contains $pipelineMarkdown.Output "## Artifacts" "pipeline markdown"
     Assert-Contains $pipelineMarkdown.Output "## Remaining risks" "pipeline markdown"
     Assert-Contains $pipelineMarkdown.Output "missing-model" "pipeline markdown"
+
+    $automationManual = Invoke-CaiCli -Arguments @(
+        "automation", "run", "nightly-review", "--manual", "--output", "json", "--workspace", $workspace
+    )
+    Assert-ExitCode $automationManual 1 "automation manual missing model"
+    Assert-Contains $automationManual.Output '"type":"automation.result"' "automation manual missing model"
+    Assert-Contains $automationManual.Output '"status":"failed"' "automation manual missing model"
+    Assert-Contains $automationManual.Output '"targetType":"skill"' "automation manual target"
+    $automationManualJson = $automationManual.Output | ConvertFrom-Json
+    $automationQueueId = [string]@($automationManualJson.result.queueIds)[0]
+    $automationJobId = [string]@($automationManualJson.result.jobIds)[0]
+    if ([string]::IsNullOrWhiteSpace($automationQueueId) -or [string]::IsNullOrWhiteSpace($automationJobId)) {
+        throw "automation manual expected queue and job pointers. Output:`n$($automationManual.Output)"
+    }
+
+    $automationQueueShow = Invoke-CaiCli -Arguments @(
+        "queue", "show", $automationQueueId, "--output", "json", "--workspace", $workspace
+    )
+    Assert-ExitCode $automationQueueShow 0 "automation queue metadata"
+    Assert-Contains $automationQueueShow.Output '"automation":"nightly-review"' "automation queue metadata"
+    Assert-Contains $automationQueueShow.Output '"targetType":"skill"' "automation queue metadata"
+
+    $automationJobShow = Invoke-CaiCli -Arguments @(
+        "jobs", "show", $automationJobId, "--output", "json", "--workspace", $workspace
+    )
+    Assert-ExitCode $automationJobShow 0 "automation job metadata"
+    Assert-Contains $automationJobShow.Output '"automation":"nightly-review"' "automation job metadata"
+    Assert-Contains $automationJobShow.Output '"kind":"automation"' "automation job artifact"
+    Assert-Contains $automationJobShow.Output '"path":"inline:automation/' "automation job artifact"
 
     $execRecordedJob = Invoke-CaiCli -Arguments @(
         "exec", "--record-job", "--job-name", "smoke-missing-model",

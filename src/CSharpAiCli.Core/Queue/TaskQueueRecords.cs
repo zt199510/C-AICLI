@@ -53,7 +53,8 @@ public sealed record TaskQueueRequest
         string? Cwd = null,
         string? Skill = null,
         string? Expert = null,
-        string? ReportMode = null)
+        string? ReportMode = null,
+        AutomationRunMetadata? Automation = null)
     {
         if (!TaskQueueCommandFamily.IsKnown(Family))
         {
@@ -74,6 +75,7 @@ public sealed record TaskQueueRequest
         this.Skill = SafeOrNull(Skill, 256);
         this.Expert = SafeOrNull(Expert, 256);
         this.ReportMode = SafeOrNull(ReportMode, 64);
+        this.Automation = Automation;
     }
 
     public string Family { get; }
@@ -89,6 +91,8 @@ public sealed record TaskQueueRequest
     public string? Expert { get; }
 
     public string? ReportMode { get; }
+
+    public AutomationRunMetadata? Automation { get; }
 
     private static string Safe(string value, int maxLength)
     {
@@ -470,6 +474,11 @@ public static class TaskQueueItemJsonSchema
             ["skill"] = NullableString(),
             ["expert"] = NullableString(),
             ["reportMode"] = NullableString()
+            , ["automation"] = new Dictionary<string, object?>
+            {
+                ["type"] = new[] { "object", "null" },
+                ["additionalProperties"] = true
+            }
         }
     };
 

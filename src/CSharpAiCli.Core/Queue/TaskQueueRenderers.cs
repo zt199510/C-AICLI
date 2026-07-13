@@ -112,6 +112,13 @@ public sealed class TaskQueueTextRenderer
             output.WriteLine($"report: {item.Request.ReportMode}");
         }
 
+        if (item.Request.Automation is not null)
+        {
+            output.WriteLine($"automation: {item.Request.Automation.Automation}");
+            output.WriteLine($"automationRunId: {item.Request.Automation.RunId}");
+            output.WriteLine($"automationTarget: {item.Request.Automation.TargetType}");
+        }
+
         if (includeTask)
         {
             output.WriteLine($"task: {item.Request.Task}");
@@ -210,6 +217,7 @@ public sealed class TaskQueueJsonRenderer
         item.Status,
         family = item.Request.Family,
         skill = item.Request.Skill,
+        automation = item.Request.Automation,
         workspace = item.Request.WorkspaceRoot,
         attemptCount = item.Attempts.Count,
         item.LatestJobId,

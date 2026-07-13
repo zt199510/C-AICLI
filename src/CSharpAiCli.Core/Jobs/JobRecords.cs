@@ -25,6 +25,7 @@ public static class JobArtifactKind
     public const string Trace = "trace";
     public const string Session = "session";
     public const string SkillPlan = "skill-plan";
+    public const string Automation = "automation";
 }
 
 public sealed record JobSkillSummary
@@ -117,7 +118,8 @@ public sealed record JobCommandSummary
         string? ReportMode = null,
         string? OutputMode = null,
         bool? DryRun = null,
-        JobSkillSummary? SkillMetadata = null)
+        JobSkillSummary? SkillMetadata = null,
+        AutomationRunMetadata? Automation = null)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(Family);
 
@@ -132,6 +134,7 @@ public sealed record JobCommandSummary
         this.OutputMode = SafeOrNull(OutputMode);
         this.DryRun = DryRun;
         this.SkillMetadata = SkillMetadata;
+        this.Automation = Automation;
     }
 
     public string Family { get; }
@@ -155,6 +158,8 @@ public sealed record JobCommandSummary
     public bool? DryRun { get; }
 
     public JobSkillSummary? SkillMetadata { get; }
+
+    public AutomationRunMetadata? Automation { get; }
 
     private static string Safe(string value)
     {
@@ -538,6 +543,50 @@ public sealed record JobRecord
             result.TaskReport is null ? null : JobTaskReportSummary.FromTaskReport(result.TaskReport),
             artifacts,
             warnings);
+    }
+
+    public JobRecord WithAutomation(AutomationRunMetadata metadata)
+    {
+        ArgumentNullException.ThrowIfNull(metadata);
+        JobCommandSummary command = new(
+            Command.Family,
+            Command.Task,
+            Command.Name,
+            Command.WorkspaceRoot,
+            Command.Cwd,
+            Command.Skill,
+            Command.Expert,
+            Command.ReportMode,
+            Command.OutputMode,
+            Command.DryRun,
+            Command.SkillMetadata,
+            metadata);
+        List<JobArtifact> artifacts = Artifacts
+            .Where(artifact => !string.Equals(artifact.Kind, JobArtifactKind.Automation, StringComparison.Ordinal))
+            .ToList();
+        artifacts.Add(new JobArtifact(
+            JobArtifactKind.Automation,
+            $"inline:automation/{metadata.RunId}",
+            Exists: true,
+            Summary: $"automation={metadata.Automation} mode={metadata.Mode} target={metadata.TargetType}"));
+        return new JobRecord(
+            SchemaVersion,
+            JobId,
+            Status,
+            CreatedAtUtc,
+            UpdatedAtUtc,
+            command,
+            JobName,
+            StartedAtUtc,
+            CompletedAtUtc,
+            ExitCode,
+            StopReason,
+            ErrorCode,
+            Summary,
+            TaskReport,
+            artifacts,
+            Warnings.Concat([$"automation={metadata.Automation};run={metadata.RunId};target={metadata.TargetType}"]).ToArray(),
+            Redaction);
     }
 
     private static string Safe(string value)
@@ -1036,6 +1085,15 @@ public sealed class JobsTextRenderer
             writer.WriteLine("skillSuggestedReferences: " + record.Command.SkillMetadata.SuggestedReferences.Count.ToString(CultureInfo.InvariantCulture));
         }
 
+        if (record.Command.Automation is not null)
+        {
+            writer.WriteLine("automation: " + Safe(record.Command.Automation.Automation));
+            writer.WriteLine("automationRunId: " + Safe(record.Command.Automation.RunId));
+            writer.WriteLine("automationMode: " + Safe(record.Command.Automation.Mode));
+            writer.WriteLine("automationTarget: " + Safe(record.Command.Automation.TargetType));
+            writer.WriteLine("automationSource: " + Safe(record.Command.Automation.SourcePath));
+        }
+
         writer.WriteLine("exitCode: " + (record.ExitCode?.ToString(CultureInfo.InvariantCulture) ?? "none"));
         writer.WriteLine("stopReason: " + Safe(record.StopReason ?? "none"));
         writer.WriteLine("errorCode: " + Safe(record.ErrorCode ?? "none"));
@@ -1262,7 +1320,8 @@ public sealed class JobsJsonRenderer
                 ["dryRun"] = record.Command.DryRun,
                 ["skillMetadata"] = record.Command.SkillMetadata is null
                     ? null
-                    : ToJson(record.Command.SkillMetadata)
+                    : ToJson(record.Command.SkillMetadata),
+                ["automation"] = record.Command.Automation
             },
             ["taskReport"] = record.TaskReport is null ? null : ToJson(record.TaskReport),
             ["artifacts"] = record.Artifacts.Select(ToJson).ToArray(),

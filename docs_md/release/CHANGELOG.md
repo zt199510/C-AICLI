@@ -3,6 +3,9 @@
 ## Unreleased
 
 Added:
+- Week 53 workspace-local automation commands: strict JSON manifests under `.caicli/automations`, `automation list/validate/plan`, credential-free `automation run --dry-run`, and explicit `automation run --manual` for queue, skill, and built-in pipeline targets.
+- Automation schedule fields are validation/preview metadata only. The CLI does not start a background scheduler, register Windows Task Scheduler, expose a webhook/API, or execute manifest scripts.
+- Manual automation delegates through existing queue/pipeline/exec/skills command factories without injecting approval overrides. Queue/job records carry bounded redacted automation name/run/source/target metadata and job history includes an inline automation artifact pointer.
 - Week 52 local multi-role pipeline v1: `pipeline list`, credential-free `pipeline plan`, and sequential `pipeline run` compose fixed `fix-review-test`, `review-test`, and `security-review` role catalogs through existing expert, skill, queue, job, exec, report, trace, redaction, and security paths.
 - Pipeline final report schema v1 aggregates per-role boundary, queue attempt, job, task-report summary, command/verification metadata, artifact pointers, warnings, and remaining risks. A failed role short-circuits later roles without deleting completed role evidence.
 - Reviewer and security pipeline stages are enforced read-only: patch/shell tools are not registered, MCP discovery is skipped, and the executor rejects patch, shell, and `mcp.*` requests.
@@ -18,6 +21,7 @@ Added:
 - Week 47 read-only `caicli changes`: summarizes git status/diff stat, changed files, optional latest session task report, commands, verification, remaining risks, trace path, and warnings in text or JSON without calling a model, running shell/patch tools, starting MCP, or writing command logs by default.
 
 Changed:
+- Default smoke coverage now includes credential-free automation list/validate/plan/dry-run and a controlled missing-model manual skill trigger with queue/job correlation and automation artifact checks. Real model smoke remains opt-in.
 - Default smoke coverage now includes credential-free pipeline list/plan text/JSON and a controlled missing-model `security-review` run with read-only boundary, queue/job pointer, task-report artifact, short-circuit, and remaining-risk checks. Real model smoke remains opt-in.
 - Default smoke coverage now includes credential-free queue add/list/show, a controlled missing-model queue run with job pointer, pending-only cancel, and safe recent-item cleanup. Real model smoke remains opt-in.
 - Default smoke coverage now includes credential-free job history checks: empty `jobs list`, `exec --record-job` missing-model recording, `skills run --record-job --dry-run`, `jobs show`, and `jobs export --format markdown`.
@@ -29,7 +33,7 @@ Changed:
 - Default smoke coverage now includes `changes`, `changes --output json`, `changes --session` warning behavior, and `exec @file` reference diagnostics without requiring model credentials.
 
 Known deferred items:
-- Automatic model role routing, provider assignment, parallel pipeline workers, pipeline retry/resume, automation schedules, CI/PR providers, daemon/API/SSE, remote runners, and remote control remain Deferred.
+- Automatic model role routing, provider assignment, parallel pipeline workers, pipeline retry/resume, automatic schedule execution, Windows Task Scheduler registration, CI/PR providers, daemon/API/SSE, webhooks, remote runners, and remote control remain Deferred.
 - Job retention, rotation, delete, cleanup, and remote/shared stores remain Deferred. Queue cleanup only removes matching terminal queue records and does not remove jobs/artifacts.
 - `@file` / `@folder` references are scoped to `exec`; `chat` references, URL references, glob expansion, semantic retrieval, and workflow-pack references remain Deferred.
 - Remote skill marketplaces, automatic skill updates, signed trust chains, custom expert files, automatic model role routing, user-level skill directories, YAML manifests, and Gerber/TIFF real execution remain Deferred.

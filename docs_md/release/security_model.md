@@ -168,6 +168,16 @@ Reviewer and security stages are read-only invariants in the built-in catalog. T
 
 Pipeline reports aggregate bounded redacted job/task-report metadata, queue/job pointers, warnings, remaining risks, and artifact pointers. They do not persist raw referenced contents, raw tool arguments, raw secrets, or full diffs. Execution is sequential and stops at the first failed role without deleting earlier role evidence. Pipeline v1 has no automatic model/provider routing, parallel workers, scheduler, daemon, remote runner, or remote collaboration path.
 
+## Workspace-local Automation
+
+Automation manifests are workspace-local JSON data under `.caicli/automations`. Loading is read-only and guarded by the workspace boundary, a manifest size limit, strict unknown-field rejection, target validation, and secret-safe diagnostics. Manifests cannot contain executable script/command fields or approval overrides. A `schedule` trigger is validation and preview metadata only: the CLI does not start a scheduler, register Windows Task Scheduler, or execute a manifest in the background.
+
+`automation list`, `automation validate`, `automation plan`, and `automation run --dry-run` do not call a model, construct a tool registry, run tools, start MCP, create queue/job records, write command logs, or write the workspace. Dry-run is non-persistent and only renders the validated, redacted plan.
+
+`automation run --manual` supports queue, skill, and built-in pipeline targets. Queue and skill targets enter `queue run`; pipeline targets enter `pipeline run`, whose roles then enter `queue run`. Automation does not pass `--approve` or `--approval`, cannot expand disabled tools or target role boundaries, and continues to use the existing workspace guard, dirty-workspace checks, shell policy, dangerous-command detection, MCP startup boundary, trace/session/report path, model credential checks, and smoke contract.
+
+Manual runs store bounded redacted automation name/run/source/target correlation in queue and job metadata plus an inline automation artifact pointer. They do not store raw referenced contents, raw tool arguments, raw secrets, full diffs, or approval overrides. Automatic schedules, daemon workers, Windows Task Scheduler registration, API/webhook triggers, remote execution, and team automation remain Deferred.
+
 ## Expert Profiles
 
 `exec --expert` selects a built-in local profile. It is local policy and prompt/report guidance, not provider/model routing.
