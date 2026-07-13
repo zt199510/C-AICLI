@@ -456,6 +456,42 @@ Write-Output 'bugfix verification passed'
     Assert-Contains $execMissingModel.Output "context.references" "exec missing model reference context"
     Assert-Contains $execMissingModel.Output "references=count=1" "exec missing model reference summary"
 
+    $execMarkdownReport = Invoke-CaiCli -Arguments @(
+        "exec", "--report", "markdown", "--workspace", $workspace,
+        "--max-turns", "1", "--max-tool-calls", "1", "--timeout-seconds", "5",
+        "summarize workspace with @file:note.txt"
+    )
+    Assert-ExitCode $execMarkdownReport 1 "exec markdown report"
+    Assert-Contains $execMarkdownReport.Output "event: report.generated" "exec markdown report"
+    Assert-Contains $execMarkdownReport.Output "reportMode=markdown" "exec markdown report"
+    Assert-Contains $execMarkdownReport.Output "reportStatus=stdout" "exec markdown report"
+    Assert-Contains $execMarkdownReport.Output "# C# AI CLI Task Report" "exec markdown report"
+    Assert-Contains $execMarkdownReport.Output "## References" "exec markdown report"
+
+    $smokeReportPath = Join-Path ".caicli\reports" "smoke.md"
+    $execMarkdownReportPath = Invoke-CaiCli -Arguments @(
+        "exec", "--report", "markdown", "--report-path", $smokeReportPath, "--workspace", $workspace,
+        "--max-turns", "1", "--max-tool-calls", "1", "--timeout-seconds", "5",
+        "summarize workspace"
+    )
+    Assert-ExitCode $execMarkdownReportPath 1 "exec markdown report path"
+    Assert-Contains $execMarkdownReportPath.Output "reportStatus=written" "exec markdown report path"
+    Assert-Contains $execMarkdownReportPath.Output "reportPath=" "exec markdown report path"
+    $resolvedSmokeReportPath = Join-Path $workspace $smokeReportPath
+    if (-not (Test-Path -LiteralPath $resolvedSmokeReportPath)) {
+        throw "exec markdown report path did not create $resolvedSmokeReportPath."
+    }
+    Assert-Contains ([System.IO.File]::ReadAllText($resolvedSmokeReportPath)) "# C# AI CLI Task Report" "exec markdown report file"
+
+    $execReviewer = Invoke-CaiCli -Arguments @(
+        "exec", "--expert", "reviewer", "--workspace", $workspace,
+        "--max-turns", "1", "--max-tool-calls", "1", "--timeout-seconds", "5",
+        "review @file:note.txt"
+    )
+    Assert-ExitCode $execReviewer 1 "exec expert reviewer"
+    Assert-Contains $execReviewer.Output "expert=reviewer" "exec expert reviewer"
+    Assert-Contains $execReviewer.Output "errorCode=missing-model" "exec expert reviewer"
+
     $env:OPENAI_MODEL = "gpt-smoke"
     $execMissingKey = Invoke-CaiCli -Arguments @(
         "exec", "--output", "json", "--workspace", $workspace,
@@ -464,6 +500,16 @@ Write-Output 'bugfix verification passed'
     )
     Assert-ExitCode $execMissingKey 1 "exec missing key"
     Assert-Contains $execMissingKey.Output "missing-openai-api-key" "exec missing key"
+
+    $execSecurityJson = Invoke-CaiCli -Arguments @(
+        "exec", "--expert", "security", "--output", "json", "--workspace", $workspace,
+        "--max-turns", "1", "--max-tool-calls", "1", "--timeout-seconds", "5",
+        "audit @file:note.txt"
+    )
+    Assert-ExitCode $execSecurityJson 1 "exec expert security json"
+    Assert-Contains $execSecurityJson.Output '"expert":{"name":"security"' "exec expert security json"
+    Assert-Contains $execSecurityJson.Output "missing-openai-api-key" "exec expert security json"
+    Assert-NotContains $execSecurityJson.Output "# C# AI CLI Task Report" "exec expert security json"
     Remove-Item Env:OPENAI_API_KEY -ErrorAction SilentlyContinue
     Remove-Item Env:OPENAI_MODEL -ErrorAction SilentlyContinue
 

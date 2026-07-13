@@ -55,6 +55,38 @@ public sealed class ToolExecutorTests
         Assert.Contains("disabled", result.Summary, StringComparison.Ordinal);
     }
 
+    [Fact]
+    public void Execute_returns_boundary_failure_before_invoking_disallowed_tool()
+    {
+        ToolRegistry registry = new();
+        EchoTool writeTool = new();
+        registry.Register(writeTool);
+        ToolExecutor executor = new(
+            registry,
+            boundary: ToolExecutionBoundary.ReadOnly());
+
+        ToolExecutionResult result = executor.Execute("test.echo", CreateContext("{}"));
+
+        Assert.False(result.Succeeded);
+        Assert.Equal(ToolErrorCode.ToolDisabled, result.ErrorCode);
+        Assert.Contains("active tool boundary", result.Summary, StringComparison.Ordinal);
+        Assert.Null(writeTool.LastArgumentsJson);
+    }
+
+    [Fact]
+    public void Execute_returns_boundary_failure_for_disabled_prefix_before_registry_lookup()
+    {
+        ToolExecutor executor = new(
+            new ToolRegistry(),
+            boundary: ToolExecutionBoundary.ReadOnly());
+
+        ToolExecutionResult result = executor.Execute("mcp.server.tool", CreateContext("{}"));
+
+        Assert.False(result.Succeeded);
+        Assert.Equal(ToolErrorCode.ToolDisabled, result.ErrorCode);
+        Assert.Contains("active tool boundary", result.Summary, StringComparison.Ordinal);
+    }
+
     [Theory]
     [InlineData("{")]
     [InlineData("[]")]

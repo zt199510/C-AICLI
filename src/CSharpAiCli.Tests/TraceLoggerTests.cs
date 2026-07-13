@@ -538,7 +538,18 @@ public sealed class TraceLoggerTests
                 Risks: ["risk password=trace-risk-secret"],
                 TracePath: TraceLogger.ResolveTracePath(snapshot, context.TimestampUtc),
                 Secrets: [new AgentTaskSecretPresence("prompt", "key-value")],
-                Summary: "done secret=trace-summary-secret");
+                Summary: "done secret=trace-summary-secret",
+                Expert: new AgentTaskExpertReport(
+                    Name: "security",
+                    DisplayName: "Security",
+                    ToolBoundary: "read-only",
+                    BoundarySummary: "read-only tools only",
+                    ReportFocus: "risks"),
+                Report: new ExecReportMetadata(
+                    Mode: "markdown",
+                    Generated: true,
+                    Path: ".caicli/reports/run.md",
+                    WriteStatus: "written"));
             ExecResult result = ExecResult.Success("done", []).WithTaskReport(
                 report,
                 DateTimeOffset.Parse("2026-07-10T10:30:01Z"));
@@ -556,6 +567,9 @@ public sealed class TraceLoggerTests
             Assert.Equal("success", taskReport["status"]?.GetValue<string>());
             Assert.Equal("completed", taskReport["stopReason"]?.GetValue<string>());
             Assert.Equal(1, taskReport["commands"]?.AsArray().Count);
+            Assert.Equal("security", taskReport["expert"]?["name"]?.GetValue<string>());
+            Assert.Equal("markdown", taskReport["report"]?["mode"]?.GetValue<string>());
+            Assert.Equal("written", taskReport["report"]?["writeStatus"]?.GetValue<string>());
             JsonArray secrets = Assert.IsType<JsonArray>(taskReport["secrets"]);
             Assert.Equal("prompt", secrets[0]?["source"]?.GetValue<string>());
             Assert.Contains("[redacted]", trace, StringComparison.Ordinal);

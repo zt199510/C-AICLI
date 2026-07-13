@@ -1340,7 +1340,7 @@ public sealed class OfflineAgentRunner : IAgentRunner
         RecordReferenceContext(events, taskContext);
         RecordGitStatusContext(events, taskContext);
         RecordGitDiffContext(events, taskContext);
-        RecordStartupPlan(events, request.Prompt, taskContext);
+        RecordStartupPlan(events, request.Prompt, taskContext, request.ExpertProfile);
     }
 
     private void RecordWorkspaceContext(
@@ -1506,24 +1506,32 @@ public sealed class OfflineAgentRunner : IAgentRunner
     private void RecordStartupPlan(
         List<AgentRunEvent> events,
         string prompt,
-        AgentTaskContext taskContext)
+        AgentTaskContext taskContext,
+        ExpertProfile? expert)
     {
-        AgentStartupPlan plan = AgentStartupPlanBuilder.Build(prompt, taskContext);
+        AgentStartupPlan plan = AgentStartupPlanBuilder.Build(prompt, taskContext, expert);
+        Dictionary<string, string> payload = new()
+        {
+            ["source"] = "startup",
+            ["goal"] = plan.Goal,
+            ["candidateFiles"] = string.Join(";", plan.CandidateFiles),
+            ["expectedTools"] = string.Join(";", plan.ExpectedTools),
+            ["risks"] = string.Join(";", plan.Risks),
+            ["truncated"] = plan.Truncated ? "true" : "false"
+        };
+        if (expert is not null)
+        {
+            payload["expert"] = expert.Name;
+            payload["expertBoundary"] = expert.ToolBoundary;
+        }
+
         events.Add(new AgentRunEvent(
             Type: "plan",
             Sequence: events.Count,
             Timestamp: utcNowProvider(),
             Message: "Created read-only startup plan.",
             Summary: plan.Summary,
-            Payload: new Dictionary<string, string>
-            {
-                ["source"] = "startup",
-                ["goal"] = plan.Goal,
-                ["candidateFiles"] = string.Join(";", plan.CandidateFiles),
-                ["expectedTools"] = string.Join(";", plan.ExpectedTools),
-                ["risks"] = string.Join(";", plan.Risks),
-                ["truncated"] = plan.Truncated ? "true" : "false"
-            },
+            Payload: payload,
             Status: plan.Truncated ? DiagnosticEventStatus.Warning : DiagnosticEventStatus.Success));
     }
 

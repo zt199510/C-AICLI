@@ -124,12 +124,20 @@ Agentic `exec` ends each run with a read-only review gate and final task report.
 - The review gate payload marks `readOnly=true` and `toolName=git.diff`.
 - The review gate does not call patch tools, shell tools, or workspace write paths.
 - The review gate can report `success` or `warning`; warning covers cases such as failed or truncated diff collection.
-- The final `AgentTaskReport` records status, stop reason, prompt, plan, tools, workflow reference metadata, changed files, commands, verification, remaining risks, trace path, summary, error code, and optional review gate details.
+- The final `AgentTaskReport` records status, stop reason, prompt, plan, tools, workflow reference metadata, expert metadata, report artifact metadata, changed files, commands, verification, remaining risks, trace path, summary, error code, and optional review gate details.
 - Text output, NDJSON output, trace result payloads, and session transcript agent run summaries all carry report-derived data.
 - The report is diagnostic and review-oriented; it is not an automatic rollback or correctness guarantee.
-- A standalone full markdown task report file is not written by default. Full markdown task reports remain Deferred; session markdown export only includes compact task report counts and trace path metadata.
+- A standalone full markdown task report file is not written by default. `exec --report markdown` prints the full report in text mode, while JSON output records structured metadata only. `--report-path <path>` writes only on explicit request, must remain inside the workspace, creates parent directories, and refuses to overwrite existing files.
 
 Task reports sanitize all captured strings before output or persistence. When a secret-like value is detected, the report records only presence metadata, expressed as source and kind, and never stores the raw value.
+
+## Expert Profiles
+
+`exec --expert` selects a built-in local profile. It is local policy and prompt/report guidance, not provider/model routing.
+
+- `bugfix`, `tester`, and `refactor` do not expand permissions. They still use the configured disabled tools, approval mode, workspace guard, shell policy, dangerous-command detector, MCP startup policy, loop limits, and timeouts.
+- `reviewer` and `security` are read-only profiles. The CLI does not register write or shell tools for those runs, skips MCP discovery, and the tool executor rejects write, shell, and `mcp.*` tool requests with `tool-disabled` even if a model asks for them.
+- Expert metadata is recorded in text output, NDJSON, trace, session task reports, and markdown reports so the active role and boundary can be reviewed later.
 
 ## Changes View
 
@@ -175,7 +183,7 @@ Users can disable tools through `disabledTools` in user or workspace config. Dis
 
 - Microsoft Agent Framework integration is an experimental adapter boundary in this release. The real framework runtime is not enabled.
 - MCP config/list/doctor and a generic bridge exist. Registry/tool paths can discover and call user-configured stdio MCP v1 servers through the real initialize, `tools/list`, and `tools/call` paths.
-- Workspace-configured MCP servers are not auto-discovered or started during ordinary tool registry creation, including `tools list`, `tools call`, `exec`, and `run`.
+- Workspace-configured MCP servers are not auto-discovered or started during ordinary tool registry creation, including `tools list`, `tools call`, `exec`, and `run`. `exec --expert reviewer` and `exec --expert security` also skip user-configured MCP discovery for that run.
 - `mcp doctor` may explicitly perform real stdio handshake diagnostics for configured stdio servers, including workspace config. Disabled servers are not started.
 - MCP stdio startup commands run dangerous command detection and shell policy checks before process start.
 - MCP startup policy failures surface safe diagnostics in `tools call mcp.*` when configured server/tool discovery is blocked, instead of only returning `unknown-tool`.

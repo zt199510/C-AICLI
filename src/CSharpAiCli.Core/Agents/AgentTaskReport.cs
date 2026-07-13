@@ -22,7 +22,11 @@ public sealed record AgentTaskReport
         IReadOnlyList<AgentTaskReferenceReport>? References = null,
         string? Summary = null,
         string? ErrorCode = null,
-        AgentTaskReviewGateReport? ReviewGate = null)
+        AgentTaskReviewGateReport? ReviewGate = null,
+        AgentTaskExpertReport? Expert = null,
+        ExecReportMetadata? Report = null,
+        string? WorkspaceRoot = null,
+        string? SessionName = null)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(Status);
         ArgumentException.ThrowIfNullOrWhiteSpace(StopReason);
@@ -42,6 +46,10 @@ public sealed record AgentTaskReport
         this.Summary = Summary;
         this.ErrorCode = ErrorCode;
         this.ReviewGate = ReviewGate;
+        this.Expert = Expert;
+        this.Report = Report;
+        this.WorkspaceRoot = WorkspaceRoot;
+        this.SessionName = SessionName;
     }
 
     public string Status { get; }
@@ -73,6 +81,40 @@ public sealed record AgentTaskReport
     public string? ErrorCode { get; }
 
     public AgentTaskReviewGateReport? ReviewGate { get; }
+
+    public AgentTaskExpertReport? Expert { get; }
+
+    public ExecReportMetadata? Report { get; }
+
+    public string? WorkspaceRoot { get; }
+
+    public string? SessionName { get; }
+
+    public AgentTaskReport WithReportMetadata(ExecReportMetadata report)
+    {
+        ArgumentNullException.ThrowIfNull(report);
+
+        return new AgentTaskReport(
+            Status,
+            StopReason,
+            Prompt,
+            Plan,
+            Tools,
+            ChangedFiles,
+            Commands,
+            Verification,
+            Risks,
+            TracePath,
+            Secrets,
+            References,
+            Summary,
+            ErrorCode,
+            ReviewGate,
+            Expert,
+            report,
+            WorkspaceRoot,
+            SessionName);
+    }
 }
 
 public sealed record AgentTaskCommandReport(
@@ -100,6 +142,13 @@ public sealed record AgentTaskReviewGateReport(
     bool HasDiff,
     bool Truncated,
     string? ErrorCode = null);
+
+public sealed record AgentTaskExpertReport(
+    string Name,
+    string DisplayName,
+    string ToolBoundary,
+    string BoundarySummary,
+    string ReportFocus);
 
 public sealed record AgentTaskSecretPresence(
     string Source,
@@ -200,7 +249,10 @@ public static class AgentTaskReportBuilder
             References: references,
             Summary: summary,
             ErrorCode: result.Error?.LocalErrorCode,
-            ReviewGate: safeReviewGate);
+            ReviewGate: safeReviewGate,
+            Expert: request.ExpertProfile?.ToReportMetadata(),
+            WorkspaceRoot: Bound(secrets.Sanitize(request.Workspace.RootPath, "workspace"), MaxItemCharacters),
+            SessionName: Bound(secrets.Sanitize(request.SessionName, "session"), MaxItemCharacters));
     }
 
     public static AgentRunEvent CreateTaskReportEvent(
@@ -235,6 +287,25 @@ public static class AgentTaskReportBuilder
         AddIfPresent(payload, "tracePath", report.TracePath);
         AddIfPresent(payload, "summary", report.Summary);
         AddIfPresent(payload, "errorCode", report.ErrorCode);
+        AddIfPresent(payload, "workspaceRoot", report.WorkspaceRoot);
+        AddIfPresent(payload, "sessionName", report.SessionName);
+        if (report.Expert is not null)
+        {
+            payload["expert"] = report.Expert.Name;
+            payload["expertBoundary"] = report.Expert.ToolBoundary;
+            payload["expertReportFocus"] = report.Expert.ReportFocus;
+        }
+
+        if (report.Report is not null)
+        {
+            payload["reportMode"] = report.Report.Mode;
+            payload["reportGenerated"] = report.Report.Generated ? "true" : "false";
+            AddIfPresent(payload, "reportPath", report.Report.Path);
+            AddIfPresent(payload, "reportWriteStatus", report.Report.WriteStatus);
+            AddIfPresent(payload, "reportErrorCode", report.Report.ErrorCode);
+            AddIfPresent(payload, "reportSummary", report.Report.Summary);
+        }
+
         if (report.ReviewGate is not null)
         {
             payload["reviewGateStatus"] = report.ReviewGate.Status;
@@ -318,6 +389,8 @@ public static class AgentTaskReportBuilder
                 ["errorCode"] = reference.ErrorCode
             }).ToArray(),
             ["tracePath"] = report.TracePath,
+            ["workspaceRoot"] = report.WorkspaceRoot,
+            ["sessionName"] = report.SessionName,
             ["secrets"] = report.Secrets.Select(secret => new Dictionary<string, object?>
             {
                 ["source"] = secret.Source,
@@ -326,6 +399,31 @@ public static class AgentTaskReportBuilder
             ["summary"] = report.Summary,
             ["errorCode"] = report.ErrorCode
         };
+
+        if (report.Expert is not null)
+        {
+            payload["expert"] = new Dictionary<string, object?>
+            {
+                ["name"] = report.Expert.Name,
+                ["displayName"] = report.Expert.DisplayName,
+                ["toolBoundary"] = report.Expert.ToolBoundary,
+                ["boundarySummary"] = report.Expert.BoundarySummary,
+                ["reportFocus"] = report.Expert.ReportFocus
+            };
+        }
+
+        if (report.Report is not null)
+        {
+            payload["report"] = new Dictionary<string, object?>
+            {
+                ["mode"] = report.Report.Mode,
+                ["generated"] = report.Report.Generated,
+                ["path"] = report.Report.Path,
+                ["writeStatus"] = report.Report.WriteStatus,
+                ["errorCode"] = report.Report.ErrorCode,
+                ["summary"] = report.Report.Summary
+            };
+        }
 
         if (report.ReviewGate is not null)
         {
@@ -362,7 +460,10 @@ public static class AgentTaskReportBuilder
             ? "none"
             : string.Join(",", report.References.Select(reference => reference.ResolvedPath ?? reference.RequestedPath));
 
-        return $"status={report.Status} references={references} changedFiles={changedFiles} commands={commands} verification={verification} risks={risks}";
+        string expert = report.Expert is null ? "none" : report.Expert.Name;
+        string reportMode = report.Report is null ? "none" : report.Report.Mode;
+
+        return $"status={report.Status} expert={expert} report={reportMode} references={references} changedFiles={changedFiles} commands={commands} verification={verification} risks={risks}";
     }
 
     private static string? FindPlanSummary(IReadOnlyList<AgentRunEvent> events)

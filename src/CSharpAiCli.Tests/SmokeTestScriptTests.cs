@@ -25,6 +25,9 @@ public sealed class SmokeTestScriptTests
         Assert.Contains("localErrorCode: missing-openai-api-key", script, StringComparison.Ordinal);
         Assert.Contains("exec", script, StringComparison.Ordinal);
         Assert.Contains("--output", script, StringComparison.Ordinal);
+        Assert.Contains("--report", script, StringComparison.Ordinal);
+        Assert.Contains("--report-path", script, StringComparison.Ordinal);
+        Assert.Contains("--expert", script, StringComparison.Ordinal);
         Assert.Contains("--max-turns", script, StringComparison.Ordinal);
         Assert.Contains("--max-tool-calls", script, StringComparison.Ordinal);
         Assert.Contains("--timeout-seconds", script, StringComparison.Ordinal);
@@ -62,6 +65,12 @@ public sealed class SmokeTestScriptTests
         Assert.Contains("\"type\":\"changes.view\"", script, StringComparison.Ordinal);
         Assert.Contains("context.references", script, StringComparison.Ordinal);
         Assert.Contains("references=count=1", script, StringComparison.Ordinal);
+        Assert.Contains("# C# AI CLI Task Report", script, StringComparison.Ordinal);
+        Assert.Contains("reportMode=markdown", script, StringComparison.Ordinal);
+        Assert.Contains("reportStatus=stdout", script, StringComparison.Ordinal);
+        Assert.Contains("reportStatus=written", script, StringComparison.Ordinal);
+        Assert.Contains("expert=reviewer", script, StringComparison.Ordinal);
+        Assert.Contains("\"expert\":{\"name\":\"security\"", script, StringComparison.Ordinal);
         Assert.Contains("commit.gpgSign=false", script, StringComparison.Ordinal);
         Assert.Contains("core.autocrlf", script, StringComparison.Ordinal);
         Assert.Contains("--no-gpg-sign", script, StringComparison.Ordinal);

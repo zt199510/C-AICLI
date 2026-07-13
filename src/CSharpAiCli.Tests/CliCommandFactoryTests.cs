@@ -2986,6 +2986,192 @@ public sealed class CliCommandFactoryTests
     }
 
     [Fact]
+    public void Exec_report_markdown_text_output_appends_full_report_section()
+    {
+        using TempDirectory temp = TempDirectory.Create();
+        using StringWriter output = new();
+        FakeAgentRunner agentRunner = new(AgentRunResult.Success("agent completed task", []));
+
+        int exitCode = CliCommandFactory
+            .Create(
+                output,
+                workspacePath => CreateSnapshot(
+                    workspacePath,
+                    apiKey: "sk-test-secret",
+                    apiKeySource: "OPENAI_API_KEY",
+                    model: "gpt-test"),
+                (_, _) => { },
+                _ => new FakeChatModelClient(ChatModelResult.Success(new ChatResponse("openai", "gpt-test", "resp", ""))),
+                writer => new TerminalChatStreamingRenderer(writer),
+                _ => new FakeConversationStore(),
+                () => DateTimeOffset.Parse("2024-01-01T00:00:00Z"),
+                (_, _, _) => agentRunner)
+            .Parse(["exec", "--report", "markdown", "--workspace", temp.Path, "summarize workspace apiKey=prompt-secret"])
+            .Invoke();
+
+        string text = output.ToString();
+        Assert.Equal(0, exitCode);
+        Assert.Contains("event: report.generated", text, StringComparison.Ordinal);
+        Assert.Contains("reportMode=markdown", text, StringComparison.Ordinal);
+        Assert.Contains("reportStatus=stdout", text, StringComparison.Ordinal);
+        Assert.Contains("# C# AI CLI Task Report", text, StringComparison.Ordinal);
+        Assert.Contains("## Summary", text, StringComparison.Ordinal);
+        Assert.Contains("## Prompt", text, StringComparison.Ordinal);
+        Assert.Contains("[redacted]", text, StringComparison.Ordinal);
+        Assert.DoesNotContain("prompt-secret", text, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Exec_report_markdown_json_output_uses_metadata_without_raw_markdown()
+    {
+        using TempDirectory temp = TempDirectory.Create();
+        using StringWriter output = new();
+        FakeAgentRunner agentRunner = new(AgentRunResult.Success("agent completed task", []));
+
+        int exitCode = CliCommandFactory
+            .Create(
+                output,
+                workspacePath => CreateSnapshot(
+                    workspacePath,
+                    apiKey: "sk-test-secret",
+                    apiKeySource: "OPENAI_API_KEY",
+                    model: "gpt-test"),
+                (_, _) => { },
+                _ => new FakeChatModelClient(ChatModelResult.Success(new ChatResponse("openai", "gpt-test", "resp", ""))),
+                writer => new TerminalChatStreamingRenderer(writer),
+                _ => new FakeConversationStore(),
+                () => DateTimeOffset.Parse("2024-01-01T00:00:00Z"),
+                (_, _, _) => agentRunner)
+            .Parse(["exec", "--output", "json", "--report", "markdown", "--workspace", temp.Path, "summarize workspace"])
+            .Invoke();
+
+        string text = output.ToString();
+        JsonObject[] lines = text
+            .TrimEnd()
+            .Split(Environment.NewLine, StringSplitOptions.RemoveEmptyEntries)
+            .Select(line => Assert.IsType<JsonObject>(JsonNode.Parse(line)))
+            .ToArray();
+        JsonObject reportEvent = Assert.Single(lines, line => line["type"]?.GetValue<string>() == "report.generated");
+        JsonObject result = lines[^1];
+        JsonObject report = Assert.IsType<JsonObject>(result["payload"]?["taskReport"]?["report"]);
+
+        Assert.Equal(0, exitCode);
+        Assert.Equal("stdout", reportEvent["payload"]?["writeStatus"]?.GetValue<string>());
+        Assert.Equal("markdown", report["mode"]?.GetValue<string>());
+        Assert.True(report["generated"]?.GetValue<bool>());
+        Assert.Equal("stdout", report["writeStatus"]?.GetValue<string>());
+        Assert.DoesNotContain("# C# AI CLI Task Report", text, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Exec_report_path_writes_markdown_file_and_reports_path_without_stdout_markdown()
+    {
+        using TempDirectory temp = TempDirectory.Create();
+        using StringWriter output = new();
+        FakeAgentRunner agentRunner = new(AgentRunResult.Success("agent completed task", []));
+        string reportPath = Path.Combine(".caicli", "reports", "run.md");
+
+        int exitCode = CliCommandFactory
+            .Create(
+                output,
+                workspacePath => CreateSnapshot(
+                    workspacePath,
+                    apiKey: "sk-test-secret",
+                    apiKeySource: "OPENAI_API_KEY",
+                    model: "gpt-test"),
+                (_, _) => { },
+                _ => new FakeChatModelClient(ChatModelResult.Success(new ChatResponse("openai", "gpt-test", "resp", ""))),
+                writer => new TerminalChatStreamingRenderer(writer),
+                _ => new FakeConversationStore(),
+                () => DateTimeOffset.Parse("2024-01-01T00:00:00Z"),
+                (_, _, _) => agentRunner)
+            .Parse(["exec", "--report", "markdown", "--report-path", reportPath, "--workspace", temp.Path, "summarize workspace"])
+            .Invoke();
+
+        string text = output.ToString();
+        string fullReportPath = Path.Combine(temp.Path, reportPath);
+        Assert.Equal(0, exitCode);
+        Assert.True(File.Exists(fullReportPath));
+        Assert.Contains("# C# AI CLI Task Report", File.ReadAllText(fullReportPath), StringComparison.Ordinal);
+        Assert.Contains("reportStatus=written", text, StringComparison.Ordinal);
+        Assert.Contains("reportPath=", text, StringComparison.Ordinal);
+        Assert.DoesNotContain("# C# AI CLI Task Report", text, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Exec_unknown_expert_rejects_before_logging_or_running_agent()
+    {
+        using TempDirectory temp = TempDirectory.Create();
+        using StringWriter output = new();
+        List<string> loggedCommands = [];
+        FakeAgentRunner agentRunner = new(AgentRunResult.Success("should not run", []));
+        RootCommand command = CliCommandFactory.Create(
+            output,
+            workspacePath => CreateSnapshot(
+                workspacePath,
+                apiKey: "sk-test-secret",
+                apiKeySource: "OPENAI_API_KEY",
+                model: "gpt-test"),
+            (commandName, _) => loggedCommands.Add(commandName),
+            _ => new FakeChatModelClient(ChatModelResult.Success(new ChatResponse("openai", "gpt-test", "resp", ""))),
+            writer => new TerminalChatStreamingRenderer(writer),
+            _ => new FakeConversationStore(),
+            () => DateTimeOffset.Parse("2024-01-01T00:00:00Z"),
+            (_, _, _) => agentRunner);
+
+        int exitCode = CliCommandFactory.Invoke(
+            command,
+            ["exec", "--expert", "unknown", "--workspace", temp.Path, "summarize workspace"],
+            output);
+
+        Assert.Equal(2, exitCode);
+        Assert.Empty(loggedCommands);
+        Assert.Null(agentRunner.LastRequest);
+        Assert.Contains("Invalid value for --expert.", output.ToString(), StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Exec_reviewer_expert_passes_metadata_and_blocks_write_tool()
+    {
+        using TempDirectory temp = TempDirectory.Create();
+        File.WriteAllText(Path.Combine(temp.Path, "note.txt"), "before");
+        using StringWriter output = new();
+        ExecutorToolCallAgentRunner agentRunner = new(
+            "workspace.apply_patch",
+            """{"path":"note.txt","find":"before","replace":"after"}""");
+
+        int exitCode = CliCommandFactory
+            .Create(
+                output,
+                workspacePath => CreateSnapshot(
+                    workspacePath,
+                    apiKey: "sk-test-secret",
+                    apiKeySource: "OPENAI_API_KEY",
+                    model: "gpt-test"),
+                (_, _) => { },
+                _ => new FakeChatModelClient(ChatModelResult.Success(new ChatResponse("openai", "gpt-test", "resp", ""))),
+                writer => new TerminalChatStreamingRenderer(writer),
+                _ => new FakeConversationStore(),
+                () => DateTimeOffset.Parse("2024-01-01T00:00:00Z"),
+                (_, _, executor) =>
+                {
+                    agentRunner.Executor = executor;
+                    return agentRunner;
+                })
+            .Parse(["exec", "--expert", "reviewer", "--approval", "always", "--workspace", temp.Path, "review note"])
+            .Invoke();
+
+        string text = output.ToString();
+        Assert.Equal(1, exitCode);
+        Assert.Equal("reviewer", agentRunner.LastRequest?.ExpertProfile?.Name);
+        Assert.True(agentRunner.LastRequest?.ExpertProfile?.IsReadOnly);
+        Assert.Contains("errorCode=tool-disabled", text, StringComparison.Ordinal);
+        Assert.Contains("expert=reviewer", text, StringComparison.Ordinal);
+        Assert.Contains("result: failure", text, StringComparison.Ordinal);
+        Assert.Equal("before", File.ReadAllText(Path.Combine(temp.Path, "note.txt")));
+    }
+
+    [Fact]
     public void Exec_command_passes_cwd_to_snapshot_provider_and_merged_instructions_to_agent_request()
     {
         using TempDirectory temp = TempDirectory.Create();

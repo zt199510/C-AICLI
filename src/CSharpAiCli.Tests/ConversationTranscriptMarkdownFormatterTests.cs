@@ -258,12 +258,24 @@ public sealed class ConversationTranscriptMarkdownFormatterTests
                 Verification: [],
                 Risks: [],
                 TracePath: "D:/trace.log",
-                Summary: "nothing changed")));
+                Summary: "nothing changed",
+                Expert: new AgentTaskExpertReport(
+                    Name: "reviewer",
+                    DisplayName: "Reviewer",
+                    ToolBoundary: "read-only",
+                    BoundarySummary: "read-only tools only",
+                    ReportFocus: "findings"),
+                Report: new ExecReportMetadata(
+                    Mode: "markdown",
+                    Generated: true,
+                    Path: ".caicli/reports/run.md",
+                    WriteStatus: "written"))));
 
         string markdown = ConversationTranscriptMarkdownFormatter.Format(transcript);
 
-        Assert.Contains("taskReport: status=success stopReason=completed changedFiles=0 commands=0 verification=0 risks=0", markdown, StringComparison.Ordinal);
+        Assert.Contains("taskReport: status=success stopReason=completed expert=reviewer report=markdown changedFiles=0 commands=0 verification=0 risks=0", markdown, StringComparison.Ordinal);
         Assert.Contains("tracePath: D:/trace.log", markdown, StringComparison.Ordinal);
+        Assert.Contains("reportPath: .caicli/reports/run.md", markdown, StringComparison.Ordinal);
     }
 
     [Fact]

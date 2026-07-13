@@ -1016,7 +1016,20 @@ public static class CliCommandFactory
         {
             Description = "Use a working context path for hierarchical instruction discovery.",
         };
+        Option<string> execReportOption = new("--report")
+        {
+            Description = "Generate an additional task report: none or markdown.",
+        };
+        Option<string> execReportPathOption = new("--report-path")
+        {
+            Description = "Write a markdown task report to a workspace path.",
+        };
+        Option<string> execExpertOption = new("--expert")
+        {
+            Description = "Select a local expert profile: bugfix, reviewer, tester, security, or refactor.",
+        };
         execOutputOption.DefaultValueFactory = _ => "text";
+        execReportOption.DefaultValueFactory = _ => "none";
         execOutputOption.Validators.Add(result =>
         {
             string outputMode = result.GetValueOrDefault<string>() ?? "text";
@@ -1024,6 +1037,22 @@ public static class CliCommandFactory
                 !string.Equals(outputMode, "json", StringComparison.OrdinalIgnoreCase))
             {
                 result.AddError("Invalid value for --output. Allowed values are text and json.");
+            }
+        });
+        execReportOption.Validators.Add(result =>
+        {
+            string reportMode = result.GetValueOrDefault<string>() ?? "none";
+            if (!ExecReportModeParser.TryParse(reportMode, out _))
+            {
+                result.AddError("Invalid value for --report. Allowed values are none and markdown.");
+            }
+        });
+        execExpertOption.Validators.Add(result =>
+        {
+            string? expert = result.GetValueOrDefault<string>();
+            if (!ExpertProfileCatalog.TryGet(expert, out _))
+            {
+                result.AddError("Invalid value for --expert. Allowed values are bugfix, refactor, reviewer, security, and tester.");
             }
         });
         AddPositiveIntegerValidator(execMaxTurnsOption, "--max-turns");
@@ -1044,6 +1073,9 @@ public static class CliCommandFactory
         execCommand.Options.Add(execSessionOption);
         execCommand.Options.Add(execResumeOption);
         execCommand.Options.Add(execCwdOption);
+        execCommand.Options.Add(execReportOption);
+        execCommand.Options.Add(execReportPathOption);
+        execCommand.Options.Add(execExpertOption);
         execCommand.SetAction(parseResult =>
         {
             string? workspacePath = parseResult.GetValue(workspaceOption);
@@ -1060,6 +1092,9 @@ public static class CliCommandFactory
             int? timeoutSeconds = parseResult.GetValue(execTimeoutSecondsOption);
             string? session = parseResult.GetValue(execSessionOption);
             string? resume = parseResult.GetValue(execResumeOption);
+            string reportModeValue = parseResult.GetValue(execReportOption) ?? "none";
+            string? reportPath = parseResult.GetValue(execReportPathOption);
+            string? expertName = parseResult.GetValue(execExpertOption);
             bool sessionSupplied = IsOptionExplicit(parseResult, execSessionOption);
             bool resumeSupplied = IsOptionExplicit(parseResult, execResumeOption);
             bool maxStepsSupplied = IsOptionExplicit(parseResult, execMaxStepsOption);
@@ -1067,6 +1102,12 @@ public static class CliCommandFactory
             CliEnvironmentSnapshot snapshot = snapshotProvider(workspacePath, cwdPath);
             DiagnosticContext? traceContext = CreateTraceContext(parseResult, snapshot);
             ApprovalMode? cliApprovalMode = GetApprovalOverride(approvalModeValue, parseResult.GetResult(execApprovalOption), approve);
+            ExecReportModeParser.TryParse(reportModeValue, out ExecReportMode reportMode);
+            ExecReportOptions reportOptions = new(reportMode, reportPath);
+            ExpertProfile? expertProfile = ExpertProfileCatalog.GetOrNull(expertName);
+            ToolExecutionBoundary toolBoundary = ExpertToolBoundary.FromExpert(expertProfile);
+            ReportPathResolver reportPathResolver = new();
+            string? markdownReportForStdout = null;
             TryWriteCommandLog(commandLogger, "exec", snapshot);
             WriteVerboseDiagnostics(
                 parseResult,
@@ -1087,6 +1128,11 @@ public static class CliCommandFactory
                 {
                     ExecTextRenderer renderer = new(output);
                     WriteExecOutput(renderer, result);
+                    if (!string.IsNullOrWhiteSpace(markdownReportForStdout))
+                    {
+                        output.WriteLine();
+                        output.WriteLine(markdownReportForStdout);
+                    }
                 }
 
                 return result.ExitCode;
@@ -1144,9 +1190,101 @@ public static class CliCommandFactory
                     []);
             }
 
+            if (!reportOptions.ShouldGenerate && !string.IsNullOrWhiteSpace(reportOptions.ReportPath))
+            {
+                return WriteExecFailureWithTrace(
+                    "report-path-requires-markdown",
+                    "Use --report markdown with --report-path.",
+                    []);
+            }
+
+            ReportWriteResult? reportPathPrecheck = null;
+            if (reportOptions.ShouldWriteFile)
+            {
+                reportPathPrecheck = reportPathResolver.ResolveForWrite(snapshot.Workspace, reportOptions.ReportPath);
+                if (!reportPathPrecheck.Succeeded)
+                {
+                    return WriteExecFailureWithTrace(
+                        reportPathPrecheck.ErrorCode ?? "invalid-report-path",
+                        reportPathPrecheck.Summary ?? "Report path is invalid.",
+                        []);
+                }
+            }
+
+            ExecResult FinalizeExecResultWithTaskReport(
+                ExecResult baseResult,
+                AgentTaskReport baseTaskReport,
+                IReadOnlyList<ExecEvent>? additionalEvents = null)
+            {
+                List<ExecEvent> reportEvents = additionalEvents?.ToList() ?? [];
+                AgentTaskReport finalTaskReport = baseTaskReport;
+                ReportWriteResult? writeResult = null;
+                if (reportOptions.ShouldGenerate)
+                {
+                    MarkdownTaskReportRenderer reportRenderer = new();
+                    if (reportOptions.ShouldWriteFile)
+                    {
+                        string markdown = reportRenderer.Render(baseTaskReport);
+                        writeResult = reportPathResolver.WriteMarkdown(
+                            snapshot.Workspace,
+                            reportOptions.ReportPath,
+                            markdown);
+                    }
+
+                    ExecReportMetadata reportMetadata = new(
+                        Mode: reportOptions.Mode.ToCanonicalName(),
+                        Generated: true,
+                        Path: writeResult?.Path ?? reportPathPrecheck?.Path,
+                        WriteStatus: reportOptions.ShouldWriteFile
+                            ? writeResult?.Succeeded == true ? "written" : "failed"
+                            : "stdout",
+                        ErrorCode: writeResult?.ErrorCode,
+                        Summary: reportOptions.ShouldWriteFile
+                            ? writeResult?.Summary
+                            : "Markdown report generated for stdout.");
+                    finalTaskReport = baseTaskReport.WithReportMetadata(reportMetadata);
+                    long reportSequence = reportEvents.Count > 0
+                        ? reportEvents[^1].Sequence + 1
+                        : baseResult.Events.Count == 0
+                            ? 0
+                            : baseResult.Events[^1].Sequence + 1;
+                    reportEvents.Add(CreateReportGeneratedEvent(
+                        reportMetadata,
+                        reportSequence,
+                        utcNowProvider()));
+                    if (!reportOptions.ShouldWriteFile &&
+                        !IsJsonOutputRequested(jsonRequested, outputMode))
+                    {
+                        markdownReportForStdout = reportRenderer.Render(finalTaskReport);
+                    }
+                }
+
+                ExecResult finalResult = baseResult.WithTaskReport(
+                    finalTaskReport,
+                    utcNowProvider(),
+                    reportEvents);
+                if (writeResult is { Succeeded: false })
+                {
+                    finalResult = ExecResult.Failure(
+                        ExitCode: 1,
+                        Summary: writeResult.Summary ?? "Markdown report could not be written.",
+                        ErrorCode: writeResult.ErrorCode ?? "report-write-failed",
+                        Events: finalResult.Events,
+                        ApprovalStatus: finalResult.ApprovalStatus,
+                        StopReason: finalResult.StopReason,
+                        ChangedFiles: finalResult.ChangedFiles,
+                        VerificationResults: finalResult.VerificationResults,
+                        RetryAttempts: finalResult.RetryAttempts,
+                        FailureSummary: finalResult.FailureSummary,
+                        TaskReport: finalTaskReport);
+                }
+
+                return finalResult;
+            }
+
             IApprovalPolicy approvalPolicy = ApprovalPolicyResolver.Resolve(snapshot.Configuration.ApprovalMode, cliApprovalMode);
-            ToolRegistry registry = CliToolFactory.CreateRegistry(snapshot, approvalPolicy);
-            ToolExecutor executor = new(registry, snapshot.Configuration.DisabledTools);
+            ToolRegistry registry = CliToolFactory.CreateRegistry(snapshot, approvalPolicy, toolBoundary);
+            ToolExecutor executor = new(registry, snapshot.Configuration.DisabledTools, toolBoundary);
             string? effectiveSession = resumeSupplied ? resume : session;
             ConversationSessionName? sessionName = null;
             ConversationTranscript? transcript = null;
@@ -1214,7 +1352,8 @@ public static class CliCommandFactory
                     .MergeWith(snapshot.Configuration.AgentRunLimits),
                 TranscriptContext: transcriptContext,
                 TaskContext: taskContext,
-                WorkflowConfiguration: WorkflowProfileLoader.Load(snapshot.Configuration));
+                WorkflowConfiguration: WorkflowProfileLoader.Load(snapshot.Configuration),
+                ExpertProfile: expertProfile);
 
             WorkflowReferenceResolution references = taskContext.References ?? WorkflowReferenceResolution.Empty;
             if (references.HasErrors)
@@ -1230,9 +1369,9 @@ public static class CliCommandFactory
                     request,
                     referenceFailure,
                     referenceTracePath);
-                referenceExecResult = referenceExecResult.WithTaskReport(
-                    referenceTaskReport,
-                    utcNowProvider());
+                referenceExecResult = FinalizeExecResultWithTaskReport(
+                    referenceExecResult,
+                    referenceTaskReport);
                 return WriteExecResultWithTrace(referenceExecResult);
             }
 
@@ -1271,9 +1410,9 @@ public static class CliCommandFactory
                 agentResult,
                 tracePath,
                 reviewGate);
-            execResult = execResult.WithTaskReport(
+            execResult = FinalizeExecResultWithTaskReport(
+                execResult,
                 taskReport,
-                utcNowProvider(),
                 additionalReportEvents);
             if (sessionName is not null && transcript is not null && conversationStore is not null)
             {
@@ -2071,6 +2210,49 @@ public static class CliCommandFactory
             Payload: payload,
             ErrorCode: reviewGate.ErrorCode,
             Status: reviewGate.Status);
+    }
+
+    private static ExecEvent CreateReportGeneratedEvent(
+        ExecReportMetadata report,
+        long sequence,
+        DateTimeOffset timestampUtc)
+    {
+        ArgumentNullException.ThrowIfNull(report);
+
+        Dictionary<string, string> payload = new(StringComparer.Ordinal)
+        {
+            ["mode"] = report.Mode,
+            ["generated"] = report.Generated ? "true" : "false"
+        };
+        if (!string.IsNullOrWhiteSpace(report.Path))
+        {
+            payload["path"] = report.Path;
+        }
+
+        if (!string.IsNullOrWhiteSpace(report.WriteStatus))
+        {
+            payload["writeStatus"] = report.WriteStatus;
+        }
+
+        if (!string.IsNullOrWhiteSpace(report.ErrorCode))
+        {
+            payload["errorCode"] = report.ErrorCode;
+        }
+
+        if (!string.IsNullOrWhiteSpace(report.Summary))
+        {
+            payload["summary"] = report.Summary;
+        }
+
+        return new ExecEvent(
+            Type: "report.generated",
+            Sequence: sequence,
+            Timestamp: timestampUtc,
+            Message: "Markdown task report metadata recorded.",
+            Summary: report.Summary,
+            Payload: payload,
+            ErrorCode: report.ErrorCode,
+            Status: report.ErrorCode is null ? "success" : "failure");
     }
 
     private static AgentRunResult CreateWorkflowReferenceFailureResult(

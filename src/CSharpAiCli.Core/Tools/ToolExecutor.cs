@@ -6,14 +6,17 @@ public sealed class ToolExecutor : IToolExecutor
 {
     private readonly IToolRegistry registry;
     private readonly IReadOnlySet<string> disabledTools;
+    private readonly ToolExecutionBoundary boundary;
 
     public ToolExecutor(
         IToolRegistry registry,
-        IReadOnlySet<string>? disabledTools = null)
+        IReadOnlySet<string>? disabledTools = null,
+        ToolExecutionBoundary? boundary = null)
     {
         ArgumentNullException.ThrowIfNull(registry);
         this.registry = registry;
         this.disabledTools = disabledTools ?? new HashSet<string>(StringComparer.Ordinal);
+        this.boundary = boundary ?? ToolExecutionBoundary.Default;
     }
 
     public ToolExecutionResult Execute(
@@ -30,6 +33,13 @@ public sealed class ToolExecutor : IToolExecutor
                 $"Tool '{toolName}' is disabled by configuration.");
         }
 
+        if (boundary.IsDisabledByName(toolName) || boundary.IsDisabledByPrefix(toolName))
+        {
+            return ToolExecutionResult.Failure(
+                ToolErrorCode.ToolDisabled,
+                $"Tool '{toolName}' is disabled by the active tool boundary.");
+        }
+
         if (!registry.TryGet(toolName, out ITool? tool) || tool is null)
         {
             return ToolExecutionResult.Failure(
@@ -38,6 +48,13 @@ public sealed class ToolExecutor : IToolExecutor
         }
 
         ITool executableTool = tool;
+        if (!boundary.AllowsRisk(executableTool.Definition.RiskLevel))
+        {
+            return ToolExecutionResult.Failure(
+                ToolErrorCode.ToolDisabled,
+                $"Tool '{toolName}' is disabled by the active tool boundary.");
+        }
+
         if (string.Equals(context.Phase, ToolExecutionPhase.Planning, StringComparison.Ordinal) &&
             executableTool.Definition.RiskLevel != ToolRiskLevel.Read)
         {

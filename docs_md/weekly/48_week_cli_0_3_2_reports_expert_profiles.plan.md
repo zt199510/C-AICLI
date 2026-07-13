@@ -1,6 +1,6 @@
 # 第 48 周 0.3.2 Reports 与 Expert Profiles Implementation Plan
 
-状态：计划中
+状态：已执行
 
 **Goal:** 在 0.3.1 workflow references 与 changes view 稳定后，把 `exec` 的 `taskReport` 升级为按需可交付 markdown report，并增加受控的本地 expert profiles，让常见开发角色可以通过 CLI 明确选择。
 
@@ -205,20 +205,20 @@ Release docs 需要在实现后更新：
 
 ## 任务清单
 
-- [ ] Step 1: 确认 `--report` / `--report-path` / `--expert` CLI option 语义和错误码。
-- [ ] Step 2: 新增 report option model、path resolver 和 markdown renderer。
-- [ ] Step 3: 将 report generation 接入 `exec` text、JSON、trace、session 和 terminal result。
-- [ ] Step 4: 新增 expert profile catalog、prompt formatter 和 metadata。
-- [ ] Step 5: 将 expert profile 接入 `AgentRunRequest`、startup context、startup plan 和 task report。
-- [ ] Step 6: 实现 reviewer/security 只读 tool boundary，并测试不能写文件、运行 shell 或启动 MCP。
-- [ ] Step 7: 增加 markdown report、report path、redaction、JSON stream、session/trace 测试。
-- [ ] Step 8: 增加 expert profile CLI/prompt/tool-boundary/report 测试。
-- [ ] Step 9: 更新 smoke script 与 smoke script tests。
-- [ ] Step 10: 更新 release docs、capability status、known limitations、runtime logging diagnostics。
-- [ ] Step 11: 运行 `dotnet build src\CSharpAiCli.sln -c Release`。
-- [ ] Step 12: 运行 `dotnet test src\CSharpAiCli.sln -c Release --no-build`。
-- [ ] Step 13: 运行 `powershell -NoProfile -ExecutionPolicy Bypass -File tools\Invoke-SmokeTests.ps1`。
-- [ ] Step 14: 创建 `48_week_review.md`，记录实际验收、风险、Deferred 边界。
+- [x] Step 1: 确认 `--report` / `--report-path` / `--expert` CLI option 语义和错误码。
+- [x] Step 2: 新增 report option model、path resolver 和 markdown renderer。
+- [x] Step 3: 将 report generation 接入 `exec` text、JSON、trace、session 和 terminal result。
+- [x] Step 4: 新增 expert profile catalog、prompt formatter 和 metadata。
+- [x] Step 5: 将 expert profile 接入 `AgentRunRequest`、startup context、startup plan 和 task report。
+- [x] Step 6: 实现 reviewer/security 只读 tool boundary，并测试不能写文件、运行 shell 或启动 MCP。
+- [x] Step 7: 增加 markdown report、report path、redaction、JSON stream、session/trace 测试。
+- [x] Step 8: 增加 expert profile CLI/prompt/tool-boundary/report 测试。
+- [x] Step 9: 更新 smoke script 与 smoke script tests。
+- [x] Step 10: 更新 release docs、capability status、known limitations、runtime logging diagnostics。
+- [x] Step 11: 运行 `dotnet build src\CSharpAiCli.sln -c Release`。
+- [x] Step 12: 运行 `dotnet test src\CSharpAiCli.sln -c Release --no-build`。
+- [x] Step 13: 运行 `powershell -NoProfile -ExecutionPolicy Bypass -File tools\Invoke-SmokeTests.ps1`。
+- [x] Step 14: 创建 `48_week_review.md`，记录实际验收、风险、Deferred 边界。
 
 ## 验收矩阵
 
@@ -256,4 +256,3 @@ powershell -NoProfile -ExecutionPolicy Bypass -File tools\Build-Release.ps1
 1. `--report markdown` 在 text mode 是否直接输出完整 markdown，还是只输出 path/summary；建议 text mode 输出完整 markdown，path mode 输出 path。
 2. `--report-path` 是否允许写 `.caicli/reports` 以外的 workspace path；建议允许 workspace 内显式 path，但拒绝覆盖。
 3. `reviewer` / `security` 是否允许运行 read-only git tools；建议允许 git status/diff/read/search，禁止 shell/patch/MCP start。
-

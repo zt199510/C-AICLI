@@ -20,7 +20,11 @@
 - `review` is workspace-read-only and does not execute patch or shell tools or write workspace files, logs, transcripts, or patches. Diff collection may use cleaned-up temp files outside the workspace. It sends the current git diff to the configured model and requires configured model credentials for real use.
 - `review.gate` and `taskReport` are implemented diagnostic outputs for `exec`; they summarize the final state but do not prove correctness and do not replace human diff review.
 - Inline `@file:<path>` and `@folder:<path>` workflow references are available for `exec` only. They are bounded local context hints, not new tool permissions. `chat` references, URL references, glob expansion, semantic retrieval, and workflow-pack references remain Deferred.
-- `caicli changes` is read-only and local. It summarizes current git/session/taskReport state but does not call a model, prove correctness, generate markdown reports, or keep historical timelines.
+- `caicli changes` is read-only and local. It summarizes current git/session/taskReport state but does not call a model, prove correctness, generate standalone markdown reports, or keep historical timelines.
+- `exec --report markdown` is an audit artifact, not a correctness proof. It is generated from `AgentTaskReport`, records reference metadata only, and does not persist raw `@file`/`@folder` contents.
+- `exec --report-path` never overwrites an existing file and has no automatic history store or report rotation.
+- `exec --expert` uses built-in local profiles only. Custom expert files, model role routing, skills, and workflow-pack manifests remain Deferred.
+- `reviewer` and `security` experts are read-only by local policy. They still depend on the model's textual output quality and do not prove security or review completeness.
 - The Microsoft Agent Framework project is an adapter boundary and experimental stub; the real framework runtime backend is Deferred.
 
 ## MCP And Project Packs

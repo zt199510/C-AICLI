@@ -4,11 +4,14 @@ namespace CSharpAiCli.Core;
 
 internal static class AgentTaskContextPromptFormatter
 {
-    public static string FormatWithCurrentPrompt(AgentTaskContext taskContext, string prompt)
+    public static string FormatWithCurrentPrompt(
+        AgentTaskContext taskContext,
+        string prompt,
+        ExpertProfile? expert = null)
     {
         ArgumentNullException.ThrowIfNull(taskContext);
 
-        AgentStartupPlan plan = AgentStartupPlanBuilder.Build(prompt, taskContext);
+        AgentStartupPlan plan = AgentStartupPlanBuilder.Build(prompt, taskContext, expert);
         StringBuilder builder = new();
         builder.AppendLine("Bounded startup context:");
         builder.AppendLine("- Workspace: " + taskContext.WorkspaceRoot);
@@ -20,6 +23,7 @@ internal static class AgentTaskContextPromptFormatter
         builder.AppendLine("- Git diff summary:");
         builder.AppendLine(taskContext.Git.DiffSummary);
         AppendReferences(builder, taskContext.References ?? WorkflowReferenceResolution.Empty);
+        AppendExpert(builder, expert);
         builder.AppendLine();
         builder.AppendLine("Read-only startup plan:");
         builder.AppendLine(plan.Summary);
@@ -29,6 +33,19 @@ internal static class AgentTaskContextPromptFormatter
         builder.AppendLine("Current task:");
         builder.AppendLine(prompt);
         return builder.ToString().TrimEnd();
+    }
+
+    private static void AppendExpert(StringBuilder builder, ExpertProfile? expert)
+    {
+        builder.AppendLine("- Expert: " + (expert?.Name ?? "none"));
+        if (expert is null)
+        {
+            return;
+        }
+
+        builder.AppendLine("- Expert tool boundary: " + expert.ToolBoundary);
+        builder.AppendLine("- Expert report focus: " + expert.ReportFocus);
+        builder.AppendLine("- Expert guidance: " + expert.PromptGuidance);
     }
 
     private static string FormatInstructionSources(AgentTaskContext taskContext)

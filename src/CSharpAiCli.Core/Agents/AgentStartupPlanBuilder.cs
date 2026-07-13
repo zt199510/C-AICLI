@@ -12,14 +12,17 @@ internal static class AgentStartupPlanBuilder
         @"(?<![\w.-])(?:[A-Za-z0-9_.-]+[\\/])+[A-Za-z0-9_.-]+|(?<![\w.-])[A-Za-z0-9_.-]+\.(?:cs|csproj|sln|md|json|yml|yaml|ps1|sh|txt|xml)(?![\w.-])",
         RegexOptions.CultureInvariant);
 
-    public static AgentStartupPlan Build(string prompt, AgentTaskContext taskContext)
+    public static AgentStartupPlan Build(
+        string prompt,
+        AgentTaskContext taskContext,
+        ExpertProfile? expert = null)
     {
         ArgumentNullException.ThrowIfNull(taskContext);
 
         string goal = NormalizeSingleLine(prompt, 500);
         IReadOnlyList<string> candidateFiles = FindCandidateFiles(prompt, taskContext);
-        IReadOnlyList<string> expectedTools = SelectExpectedTools(prompt);
-        IReadOnlyList<string> risks = SelectRisks(taskContext, prompt);
+        IReadOnlyList<string> expectedTools = SelectExpectedTools(prompt, expert);
+        IReadOnlyList<string> risks = SelectRisks(taskContext, prompt, expert);
         string summary = FormatSummary(goal, candidateFiles, expectedTools, risks);
         bool truncated = false;
         if (summary.Length > MaxPlanSummaryCharacters)
@@ -57,7 +60,7 @@ internal static class AgentStartupPlanBuilder
         return candidates.Count == 0 ? ["unknown until read/search"] : candidates.Take(20).ToArray();
     }
 
-    private static IReadOnlyList<string> SelectExpectedTools(string prompt)
+    private static IReadOnlyList<string> SelectExpectedTools(string prompt, ExpertProfile? expert)
     {
         List<string> tools =
         [
@@ -66,6 +69,11 @@ internal static class AgentStartupPlanBuilder
             "workspace.search_text",
             "workspace.read_text"
         ];
+
+        if (expert is { IsReadOnly: true })
+        {
+            return tools;
+        }
 
         if (ContainsAny(prompt, "edit", "modify", "fix", "implement", "update", "create", "write", "patch", "add"))
         {
@@ -80,9 +88,17 @@ internal static class AgentStartupPlanBuilder
         return tools;
     }
 
-    private static IReadOnlyList<string> SelectRisks(AgentTaskContext taskContext, string prompt)
+    private static IReadOnlyList<string> SelectRisks(
+        AgentTaskContext taskContext,
+        string prompt,
+        ExpertProfile? expert)
     {
         List<string> risks = [];
+        if (expert is { IsReadOnly: true })
+        {
+            risks.Add("expert profile is read-only; write, shell, and MCP tools are disabled");
+        }
+
         if (taskContext.Git.IsDirty)
         {
             risks.Add("workspace has uncommitted changes");
@@ -134,7 +150,8 @@ internal static class AgentStartupPlanBuilder
             risks.Add("workflow reference resolution failed: " + (references.FirstErrorCode ?? "unknown"));
         }
 
-        if (ContainsAny(prompt, "edit", "modify", "fix", "implement", "update", "create", "write", "patch", "add", "run", "shell"))
+        if (expert is not { IsReadOnly: true } &&
+            ContainsAny(prompt, "edit", "modify", "fix", "implement", "update", "create", "write", "patch", "add", "run", "shell"))
         {
             risks.Add("write or shell tools may require approval");
         }

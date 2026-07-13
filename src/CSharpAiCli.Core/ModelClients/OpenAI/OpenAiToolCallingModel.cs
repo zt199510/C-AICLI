@@ -40,6 +40,13 @@ public sealed class OpenAiToolCallingModel : IToolCallingModel
         {
             prompt = AgentTaskContextPromptFormatter.FormatWithCurrentPrompt(
                 request.TaskContext,
+                prompt,
+                request.ExpertProfile);
+        }
+        else
+        {
+            prompt = ExpertProfilePromptFormatter.FormatWithCurrentPrompt(
+                request.ExpertProfile,
                 prompt);
         }
 

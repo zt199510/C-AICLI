@@ -113,10 +113,10 @@ Agent event order is shared by text output, NDJSON output, and trace output. `mo
 Week 44 adds final review/report diagnostics for every agentic `exec` run:
 
 - `review.gate` summarizes the final git diff through the read-only `git.diff` planning-phase path. Its payload includes `readOnly=true`, `toolName=git.diff`, `hasDiff`, and `truncated`. It must not call shell, patch, or workspace write tools.
-- `taskReport` records the final report as an event. Its payload includes status, stop reason, prompt, plan, tools, workflow reference count/list, changed file count/list, command count/list, verification count/statuses, risk count/list, trace path when trace is enabled, optional review gate status, and secret presence metadata.
-- The terminal `exec.result.payload.taskReport` contains the structured report payload used by JSON consumers and trace readers.
-- Session transcript `agentRuns[]` stores the same task report summary object when `exec --session` is used. Markdown session export renders compact task report counts and trace path only.
-- Full standalone markdown task report files are not written by default and remain deferred.
+- `taskReport` records the final report as an event. Its payload includes status, stop reason, prompt, plan, tools, workflow reference count/list, changed file count/list, command count/list, verification count/statuses, risk count/list, trace path when trace is enabled, optional review gate status, optional expert metadata, optional report artifact metadata, and secret presence metadata.
+- The terminal `exec.result.payload.taskReport` contains the structured report payload used by JSON consumers and trace readers. `exec --report markdown` adds a `report.generated` event and `taskReport.report` metadata without placing raw markdown in NDJSON output.
+- Session transcript `agentRuns[]` stores the same task report summary object when `exec --session` is used. Markdown session export renders compact task report counts, expert/report metadata, report path when present, and trace path.
+- Full standalone markdown task report files are written only when `--report markdown --report-path <workspace-path>` is explicitly requested. Existing paths are rejected by default.
 
 Week 47 adds workflow reference and changes-view diagnostics:
 

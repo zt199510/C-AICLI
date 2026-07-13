@@ -105,6 +105,39 @@ artifacts\release\caicli-0.3.0-win-x64\caicli.exe review --workspace .
 
 `changes` is local and read-only. It does not call a model and can still return exit code `0` for clean workspaces, non-git workspaces, or missing session task reports while surfacing warnings in text/JSON output.
 
+## Markdown Report Issues
+
+Use `--report markdown` for a full task report:
+
+```powershell
+artifacts\release\caicli-0.3.0-win-x64\caicli.exe exec --report markdown --workspace . "Summarize @file:README.md"
+```
+
+Common report failures:
+
+- `Invalid value for --report`: use `none` or `markdown`.
+- `report-path-requires-markdown`: use `--report markdown` together with `--report-path`.
+- `workspace-boundary-denied`: the report path resolved outside the workspace.
+- `report-path-exists`: the report path already exists. The CLI does not overwrite report files in this release.
+- `report-path-is-directory`: choose a file path, not a directory path.
+
+When using `--output json --report markdown`, the NDJSON stream should not contain the raw markdown report. Look for `report.generated` and `payload.taskReport.report` metadata instead.
+
+## Expert Profile Issues
+
+Use one of the built-in profiles:
+
+```powershell
+artifacts\release\caicli-0.3.0-win-x64\caicli.exe exec --expert reviewer --workspace . "Review @folder:src"
+artifacts\release\caicli-0.3.0-win-x64\caicli.exe exec --expert security --workspace . "Audit @folder:src"
+```
+
+Common expert failures:
+
+- `Invalid value for --expert`: use `bugfix`, `reviewer`, `tester`, `security`, or `refactor`.
+- `tool-disabled` under `reviewer` or `security`: the selected expert is read-only, so patch, shell, and MCP tools are blocked for that run.
+- Expert profiles do not configure a model or API key. Missing model/key errors are diagnosed the same way as ordinary `exec`.
+
 ## Traces, Logs, And Sessions
 
 Enable trace diagnostics for agent work:

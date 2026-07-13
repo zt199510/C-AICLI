@@ -172,9 +172,25 @@ Automatic verification uses only explicit commands. Project instructions take pr
 
 At completion, `exec` runs a read-only `review.gate` over the final git diff summary. The gate uses the read-only `git.diff` tool path, does not call patch or shell tools, and does not write workspace files. The event payload includes `readOnly=true`, `toolName=git.diff`, `hasDiff`, and `truncated`.
 
-Every agentic `exec` run also records a final `AgentTaskReport`. Text output includes the report-derived `references`, `changedFiles`, `commands`, `verificationStatus`, `remainingRisks`, and `tracePath` fields when available. JSON output emits a `taskReport` event and includes the full `payload.taskReport` object on the terminal `exec.result`. The report payload contains status/stop reason, prompt, plan, tools, workflow reference metadata, changed files, commands, verification, risks, trace path, and optional review gate data.
+Every agentic `exec` run also records a final `AgentTaskReport`. Text output includes the report-derived `expert`, `reportMode`, `reportPath`, `references`, `changedFiles`, `commands`, `verificationStatus`, `remainingRisks`, and `tracePath` fields when available. JSON output emits a `taskReport` event and includes the full `payload.taskReport` object on the terminal `exec.result`. The report payload contains status/stop reason, prompt, plan, tools, workflow reference metadata, expert metadata, report artifact metadata, changed files, commands, verification, risks, trace path, and optional review gate data.
 
-When `--trace` is enabled, the task report is written into the trace result payload. When `--session` is used, the report is attached to the session transcript's agent run summary. Report redaction records secret presence/source/kind only and never raw secret values. A standalone full markdown task report is deferred; `session export --format markdown` currently prints compact task report counts and the trace path when present.
+When `--trace` is enabled, the task report is written into the trace result payload. When `--session` is used, the report is attached to the session transcript's agent run summary. Report redaction records secret presence/source/kind only and never raw secret values.
+
+Use `--report markdown` to request a full markdown report. In text mode the report is printed after the ordinary exec event/result output. In JSON mode the NDJSON stream remains machine-readable and carries `report.generated` plus `payload.taskReport.report` metadata instead of raw markdown. Use `--report-path` only when you want an explicit workspace file; existing files and workspace escapes are rejected.
+
+```powershell
+artifacts\release\caicli-0.3.0-win-x64\caicli.exe exec --report markdown --workspace . "Summarize @file:README.md"
+artifacts\release\caicli-0.3.0-win-x64\caicli.exe exec --report markdown --report-path .caicli\reports\latest.md --workspace . "Review @folder:src/CSharpAiCli.Core"
+artifacts\release\caicli-0.3.0-win-x64\caicli.exe exec --output json --report markdown --workspace . "Summarize @file:docs_md\release\capability_status.md"
+```
+
+Use `--expert` to select built-in local profiles. `bugfix`, `tester`, and `refactor` adjust guidance and report focus without expanding permissions. `reviewer` and `security` are read-only: patch, shell, and MCP tools are disabled and MCP discovery is skipped.
+
+```powershell
+artifacts\release\caicli-0.3.0-win-x64\caicli.exe exec --expert bugfix --workspace . "Fix this using @file:src\App.cs"
+artifacts\release\caicli-0.3.0-win-x64\caicli.exe exec --expert reviewer --workspace . "Review @folder:src\CSharpAiCli.Core"
+artifacts\release\caicli-0.3.0-win-x64\caicli.exe exec --expert security --report markdown --workspace . "Audit @folder:src\CSharpAiCli.Core\Tools"
+```
 
 ```powershell
 artifacts\release\caicli-0.3.0-win-x64\caicli.exe exec --workspace . "read README.md"
@@ -237,7 +253,7 @@ artifacts\release\caicli-0.3.0-win-x64\caicli.exe changes --workspace .
 artifacts\release\caicli-0.3.0-win-x64\caicli.exe review --workspace .
 ```
 
-`exec` already records a read-only `review.gate` event and a final `taskReport`, but those are diagnostics. They do not replace manually reviewing the actual diff.
+`exec` records a read-only `review.gate`, a final `taskReport`, and optional markdown report metadata, but those are diagnostics. They do not replace manually reviewing the actual diff.
 
 ## 11. Run A Local Smoke Task
 
