@@ -1,6 +1,6 @@
 # C-AICLI 产品定位与路线护栏
 
-更新时间：2026-07-12
+更新时间：2026-07-13
 
 ## 一句话定位
 
@@ -123,6 +123,8 @@ C-AICLI 的价值在于可控性和工程化：
 
 ### 0.3.1-0.3.3：Developer Workflow Packs
 
+状态：已完成，已在 2026-07-13 验收为当前 release line。
+
 目标：借鉴 WorkBuddy 的 Skills、Experts 和可交付结果思路，但保持 CLI 形态。
 
 详细排期统一维护在 `docs_md/weekly/47_week_cli_0_3_developer_workflow_packs_schedule.md`，路线图只保留版本方向，避免同一范围在多个文档里重复漂移。
@@ -135,9 +137,18 @@ C-AICLI 的价值在于可控性和工程化：
 
 0.3.3 可以借鉴 WorkBuddy 的“专家和技能包”，但不应复制 WorkBuddy 的桌面工作台、IM 控制或办公套件形态。
 
+完成确认：
+
+- 版本元数据已更新到 `0.3.3`，当前 release artifact 为 `artifacts/release/caicli-0.3.3-win-x64.zip`。
+- `docs_md/release/final_acceptance_0.3.3.md` 已记录 0.3.3 final acceptance、deterministic zip size/SHA256、packaged smoke 和 Deferred 边界。
+- 当前复核通过：`dotnet build src\CSharpAiCli.sln -c Release`、`dotnet test src\CSharpAiCli.sln -c Release --no-build` 和 `tools\Invoke-SmokeTests.ps1` 均通过；真实模型 smoke 仍按设计需要 `CAICLI_REAL_MODEL_SMOKE=1` 显式启用。
+- 当前能力边界：bounded `@file:` / `@folder:` references、只读 `changes`、markdown task report、`--expert` profiles、本地 `skills list/run`、内置 .NET workflow packs、direct OpenAI SDK agent tool-call continuation、fake/offline agent contract、`review.gate`、`taskReport` 和 user-configured stdio MCP v1 是 0.3.3 当前能力；remote skill marketplace、custom expert files、automatic model routing、daemon/API、CI/PR integration、Gerber/TIFF real execution 和 team platform 仍 Deferred。
+
 ### 0.4.0：工程自动化平台化
 
 目标：在真实 agent 闭环稳定后，引入更强的任务编排。
+
+详细排期统一维护在 `docs_md/weekly/50_week_cli_0_4_engineering_automation_platform_schedule.md`，路线图只保留版本方向，避免同一范围在多个文档里重复漂移。
 
 候选范围：
 
@@ -146,6 +157,8 @@ C-AICLI 的价值在于可控性和工程化：
 - CI/PR 集成。
 - 本地 daemon、HTTP API 或 SSE，为 IDE、Web UI 或远程控制预留入口。
 - 更完整的 task queue、job history 和 artifact 管理。
+
+0.4.0 的优先级应是本地可审计任务编排，而不是远程平台化。job history、artifact index、task queue、multi-role pipeline 和 CI/report 输出应先在 CLI 与本地文件边界内稳定；daemon/API/SSE 只能作为可选 preview 或后续阶段，不能绕过 approval、workspace guard、secret redaction、trace/log、session/report 或 smoke。
 
 ### 0.5.0+：垂直行业能力和团队化
 

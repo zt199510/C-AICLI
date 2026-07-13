@@ -18,7 +18,7 @@
 - Passed: `$env:PATH = "$env:USERPROFILE\.dotnet;$env:PATH"; dotnet test src\CSharpAiCli.sln -c Release --no-build`
 - Passed: `$env:PATH = "$env:USERPROFILE\.dotnet;$env:PATH"; powershell -NoProfile -ExecutionPolicy Bypass -File tools\Build-Release.ps1`
 - Passed: `$env:PATH = "$env:USERPROFILE\.dotnet;$env:PATH"; powershell -NoProfile -ExecutionPolicy Bypass -File tools\Invoke-SmokeTests.ps1`
-- Release artifact: `artifacts/release/caicli-0.3.3-win-x64.zip`, size `32371308` bytes, SHA256 `E2060C11378EACDC2D75F51700E0F1903CD058EFC40C6B96DA0DF6446E1F5CF4`.
+- Release artifact: `artifacts/release/caicli-0.3.3-win-x64.zip`, size `32371265` bytes, SHA256 `3EA45A7366BD3E7EDC940E1737D786EA0D4DFB6C8ECB963D6FED668F6E903BF1`.
 
 ## 验收要点
 
