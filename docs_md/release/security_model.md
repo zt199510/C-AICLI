@@ -178,6 +178,14 @@ Automation manifests are workspace-local JSON data under `.caicli/automations`. 
 
 Manual runs store bounded redacted automation name/run/source/target correlation in queue and job metadata plus an inline automation artifact pointer. They do not store raw referenced contents, raw tool arguments, raw secrets, full diffs, or approval overrides. Automatic schedules, daemon workers, Windows Task Scheduler registration, API/webhook triggers, remote execution, and team automation remain Deferred.
 
+## CI Artifacts
+
+`ci summarize` and `ci check` read one existing job through the user-level job store and project it into provider-neutral JSON or markdown. They do not call a model, construct a tool registry, run shell/patch tools, start MCP, create queue/job/session/trace state, or write command logs. They cannot expand approval, workspace, dirty-workspace, shell, disabled-tool, expert/skill, or MCP boundaries because they do not execute the recorded task.
+
+The projection includes only bounded redacted summary/check/annotation/correlation metadata and artifact pointers. It excludes job task text, raw workflow reference content, task-report command and verification details, raw tool arguments, raw secrets, and full diffs. Exported strings pass through secret redaction again. A source record that does not declare secrets redacted plus raw references/tool arguments/full diff absent becomes `config-error`, and its artifact pointers are not emitted.
+
+JSON and stdout markdown are non-persistent. `--markdown-path` explicitly reuses the report path resolver: paths must stay inside the workspace and existing files are not overwritten. The CLI does not invoke GitHub/GitLab/Azure DevOps APIs, create PR comments, emit provider annotation protocols, send webhook/callback traffic, or upload artifacts. Local paths in artifact pointers remain sensitive metadata.
+
 ## Expert Profiles
 
 `exec --expert` selects a built-in local profile. It is local policy and prompt/report guidance, not provider/model routing.

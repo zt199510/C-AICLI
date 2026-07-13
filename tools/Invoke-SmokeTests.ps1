@@ -692,6 +692,51 @@ Write-Output 'bugfix verification passed'
     Assert-Contains $jobsExport.Output "# C# AI CLI Job" "jobs export markdown"
     Assert-Contains $jobsExport.Output $recordedJobId "jobs export markdown"
 
+    $ciSummary = Invoke-CaiCli -Arguments @(
+        "ci", "summarize", "--job", $recordedJobId, "--output", "json", "--workspace", $workspace
+    )
+    Assert-ExitCode $ciSummary 0 "ci summarize json"
+    Assert-Contains $ciSummary.Output '"schemaVersion":1' "ci summarize schema"
+    Assert-Contains $ciSummary.Output '"type":"caicli.ci.summary"' "ci summarize type"
+    Assert-Contains $ciSummary.Output '"outcome":"failure"' "ci summarize failed job outcome"
+    Assert-Contains $ciSummary.Output '"recommendedExitCode":1' "ci summarize recommended exit code"
+    Assert-Contains $ciSummary.Output '"rawReferencesStored":false' "ci summarize reference boundary"
+    Assert-Contains $ciSummary.Output '"rawToolArgumentsStored":false' "ci summarize tool argument boundary"
+    Assert-Contains $ciSummary.Output '"fullDiffStored":false' "ci summarize diff boundary"
+    Assert-NotContains $ciSummary.Output '@file:note.txt' "ci summarize raw reference exclusion"
+
+    $ciMarkdown = Invoke-CaiCli -Arguments @(
+        "ci", "summarize", "--job", $recordedJobId, "--output", "markdown", "--workspace", $workspace
+    )
+    Assert-ExitCode $ciMarkdown 0 "ci summarize markdown"
+    Assert-Contains $ciMarkdown.Output "# C-AICLI CI summary" "ci summarize markdown"
+    Assert-Contains $ciMarkdown.Output "Outcome: **failure**" "ci summarize markdown outcome"
+
+    $ciMarkdownRelativePath = ".caicli\reports\ci-summary.md"
+    $ciMarkdownPath = Join-Path $workspace $ciMarkdownRelativePath
+    $ciSummaryFile = Invoke-CaiCli -Arguments @(
+        "ci", "summarize", "--job", $recordedJobId, "--markdown-path", $ciMarkdownRelativePath,
+        "--workspace", $workspace
+    )
+    Assert-ExitCode $ciSummaryFile 0 "ci summarize markdown file"
+    if (-not (Test-Path -LiteralPath $ciMarkdownPath -PathType Leaf)) {
+        throw "ci summarize markdown file expected workspace-local output at $ciMarkdownPath"
+    }
+    Assert-Contains ([System.IO.File]::ReadAllText($ciMarkdownPath)) "# C-AICLI CI summary" "ci markdown file content"
+
+    $ciCheck = Invoke-CaiCli -Arguments @(
+        "ci", "check", "--job", $recordedJobId, "--workspace", $workspace
+    )
+    Assert-ExitCode $ciCheck 1 "ci check failed job"
+    Assert-Contains $ciCheck.Output '"outcome":"failure"' "ci check failed job outcome"
+
+    $ciMissing = Invoke-CaiCli -Arguments @(
+        "ci", "check", "--job", "job_20260713T000000000Z_00000000", "--workspace", $workspace
+    )
+    Assert-ExitCode $ciMissing 2 "ci check config error"
+    Assert-Contains $ciMissing.Output '"type":"caicli.ci.error"' "ci check config error"
+    Assert-Contains $ciMissing.Output '"outcome":"config-error"' "ci check config error outcome"
+
     $emptyHooks = Join-Path $TempRoot "empty-hooks"
     New-Item -ItemType Directory -Path $emptyHooks -Force | Out-Null
     Invoke-Git -Name "git init" -Arguments @("-C", $workspace, "-c", "commit.gpgSign=false", "-c", "core.hooksPath=$emptyHooks", "init") | Out-Null

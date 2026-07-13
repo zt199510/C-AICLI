@@ -290,6 +290,20 @@ List, validate, plan, and dry-run are credential-free and do not call a model, r
 
 C-AICLI does not include a background scheduler, Windows Task Scheduler registration, daemon worker, API/webhook trigger, remote execution, or team automation. To run a schedule preview, a user must still invoke `automation run --manual` explicitly.
 
+## Provider-neutral CI Artifacts
+
+After an exec, queue, pipeline role, or manual automation has produced a job record, generate stable JSON or markdown without model credentials:
+
+```powershell
+artifacts\release\caicli-0.3.3-win-x64\caicli.exe ci summarize --job <job-id> --output json --workspace .
+artifacts\release\caicli-0.3.3-win-x64\caicli.exe ci summarize --job <job-id> --markdown-path .caicli\reports\ci-summary.md --workspace .
+artifacts\release\caicli-0.3.3-win-x64\caicli.exe ci check --job <job-id> --fail-on risks --workspace .
+```
+
+`ci summarize` returns `0` after artifact generation and records the source result in `check.outcome` plus `check.recommendedExitCode`. `ci check` returns `0` for success/default warnings, `1` for a failed source job or selected `--fail-on` threshold, and `2` for missing/corrupt input or an unsafe source boundary. Explicit markdown paths stay inside the workspace and never overwrite an existing file.
+
+CI artifacts include bounded redacted job/task-report summaries, annotations, correlation, and artifact pointers. They exclude raw reference contents, raw tool arguments, verification command details, raw secrets, and full diffs. See `docs_md/release/ci_artifacts.md` for the v1 schema and manual GitHub Actions/Azure DevOps YAML. C-AICLI does not call provider APIs, create PR comments, send callbacks, or upload artifacts.
+
 ```powershell
 artifacts\release\caicli-0.3.3-win-x64\caicli.exe exec --workspace . "read README.md"
 artifacts\release\caicli-0.3.3-win-x64\caicli.exe exec --json --workspace . "read README.md"

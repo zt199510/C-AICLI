@@ -68,6 +68,15 @@ public sealed class SmokeTestScriptTests
         Assert.Contains("\"type\":\"jobs.list\"", script, StringComparison.Ordinal);
         Assert.Contains("\"type\":\"jobs.show\"", script, StringComparison.Ordinal);
         Assert.Contains("# C# AI CLI Job", script, StringComparison.Ordinal);
+        Assert.Contains("\"ci\", \"summarize\", \"--job\", $recordedJobId", script, StringComparison.Ordinal);
+        Assert.Contains("\"type\":\"caicli.ci.summary\"", script, StringComparison.Ordinal);
+        Assert.Contains("\"rawReferencesStored\":false", script, StringComparison.Ordinal);
+        Assert.Contains("\"rawToolArgumentsStored\":false", script, StringComparison.Ordinal);
+        Assert.Contains("\"fullDiffStored\":false", script, StringComparison.Ordinal);
+        Assert.Contains("\"ci\", \"check\", \"--job\", $recordedJobId", script, StringComparison.Ordinal);
+        Assert.Contains("Assert-ExitCode $ciCheck 1 \"ci check failed job\"", script, StringComparison.Ordinal);
+        Assert.Contains("Assert-ExitCode $ciMissing 2 \"ci check config error\"", script, StringComparison.Ordinal);
+        Assert.Contains(".caicli\\reports\\ci-summary.md", script, StringComparison.Ordinal);
         Assert.Contains("\"queue\", \"list\", \"--output\", \"json\", \"--workspace\", $workspace", script, StringComparison.Ordinal);
         Assert.Contains("\"queue\", \"add\", \"exec\"", script, StringComparison.Ordinal);
         Assert.Contains("\"queue\", \"add\", \"skill\", \"review-only\"", script, StringComparison.Ordinal);

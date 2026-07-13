@@ -742,6 +742,179 @@ public static class CliCommandFactory
         jobsCommand.Subcommands.Add(jobsShowCommand);
         jobsCommand.Subcommands.Add(jobsExportCommand);
 
+        Command ciCommand = new("ci", "Generate provider-neutral CI artifacts from local job records.");
+        Command ciSummarizeCommand = new("summarize", "Generate a CI JSON or markdown summary for one job.");
+        Option<string> ciSummarizeJobOption = new("--job")
+        {
+            Description = "Job id to summarize.",
+        };
+        Option<string> ciSummarizeOutputOption = new("--output")
+        {
+            Description = "Select json or markdown output.",
+        };
+        Option<string> ciSummarizeMarkdownPathOption = new("--markdown-path")
+        {
+            Description = "Write the markdown summary to a new workspace-local file.",
+        };
+        ciSummarizeOutputOption.DefaultValueFactory = _ => "json";
+        ciSummarizeJobOption.Validators.Add(result =>
+        {
+            if (string.IsNullOrWhiteSpace(result.GetValueOrDefault<string>()))
+            {
+                result.AddError("Option --job is required.");
+            }
+        });
+        ciSummarizeOutputOption.Validators.Add(result =>
+        {
+            string value = result.GetValueOrDefault<string>() ?? "json";
+            if (!string.Equals(value, "json", StringComparison.OrdinalIgnoreCase) &&
+                !string.Equals(value, "markdown", StringComparison.OrdinalIgnoreCase))
+            {
+                result.AddError("Invalid value for --output. Allowed values are json and markdown.");
+            }
+        });
+        ciSummarizeCommand.Options.Add(ciSummarizeJobOption);
+        ciSummarizeCommand.Options.Add(ciSummarizeOutputOption);
+        ciSummarizeCommand.Options.Add(ciSummarizeMarkdownPathOption);
+        ciSummarizeCommand.SetAction(parseResult =>
+        {
+            string? workspacePath = parseResult.GetValue(workspaceOption);
+            string jobId = parseResult.GetValue(ciSummarizeJobOption) ?? string.Empty;
+            string outputMode = parseResult.GetValue(ciSummarizeOutputOption) ?? "json";
+            string? markdownPath = parseResult.GetValue(ciSummarizeMarkdownPathOption);
+            bool jsonOutput = string.Equals(outputMode, "json", StringComparison.OrdinalIgnoreCase);
+            CliEnvironmentSnapshot snapshot = workspaceSnapshotProvider(workspacePath);
+            WriteVerboseDiagnostics(parseResult, "ci summarize", snapshot, !jsonOutput);
+
+            JobRecordReadResult readResult = JobRecordStore.Create(snapshot).Read(jobId);
+            if (!readResult.Succeeded || readResult.Record is null)
+            {
+                WriteCiFailure(
+                    output,
+                    readResult.Diagnostic?.ErrorCode ?? "job-not-found",
+                    readResult.Diagnostic?.Summary ?? "Job record was not found.",
+                    jsonOutput,
+                    jobId);
+                return CiExitCodePolicy.ConfigError;
+            }
+
+            CiArtifact artifact = new CiArtifactRenderer().Render(readResult.Record);
+            CiMarkdownRenderer markdownRenderer = new();
+            if (!string.IsNullOrWhiteSpace(markdownPath))
+            {
+                ReportWriteResult writeResult = new ReportPathResolver().WriteMarkdown(
+                    snapshot.Workspace,
+                    markdownPath,
+                    markdownRenderer.Render(artifact));
+                if (!writeResult.Succeeded)
+                {
+                    WriteCiFailure(
+                        output,
+                        writeResult.ErrorCode ?? "ci-markdown-write-failed",
+                        writeResult.Summary ?? "CI markdown summary could not be written.",
+                        jsonOutput,
+                        jobId);
+                    return CiExitCodePolicy.ConfigError;
+                }
+            }
+
+            if (jsonOutput)
+            {
+                new CiJsonRenderer(output).Write(artifact);
+            }
+            else
+            {
+                markdownRenderer.Write(output, artifact);
+            }
+
+            return string.Equals(artifact.Check.Outcome, CiCheckOutcome.ConfigError, StringComparison.Ordinal)
+                ? CiExitCodePolicy.ConfigError
+                : CiExitCodePolicy.Success;
+        });
+
+        Command ciCheckCommand = new("check", "Evaluate one job using the deterministic CI exit-code policy.");
+        Option<string> ciCheckJobOption = new("--job")
+        {
+            Description = "Job id to check.",
+        };
+        Option<string> ciCheckOutputOption = new("--output")
+        {
+            Description = "Select json or markdown output.",
+        };
+        Option<string> ciCheckFailOnOption = new("--fail-on")
+        {
+            Description = "Promote none, warnings, or remaining risks to a failed check.",
+        };
+        ciCheckOutputOption.DefaultValueFactory = _ => "json";
+        ciCheckFailOnOption.DefaultValueFactory = _ => "none";
+        ciCheckJobOption.Validators.Add(result =>
+        {
+            if (string.IsNullOrWhiteSpace(result.GetValueOrDefault<string>()))
+            {
+                result.AddError("Option --job is required.");
+            }
+        });
+        ciCheckOutputOption.Validators.Add(result =>
+        {
+            string value = result.GetValueOrDefault<string>() ?? "json";
+            if (!string.Equals(value, "json", StringComparison.OrdinalIgnoreCase) &&
+                !string.Equals(value, "markdown", StringComparison.OrdinalIgnoreCase))
+            {
+                result.AddError("Invalid value for --output. Allowed values are json and markdown.");
+            }
+        });
+        ciCheckFailOnOption.Validators.Add(result =>
+        {
+            string value = result.GetValueOrDefault<string>() ?? "none";
+            if (!string.Equals(value, "none", StringComparison.OrdinalIgnoreCase) &&
+                !string.Equals(value, "warnings", StringComparison.OrdinalIgnoreCase) &&
+                !string.Equals(value, "risks", StringComparison.OrdinalIgnoreCase))
+            {
+                result.AddError("Invalid value for --fail-on. Allowed values are none, warnings, and risks.");
+            }
+        });
+        ciCheckCommand.Options.Add(ciCheckJobOption);
+        ciCheckCommand.Options.Add(ciCheckOutputOption);
+        ciCheckCommand.Options.Add(ciCheckFailOnOption);
+        ciCheckCommand.SetAction(parseResult =>
+        {
+            string? workspacePath = parseResult.GetValue(workspaceOption);
+            string jobId = parseResult.GetValue(ciCheckJobOption) ?? string.Empty;
+            string outputMode = parseResult.GetValue(ciCheckOutputOption) ?? "json";
+            string failOn = parseResult.GetValue(ciCheckFailOnOption) ?? "none";
+            bool jsonOutput = string.Equals(outputMode, "json", StringComparison.OrdinalIgnoreCase);
+            CliEnvironmentSnapshot snapshot = workspaceSnapshotProvider(workspacePath);
+            WriteVerboseDiagnostics(parseResult, "ci check", snapshot, !jsonOutput);
+
+            JobRecordReadResult readResult = JobRecordStore.Create(snapshot).Read(jobId);
+            if (!readResult.Succeeded || readResult.Record is null)
+            {
+                WriteCiFailure(
+                    output,
+                    readResult.Diagnostic?.ErrorCode ?? "job-not-found",
+                    readResult.Diagnostic?.Summary ?? "Job record was not found.",
+                    jsonOutput,
+                    jobId);
+                return CiExitCodePolicy.ConfigError;
+            }
+
+            CiArtifact artifact = CiExitCodePolicy.Apply(
+                new CiArtifactRenderer().Render(readResult.Record),
+                failOn);
+            if (jsonOutput)
+            {
+                new CiJsonRenderer(output).Write(artifact);
+            }
+            else
+            {
+                new CiMarkdownRenderer().Write(output, artifact);
+            }
+
+            return artifact.Check.RecommendedExitCode;
+        });
+        ciCommand.Subcommands.Add(ciSummarizeCommand);
+        ciCommand.Subcommands.Add(ciCheckCommand);
+
         Command queueCommand = new("queue", "Manage the local task queue.");
         Command queueAddCommand = new("add", "Add a pending request to the local task queue.");
         Command queueAddExecCommand = new("exec", "Add a pending exec request.");
@@ -3992,6 +4165,7 @@ public static class CliCommandFactory
         rootCommand.Subcommands.Add(diffCommand);
         rootCommand.Subcommands.Add(changesCommand);
         rootCommand.Subcommands.Add(jobsCommand);
+        rootCommand.Subcommands.Add(ciCommand);
         rootCommand.Subcommands.Add(queueCommand);
         rootCommand.Subcommands.Add(automationCommand);
         rootCommand.Subcommands.Add(pipelineCommand);
@@ -4914,6 +5088,40 @@ public static class CliCommandFactory
         }
 
         WriteSafeFailure(output, errorCode, summary);
+    }
+
+    private static void WriteCiFailure(
+        TextWriter output,
+        string errorCode,
+        string summary,
+        bool jsonOutput,
+        string? jobId)
+    {
+        string safeErrorCode = DiagnosticSecretRedactor.Redact(errorCode);
+        string safeSummary = DiagnosticSecretRedactor.Redact(summary);
+        if (jsonOutput)
+        {
+            output.WriteLine(JsonSerializer.Serialize(new Dictionary<string, object?>
+            {
+                ["type"] = "caicli.ci.error",
+                ["outcome"] = CiCheckOutcome.ConfigError,
+                ["exitCode"] = CiExitCodePolicy.ConfigError,
+                ["errorCode"] = safeErrorCode,
+                ["summary"] = safeSummary,
+                ["jobId"] = string.IsNullOrWhiteSpace(jobId)
+                    ? null
+                    : DiagnosticSecretRedactor.Redact(jobId)
+            }, JsonOptions));
+            return;
+        }
+
+        output.WriteLine("# C-AICLI CI summary");
+        output.WriteLine();
+        output.WriteLine("- Outcome: **config-error**");
+        output.WriteLine("- Exit code: " + CiExitCodePolicy.ConfigError.ToString(CultureInfo.InvariantCulture));
+        output.WriteLine("- Error code: " + safeErrorCode);
+        output.WriteLine();
+        output.WriteLine(safeSummary);
     }
 
     private static void WriteQueueFailure(

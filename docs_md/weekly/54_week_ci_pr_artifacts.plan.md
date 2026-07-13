@@ -36,14 +36,14 @@ caicli ci check --job <job-id> --fail-on risks
 
 ## 任务清单
 
-- [ ] Step 1: 定义 CI summary/check/annotation schema。
-- [ ] Step 2: 增加 job->CI artifact renderer。
-- [ ] Step 3: 实现 `ci summarize/check` 或等价 `jobs export` 格式。
-- [ ] Step 4: 明确 exit-code policy 并增加 tests。
-- [ ] Step 5: 确保 CI artifact 不包含 raw secrets、raw references、raw tool args 或完整 diff。
-- [ ] Step 6: 增加 smoke 覆盖 credential-free CI artifact generation。
-- [ ] Step 7: 更新 docs，给出 GitHub Actions/Azure DevOps 的手动调用示例但不内置 provider integration。
-- [ ] Step 8: 运行 build/test/smoke 并创建 `54_week_review.md`。
+- [x] Step 1: 定义 CI summary/check/annotation schema。
+- [x] Step 2: 增加 job->CI artifact renderer。
+- [x] Step 3: 实现 `ci summarize/check` 或等价 `jobs export` 格式。
+- [x] Step 4: 明确 exit-code policy 并增加 tests。
+- [x] Step 5: 确保 CI artifact 不包含 raw secrets、raw references、raw tool args 或完整 diff。
+- [x] Step 6: 增加 smoke 覆盖 credential-free CI artifact generation。
+- [x] Step 7: 更新 docs，给出 GitHub Actions/Azure DevOps 的手动调用示例但不内置 provider integration。
+- [x] Step 8: 运行 build/test/smoke 并创建 `54_week_review.md`。
 
 ## 验收标准
 
