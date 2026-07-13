@@ -3,6 +3,8 @@
 ## Unreleased
 
 Added:
+- Week 55 localhost-only Local API / daemon Preview: static `daemon doctor` and `api routes`, explicit `daemon start --preview`, and `api smoke` expose health plus read-only existing jobs/queue metadata. Accepted bind input is normalized to `127.0.0.1`; wildcard, remote, hostname, and IPv6 binds are rejected before startup.
+- Local API route contract v1 reuses `JobRecordStore`, `TaskQueueStore`, `JobsJsonRenderer`, and `TaskQueueJsonRenderer`. It adds no execution/control route, model/tool/MCP path, approval override, workspace write, second history store, or artifact-content endpoint. SSE remains Deferred.
 - Week 54 provider-neutral CI artifact v1: `ci summarize` and `ci check` render existing job records as stable JSON or markdown with summary, check outcome, annotations, queue/pipeline/automation correlation, artifact pointers, redaction declarations, and deterministic exit codes.
 - CI JSON schema v1 uses `caicli.ci.summary`; `ci check` returns `0` for success/default warnings, `1` for source failure or a selected warning/risk threshold, and `2` for missing/corrupt input or an unsafe source storage boundary. Explicit `--markdown-path` reuses workspace guard and no-overwrite report behavior.
 - Week 53 workspace-local automation commands: strict JSON manifests under `.caicli/automations`, `automation list/validate/plan`, credential-free `automation run --dry-run`, and explicit `automation run --manual` for queue, skill, and built-in pipeline targets.
@@ -23,6 +25,7 @@ Added:
 - Week 47 read-only `caicli changes`: summarizes git status/diff stat, changed files, optional latest session task report, commands, verification, remaining risks, trace path, and warnings in text or JSON without calling a model, running shell/patch tools, starting MCP, or writing command logs by default.
 
 Changed:
+- Default smoke checks daemon doctor/routes, default-off behavior, and remote-bind rejection without starting a server. Real daemon/API smoke starts the packaged localhost Preview only when `CAICLI_DAEMON_SMOKE=1`; real model smoke remains separately opt-in.
 - Default smoke now generates credential-free CI JSON/markdown from a controlled local failed job, verifies raw-reference/tool-argument/full-diff exclusion declarations, writes one workspace-guarded markdown file, and checks failure/config-error exit codes. Real-model and external-provider smoke remain opt-in/not enabled.
 - Default smoke coverage now includes credential-free automation list/validate/plan/dry-run and a controlled missing-model manual skill trigger with queue/job correlation and automation artifact checks. Real model smoke remains opt-in.
 - Default smoke coverage now includes credential-free pipeline list/plan text/JSON and a controlled missing-model `security-review` run with read-only boundary, queue/job pointer, task-report artifact, short-circuit, and remaining-risk checks. Real model smoke remains opt-in.
@@ -36,7 +39,7 @@ Changed:
 - Default smoke coverage now includes `changes`, `changes --output json`, `changes --session` warning behavior, and `exec @file` reference diagnostics without requiring model credentials.
 
 Known deferred items:
-- Automatic model role routing, provider assignment, parallel pipeline workers, pipeline retry/resume, automatic schedule execution, Windows Task Scheduler registration, CI/PR provider APIs/comments/uploads, daemon/API/SSE, webhooks, remote runners, and remote control remain Deferred.
+- Automatic model role routing, provider assignment, parallel pipeline workers, pipeline retry/resume, automatic schedule execution, Windows Task Scheduler registration, CI/PR provider APIs/comments/uploads, API control routes, SSE, authentication/TLS, service installation, remote bind, webhooks, remote runners, and remote control remain Deferred. The read-only localhost API/daemon is Preview.
 - Job retention, rotation, delete, cleanup, and remote/shared stores remain Deferred. Queue cleanup only removes matching terminal queue records and does not remove jobs/artifacts.
 - `@file` / `@folder` references are scoped to `exec`; `chat` references, URL references, glob expansion, semantic retrieval, and workflow-pack references remain Deferred.
 - Remote skill marketplaces, automatic skill updates, signed trust chains, custom expert files, automatic model role routing, user-level skill directories, YAML manifests, and Gerber/TIFF real execution remain Deferred.

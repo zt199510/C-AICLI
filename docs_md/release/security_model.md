@@ -156,7 +156,7 @@ Queue records are user-level local state under `%USERPROFILE%\.caicli\queue`, or
 
 Each completed attempt records its terminal status, bounded error metadata, exit code, and job id. The queue item also stores the latest job id; job records use the queue id as their label. Queue files do not store raw referenced contents, raw tool arguments, raw secrets, full diffs, or approval overrides.
 
-Cancel is pending-only and never attempts to terminate an active process. Cleanup accepts only succeeded, failed, or canceled queue status. It preserves pending, running, corrupt, and unknown records, and it does not delete job history or artifacts. Task queue v1 has no daemon, scheduler, concurrent worker pool, remote runner, or permission elevation mechanism.
+Cancel is pending-only and never attempts to terminate an active process. Cleanup accepts only succeeded, failed, or canceled queue status. It preserves pending, running, corrupt, and unknown records, and it does not delete job history or artifacts. Task queue v1 has no execution daemon, scheduler, concurrent worker pool, remote runner, or permission elevation mechanism. The separate local API Preview is read-only and never runs queue items.
 
 ## Local Multi-role Pipelines
 
@@ -185,6 +185,16 @@ Manual runs store bounded redacted automation name/run/source/target correlation
 The projection includes only bounded redacted summary/check/annotation/correlation metadata and artifact pointers. It excludes job task text, raw workflow reference content, task-report command and verification details, raw tool arguments, raw secrets, and full diffs. Exported strings pass through secret redaction again. A source record that does not declare secrets redacted plus raw references/tool arguments/full diff absent becomes `config-error`, and its artifact pointers are not emitted.
 
 JSON and stdout markdown are non-persistent. `--markdown-path` explicitly reuses the report path resolver: paths must stay inside the workspace and existing files are not overwritten. The CLI does not invoke GitHub/GitLab/Azure DevOps APIs, create PR comments, emit provider annotation protocols, send webhook/callback traffic, or upload artifacts. Local paths in artifact pointers remain sensitive metadata.
+
+## Local API / Daemon Preview
+
+The local HTTP daemon is disabled by default and starts only through explicit `daemon start --preview`. Bind input is restricted to `localhost` or `127.0.0.1` and normalized to an IPv4 `127.0.0.1` Kestrel listener; wildcard, LAN, public, hostname, IPv6, and `0.0.0.0` binds are rejected before workspace snapshot or server startup. Ordinary CLI commands never start the listener.
+
+The v1 routes are GET-only health, jobs list/show, and queue list/show. They reuse `JobRecordStore`, `TaskQueueStore`, `JobsJsonRenderer`, and `TaskQueueJsonRenderer`. The API does not create a tool registry, call a model, start MCP, run shell/patch, write workspace files, create/transition queue or job records, read artifact contents, or accept approval/configuration overrides. Unsupported methods, request bodies, invalid filters, over-limit lists, and unknown routes fail with bounded JSON errors. Server headers are disabled and connections/request sizes are bounded.
+
+Loopback is a network binding restriction, not authentication. The Preview has no authentication, authorization, TLS, multi-user isolation, or protection from another process running as the same operating-system user. Returned workspace paths, bounded redacted task metadata, job/queue ids, and artifact pointers remain sensitive local data. The listener must not be exposed through a port forward or reverse proxy.
+
+API control routes, queue workers, automation/pipeline execution, SSE, browser UI/CORS support, remote bind, authentication/TLS, service installation, detached mode, auto-restart, and remote control are Deferred. If control routes are considered later, they must re-enter the existing CLI command/service path and preserve approval, workspace guard, dirty-workspace checks, secret redaction, shell policy, disabled tools, expert/skill boundaries, MCP startup policy, trace/session/report, job recording, and smoke boundaries.
 
 ## Expert Profiles
 

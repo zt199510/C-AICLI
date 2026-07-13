@@ -293,6 +293,7 @@ $oldCaiCliUserProfile = $env:CAICLI_USER_PROFILE
 $oldOpenAiKey = $env:OPENAI_API_KEY
 $oldOpenAiModel = $env:OPENAI_MODEL
 $realModelSmokeOptIn = [System.String]::Equals($env:CAICLI_REAL_MODEL_SMOKE, "1", [System.StringComparison]::Ordinal)
+$daemonSmokeOptIn = [System.String]::Equals($env:CAICLI_DAEMON_SMOKE, "1", [System.StringComparison]::Ordinal)
 
 try {
     New-Item -ItemType Directory -Path $workspace, $userProfile | Out-Null
@@ -398,6 +399,26 @@ Write-Output 'bugfix verification passed'
     Assert-ExitCode $models 0 "models"
     Assert-Contains $models.Output "modelListApi: not called" "models"
     Assert-Contains $models.Output "apiKey: missing" "models"
+
+    $daemonDoctor = Invoke-CaiCli -Arguments @("daemon", "doctor", "--output", "json")
+    Assert-ExitCode $daemonDoctor 0 "daemon doctor json"
+    Assert-Contains $daemonDoctor.Output '"type":"daemon.doctor"' "daemon doctor json"
+    Assert-Contains $daemonDoctor.Output '"defaultEnabled":false' "daemon default off"
+    Assert-Contains $daemonDoctor.Output '"access":"read-only"' "daemon read-only"
+
+    $apiRoutes = Invoke-CaiCli -Arguments @("api", "routes", "--output", "json")
+    Assert-ExitCode $apiRoutes 0 "api routes json"
+    Assert-Contains $apiRoutes.Output '"type":"api.routes"' "api routes json"
+    Assert-Contains $apiRoutes.Output '"controlRoutes":"deferred"' "api control routes deferred"
+    Assert-Contains $apiRoutes.Output '"sse":"deferred"' "api sse deferred"
+
+    $daemonDefaultOff = Invoke-CaiCli -Arguments @("daemon", "start")
+    Assert-ExitCode $daemonDefaultOff 2 "daemon default off"
+    Assert-Contains $daemonDefaultOff.Output "--preview is required" "daemon default off"
+
+    $daemonRemoteBind = Invoke-CaiCli -Arguments @("daemon", "start", "--preview", "--bind", "0.0.0.0")
+    Assert-ExitCode $daemonRemoteBind 2 "daemon remote bind"
+    Assert-Contains $daemonRemoteBind.Output "remote and wildcard binds are disabled" "daemon remote bind"
 
     $workspaceConfigDir = Join-Path $workspace ".caicli"
     New-Item -ItemType Directory -Path $workspaceConfigDir -Force | Out-Null
@@ -736,6 +757,97 @@ Write-Output 'bugfix verification passed'
     Assert-ExitCode $ciMissing 2 "ci check config error"
     Assert-Contains $ciMissing.Output '"type":"caicli.ci.error"' "ci check config error"
     Assert-Contains $ciMissing.Output '"outcome":"config-error"' "ci check config error outcome"
+
+    if (-not $daemonSmokeOptIn) {
+        Write-Host "daemon/API smoke skipped: set CAICLI_DAEMON_SMOKE=1 to start the localhost-only read-only Preview."
+    } else {
+        $portListener = [System.Net.Sockets.TcpListener]::new([System.Net.IPAddress]::Loopback, 0)
+        $portListener.Start()
+        $daemonPort = ([System.Net.IPEndPoint]$portListener.LocalEndpoint).Port
+        $portListener.Stop()
+        $daemonStdout = Join-Path $TempRoot "daemon-smoke.stdout.log"
+        $daemonStderr = Join-Path $TempRoot "daemon-smoke.stderr.log"
+        $daemonArguments = @(
+            "daemon",
+            "start",
+            "--preview",
+            "--bind",
+            "127.0.0.1",
+            "--port",
+            [string]$daemonPort,
+            "--workspace",
+            (ConvertTo-CmdArgument $workspace)
+        )
+        $daemonProcess = Start-Process `
+            -FilePath $ExecutablePath `
+            -ArgumentList $daemonArguments `
+            -RedirectStandardOutput $daemonStdout `
+            -RedirectStandardError $daemonStderr `
+            -WindowStyle Hidden `
+            -PassThru
+        try {
+            $daemonReady = $false
+            for ($attempt = 0; $attempt -lt 50; $attempt++) {
+                if ($daemonProcess.HasExited) {
+                    $daemonOutput = if (Test-Path -LiteralPath $daemonStdout) {
+                        [System.IO.File]::ReadAllText($daemonStdout)
+                    } else {
+                        ""
+                    }
+                    $daemonError = if (Test-Path -LiteralPath $daemonStderr) {
+                        [System.IO.File]::ReadAllText($daemonStderr)
+                    } else {
+                        ""
+                    }
+                    throw "daemon/API smoke process exited early with code $($daemonProcess.ExitCode). Output:`n$daemonOutput`n$daemonError"
+                }
+
+                try {
+                    $health = Invoke-WebRequest `
+                        -UseBasicParsing `
+                        -Uri "http://127.0.0.1:$daemonPort/v1/health" `
+                        -TimeoutSec 1
+                    if ($health.StatusCode -eq 200 -and $health.Content -match '"type":"daemon.health"') {
+                        $daemonReady = $true
+                        break
+                    }
+                } catch {
+                }
+
+                Start-Sleep -Milliseconds 100
+            }
+
+            if (-not $daemonReady) {
+                throw "daemon/API smoke did not reach the localhost health endpoint."
+            }
+
+            $apiSmoke = Invoke-CaiCli -Arguments @("api", "smoke", "--port", [string]$daemonPort)
+            Assert-ExitCode $apiSmoke 0 "api smoke opt-in"
+            Assert-Contains $apiSmoke.Output "api smoke passed" "api smoke opt-in"
+
+            $daemonJobs = Invoke-WebRequest `
+                -UseBasicParsing `
+                -Uri "http://127.0.0.1:$daemonPort/v1/jobs?limit=10" `
+                -TimeoutSec 2
+            Assert-Contains $daemonJobs.Content '"type":"jobs.list"' "daemon jobs endpoint"
+            Assert-Contains $daemonJobs.Content $recordedJobId "daemon jobs endpoint"
+
+            $daemonQueue = Invoke-WebRequest `
+                -UseBasicParsing `
+                -Uri "http://127.0.0.1:$daemonPort/v1/queue?limit=10" `
+                -TimeoutSec 2
+            Assert-Contains $daemonQueue.Content '"type":"queue.list"' "daemon queue endpoint"
+            Assert-Contains $daemonQueue.Content $queuedExecId "daemon queue endpoint"
+        }
+        finally {
+            if (-not $daemonProcess.HasExited) {
+                Stop-Process -Id $daemonProcess.Id -Force
+                $daemonProcess.WaitForExit(5000) | Out-Null
+            }
+
+            $daemonProcess.Dispose()
+        }
+    }
 
     $emptyHooks = Join-Path $TempRoot "empty-hooks"
     New-Item -ItemType Directory -Path $emptyHooks -Force | Out-Null

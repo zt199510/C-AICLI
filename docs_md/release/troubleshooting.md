@@ -165,7 +165,7 @@ Common automation diagnostics:
 - `automation-run-mode-invalid`: specify exactly one of `--dry-run` or `--manual`.
 - `automation-execution-failed`: queue/job artifacts could not be created or read. Inspect the active `CAICLI_USER_PROFILE` and filesystem access.
 
-Schedule output always reports `enabled=false`. This is intentional: the schedule is preview data, not a background registration. Do not expect Windows Task Scheduler entries, daemon processes, API/webhook triggers, or automatic retries.
+Schedule output always reports `enabled=false`. This is intentional: the schedule is preview data, not a background registration. Do not expect automation to create Windows Task Scheduler entries, daemon processes, API/webhook triggers, or automatic retries. The separate local API Preview is read-only and never executes an automation.
 
 Dry-run is non-persistent and should not create queue/job/log state. Manual execution can return delegated errors such as `missing-model`, `tool-disabled`, `approval-denied`, or `shell-policy-denied`; these show that the existing target boundary was preserved. Inspect the returned queue/job ids with `queue show` and `jobs show` rather than rerunning with broader permissions.
 
@@ -271,6 +271,31 @@ Use sessions when you need a transcript:
 artifacts\release\caicli-0.3.3-win-x64\caicli.exe exec --workspace . --session smoke-exec "inspect README.md"
 artifacts\release\caicli-0.3.3-win-x64\caicli.exe session export --format markdown smoke-exec
 ```
+
+## Local API / Daemon Preview
+
+Use static diagnostics first; neither command starts a listener:
+
+```powershell
+artifacts\release\caicli-0.3.3-win-x64\caicli.exe daemon doctor --output json
+artifacts\release\caicli-0.3.3-win-x64\caicli.exe api routes --output json
+```
+
+Common daemon failures:
+
+- `--preview is required`: the API is default-off. Add `--preview` only after reviewing the local unauthenticated threat model.
+- `remote and wildcard binds are disabled`: use `--bind localhost` or `--bind 127.0.0.1`. `0.0.0.0`, IPv6, LAN/public addresses, and hostnames are intentionally unsupported.
+- `listener could not be started`: another process may already use the port. Choose an unused port from `1024` through `65535`.
+- `api smoke failed`: start the daemon explicitly on the same port, then retry `api smoke --port <port>`.
+
+Default smoke does not start a daemon. To run the packaged localhost API smoke explicitly:
+
+```powershell
+$env:CAICLI_DAEMON_SMOKE = "1"
+tools\Invoke-SmokeTests.ps1
+```
+
+This opt-in does not require model credentials. It starts only the read-only `127.0.0.1` Preview for the smoke duration and terminates the process afterward.
 
 ## Real Model Smoke
 

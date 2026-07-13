@@ -39,6 +39,16 @@ public sealed class SmokeTestScriptTests
         Assert.Contains("Assert-ExitCode $realModelExec 0 \"real model read-only exec\"", script, StringComparison.Ordinal);
         Assert.Contains("Assert-Contains $realModelExec.Output \"result: success\" \"real model read-only exec\"", script, StringComparison.Ordinal);
         Assert.Contains("Assert-Contains $realModelExec.Output \"workspace.read_text\" \"real model read-only exec tool call\"", script, StringComparison.Ordinal);
+        Assert.Contains("CAICLI_DAEMON_SMOKE", script, StringComparison.Ordinal);
+        Assert.Contains("daemon/API smoke skipped: set CAICLI_DAEMON_SMOKE=1", script, StringComparison.Ordinal);
+        Assert.Contains("\"daemon\", \"doctor\", \"--output\", \"json\"", script, StringComparison.Ordinal);
+        Assert.Contains("\"api\", \"routes\", \"--output\", \"json\"", script, StringComparison.Ordinal);
+        Assert.Contains("\"daemon\", \"start\", \"--preview\", \"--bind\", \"0.0.0.0\"", script, StringComparison.Ordinal);
+        Assert.Contains("Start-Process", script, StringComparison.Ordinal);
+        Assert.Contains("-WindowStyle Hidden", script, StringComparison.Ordinal);
+        Assert.Contains("\"api\", \"smoke\", \"--port\", [string]$daemonPort", script, StringComparison.Ordinal);
+        Assert.Contains("http://127.0.0.1:$daemonPort/v1/jobs?limit=10", script, StringComparison.Ordinal);
+        Assert.Contains("http://127.0.0.1:$daemonPort/v1/queue?limit=10", script, StringComparison.Ordinal);
         Assert.DoesNotContain("sk-smoke-local", script, StringComparison.Ordinal);
         Assert.DoesNotContain("agent-backend-unavailable", script, StringComparison.Ordinal);
         Assert.Contains("errorCode: approval-denied", script, StringComparison.Ordinal);

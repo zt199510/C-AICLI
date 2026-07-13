@@ -1,6 +1,6 @@
 # 第 55 周 Local API / Daemon Preview Implementation Plan
 
-状态：计划中
+状态：已验收
 
 **Goal:** 在 job/queue/pipeline/automation/CI artifacts 稳定后，评估并可选实现本地 daemon/HTTP API/SSE preview，为 IDE/Web UI/远程控制预留入口；preview 默认关闭，仅绑定 localhost，且不能扩大 CLI 权限。
 
@@ -29,20 +29,20 @@
 
 ```powershell
 caicli daemon doctor
-caicli daemon start --localhost --port 8787 --preview
+caicli daemon start --preview --bind 127.0.0.1 --port 8787
 caicli api routes
-caicli api smoke --localhost --port 8787
+caicli api smoke --port 8787
 ```
 
 ## 任务清单
 
-- [ ] Step 1: 写明 preview threat model 和默认关闭策略。
-- [ ] Step 2: 定义 API route contract，优先 read-only jobs/queue endpoints。
-- [ ] Step 3: 如实现 start，限制 localhost，并拒绝 remote bind。
-- [ ] Step 4: 将 API 操作全部复用 CLI service path 和 existing security boundaries。
-- [ ] Step 5: 增加 opt-in smoke，不进入默认 CI 前提。
-- [ ] Step 6: 更新 docs，将 daemon/API 标为 Preview 或 Deferred。
-- [ ] Step 7: 运行 build/test/smoke 并创建 `55_week_review.md`。
+- [x] Step 1: 写明 preview threat model 和默认关闭策略。
+- [x] Step 2: 定义 API route contract，优先 read-only jobs/queue endpoints。
+- [x] Step 3: 如实现 start，限制 localhost，并拒绝 remote bind。
+- [x] Step 4: 将 API 操作全部复用 CLI service path 和 existing security boundaries。
+- [x] Step 5: 增加 opt-in smoke，不进入默认 CI 前提。
+- [x] Step 6: 更新 docs，将 daemon/API 标为 Preview 或 Deferred。
+- [x] Step 7: 运行 build/test/smoke 并创建 `55_week_review.md`。
 
 ## 验收标准
 

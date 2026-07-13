@@ -288,7 +288,7 @@ artifacts\release\caicli-0.3.3-win-x64\caicli.exe automation run nightly-review 
 
 List, validate, plan, and dry-run are credential-free and do not call a model, run tools, start MCP, create queue/job records, or write the workspace. Manual run delegates to the existing queue or pipeline path, so approval, workspace and dirty-workspace checks, shell policy, disabled tools, MCP startup policy, trace/session/report, and model credentials are unchanged. Manual runs record redacted automation correlation in queue/job metadata and an inline job artifact pointer.
 
-C-AICLI does not include a background scheduler, Windows Task Scheduler registration, daemon worker, API/webhook trigger, remote execution, or team automation. To run a schedule preview, a user must still invoke `automation run --manual` explicitly.
+C-AICLI does not include a background scheduler, Windows Task Scheduler registration, queue daemon worker, API/webhook execution trigger, remote execution, or team automation. The separate local API Preview described below is read-only and cannot run an automation. To run a schedule preview, a user must still invoke `automation run --manual` explicitly.
 
 ## Provider-neutral CI Artifacts
 
@@ -303,6 +303,32 @@ artifacts\release\caicli-0.3.3-win-x64\caicli.exe ci check --job <job-id> --fail
 `ci summarize` returns `0` after artifact generation and records the source result in `check.outcome` plus `check.recommendedExitCode`. `ci check` returns `0` for success/default warnings, `1` for a failed source job or selected `--fail-on` threshold, and `2` for missing/corrupt input or an unsafe source boundary. Explicit markdown paths stay inside the workspace and never overwrite an existing file.
 
 CI artifacts include bounded redacted job/task-report summaries, annotations, correlation, and artifact pointers. They exclude raw reference contents, raw tool arguments, verification command details, raw secrets, and full diffs. See `docs_md/release/ci_artifacts.md` for the v1 schema and manual GitHub Actions/Azure DevOps YAML. C-AICLI does not call provider APIs, create PR comments, send callbacks, or upload artifacts.
+
+## Local API / Daemon Preview
+
+Inspect the default-off boundary and route contract without starting a listener:
+
+```powershell
+artifacts\release\caicli-0.3.3-win-x64\caicli.exe daemon doctor --output json
+artifacts\release\caicli-0.3.3-win-x64\caicli.exe api routes --output json
+```
+
+Explicitly start the read-only Preview on IPv4 loopback:
+
+```powershell
+artifacts\release\caicli-0.3.3-win-x64\caicli.exe daemon start --preview --bind 127.0.0.1 --port 8787 --workspace .
+```
+
+In another terminal, check the already-running process or read the v1 endpoints:
+
+```powershell
+artifacts\release\caicli-0.3.3-win-x64\caicli.exe api smoke --port 8787
+Invoke-RestMethod http://127.0.0.1:8787/v1/health
+Invoke-RestMethod http://127.0.0.1:8787/v1/jobs?limit=50
+Invoke-RestMethod http://127.0.0.1:8787/v1/queue?limit=50
+```
+
+`--preview` is mandatory. Only `localhost` and `127.0.0.1` are accepted as bind input, and the listener always uses `127.0.0.1`; `0.0.0.0`, IPv6, hostnames, LAN, and public addresses are rejected before startup. This Preview has no authentication or TLS and must not be exposed through a reverse proxy or port forward. It exposes bounded redacted job/queue metadata and local artifact pointers, not artifact contents. Control routes, SSE, queue workers, remote access, service installation, and browser UI are Deferred. See `docs_md/release/local_api_daemon_preview.md` for the threat model and route contract.
 
 ```powershell
 artifacts\release\caicli-0.3.3-win-x64\caicli.exe exec --workspace . "read README.md"
