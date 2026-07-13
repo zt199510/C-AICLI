@@ -54,7 +54,7 @@ public sealed class ReleaseBuildScriptTests
     {
         string props = ReadRepositoryFile("Directory.Build.props");
 
-        Assert.Contains("<Version>0.3.0</Version>", props, StringComparison.Ordinal);
+        Assert.Contains("<Version>0.3.1</Version>", props, StringComparison.Ordinal);
         Assert.Contains("<InformationalVersion>$(Version)</InformationalVersion>", props, StringComparison.Ordinal);
     }
 
