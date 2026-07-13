@@ -1,8 +1,8 @@
-﻿# C# AI CLI Installation
+# C# AI CLI Installation
 
 ## Supported Package
 
-The `0.3.0` release candidate is a Windows `win-x64` self-contained package produced by:
+The `0.3.3` release candidate is a Windows `win-x64` self-contained package produced by:
 
 ```powershell
 powershell -NoProfile -ExecutionPolicy Bypass -File tools/Build-Release.ps1
@@ -11,7 +11,7 @@ powershell -NoProfile -ExecutionPolicy Bypass -File tools/Build-Release.ps1
 The script writes the executable to:
 
 ```text
-artifacts/release/caicli-0.3.0-win-x64/caicli.exe
+artifacts/release/caicli-0.3.3-win-x64/caicli.exe
 ```
 
 The package also includes `release-manifest.json`, which records the version, runtime, target framework, and executable name.
@@ -34,14 +34,14 @@ powershell -NoProfile -ExecutionPolicy Bypass -File tools/Build-Release.ps1
 2. Run the executable directly:
 
 ```powershell
-artifacts\release\caicli-0.3.0-win-x64\caicli.exe version
-artifacts\release\caicli-0.3.0-win-x64\caicli.exe doctor
+artifacts\release\caicli-0.3.3-win-x64\caicli.exe version
+artifacts\release\caicli-0.3.3-win-x64\caicli.exe doctor
 ```
 
 3. Optional: add the release directory to `PATH` for the current PowerShell session:
 
 ```powershell
-$env:PATH = "$(Resolve-Path artifacts\release\caicli-0.3.0-win-x64);$env:PATH"
+$env:PATH = "$(Resolve-Path artifacts\release\caicli-0.3.3-win-x64);$env:PATH"
 caicli version
 caicli doctor
 ```

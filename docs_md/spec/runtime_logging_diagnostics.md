@@ -125,6 +125,13 @@ Week 47 adds workflow reference and changes-view diagnostics:
 - `caicli changes --output json` emits a single JSON object with `type="changes.view"`, `status`, `git`, `changedFiles`, optional `taskReport`, optional `session`, and `warnings`.
 - `caicli changes --trace` or `CAICLI_TRACE=1` writes a redacted `changes.view` trace command event. `changes` does not write command logs by default.
 
+Week 49 adds local skill metadata:
+
+- `skills list` emits local-only text or a single JSON object with `type="skills.list"`, built-in/workspace-local pack metadata, and non-fatal manifest diagnostics. It does not call a model or run tools.
+- `skills run --dry-run` emits text or a single JSON object with `type="skills.runPlan"`, selected skill, source, entry mode, expert, report, safety, validation command hint, suggested references, instructions, and expanded task. Dry-run does not write reports, run shell/patch/MCP tools, call a model, or save a session.
+- Non-dry-run `skills run` uses the existing agentic `exec` trace/session/report path and sets the trace command name to `skills run`.
+- `taskReport.skill` records name, version, description, source kind/path, entry mode, expert, report, safety summary, validation command hint, and suggested references. The same structured field is present in text-derived summaries, NDJSON result payloads, trace result payloads, session task reports, and markdown task reports.
+
 Trace and verbose diagnostics must redact secrets before writing output. Redaction covers API keys, access/refresh tokens, passwords, `Authorization` headers and common variants, `secretKey`, `privateKey`, nested or escaped `argumentsJson`, OpenAI `sk-...` keys, and GitHub token formats such as `ghp_...` and `github_pat_...`. Diagnostics may record key presence and source, but never raw key values.
 
 `logs path` prints the resolved CLI log directory. It must not create the directory just to print the path.

@@ -273,7 +273,7 @@ public sealed class ConversationTranscriptMarkdownFormatterTests
 
         string markdown = ConversationTranscriptMarkdownFormatter.Format(transcript);
 
-        Assert.Contains("taskReport: status=success stopReason=completed expert=reviewer report=markdown changedFiles=0 commands=0 verification=0 risks=0", markdown, StringComparison.Ordinal);
+        Assert.Contains("taskReport: status=success stopReason=completed skill=none expert=reviewer report=markdown changedFiles=0 commands=0 verification=0 risks=0", markdown, StringComparison.Ordinal);
         Assert.Contains("tracePath: D:/trace.log", markdown, StringComparison.Ordinal);
         Assert.Contains("reportPath: .caicli/reports/run.md", markdown, StringComparison.Ordinal);
     }

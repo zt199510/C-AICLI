@@ -124,7 +124,7 @@ Agentic `exec` ends each run with a read-only review gate and final task report.
 - The review gate payload marks `readOnly=true` and `toolName=git.diff`.
 - The review gate does not call patch tools, shell tools, or workspace write paths.
 - The review gate can report `success` or `warning`; warning covers cases such as failed or truncated diff collection.
-- The final `AgentTaskReport` records status, stop reason, prompt, plan, tools, workflow reference metadata, expert metadata, report artifact metadata, changed files, commands, verification, remaining risks, trace path, summary, error code, and optional review gate details.
+- The final `AgentTaskReport` records status, stop reason, prompt, plan, tools, workflow reference metadata, expert metadata, skill metadata, report artifact metadata, changed files, commands, verification, remaining risks, trace path, summary, error code, and optional review gate details.
 - Text output, NDJSON output, trace result payloads, and session transcript agent run summaries all carry report-derived data.
 - The report is diagnostic and review-oriented; it is not an automatic rollback or correctness guarantee.
 - A standalone full markdown task report file is not written by default. `exec --report markdown` prints the full report in text mode, while JSON output records structured metadata only. `--report-path <path>` writes only on explicit request, must remain inside the workspace, creates parent directories, and refuses to overwrite existing files.
@@ -138,6 +138,16 @@ Task reports sanitize all captured strings before output or persistence. When a 
 - `bugfix`, `tester`, and `refactor` do not expand permissions. They still use the configured disabled tools, approval mode, workspace guard, shell policy, dangerous-command detector, MCP startup policy, loop limits, and timeouts.
 - `reviewer` and `security` are read-only profiles. The CLI does not register write or shell tools for those runs, skips MCP discovery, and the tool executor rejects write, shell, and `mcp.*` tool requests with `tool-disabled` even if a model asks for them.
 - Expert metadata is recorded in text output, NDJSON, trace, session task reports, and markdown reports so the active role and boundary can be reviewed later.
+
+## Local Skills
+
+`skills list` and `skills run` are local workflow-pack entry points. Built-in packs and workspace `.caicli/skills` JSON manifests can select an existing expert profile, default report mode, reference suggestions, instructions, validation command hints, and stricter safety constraints.
+
+- Skill manifests are data only. They are read and validated, but manifest commands or scripts are not executed directly.
+- `skills run --dry-run` only renders the expanded plan. It does not call a model, write files, run shell/patch tools, start MCP, or create reports.
+- Non-dry-run `skills run` uses the same `exec` agent runner, tool registry, approval policy, workspace guard, shell policy, disabled-tool checks, trace/session/report flow, and review gate.
+- Skill safety can restrict tools, such as read-only mode or disabling shell/MCP. It cannot bypass approval, shell policy, workspace guard, disabled tools, or dangerous-command detection.
+- Skill metadata is recorded in text output, NDJSON, trace, session task reports, and markdown reports so the selected pack and boundary can be audited later.
 
 ## Changes View
 
@@ -190,7 +200,7 @@ Users can disable tools through `disabledTools` in user or workspace config. Dis
 - Remote/http MCP transport remains Deferred.
 - Gerber/TIFF project pack status/profile support exists, but real Gerber execution is Deferred.
 
-These deferred capabilities do not block the `0.3.0` direct backend release.
+These deferred capabilities do not block the `0.3.3` direct backend release.
 
 ## Current Limitations
 
@@ -199,4 +209,4 @@ These deferred capabilities do not block the `0.3.0` direct backend release.
 - Dangerous command detection and shell policy use conservative text and pattern boundaries, not full shell parsing or semantic proof.
 - Allowlist entries are command text, not exact argv arrays. Unusual quoted arguments containing metacharacters may be conservatively blocked.
 - The release is Windows-focused.
-- Dotnet tool packaging is not enabled for the `0.3.0` package.
+- Dotnet tool packaging is not enabled for the `0.3.3` package.

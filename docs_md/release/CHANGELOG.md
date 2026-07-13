@@ -3,12 +3,15 @@
 ## Unreleased
 
 Added:
+- Week 49 local skills/workflow packs: `caicli skills list` lists built-in and workspace-local packs, and `caicli skills run <name> --dry-run -- <task>` expands a pack into a reviewable plan without calling a model, writing files, running shell, or starting MCP. Non-dry-run skill runs route through the existing agentic `exec` safety path and record skill metadata in text, JSON, trace, session task reports, and markdown reports.
+- Built-in .NET workflow packs: `test-fix`, `review-only`, `upgrade-package`, and `doc-sync`. Pack manifests are JSON-only in this increment, with workspace-local loading from `.caicli/skills`.
 - Week 48 markdown task reports for `exec`: `--report markdown` emits a full redacted task report in text mode, `--report-path <path>` writes an explicit workspace-bounded markdown file without overwriting existing files, and JSON output keeps markdown out of the NDJSON stream while carrying structured report metadata.
 - Week 48 local expert profiles for `exec`: `--expert bugfix|reviewer|tester|security|refactor` records expert metadata in prompt context, text, JSON, trace, session task reports, and markdown reports. `reviewer` and `security` are read-only profiles that disable write, shell, and MCP tools and skip MCP discovery.
 - Week 47 workflow inputs for `exec`: inline `@file:<path>` and `@folder:<path>` references are resolved inside the workspace before model execution, bounded by file count, byte count, depth, binary-file, and workspace-guard checks, and recorded in text, JSON, trace, session, and `taskReport` metadata without persisting raw referenced content in reports.
 - Week 47 read-only `caicli changes`: summarizes git status/diff stat, changed files, optional latest session task report, commands, verification, remaining risks, trace path, and warnings in text or JSON without calling a model, running shell/patch tools, starting MCP, or writing command logs by default.
 
 Changed:
+- Default smoke coverage now includes credential-free `skills list`, `skills list --output json`, and `skills run review-only --dry-run` paths.
 - `exec` task reports now include report artifact metadata and selected expert metadata. Markdown reports are generated from the final `AgentTaskReport` object and do not persist raw referenced file contents.
 - Default smoke coverage now includes credential-free `exec --report markdown`, `--report-path`, `--expert reviewer`, and `--expert security --output json` paths.
 - `exec` task reports now include workflow reference metadata and final text output includes a compact reference summary when references are present.
@@ -16,7 +19,7 @@ Changed:
 
 Known deferred items:
 - `@file` / `@folder` references are scoped to `exec`; `chat` references, URL references, glob expansion, semantic retrieval, and workflow-pack references remain Deferred.
-- Local skills, custom expert files, automatic model role routing, pack manifests, and built-in workflow packs remain Deferred.
+- Remote skill marketplaces, automatic skill updates, signed trust chains, custom expert files, automatic model role routing, user-level skill directories, YAML manifests, and Gerber/TIFF real execution remain Deferred.
 
 ## 0.3.0 - 2026-07-12
 

@@ -2,9 +2,9 @@
 
 ## Release Scope
 
-- Version `0.3.0` is a local Windows release candidate.
+- Version `0.3.3` is a local Windows release candidate.
 - The primary supported package is `win-x64` self-contained single-file publish.
-- Dotnet tool packaging is not part of the `0.3.0` release package.
+- Dotnet tool packaging is not part of the `0.3.3` release package.
 
 ## Model And Agent Behavior
 
@@ -19,11 +19,12 @@
 - `chat --resume` and `exec --resume` provide prior transcript context only for existing local sessions. The context is normalized before use to reduce transcript section-spoofing risk.
 - `review` is workspace-read-only and does not execute patch or shell tools or write workspace files, logs, transcripts, or patches. Diff collection may use cleaned-up temp files outside the workspace. It sends the current git diff to the configured model and requires configured model credentials for real use.
 - `review.gate` and `taskReport` are implemented diagnostic outputs for `exec`; they summarize the final state but do not prove correctness and do not replace human diff review.
-- Inline `@file:<path>` and `@folder:<path>` workflow references are available for `exec` only. They are bounded local context hints, not new tool permissions. `chat` references, URL references, glob expansion, semantic retrieval, and workflow-pack references remain Deferred.
+- Inline `@file:<path>` and `@folder:<path>` workflow references are available for `exec` and `skills run` through the same agentic execution path. They are bounded local context hints, not new tool permissions. `chat` references, URL references, glob expansion, and semantic retrieval remain Deferred.
+- `skills list` and `skills run` support built-in packs and workspace-local JSON manifests under `.caicli/skills`. Pack manifests are data only: validation commands are hints, not directly executed scripts. Remote marketplaces, automatic updates, signed trust chains, YAML manifests, user-level skill directories, team knowledge distribution, and automatic model role routing remain Deferred.
 - `caicli changes` is read-only and local. It summarizes current git/session/taskReport state but does not call a model, prove correctness, generate standalone markdown reports, or keep historical timelines.
 - `exec --report markdown` is an audit artifact, not a correctness proof. It is generated from `AgentTaskReport`, records reference metadata only, and does not persist raw `@file`/`@folder` contents.
 - `exec --report-path` never overwrites an existing file and has no automatic history store or report rotation.
-- `exec --expert` uses built-in local profiles only. Custom expert files, model role routing, skills, and workflow-pack manifests remain Deferred.
+- `exec --expert` uses built-in local profiles only. Custom expert files and model role routing remain Deferred.
 - `reviewer` and `security` experts are read-only by local policy. They still depend on the model's textual output quality and do not prove security or review completeness.
 - The Microsoft Agent Framework project is an adapter boundary and experimental stub; the real framework runtime backend is Deferred.
 

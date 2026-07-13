@@ -52,6 +52,14 @@ public sealed class SmokeTestScriptTests
         Assert.Contains("errorCode: shell-timeout", script, StringComparison.Ordinal);
         Assert.Contains("workflow", script, StringComparison.Ordinal);
         Assert.Contains("validationCommand: dotnet test", script, StringComparison.Ordinal);
+        Assert.Contains("\"skills\", \"list\", \"--workspace\", $workspace", script, StringComparison.Ordinal);
+        Assert.Contains("\"skills\", \"list\", \"--output\", \"json\", \"--workspace\", $workspace", script, StringComparison.Ordinal);
+        Assert.Contains("\"skills\", \"run\", \"review-only\", \"--dry-run\"", script, StringComparison.Ordinal);
+        Assert.Contains("\"type\":\"skills.list\"", script, StringComparison.Ordinal);
+        Assert.Contains("\"type\":\"skills.runPlan\"", script, StringComparison.Ordinal);
+        Assert.Contains("dryRun: true", script, StringComparison.Ordinal);
+        Assert.Contains("skill: review-only", script, StringComparison.Ordinal);
+        Assert.Contains("allowWrites=false", script, StringComparison.Ordinal);
         Assert.Contains("\"status\", \"--workspace\", $workspace", script, StringComparison.Ordinal);
         Assert.Contains("\"models\", \"--workspace\", $workspace", script, StringComparison.Ordinal);
         Assert.Contains("modelListApi: not called", script, StringComparison.Ordinal);

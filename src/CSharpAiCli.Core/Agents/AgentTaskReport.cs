@@ -26,7 +26,8 @@ public sealed record AgentTaskReport
         AgentTaskExpertReport? Expert = null,
         ExecReportMetadata? Report = null,
         string? WorkspaceRoot = null,
-        string? SessionName = null)
+        string? SessionName = null,
+        AgentTaskSkillReport? Skill = null)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(Status);
         ArgumentException.ThrowIfNullOrWhiteSpace(StopReason);
@@ -50,6 +51,7 @@ public sealed record AgentTaskReport
         this.Report = Report;
         this.WorkspaceRoot = WorkspaceRoot;
         this.SessionName = SessionName;
+        this.Skill = Skill;
     }
 
     public string Status { get; }
@@ -90,6 +92,8 @@ public sealed record AgentTaskReport
 
     public string? SessionName { get; }
 
+    public AgentTaskSkillReport? Skill { get; }
+
     public AgentTaskReport WithReportMetadata(ExecReportMetadata report)
     {
         ArgumentNullException.ThrowIfNull(report);
@@ -113,7 +117,8 @@ public sealed record AgentTaskReport
             Expert,
             report,
             WorkspaceRoot,
-            SessionName);
+            SessionName,
+            Skill);
     }
 }
 
@@ -149,6 +154,19 @@ public sealed record AgentTaskExpertReport(
     string ToolBoundary,
     string BoundarySummary,
     string ReportFocus);
+
+public sealed record AgentTaskSkillReport(
+    string Name,
+    string Version,
+    string Description,
+    string SourceKind,
+    string? SourcePath,
+    string EntryMode,
+    string Expert,
+    string Report,
+    string SafetySummary,
+    string? ValidationCommand,
+    IReadOnlyList<string> SuggestedReferences);
 
 public sealed record AgentTaskSecretPresence(
     string Source,
@@ -252,7 +270,8 @@ public static class AgentTaskReportBuilder
             ReviewGate: safeReviewGate,
             Expert: request.ExpertProfile?.ToReportMetadata(),
             WorkspaceRoot: Bound(secrets.Sanitize(request.Workspace.RootPath, "workspace"), MaxItemCharacters),
-            SessionName: Bound(secrets.Sanitize(request.SessionName, "session"), MaxItemCharacters));
+            SessionName: Bound(secrets.Sanitize(request.SessionName, "session"), MaxItemCharacters),
+            Skill: request.Skill?.ToReportMetadata());
     }
 
     public static AgentRunEvent CreateTaskReportEvent(
@@ -294,6 +313,19 @@ public static class AgentTaskReportBuilder
             payload["expert"] = report.Expert.Name;
             payload["expertBoundary"] = report.Expert.ToolBoundary;
             payload["expertReportFocus"] = report.Expert.ReportFocus;
+        }
+
+        if (report.Skill is not null)
+        {
+            payload["skill"] = report.Skill.Name;
+            payload["skillVersion"] = report.Skill.Version;
+            payload["skillSource"] = FormatSkillSource(report.Skill);
+            payload["skillEntry"] = report.Skill.EntryMode;
+            payload["skillExpert"] = report.Skill.Expert;
+            payload["skillReport"] = report.Skill.Report;
+            payload["skillSafety"] = report.Skill.SafetySummary;
+            AddIfPresent(payload, "skillValidationCommand", report.Skill.ValidationCommand);
+            AddIfPresent(payload, "skillSuggestedReferences", string.Join(";", report.Skill.SuggestedReferences));
         }
 
         if (report.Report is not null)
@@ -412,6 +444,24 @@ public static class AgentTaskReportBuilder
             };
         }
 
+        if (report.Skill is not null)
+        {
+            payload["skill"] = new Dictionary<string, object?>
+            {
+                ["name"] = report.Skill.Name,
+                ["version"] = report.Skill.Version,
+                ["description"] = report.Skill.Description,
+                ["sourceKind"] = report.Skill.SourceKind,
+                ["sourcePath"] = report.Skill.SourcePath,
+                ["entryMode"] = report.Skill.EntryMode,
+                ["expert"] = report.Skill.Expert,
+                ["report"] = report.Skill.Report,
+                ["safety"] = report.Skill.SafetySummary,
+                ["validationCommand"] = report.Skill.ValidationCommand,
+                ["suggestedReferences"] = report.Skill.SuggestedReferences.ToArray()
+            };
+        }
+
         if (report.Report is not null)
         {
             payload["report"] = new Dictionary<string, object?>
@@ -462,8 +512,9 @@ public static class AgentTaskReportBuilder
 
         string expert = report.Expert is null ? "none" : report.Expert.Name;
         string reportMode = report.Report is null ? "none" : report.Report.Mode;
+        string skill = report.Skill is null ? "none" : report.Skill.Name;
 
-        return $"status={report.Status} expert={expert} report={reportMode} references={references} changedFiles={changedFiles} commands={commands} verification={verification} risks={risks}";
+        return $"status={report.Status} skill={skill} expert={expert} report={reportMode} references={references} changedFiles={changedFiles} commands={commands} verification={verification} risks={risks}";
     }
 
     private static string? FindPlanSummary(IReadOnlyList<AgentRunEvent> events)
@@ -646,6 +697,13 @@ public static class AgentTaskReportBuilder
         {
             payload[key] = value;
         }
+    }
+
+    private static string FormatSkillSource(AgentTaskSkillReport skill)
+    {
+        return string.IsNullOrWhiteSpace(skill.SourcePath)
+            ? skill.SourceKind
+            : skill.SourceKind + ":" + skill.SourcePath;
     }
 
     private static bool TryReadJsonString(string json, string propertyName, out string? value)

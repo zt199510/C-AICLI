@@ -1,6 +1,6 @@
 # 第 49 周 0.3.3 Local Skills 与 .NET Workflow Packs Implementation Plan
 
-状态：计划中
+状态：已执行
 
 **Goal:** 在 0.3.1 workflow inputs/changes view 和 0.3.2 reports/expert profiles 稳定后，引入轻量本地 skills/workflow packs，让常见 .NET 工程任务可以通过 CLI 复用，同时保持本地、可审计、无远程 marketplace 的边界。
 
@@ -249,21 +249,21 @@ Release docs 需要在实现后更新：
 
 ## 任务清单
 
-- [ ] Step 1: 确认 `skills list/run` CLI shape、manifest format 和 local source policy。
-- [ ] Step 2: 新增 skill pack manifest model、schema validation 和错误码。
-- [ ] Step 3: 新增内置 pack catalog，包含 `test-fix`、`review-only`、`upgrade-package`、`doc-sync`。
-- [ ] Step 4: 新增本地 pack loading，先支持只读 workspace/user local directory。
-- [ ] Step 5: 新增 `skills list` text/json command。
-- [ ] Step 6: 新增 `skills run` planning 和 `--dry-run`。
-- [ ] Step 7: 将 `skills run` 接入受控 `exec`/`review` request builder，复用 expert/report/references。
-- [ ] Step 8: 增加 skill metadata 到 trace/session/taskReport/report。
-- [ ] Step 9: 增加 manifest/catalog/list/run/planner/security boundary tests。
-- [ ] Step 10: 更新 smoke script 与 smoke script tests。
-- [ ] Step 11: 更新 release docs、capability status、known limitations、runtime logging diagnostics。
-- [ ] Step 12: 运行 `dotnet build src\CSharpAiCli.sln -c Release`。
-- [ ] Step 13: 运行 `dotnet test src\CSharpAiCli.sln -c Release --no-build`。
-- [ ] Step 14: 运行 `powershell -NoProfile -ExecutionPolicy Bypass -File tools\Invoke-SmokeTests.ps1`。
-- [ ] Step 15: 创建 `49_week_review.md`，记录实际验收、风险、Deferred 边界。
+- [x] Step 1: 确认 `skills list/run` CLI shape、manifest format 和 local source policy。
+- [x] Step 2: 新增 skill pack manifest model、schema validation 和错误码。
+- [x] Step 3: 新增内置 pack catalog，包含 `test-fix`、`review-only`、`upgrade-package`、`doc-sync`。
+- [x] Step 4: 新增本地 pack loading，先支持只读 workspace/user local directory。
+- [x] Step 5: 新增 `skills list` text/json command。
+- [x] Step 6: 新增 `skills run` planning 和 `--dry-run`。
+- [x] Step 7: 将 `skills run` 接入受控 `exec`/`review` request builder，复用 expert/report/references。
+- [x] Step 8: 增加 skill metadata 到 trace/session/taskReport/report。
+- [x] Step 9: 增加 manifest/catalog/list/run/planner/security boundary tests。
+- [x] Step 10: 更新 smoke script 与 smoke script tests。
+- [x] Step 11: 更新 release docs、capability status、known limitations、runtime logging diagnostics。
+- [x] Step 12: 运行 `dotnet build src\CSharpAiCli.sln -c Release`。
+- [x] Step 13: 运行 `dotnet test src\CSharpAiCli.sln -c Release --no-build`。
+- [x] Step 14: 运行 `powershell -NoProfile -ExecutionPolicy Bypass -File tools\Invoke-SmokeTests.ps1`。
+- [x] Step 15: 创建 `49_week_review.md`，记录实际验收、风险、Deferred 边界。
 
 ## 验收矩阵
 
@@ -303,4 +303,3 @@ powershell -NoProfile -ExecutionPolicy Bypass -File tools\Build-Release.ps1
 1. Manifest 格式是否先固定为 JSON；建议 0.3.3 只支持 JSON，避免引入 YAML 依赖。
 2. 本地 pack 目录是否先支持 workspace `.caicli/skills`；建议先只读 workspace local，加用户级目录需更明确 trust model。
 3. `skills run` 是否必须提供 `--dry-run`；建议必须实现，便于安全复核和 smoke。
-

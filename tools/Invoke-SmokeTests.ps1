@@ -397,6 +397,37 @@ Write-Output 'bugfix verification passed'
     Assert-Contains $workflowValidate.Output "execution: not run" "workflow validate"
     Remove-Item -LiteralPath (Join-Path $workspaceConfigDir "config.json") -Force
 
+    $skillsList = Invoke-CaiCli -Arguments @("skills", "list", "--workspace", $workspace)
+    Assert-ExitCode $skillsList 0 "skills list"
+    Assert-Contains $skillsList.Output "C# AI CLI skills" "skills list"
+    Assert-Contains $skillsList.Output "test-fix" "skills list"
+    Assert-Contains $skillsList.Output "review-only" "skills list"
+
+    $skillsListJson = Invoke-CaiCli -Arguments @("skills", "list", "--output", "json", "--workspace", $workspace)
+    Assert-ExitCode $skillsListJson 0 "skills list json"
+    Assert-Contains $skillsListJson.Output '"type":"skills.list"' "skills list json"
+    Assert-Contains $skillsListJson.Output '"name":"test-fix"' "skills list json"
+
+    $skillsDryRun = Invoke-CaiCli -Arguments @(
+        "skills", "run", "review-only", "--dry-run", "--workspace", $workspace,
+        "--", "Review", "@file:note.txt"
+    )
+    Assert-ExitCode $skillsDryRun 0 "skills run dry-run"
+    Assert-Contains $skillsDryRun.Output "C# AI CLI skill run plan" "skills run dry-run"
+    Assert-Contains $skillsDryRun.Output "dryRun: true" "skills run dry-run"
+    Assert-Contains $skillsDryRun.Output "skill: review-only" "skills run dry-run"
+    Assert-Contains $skillsDryRun.Output "expert: reviewer" "skills run dry-run"
+    Assert-Contains $skillsDryRun.Output "allowWrites=false" "skills run dry-run"
+
+    $skillsDryRunJson = Invoke-CaiCli -Arguments @(
+        "skills", "run", "review-only", "--dry-run", "--output", "json", "--workspace", $workspace,
+        "--", "@file:note.txt"
+    )
+    Assert-ExitCode $skillsDryRunJson 0 "skills run dry-run json"
+    Assert-Contains $skillsDryRunJson.Output '"type":"skills.runPlan"' "skills run dry-run json"
+    Assert-Contains $skillsDryRunJson.Output '"dryRun":true' "skills run dry-run json"
+    Assert-Contains $skillsDryRunJson.Output '"expert":"reviewer"' "skills run dry-run json"
+
     $emptyHooks = Join-Path $TempRoot "empty-hooks"
     New-Item -ItemType Directory -Path $emptyHooks -Force | Out-Null
     Invoke-Git -Name "git init" -Arguments @("-C", $workspace, "-c", "commit.gpgSign=false", "-c", "core.hooksPath=$emptyHooks", "init") | Out-Null

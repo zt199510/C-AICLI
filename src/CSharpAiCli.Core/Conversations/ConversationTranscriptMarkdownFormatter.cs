@@ -140,7 +140,13 @@ public static class ConversationTranscriptMarkdownFormatter
                 if (run.TaskReport is not null)
                 {
                     builder.AppendLine(
-                        $"  taskReport: status={NormalizeMarkdownMetadata(run.TaskReport.Status)} stopReason={NormalizeMarkdownMetadata(run.TaskReport.StopReason)} expert={NormalizeMarkdownMetadata(run.TaskReport.Expert?.Name ?? "none")} report={NormalizeMarkdownMetadata(run.TaskReport.Report?.Mode ?? "none")} changedFiles={run.TaskReport.ChangedFiles.Count.ToString(CultureInfo.InvariantCulture)} commands={run.TaskReport.Commands.Count.ToString(CultureInfo.InvariantCulture)} verification={run.TaskReport.Verification.Count.ToString(CultureInfo.InvariantCulture)} risks={run.TaskReport.Risks.Count.ToString(CultureInfo.InvariantCulture)} references={run.TaskReport.References.Count.ToString(CultureInfo.InvariantCulture)}");
+                        $"  taskReport: status={NormalizeMarkdownMetadata(run.TaskReport.Status)} stopReason={NormalizeMarkdownMetadata(run.TaskReport.StopReason)} skill={NormalizeMarkdownMetadata(run.TaskReport.Skill?.Name ?? "none")} expert={NormalizeMarkdownMetadata(run.TaskReport.Expert?.Name ?? "none")} report={NormalizeMarkdownMetadata(run.TaskReport.Report?.Mode ?? "none")} changedFiles={run.TaskReport.ChangedFiles.Count.ToString(CultureInfo.InvariantCulture)} commands={run.TaskReport.Commands.Count.ToString(CultureInfo.InvariantCulture)} verification={run.TaskReport.Verification.Count.ToString(CultureInfo.InvariantCulture)} risks={run.TaskReport.Risks.Count.ToString(CultureInfo.InvariantCulture)} references={run.TaskReport.References.Count.ToString(CultureInfo.InvariantCulture)}");
+                    if (run.TaskReport.Skill is not null)
+                    {
+                        builder.AppendLine(
+                            $"  skill: version={NormalizeMarkdownMetadata(run.TaskReport.Skill.Version)} source={NormalizeMarkdownMetadata(FormatSkillSource(run.TaskReport.Skill))} safety={NormalizeMarkdownMetadata(run.TaskReport.Skill.SafetySummary)}");
+                    }
+
                     if (!string.IsNullOrWhiteSpace(run.TaskReport.TracePath))
                     {
                         builder.AppendLine($"  tracePath: {NormalizeMarkdownMetadata(run.TaskReport.TracePath)}");
@@ -174,6 +180,13 @@ public static class ConversationTranscriptMarkdownFormatter
         return string.IsNullOrWhiteSpace(normalizedToolName)
             ? "tool"
             : normalizedToolName;
+    }
+
+    private static string FormatSkillSource(AgentTaskSkillReport skill)
+    {
+        return string.IsNullOrWhiteSpace(skill.SourcePath)
+            ? skill.SourceKind
+            : skill.SourceKind + ":" + skill.SourcePath;
     }
 
     private static string NormalizeSingleLine(string? value)

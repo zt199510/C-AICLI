@@ -22,6 +22,7 @@ public sealed class MarkdownTaskReportRenderer
             ("Session", string.IsNullOrWhiteSpace(report.SessionName) ? "none" : report.SessionName)
         ]);
         AppendExpert(builder, report);
+        AppendSkill(builder, report);
         AppendReferences(builder, report);
         AppendFencedSection(builder, "Plan", report.Plan ?? "none");
         AppendChangedFiles(builder, report);
@@ -74,6 +75,33 @@ public sealed class MarkdownTaskReportRenderer
         builder.AppendLine("- Boundary: " + Metadata(report.Expert.ToolBoundary));
         builder.AppendLine("- Tool boundary: " + Metadata(report.Expert.BoundarySummary));
         builder.AppendLine("- Report focus: " + Metadata(report.Expert.ReportFocus));
+        builder.AppendLine();
+    }
+
+    private static void AppendSkill(StringBuilder builder, AgentTaskReport report)
+    {
+        builder.AppendLine("## Skill");
+        builder.AppendLine();
+        if (report.Skill is null)
+        {
+            builder.AppendLine("- Selected: none");
+            builder.AppendLine();
+            return;
+        }
+
+        builder.AppendLine("- Selected: " + Metadata(report.Skill.Name));
+        builder.AppendLine("- Version: " + Metadata(report.Skill.Version));
+        builder.AppendLine("- Source: " + Metadata(FormatSkillSource(report.Skill)));
+        builder.AppendLine("- Entry: " + Metadata(report.Skill.EntryMode));
+        builder.AppendLine("- Expert: " + Metadata(report.Skill.Expert));
+        builder.AppendLine("- Report: " + Metadata(report.Skill.Report));
+        builder.AppendLine("- Safety: " + Metadata(report.Skill.SafetySummary));
+        builder.AppendLine("- Validation command: " + Metadata(report.Skill.ValidationCommand));
+        if (report.Skill.SuggestedReferences.Count > 0)
+        {
+            builder.AppendLine("- Suggested references: " + Metadata(string.Join(", ", report.Skill.SuggestedReferences)));
+        }
+
         builder.AppendLine();
     }
 
@@ -324,6 +352,13 @@ public sealed class MarkdownTaskReportRenderer
         return EscapeMarkdownMetadata(normalized);
     }
 
+    private static string FormatSkillSource(AgentTaskSkillReport skill)
+    {
+        return string.IsNullOrWhiteSpace(skill.SourcePath)
+            ? skill.SourceKind
+            : skill.SourceKind + ":" + skill.SourcePath;
+    }
+
     private static string EscapeMarkdownMetadata(string value)
     {
         StringBuilder escaped = new(value.Length);
@@ -372,4 +407,3 @@ public sealed class MarkdownTaskReportRenderer
         return new string('`', Math.Max(3, longestRun + 1));
     }
 }
-

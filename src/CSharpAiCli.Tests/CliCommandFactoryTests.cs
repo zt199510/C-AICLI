@@ -2021,6 +2021,177 @@ public sealed class CliCommandFactoryTests
     }
 
     [Fact]
+    public void Skills_list_command_writes_builtin_packs_text_and_json()
+    {
+        using TempDirectory temp = TempDirectory.Create();
+        using StringWriter textOutput = new();
+        List<string> loggedCommands = [];
+
+        int textExitCode = CliCommandFactory
+            .Create(
+                textOutput,
+                workspacePath => CreateSnapshot(workspacePath),
+                (commandName, _) => loggedCommands.Add(commandName))
+            .Parse(["skills", "list", "--workspace", temp.Path])
+            .Invoke();
+
+        using StringWriter jsonOutput = new();
+        int jsonExitCode = CliCommandFactory
+            .Create(
+                jsonOutput,
+                workspacePath => CreateSnapshot(workspacePath),
+                (commandName, _) => loggedCommands.Add(commandName))
+            .Parse(["skills", "list", "--output", "json", "--workspace", temp.Path])
+            .Invoke();
+
+        JsonObject json = Assert.IsType<JsonObject>(JsonNode.Parse(jsonOutput.ToString()));
+        JsonArray packs = Assert.IsType<JsonArray>(json["packs"]);
+        string text = textOutput.ToString();
+        Assert.Equal(0, textExitCode);
+        Assert.Equal(0, jsonExitCode);
+        Assert.Contains("C# AI CLI skills", text, StringComparison.Ordinal);
+        Assert.Contains("test-fix", text, StringComparison.Ordinal);
+        Assert.Contains("review-only", text, StringComparison.Ordinal);
+        Assert.Contains("source=built-in", text, StringComparison.Ordinal);
+        Assert.Empty(loggedCommands);
+        Assert.Equal("skills.list", json["type"]?.GetValue<string>());
+        Assert.Contains(packs, item => item?["name"]?.GetValue<string>() == "test-fix");
+    }
+
+    [Fact]
+    public void Skills_run_dry_run_expands_plan_without_running_agent()
+    {
+        using TempDirectory temp = TempDirectory.Create();
+        using StringWriter output = new();
+        List<string> loggedCommands = [];
+        FakeAgentRunner agentRunner = new(AgentRunResult.Success("should not run", []));
+
+        int exitCode = CliCommandFactory
+            .Create(
+                output,
+                workspacePath => CreateSnapshot(
+                    workspacePath,
+                    apiKey: "sk-test-secret",
+                    apiKeySource: "OPENAI_API_KEY",
+                    model: "gpt-test"),
+                (commandName, _) => loggedCommands.Add(commandName),
+                _ => new FakeChatModelClient(ChatModelResult.Success(new ChatResponse("openai", "gpt-test", "resp", ""))),
+                writer => new TerminalChatStreamingRenderer(writer),
+                _ => new FakeConversationStore(),
+                () => DateTimeOffset.Parse("2024-01-01T00:00:00Z"),
+                (_, _, _) => agentRunner)
+            .Parse(["skills", "run", "test-fix", "--dry-run", "--workspace", temp.Path, "--", "Fix", "failing", "tests"])
+            .Invoke();
+
+        string text = output.ToString();
+        Assert.Equal(0, exitCode);
+        Assert.Null(agentRunner.LastRequest);
+        Assert.Empty(loggedCommands);
+        Assert.Contains("C# AI CLI skill run plan", text, StringComparison.Ordinal);
+        Assert.Contains("dryRun: true", text, StringComparison.Ordinal);
+        Assert.Contains("skill: test-fix", text, StringComparison.Ordinal);
+        Assert.Contains("expert: tester", text, StringComparison.Ordinal);
+        Assert.Contains("report: markdown", text, StringComparison.Ordinal);
+        Assert.Contains("validationCommand: dotnet test", text, StringComparison.Ordinal);
+        Assert.Contains("Fix failing tests", text, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Skills_run_json_dry_run_is_parseable()
+    {
+        using TempDirectory temp = TempDirectory.Create();
+        using StringWriter output = new();
+
+        int exitCode = CliCommandFactory
+            .Create(output, workspacePath => CreateSnapshot(workspacePath))
+            .Parse(["skills", "run", "review-only", "--dry-run", "--output", "json", "--workspace", temp.Path, "--", "@folder:src"])
+            .Invoke();
+
+        JsonObject json = Assert.IsType<JsonObject>(JsonNode.Parse(output.ToString()));
+        Assert.Equal(0, exitCode);
+        Assert.Equal("skills.runPlan", json["type"]?.GetValue<string>());
+        Assert.True(json["dryRun"]?.GetValue<bool>());
+        Assert.Equal("review-only", json["skill"]?["name"]?.GetValue<string>());
+        Assert.Equal("reviewer", json["expert"]?.GetValue<string>());
+    }
+
+    [Fact]
+    public void Skills_run_passes_skill_metadata_to_agent_request_and_report()
+    {
+        using TempDirectory temp = TempDirectory.Create();
+        File.WriteAllText(Path.Combine(temp.Path, "note.txt"), "hello");
+        using StringWriter output = new();
+        FakeAgentRunner agentRunner = new(AgentRunResult.Success("agent completed task", []));
+
+        int exitCode = CliCommandFactory
+            .Create(
+                output,
+                workspacePath => CreateSnapshot(
+                    workspacePath,
+                    apiKey: "sk-test-secret",
+                    apiKeySource: "OPENAI_API_KEY",
+                    model: "gpt-test"),
+                (_, _) => { },
+                _ => new FakeChatModelClient(ChatModelResult.Success(new ChatResponse("openai", "gpt-test", "resp", ""))),
+                writer => new TerminalChatStreamingRenderer(writer),
+                _ => new FakeConversationStore(),
+                () => DateTimeOffset.Parse("2024-01-01T00:00:00Z"),
+                (_, _, _) => agentRunner)
+            .Parse(["skills", "run", "review-only", "--report", "none", "--workspace", temp.Path, "--", "Review", "@file:note.txt"])
+            .Invoke();
+
+        string text = output.ToString();
+        Assert.Equal(0, exitCode);
+        Assert.Equal("review-only", agentRunner.LastRequest?.Skill?.Name);
+        Assert.Equal("reviewer", agentRunner.LastRequest?.ExpertProfile?.Name);
+        Assert.True(agentRunner.LastRequest?.ExpertProfile?.IsReadOnly);
+        Assert.Contains("Skill pack:", agentRunner.LastRequest?.Prompt, StringComparison.Ordinal);
+        Assert.Contains("@file:note.txt", agentRunner.LastRequest?.Prompt, StringComparison.Ordinal);
+        Assert.Single(agentRunner.LastRequest?.TaskContext?.References?.References ?? []);
+        Assert.Contains("skill=review-only", text, StringComparison.Ordinal);
+        Assert.Contains("expert=reviewer", text, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Skills_run_review_only_blocks_write_tool()
+    {
+        using TempDirectory temp = TempDirectory.Create();
+        File.WriteAllText(Path.Combine(temp.Path, "note.txt"), "before");
+        using StringWriter output = new();
+        ExecutorToolCallAgentRunner agentRunner = new(
+            "workspace.apply_patch",
+            """{"path":"note.txt","find":"before","replace":"after"}""");
+
+        int exitCode = CliCommandFactory
+            .Create(
+                output,
+                workspacePath => CreateSnapshot(
+                    workspacePath,
+                    apiKey: "sk-test-secret",
+                    apiKeySource: "OPENAI_API_KEY",
+                    model: "gpt-test"),
+                (_, _) => { },
+                _ => new FakeChatModelClient(ChatModelResult.Success(new ChatResponse("openai", "gpt-test", "resp", ""))),
+                writer => new TerminalChatStreamingRenderer(writer),
+                _ => new FakeConversationStore(),
+                () => DateTimeOffset.Parse("2024-01-01T00:00:00Z"),
+                (_, _, executor) =>
+                {
+                    agentRunner.Executor = executor;
+                    return agentRunner;
+                })
+            .Parse(["skills", "run", "review-only", "--report", "none", "--approval", "always", "--workspace", temp.Path, "--", "Review note"])
+            .Invoke();
+
+        string text = output.ToString();
+        Assert.Equal(1, exitCode);
+        Assert.Equal("review-only", agentRunner.LastRequest?.Skill?.Name);
+        Assert.Contains("errorCode=tool-disabled", text, StringComparison.Ordinal);
+        Assert.Contains("skill=review-only", text, StringComparison.Ordinal);
+        Assert.Equal("before", File.ReadAllText(Path.Combine(temp.Path, "note.txt")));
+    }
+
+    [Fact]
     public void Tools_list_json_writes_stable_parseable_tool_metadata()
     {
         using StringWriter output = new();

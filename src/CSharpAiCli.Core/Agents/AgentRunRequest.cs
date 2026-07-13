@@ -9,7 +9,8 @@ public sealed record AgentRunRequest(
     ConversationTranscript? TranscriptContext = null,
     AgentTaskContext? TaskContext = null,
     WorkflowConfiguration? WorkflowConfiguration = null,
-    ExpertProfile? ExpertProfile = null)
+    ExpertProfile? ExpertProfile = null,
+    SkillRunMetadata? Skill = null)
 {
     public AgentRunLimits EffectiveLimits => Limits ?? AgentRunLimits.Default;
 }

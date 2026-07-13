@@ -1,6 +1,6 @@
 # C# AI CLI Capability Status
 
-## 0.3.0 Release Capabilities
+## 0.3.3 Current Capabilities
 
 | Capability | Status | Notes |
 |---|---|---|
@@ -23,6 +23,7 @@
 | `caicli exec` | Solidified | Agentic v1 surface routed through `IAgentRunner`; emits model/tool/final/error plus read-only `review.gate`, optional `report.generated`, and final `taskReport` events with terminal `status`/`stopReason`, supports `--cwd`, inline bounded workflow references, `--report none|markdown`, `--report-path`, `--expert bugfix|reviewer|tester|security|refactor`, `--output text|json`, loop/retry/timeout budgets, approval-gated tool actions, session transcript run summaries, and `--resume` context. Task reports preserve references, expert/report metadata, changed files, commands, verification status, remaining risks, trace path, and secret presence/source/kind without storing secret values or raw referenced content. Configured direct OpenAI runs use real Responses SDK tool-call continuation through the same offline/fake agent contract. |
 | Markdown task reports | Accepted | `exec --report markdown` generates a redacted full markdown report from `AgentTaskReport`. Text mode prints the report after the normal event/result output; JSON/NDJSON mode carries structured report metadata only. `--report-path <path>` writes only when explicitly requested, stays inside the workspace guard, creates parent directories, and rejects existing files or directory paths. |
 | Expert profiles | Accepted | `exec --expert bugfix|tester|refactor` changes local guidance and report focus without expanding permissions. `reviewer` and `security` are read-only profiles: write, shell, and MCP tools are disabled, MCP discovery is skipped, and the tool executor enforces the same boundary even if a model requests a blocked tool. |
+| Local skills/workflow packs | Accepted | `skills list` lists built-in and workspace `.caicli/skills` JSON packs in text or JSON. `skills run <name> --dry-run -- <task>` expands the selected pack into expert/report/reference/safety/validation metadata without calling a model or running tools. Non-dry-run `skills run` uses the existing agentic `exec` safety path, approval policy, workspace guard, shell policy, disabled-tool checks, trace/session/report flow, and records skill metadata in task reports. Built-ins are `test-fix`, `review-only`, `upgrade-package`, and `doc-sync`. |
 | `caicli diff` / `diff --stat` | Accepted | Prints the current git diff or stat summary for the selected workspace. |
 | `caicli changes` | Accepted | Read-only changes view for git status/diff stat, changed files, optional latest session `taskReport`, commands, verification, remaining risks, trace/session path, and warnings; supports text and `--output json`/`--json`, does not call a model, run shell/patch tools, start MCP, write workspace files, or write command logs by default. |
 | `caicli review` | Accepted | Sends the current git diff to the configured model for workspace-read-only review; supports text, `--json`, and `--output json`; does not write workspace files, logs, transcripts, patches, or run shell/patch tools. Diff collection may use cleaned-up temp files outside the workspace. |
@@ -45,9 +46,9 @@
 | MCP remote/http transport | Deferred | Stdio MCP v1 is available for user-configured stdio servers in registry/tool paths and for explicit `mcp doctor` diagnostics; remote/http transport is not enabled. |
 | Gerber/TIFF real workflow execution | Deferred | Project pack status/profile MVP exists; real toolchain execution is not enabled. |
 | Dotnet tool package | Deferred | Windows self-contained package is the current release artifact. |
-| Local skills/workflow packs | Deferred | `skills list/run`, custom expert files, pack manifests, and built-in workflow packs are planned for later 0.3.x work and are not enabled by the 0.3.2 reports/expert-profiles increment. |
+| Remote skill marketplace and user-level skill distribution | Deferred | Only built-in packs and workspace-local `.caicli/skills` JSON manifests are supported. Remote marketplaces, automatic updates, signing/trust chains, YAML manifests, user-level skill directories, and team knowledge distribution are not enabled. |
 | Interactive approval UI | Deferred | Non-interactive approval modes are available. Interactive prompts, richer approval UI, and automatic sandbox retry escalation are not enabled. |
 
 ## Release Decision
 
-The direct backend `0.3.0` release line is scoped to the accepted and solidified capabilities above. Deferred enhanced capabilities are documented and must not be presented as current release behavior. The direct OpenAI SDK agent tool loop, fake/offline contract, `exec`, `review.gate`, `taskReport`, and user-configured stdio MCP v1 paths are current release behavior, not Deferred.
+The direct backend `0.3.3` release line is scoped to the accepted and solidified capabilities above. Deferred enhanced capabilities are documented and must not be presented as current release behavior. The direct OpenAI SDK agent tool loop, fake/offline contract, `exec`, `skills`, `review.gate`, `taskReport`, and user-configured stdio MCP v1 paths are current release behavior, not Deferred.

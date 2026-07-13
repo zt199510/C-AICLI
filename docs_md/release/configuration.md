@@ -41,7 +41,7 @@ Recognized backend config values:
 - `direct` or `openai`
 - `framework`, `maf`, or `agent-framework`
 
-The `framework` aliases are currently parsed for the experimental adapter boundary, but the real Microsoft Agent Framework runtime backend is not enabled in the `0.3.0` release. Use `direct` for supported release behavior.
+The `framework` aliases are currently parsed for the experimental adapter boundary, but the real Microsoft Agent Framework runtime backend is not enabled in the `0.3.3` release. Use `direct` for supported release behavior.
 
 Priority for approval mode:
 
@@ -183,8 +183,13 @@ caicli mcp list
 caicli mcp doctor
 caicli workflow list
 caicli workflow validate cpp
+caicli skills list
+caicli skills list --output json
+caicli skills run review-only --dry-run -- "@file:README.md"
 ```
 
 `config get`, `config list`, `doctor`, `status`, and command logs report whether an API key is present and where it came from, but do not print the key value. `doctor` also reports model/source, base URL/source, backend/source, approval mode/source, and backend status.
 
 `models` reads local configuration only. It reports the current model, base URL, sources, API key presence, and static configuration examples; it does not call a model list API and does not require an API key.
+
+`skills list` and `skills run --dry-run` are also local-only diagnostic paths. Workspace-local packs are read from `.caicli/skills` JSON manifests; invalid local manifests are reported as diagnostics without hiding built-in packs.
