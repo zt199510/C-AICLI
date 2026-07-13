@@ -2,7 +2,7 @@ using System.Text.RegularExpressions;
 
 namespace CSharpAiCli.Core;
 
-internal static class DiagnosticSecretRedactor
+public static class DiagnosticSecretRedactor
 {
     private const string QuotedSecretValuePattern = """\\?["'](?:\\\\.|\\.|[^"'\\])*\\?["']""";
     private const string BearerSecretValuePattern = @"Bearer\s+(?:\[redacted\]|[A-Za-z0-9._~+/=-]+)";

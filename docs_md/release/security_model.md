@@ -131,6 +131,23 @@ Agentic `exec` ends each run with a read-only review gate and final task report.
 
 Task reports sanitize all captured strings before output or persistence. When a secret-like value is detected, the report records only presence metadata, expressed as source and kind, and never stores the raw value.
 
+## Job History And Artifact Index
+
+Job recording is explicit. `exec` and `skills run` write job records only when `--record-job` is passed; `--job-name` is an optional label and is not the unique id. The default store is user-level local state under `%USERPROFILE%\.caicli\jobs`, or the directory implied by `CAICLI_USER_PROFILE` during smoke and portable verification.
+
+`jobs list`, `jobs show`, and `jobs export` are read-only inspection commands:
+
+- They do not call a model.
+- They do not run shell, patch, write, or MCP tools.
+- They do not start MCP servers.
+- They do not write workspace files or command logs.
+
+Job records store redacted metadata and artifact pointers only. They can include bounded redacted task text, command family, job id/name, workspace/cwd, status, timestamps, exit code, stop reason, error code, compact task report counts, skill plan metadata, trace/session/report paths, and artifact hashes. They must not store raw referenced content, raw tool arguments, raw secret values, or full diffs. Paths remain local metadata and should still be treated as sensitive when exporting a record.
+
+`skills run --dry-run` remains non-persistent by default. Passing `--record-job` is an explicit persistence request: it writes compact skill/expert/report/safety/validation/reference-suggestion metadata to the user-level job store, but does not persist expanded instructions, call a model, run tools, create a report, save a session, or write the workspace.
+
+If `--record-job` cannot create the initial job record, the execution command fails before model/tool work. If the final job update fails after execution, the command returns `job-record-write-failed` so explicit recording loss is not hidden.
+
 ## Expert Profiles
 
 `exec --expert` selects a built-in local profile. It is local policy and prompt/report guidance, not provider/model routing.
@@ -144,7 +161,7 @@ Task reports sanitize all captured strings before output or persistence. When a 
 `skills list` and `skills run` are local workflow-pack entry points. Built-in packs and workspace `.caicli/skills` JSON manifests can select an existing expert profile, default report mode, reference suggestions, instructions, validation command hints, and stricter safety constraints.
 
 - Skill manifests are data only. They are read and validated, but manifest commands or scripts are not executed directly.
-- `skills run --dry-run` only renders the expanded plan. It does not call a model, write files, run shell/patch tools, start MCP, or create reports.
+- `skills run --dry-run` only renders the expanded plan and is non-persistent unless `--record-job` is explicitly passed. It does not call a model, write workspace files, run shell/patch tools, start MCP, create reports, or save a session.
 - Non-dry-run `skills run` uses the same `exec` agent runner, tool registry, approval policy, workspace guard, shell policy, disabled-tool checks, trace/session/report flow, and review gate.
 - Skill safety can restrict tools, such as read-only mode or disabling shell/MCP. It cannot bypass approval, shell policy, workspace guard, disabled tools, or dangerous-command detection.
 - Skill metadata is recorded in text output, NDJSON, trace, session task reports, and markdown reports so the selected pack and boundary can be audited later.

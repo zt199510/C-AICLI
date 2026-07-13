@@ -574,6 +574,174 @@ public static class CliCommandFactory
             return report.ExitCode;
         });
 
+        Command jobsCommand = new("jobs", "Read local job history records.");
+        Command jobsListCommand = new("list", "List local job records.");
+        Option<bool> jobsListJsonOption = new("--json")
+        {
+            Description = "Write a single JSON jobs list object.",
+        };
+        Option<string> jobsListOutputOption = new("--output")
+        {
+            Description = "Select text or json output.",
+        };
+        Option<int?> jobsListLimitOption = new("--limit")
+        {
+            Description = "Maximum number of job records to list.",
+        };
+        jobsListOutputOption.DefaultValueFactory = _ => "text";
+        jobsListOutputOption.Validators.Add(result =>
+        {
+            string outputMode = result.GetValueOrDefault<string>() ?? "text";
+            if (!string.Equals(outputMode, "text", StringComparison.OrdinalIgnoreCase) &&
+                !string.Equals(outputMode, "json", StringComparison.OrdinalIgnoreCase))
+            {
+                result.AddError("Invalid value for --output. Allowed values are text and json.");
+            }
+        });
+        AddPositiveIntegerValidator(jobsListLimitOption, "--limit");
+        jobsListCommand.Options.Add(jobsListJsonOption);
+        jobsListCommand.Options.Add(jobsListOutputOption);
+        jobsListCommand.Options.Add(jobsListLimitOption);
+        jobsListCommand.SetAction(parseResult =>
+        {
+            string? workspacePath = parseResult.GetValue(workspaceOption);
+            bool jsonRequested = parseResult.GetValue(jobsListJsonOption);
+            string outputMode = parseResult.GetValue(jobsListOutputOption) ?? "text";
+            int? limit = parseResult.GetValue(jobsListLimitOption);
+            CliEnvironmentSnapshot snapshot = workspaceSnapshotProvider(workspacePath);
+            WriteVerboseDiagnostics(
+                parseResult,
+                "jobs list",
+                snapshot,
+                humanReadableOutput: !IsJsonOutputRequested(jsonRequested, outputMode));
+
+            JobRecordListResult result = JobRecordStore.Create(snapshot).List(limit);
+            if (IsJsonOutputRequested(jsonRequested, outputMode))
+            {
+                new JobsJsonRenderer(output).WriteList(result);
+            }
+            else
+            {
+                new JobsTextRenderer(output).WriteList(result);
+            }
+
+            return 0;
+        });
+
+        Command jobsShowCommand = new("show", "Show one local job record.");
+        Argument<string> jobsShowIdArgument = new("job-id")
+        {
+            Description = "Job id.",
+        };
+        Option<bool> jobsShowJsonOption = new("--json")
+        {
+            Description = "Write a single JSON jobs show object.",
+        };
+        Option<string> jobsShowOutputOption = new("--output")
+        {
+            Description = "Select text or json output.",
+        };
+        jobsShowOutputOption.DefaultValueFactory = _ => "text";
+        jobsShowOutputOption.Validators.Add(result =>
+        {
+            string outputMode = result.GetValueOrDefault<string>() ?? "text";
+            if (!string.Equals(outputMode, "text", StringComparison.OrdinalIgnoreCase) &&
+                !string.Equals(outputMode, "json", StringComparison.OrdinalIgnoreCase))
+            {
+                result.AddError("Invalid value for --output. Allowed values are text and json.");
+            }
+        });
+        jobsShowCommand.Arguments.Add(jobsShowIdArgument);
+        jobsShowCommand.Options.Add(jobsShowJsonOption);
+        jobsShowCommand.Options.Add(jobsShowOutputOption);
+        jobsShowCommand.SetAction(parseResult =>
+        {
+            string? workspacePath = parseResult.GetValue(workspaceOption);
+            string jobId = parseResult.GetValue(jobsShowIdArgument) ?? string.Empty;
+            bool jsonRequested = parseResult.GetValue(jobsShowJsonOption);
+            string outputMode = parseResult.GetValue(jobsShowOutputOption) ?? "text";
+            CliEnvironmentSnapshot snapshot = workspaceSnapshotProvider(workspacePath);
+            WriteVerboseDiagnostics(
+                parseResult,
+                "jobs show",
+                snapshot,
+                humanReadableOutput: !IsJsonOutputRequested(jsonRequested, outputMode));
+
+            JobRecordReadResult result = JobRecordStore.Create(snapshot).Read(jobId);
+            if (!result.Succeeded || result.Record is null)
+            {
+                WriteJobReadFailure(output, result.Diagnostic, IsJsonOutputRequested(jsonRequested, outputMode), "jobs.show");
+                return 1;
+            }
+
+            if (IsJsonOutputRequested(jsonRequested, outputMode))
+            {
+                new JobsJsonRenderer(output).WriteShow(result.Record);
+            }
+            else
+            {
+                new JobsTextRenderer(output).WriteShow(result.Record);
+            }
+
+            return 0;
+        });
+
+        Command jobsExportCommand = new("export", "Export one local job record.");
+        Argument<string> jobsExportIdArgument = new("job-id")
+        {
+            Description = "Job id.",
+        };
+        Option<string> jobsExportFormatOption = new("--format")
+        {
+            Description = "Select json or markdown export format.",
+        };
+        jobsExportFormatOption.DefaultValueFactory = _ => "json";
+        jobsExportFormatOption.Validators.Add(result =>
+        {
+            string format = result.GetValueOrDefault<string>() ?? "json";
+            if (!string.Equals(format, "json", StringComparison.OrdinalIgnoreCase) &&
+                !string.Equals(format, "markdown", StringComparison.OrdinalIgnoreCase))
+            {
+                result.AddError("Invalid value for --format. Allowed values are json and markdown.");
+            }
+        });
+        jobsExportCommand.Arguments.Add(jobsExportIdArgument);
+        jobsExportCommand.Options.Add(jobsExportFormatOption);
+        jobsExportCommand.SetAction(parseResult =>
+        {
+            string? workspacePath = parseResult.GetValue(workspaceOption);
+            string jobId = parseResult.GetValue(jobsExportIdArgument) ?? string.Empty;
+            string format = parseResult.GetValue(jobsExportFormatOption) ?? "json";
+            bool jsonOutput = string.Equals(format, "json", StringComparison.OrdinalIgnoreCase);
+            CliEnvironmentSnapshot snapshot = workspaceSnapshotProvider(workspacePath);
+            WriteVerboseDiagnostics(
+                parseResult,
+                "jobs export",
+                snapshot,
+                humanReadableOutput: !jsonOutput);
+
+            JobRecordReadResult result = JobRecordStore.Create(snapshot).Read(jobId);
+            if (!result.Succeeded || result.Record is null)
+            {
+                WriteJobReadFailure(output, result.Diagnostic, jsonOutput, "jobs.export");
+                return 1;
+            }
+
+            if (jsonOutput)
+            {
+                new JobsJsonRenderer(output).WriteExport(result.Record);
+            }
+            else
+            {
+                new JobsTextRenderer(output).WriteMarkdown(result.Record);
+            }
+
+            return 0;
+        });
+        jobsCommand.Subcommands.Add(jobsListCommand);
+        jobsCommand.Subcommands.Add(jobsShowCommand);
+        jobsCommand.Subcommands.Add(jobsExportCommand);
+
         Command reviewCommand = new("review", "Review the current git diff with the configured model.");
         Option<bool> reviewJsonOption = new("--json")
         {
@@ -868,6 +1036,14 @@ public static class CliCommandFactory
         {
             Description = "Use a working context path for hierarchical instruction discovery.",
         };
+        Option<bool> skillsRunRecordJobOption = new("--record-job")
+        {
+            Description = "Record redacted job metadata in the user-level local job store.",
+        };
+        Option<string> skillsRunJobNameOption = new("--job-name")
+        {
+            Description = "Optional human-readable name for a recorded job.",
+        };
         skillsRunOutputOption.DefaultValueFactory = _ => "text";
         skillsRunOutputOption.Validators.Add(result =>
         {
@@ -910,6 +1086,8 @@ public static class CliCommandFactory
         skillsRunCommand.Options.Add(skillsRunSessionOption);
         skillsRunCommand.Options.Add(skillsRunResumeOption);
         skillsRunCommand.Options.Add(skillsRunCwdOption);
+        skillsRunCommand.Options.Add(skillsRunRecordJobOption);
+        skillsRunCommand.Options.Add(skillsRunJobNameOption);
         skillsRunCommand.SetAction(parseResult =>
         {
             string? workspacePath = parseResult.GetValue(workspaceOption);
@@ -930,6 +1108,8 @@ public static class CliCommandFactory
             int? timeoutSeconds = parseResult.GetValue(skillsRunTimeoutSecondsOption);
             string? session = parseResult.GetValue(skillsRunSessionOption);
             string? resume = parseResult.GetValue(skillsRunResumeOption);
+            bool recordJob = parseResult.GetValue(skillsRunRecordJobOption);
+            string? jobName = parseResult.GetValue(skillsRunJobNameOption);
             bool sessionSupplied = IsOptionExplicit(parseResult, skillsRunSessionOption);
             bool resumeSupplied = IsOptionExplicit(parseResult, skillsRunResumeOption);
             bool maxStepsSupplied = IsOptionExplicit(parseResult, skillsRunMaxStepsOption);
@@ -1010,8 +1190,70 @@ public static class CliCommandFactory
             }
 
             SkillRunPlan plan = planResult.Plan;
+            JobRecordStore? jobStore = null;
+            JobRecord? jobRecord = null;
+            if (recordJob)
+            {
+                try
+                {
+                    DateTimeOffset nowUtc = utcNowProvider();
+                    jobStore = JobRecordStore.Create(snapshot);
+                    jobRecord = JobRecord.CreateRunning(
+                        JobIdGenerator.Create(nowUtc),
+                        nowUtc,
+                        new JobCommandSummary(
+                            Family: "skills run",
+                            Task: task,
+                            Name: jobName,
+                            WorkspaceRoot: snapshot.Workspace.RootPath,
+                            Cwd: cwdPath,
+                            Skill: plan.Manifest.Name,
+                            Expert: plan.Expert,
+                            ReportMode: plan.Report,
+                            OutputMode: IsJsonOutputRequested(jsonRequested, outputMode) ? "json" : "text",
+                            DryRun: dryRun,
+                            SkillMetadata: JobSkillSummary.FromMetadata(plan.ToMetadata())),
+                        jobName);
+                    jobStore.Create(jobRecord);
+                }
+                catch (Exception exception) when (IsJobStoreException(exception))
+                {
+                    return WriteSkillFailure(
+                        "job-record-write-failed",
+                        "Job record could not be created.");
+                }
+            }
+
             if (dryRun)
             {
+                if (jobStore is not null && jobRecord is not null)
+                {
+                    try
+                    {
+                        JobRecord completed = jobRecord.WithStatus(
+                            JobStatus.DryRun,
+                            utcNowProvider(),
+                            exitCode: 0,
+                            stopReason: "dry-run",
+                            summary: "Skill dry-run plan recorded.",
+                            artifacts:
+                            [
+                                new JobArtifact(
+                                    JobArtifactKind.SkillPlan,
+                                    "inline:skills.runPlan",
+                                    Exists: true,
+                                    Summary: "Expanded skill plan metadata.")
+                            ]);
+                        jobStore.Update(completed);
+                    }
+                    catch (Exception exception) when (IsJobStoreException(exception))
+                    {
+                        return WriteSkillFailure(
+                            "job-record-write-failed",
+                            "Job record could not be updated.");
+                    }
+                }
+
                 output.WriteLine(IsJsonOutputRequested(jsonRequested, outputMode)
                     ? SkillPackReportRenderer.RenderPlanJson(plan, dryRun: true)
                     : SkillPackReportRenderer.RenderPlanText(plan, dryRun: true));
@@ -1048,10 +1290,26 @@ public static class CliCommandFactory
             ToolExecutor executor = new(registry, snapshot.Configuration.DisabledTools, plan.ToolBoundary);
             ExpertProfile? expertProfile = ExpertProfileCatalog.GetOrNull(plan.Expert);
             string? markdownReportForStdout = null;
+            string? recordedSessionPath = null;
 
             int WriteSkillExecResultWithTrace(ExecResult result)
             {
                 TryWriteTraceExecResult("skills run", snapshot, traceContext, result);
+                result = CompleteRecordedJob(
+                    jobStore,
+                    jobRecord,
+                    result,
+                    utcNowProvider(),
+                    recordedSessionPath);
+                if (jobRecord is not null && result.TaskReport is not null)
+                {
+                    JobRecordReadResult updated = jobStore?.Read(jobRecord.JobId) ??
+                        JobRecordReadResult.Failure("job-not-found", "Job record was not found.");
+                    if (updated.Record is not null)
+                    {
+                        jobRecord = updated.Record;
+                    }
+                }
 
                 if (IsJsonOutputRequested(jsonRequested, outputMode))
                 {
@@ -1091,8 +1349,17 @@ public static class CliCommandFactory
                 }
 
                 TryWriteTraceExecResult("skills run", snapshot, traceContext, failure);
-                WriteSafeFailure(output, errorCode, summary);
-                return failure.ExitCode;
+                ExecResult completedFailure = CompleteRecordedJob(
+                    jobStore,
+                    jobRecord,
+                    failure,
+                    utcNowProvider(),
+                    recordedSessionPath);
+                WriteSafeFailure(
+                    output,
+                    completedFailure.ErrorCode ?? errorCode,
+                    completedFailure.Summary ?? summary);
+                return completedFailure.ExitCode;
             }
 
             int WriteSkillConversationStoreFailureWithTrace(
@@ -1185,6 +1452,7 @@ public static class CliCommandFactory
                 try
                 {
                     sessionName = ConversationSessionName.Parse(effectiveSession);
+                    recordedSessionPath = ResolveSessionPath(snapshot, sessionName);
                 }
                 catch (ArgumentException exception)
                 {
@@ -1596,6 +1864,14 @@ public static class CliCommandFactory
         {
             Description = "Select a local expert profile: bugfix, reviewer, tester, security, or refactor.",
         };
+        Option<bool> execRecordJobOption = new("--record-job")
+        {
+            Description = "Record redacted job metadata in the user-level local job store.",
+        };
+        Option<string> execJobNameOption = new("--job-name")
+        {
+            Description = "Optional human-readable name for a recorded job.",
+        };
         execOutputOption.DefaultValueFactory = _ => "text";
         execReportOption.DefaultValueFactory = _ => "none";
         execOutputOption.Validators.Add(result =>
@@ -1644,6 +1920,8 @@ public static class CliCommandFactory
         execCommand.Options.Add(execReportOption);
         execCommand.Options.Add(execReportPathOption);
         execCommand.Options.Add(execExpertOption);
+        execCommand.Options.Add(execRecordJobOption);
+        execCommand.Options.Add(execJobNameOption);
         execCommand.SetAction(parseResult =>
         {
             string? workspacePath = parseResult.GetValue(workspaceOption);
@@ -1663,6 +1941,8 @@ public static class CliCommandFactory
             string reportModeValue = parseResult.GetValue(execReportOption) ?? "none";
             string? reportPath = parseResult.GetValue(execReportPathOption);
             string? expertName = parseResult.GetValue(execExpertOption);
+            bool recordJob = parseResult.GetValue(execRecordJobOption);
+            string? jobName = parseResult.GetValue(execJobNameOption);
             bool sessionSupplied = IsOptionExplicit(parseResult, execSessionOption);
             bool resumeSupplied = IsOptionExplicit(parseResult, execResumeOption);
             bool maxStepsSupplied = IsOptionExplicit(parseResult, execMaxStepsOption);
@@ -1676,6 +1956,37 @@ public static class CliCommandFactory
             ToolExecutionBoundary toolBoundary = ExpertToolBoundary.FromExpert(expertProfile);
             ReportPathResolver reportPathResolver = new();
             string? markdownReportForStdout = null;
+            string? recordedSessionPath = null;
+            JobRecordStore? jobStore = null;
+            JobRecord? jobRecord = null;
+            if (recordJob)
+            {
+                try
+                {
+                    DateTimeOffset nowUtc = utcNowProvider();
+                    jobStore = JobRecordStore.Create(snapshot);
+                    jobRecord = JobRecord.CreateRunning(
+                        JobIdGenerator.Create(nowUtc),
+                        nowUtc,
+                        new JobCommandSummary(
+                            Family: "exec",
+                            Task: task,
+                            Name: jobName,
+                            WorkspaceRoot: snapshot.Workspace.RootPath,
+                            Cwd: cwdPath,
+                            Expert: expertProfile?.Name ?? expertName,
+                            ReportMode: reportMode.ToCanonicalName(),
+                            OutputMode: IsJsonOutputRequested(jsonRequested, outputMode) ? "json" : "text"),
+                        jobName);
+                    jobStore.Create(jobRecord);
+                }
+                catch (Exception exception) when (IsJobStoreException(exception))
+                {
+                    WriteSafeFailure(output, "job-record-write-failed", "Job record could not be created.");
+                    return 1;
+                }
+            }
+
             TryWriteCommandLog(commandLogger, "exec", snapshot);
             WriteVerboseDiagnostics(
                 parseResult,
@@ -1686,6 +1997,21 @@ public static class CliCommandFactory
             int WriteExecResultWithTrace(ExecResult result)
             {
                 TryWriteTraceExecResult("exec", snapshot, traceContext, result);
+                result = CompleteRecordedJob(
+                    jobStore,
+                    jobRecord,
+                    result,
+                    utcNowProvider(),
+                    recordedSessionPath);
+                if (jobRecord is not null && result.TaskReport is not null)
+                {
+                    JobRecordReadResult updated = jobStore?.Read(jobRecord.JobId) ??
+                        JobRecordReadResult.Failure("job-not-found", "Job record was not found.");
+                    if (updated.Record is not null)
+                    {
+                        jobRecord = updated.Record;
+                    }
+                }
 
                 if (IsJsonOutputRequested(jsonRequested, outputMode))
                 {
@@ -1725,8 +2051,17 @@ public static class CliCommandFactory
                 }
 
                 TryWriteTraceExecResult("exec", snapshot, traceContext, failure);
-                WriteSafeFailure(output, errorCode, summary);
-                return failure.ExitCode;
+                ExecResult completedFailure = CompleteRecordedJob(
+                    jobStore,
+                    jobRecord,
+                    failure,
+                    utcNowProvider(),
+                    recordedSessionPath);
+                WriteSafeFailure(
+                    output,
+                    completedFailure.ErrorCode ?? errorCode,
+                    completedFailure.Summary ?? summary);
+                return completedFailure.ExitCode;
             }
 
             int WriteExecConversationStoreFailureWithTrace(
@@ -1863,6 +2198,7 @@ public static class CliCommandFactory
                 try
                 {
                     sessionName = ConversationSessionName.Parse(effectiveSession);
+                    recordedSessionPath = ResolveSessionPath(snapshot, sessionName);
                 }
                 catch (ArgumentException exception)
                 {
@@ -2322,6 +2658,7 @@ public static class CliCommandFactory
         rootCommand.Subcommands.Add(modelsCommand);
         rootCommand.Subcommands.Add(diffCommand);
         rootCommand.Subcommands.Add(changesCommand);
+        rootCommand.Subcommands.Add(jobsCommand);
         rootCommand.Subcommands.Add(reviewCommand);
         rootCommand.Subcommands.Add(configCommand);
         rootCommand.Subcommands.Add(mcpCommand);
@@ -3140,6 +3477,124 @@ public static class CliCommandFactory
         output.WriteLine($"errorCode: {errorCode}");
         output.WriteLine("summary:");
         output.WriteLine(summary);
+    }
+
+    private static void WriteJobReadFailure(
+        TextWriter output,
+        JobRecordDiagnostic? diagnostic,
+        bool jsonOutput,
+        string type)
+    {
+        string errorCode = diagnostic?.ErrorCode ?? "job-not-found";
+        string summary = diagnostic?.Summary ?? "Job record was not found.";
+        if (jsonOutput)
+        {
+            output.WriteLine(JsonSerializer.Serialize(new Dictionary<string, object?>
+            {
+                ["type"] = type,
+                ["status"] = "failed",
+                ["errorCode"] = DiagnosticSecretRedactor.Redact(errorCode),
+                ["summary"] = DiagnosticSecretRedactor.Redact(summary),
+                ["jobId"] = string.IsNullOrWhiteSpace(diagnostic?.JobId)
+                    ? null
+                    : DiagnosticSecretRedactor.Redact(diagnostic.JobId),
+                ["path"] = string.IsNullOrWhiteSpace(diagnostic?.Path)
+                    ? null
+                    : DiagnosticSecretRedactor.Redact(diagnostic.Path)
+            }, JsonOptions));
+            return;
+        }
+
+        WriteSafeFailure(output, errorCode, summary);
+    }
+
+    private static ExecResult CompleteRecordedJob(
+        JobRecordStore? jobStore,
+        JobRecord? currentRecord,
+        ExecResult result,
+        DateTimeOffset nowUtc,
+        string? sessionPath = null)
+    {
+        ArgumentNullException.ThrowIfNull(result);
+
+        if (jobStore is null || currentRecord is null)
+        {
+            return result;
+        }
+
+        try
+        {
+            JobRecord updated = JobRecord.FromExecResult(
+                currentRecord,
+                result,
+                nowUtc,
+                CreateJobArtifacts(result, sessionPath));
+            jobStore.Update(updated);
+            return result;
+        }
+        catch (Exception exception) when (IsJobStoreException(exception))
+        {
+            return ExecResult.Failure(
+                ExitCode: 1,
+                Summary: "Job record could not be updated.",
+                ErrorCode: "job-record-write-failed",
+                Events: result.Events,
+                ApprovalStatus: result.ApprovalStatus,
+                StopReason: result.StopReason,
+                ChangedFiles: result.ChangedFiles,
+                VerificationResults: result.VerificationResults,
+                RetryAttempts: result.RetryAttempts,
+                FailureSummary: result.FailureSummary,
+                TaskReport: result.TaskReport);
+        }
+    }
+
+    private static IReadOnlyList<JobArtifact> CreateJobArtifacts(ExecResult result, string? sessionPath)
+    {
+        List<JobArtifact> artifacts = [];
+        if (result.TaskReport is not null)
+        {
+            artifacts.Add(new JobArtifact(
+                JobArtifactKind.TaskReport,
+                "inline:taskReport",
+                Exists: true,
+                Summary: AgentTaskReportBuilder.CreateSummary(result.TaskReport)));
+
+            if (!string.IsNullOrWhiteSpace(result.TaskReport.TracePath))
+            {
+                artifacts.Add(JobArtifact.FromPath(
+                    JobArtifactKind.Trace,
+                    result.TaskReport.TracePath,
+                    "Trace JSONL diagnostics."));
+            }
+
+            if (!string.IsNullOrWhiteSpace(result.TaskReport.Report?.Path))
+            {
+                artifacts.Add(JobArtifact.FromPath(
+                    JobArtifactKind.MarkdownReport,
+                    result.TaskReport.Report.Path,
+                    result.TaskReport.Report.Summary));
+            }
+        }
+
+        if (!string.IsNullOrWhiteSpace(sessionPath))
+        {
+            artifacts.Add(JobArtifact.FromPath(
+                JobArtifactKind.Session,
+                sessionPath,
+                "Conversation transcript."));
+        }
+
+        return artifacts;
+    }
+
+    private static bool IsJobStoreException(Exception exception)
+    {
+        return exception is IOException
+            or UnauthorizedAccessException
+            or NotSupportedException
+            or ArgumentException
+            or InvalidOperationException;
     }
 
     private static void WriteSessionList(TextWriter output, IReadOnlyList<ConversationTranscriptSummary> summaries)

@@ -428,6 +428,49 @@ Write-Output 'bugfix verification passed'
     Assert-Contains $skillsDryRunJson.Output '"dryRun":true' "skills run dry-run json"
     Assert-Contains $skillsDryRunJson.Output '"expert":"reviewer"' "skills run dry-run json"
 
+    $jobsEmpty = Invoke-CaiCli -Arguments @("jobs", "list", "--output", "json", "--workspace", $workspace)
+    Assert-ExitCode $jobsEmpty 0 "jobs list empty json"
+    Assert-Contains $jobsEmpty.Output '"type":"jobs.list"' "jobs list empty json"
+
+    $execRecordedJob = Invoke-CaiCli -Arguments @(
+        "exec", "--record-job", "--job-name", "smoke-missing-model",
+        "--workspace", $workspace, "--cwd", "src\app",
+        "--max-turns", "1", "--max-tool-calls", "1", "--timeout-seconds", "5",
+        "summarize workspace with @file:note.txt"
+    )
+    Assert-ExitCode $execRecordedJob 1 "exec record-job missing model"
+    Assert-Contains $execRecordedJob.Output "errorCode=missing-model" "exec record-job missing model"
+
+    $skillsRecordedDryRun = Invoke-CaiCli -Arguments @(
+        "skills", "run", "review-only", "--record-job", "--dry-run", "--workspace", $workspace,
+        "--", "Review", "@file:note.txt"
+    )
+    Assert-ExitCode $skillsRecordedDryRun 0 "skills run record-job dry-run"
+    Assert-Contains $skillsRecordedDryRun.Output "dryRun: true" "skills run record-job dry-run"
+
+    $jobsList = Invoke-CaiCli -Arguments @("jobs", "list", "--output", "json", "--workspace", $workspace)
+    Assert-ExitCode $jobsList 0 "jobs list json"
+    Assert-Contains $jobsList.Output '"type":"jobs.list"' "jobs list json"
+    Assert-Contains $jobsList.Output '"family":"exec"' "jobs list json"
+    Assert-Contains $jobsList.Output '"family":"skills run"' "jobs list json"
+    $jobsListJson = $jobsList.Output | ConvertFrom-Json
+    $recordedExecJobs = @($jobsListJson.records | Where-Object { $_.command.family -eq "exec" })
+    if ($recordedExecJobs.Count -lt 1) {
+        throw "jobs list json expected at least one recorded exec job. Output:`n$($jobsList.Output)"
+    }
+
+    $recordedJobId = [string]$recordedExecJobs[0].jobId
+    $jobsShow = Invoke-CaiCli -Arguments @("jobs", "show", $recordedJobId, "--output", "json", "--workspace", $workspace)
+    Assert-ExitCode $jobsShow 0 "jobs show json"
+    Assert-Contains $jobsShow.Output '"type":"jobs.show"' "jobs show json"
+    Assert-Contains $jobsShow.Output $recordedJobId "jobs show json"
+    Assert-Contains $jobsShow.Output '"errorCode":"missing-model"' "jobs show json"
+
+    $jobsExport = Invoke-CaiCli -Arguments @("jobs", "export", $recordedJobId, "--format", "markdown", "--workspace", $workspace)
+    Assert-ExitCode $jobsExport 0 "jobs export markdown"
+    Assert-Contains $jobsExport.Output "# C# AI CLI Job" "jobs export markdown"
+    Assert-Contains $jobsExport.Output $recordedJobId "jobs export markdown"
+
     $emptyHooks = Join-Path $TempRoot "empty-hooks"
     New-Item -ItemType Directory -Path $emptyHooks -Force | Out-Null
     Invoke-Git -Name "git init" -Arguments @("-C", $workspace, "-c", "commit.gpgSign=false", "-c", "core.hooksPath=$emptyHooks", "init") | Out-Null

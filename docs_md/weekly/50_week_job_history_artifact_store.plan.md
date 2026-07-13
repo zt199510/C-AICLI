@@ -1,6 +1,6 @@
 # 第 50 周 Job History 与 Artifact Store Foundation Implementation Plan
 
-状态：计划中
+状态：已验收
 
 **Goal:** 为 0.4.0 工程自动化平台化建立本地 job history 与 artifact index 底座，让后续 task queue、multi-role pipeline、automation、CI/API 都能引用同一套可审计任务记录，而不是各自生成孤立报告。
 
@@ -198,20 +198,20 @@ Release docs 需要在实现后更新：
 
 ## 任务清单
 
-- [ ] Step 1: 确认 job recording 是否 0.4.0 Week 50 先采用 `--record-job` opt-in，以及 job store 默认位置。
-- [ ] Step 2: 定义 `JobRecord`、`JobStatus`、`JobArtifact`、`JobCommandSummary` DTO 和 JSON schema。
-- [ ] Step 3: 实现用户级 `JobRecordStore`，支持 create/update/read/list 和 corrupt record diagnostics。
-- [ ] Step 4: 增加 `jobs list/show/export` text/json/markdown renderer。
-- [ ] Step 5: 将 `--record-job` 接入 `exec`，覆盖 success/failure/reference failure/report artifact。
-- [ ] Step 6: 将 `--record-job` 接入 `skills run` dry-run 与 non dry-run plan metadata。
-- [ ] Step 7: 复用 redaction，确保 job record 不保存 raw references、raw secrets、raw tool args 或完整 diff。
-- [ ] Step 8: 增加 unit/CLI tests，覆盖 store、render、exec integration、skills dry-run、error codes。
-- [ ] Step 9: 更新 smoke script 与 smoke script tests。
-- [ ] Step 10: 更新 release docs、capability status、known limitations、runtime logging diagnostics。
-- [ ] Step 11: 运行 `dotnet build src\CSharpAiCli.sln -c Release`。
-- [ ] Step 12: 运行 `dotnet test src\CSharpAiCli.sln -c Release --no-build`。
-- [ ] Step 13: 运行 `powershell -NoProfile -ExecutionPolicy Bypass -File tools\Invoke-SmokeTests.ps1`。
-- [ ] Step 14: 创建 `50_week_review.md`，记录实际验收、风险、Deferred 边界和 Week 51 输入。
+- [x] Step 1: 确认 job recording 是否 0.4.0 Week 50 先采用 `--record-job` opt-in，以及 job store 默认位置。
+- [x] Step 2: 定义 `JobRecord`、`JobStatus`、`JobArtifact`、`JobCommandSummary` DTO 和 JSON schema。
+- [x] Step 3: 实现用户级 `JobRecordStore`，支持 create/update/read/list 和 corrupt record diagnostics。
+- [x] Step 4: 增加 `jobs list/show/export` text/json/markdown renderer。
+- [x] Step 5: 将 `--record-job` 接入 `exec`，覆盖 success/failure/reference failure/report artifact。
+- [x] Step 6: 将 `--record-job` 接入 `skills run` dry-run 与 non dry-run plan metadata。
+- [x] Step 7: 复用 redaction，确保 job record 不保存 raw references、raw secrets、raw tool args 或完整 diff。
+- [x] Step 8: 增加 unit/CLI tests，覆盖 store、render、exec integration、skills dry-run、error codes。
+- [x] Step 9: 更新 smoke script 与 smoke script tests。
+- [x] Step 10: 更新 release docs、capability status、known limitations、runtime logging diagnostics。
+- [x] Step 11: 运行 `dotnet build src\CSharpAiCli.sln -c Release`。
+- [x] Step 12: 运行 `dotnet test src\CSharpAiCli.sln -c Release --no-build`。
+- [x] Step 13: 运行 `powershell -NoProfile -ExecutionPolicy Bypass -File tools\Invoke-SmokeTests.ps1`。
+- [x] Step 14: 创建 `50_week_review.md`，记录实际验收、风险、Deferred 边界和 Week 51 输入。
 
 ## 验收矩阵
 

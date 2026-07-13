@@ -132,6 +132,16 @@ Week 49 adds local skill metadata:
 - Non-dry-run `skills run` uses the existing agentic `exec` trace/session/report path and sets the trace command name to `skills run`.
 - `taskReport.skill` records name, version, description, source kind/path, entry mode, expert, report, safety summary, validation command hint, and suggested references. The same structured field is present in text-derived summaries, NDJSON result payloads, trace result payloads, session task reports, and markdown task reports.
 
+Week 50 adds opt-in local job history and artifact indexing:
+
+- `exec --record-job` and `skills run --record-job` create one schema-v1 JSON record per job under the user-level state directory `%USERPROFILE%\.caicli\jobs` (or the profile selected through `CAICLI_USER_PROFILE`). Default execution persistence is unchanged when the flag is absent.
+- Job ids use the sortable shape `job_yyyyMMddTHHmmssfffZ_<8hex>`; the corresponding file is `<job-id>.job.json` with `schemaVersion: 1`.
+- A record begins as `running` and is atomically updated to `succeeded` or `failed`; skill dry-run records finish as `dry-run`. Reference validation and other runtime failures after record creation also receive a terminal record. A create/update failure returns `job-record-write-failed` instead of silently losing an explicitly requested audit record.
+- Job records contain bounded redacted command/task metadata, terminal status/error metadata, compact task report counts/summaries, compact skill plan metadata, and artifact pointers for task report, trace, session, markdown report, or dry-run plan. Artifact pointers include kind, path, existence, compact summary, and optional SHA256. Records do not contain raw referenced content, raw tool arguments, raw secrets, agent event payloads, or full diffs.
+- `jobs list` supports text/JSON plus a positive `--limit`; corrupt/unreadable records are diagnostics and do not hide valid records. `jobs show` supports text/JSON, and `jobs export` writes JSON or markdown to stdout. A missing job returns `job-not-found`.
+- `jobs list/show/export` do not call a model, run shell/patch/MCP tools, start MCP servers, write command logs, or write workspace files. A missing job directory is an empty successful list and is not created by read commands.
+- `skills run --record-job --dry-run` is the explicit persistence exception to ordinary dry-run behavior. It finishes with status `dry-run` and an `inline:skills.runPlan` pointer, but still does not call a model, run tools, create a report, start MCP, save a session, or write the workspace.
+
 Trace and verbose diagnostics must redact secrets before writing output. Redaction covers API keys, access/refresh tokens, passwords, `Authorization` headers and common variants, `secretKey`, `privateKey`, nested or escaped `argumentsJson`, OpenAI `sk-...` keys, and GitHub token formats such as `ghp_...` and `github_pat_...`. Diagnostics may record key presence and source, but never raw key values.
 
 `logs path` prints the resolved CLI log directory. It must not create the directory just to print the path.

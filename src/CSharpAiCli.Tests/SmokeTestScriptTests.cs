@@ -60,6 +60,14 @@ public sealed class SmokeTestScriptTests
         Assert.Contains("dryRun: true", script, StringComparison.Ordinal);
         Assert.Contains("skill: review-only", script, StringComparison.Ordinal);
         Assert.Contains("allowWrites=false", script, StringComparison.Ordinal);
+        Assert.Contains("\"jobs\", \"list\", \"--output\", \"json\", \"--workspace\", $workspace", script, StringComparison.Ordinal);
+        Assert.Contains("\"exec\", \"--record-job\", \"--job-name\", \"smoke-missing-model\"", script, StringComparison.Ordinal);
+        Assert.Contains("\"skills\", \"run\", \"review-only\", \"--record-job\", \"--dry-run\"", script, StringComparison.Ordinal);
+        Assert.Contains("\"jobs\", \"show\", $recordedJobId, \"--output\", \"json\", \"--workspace\", $workspace", script, StringComparison.Ordinal);
+        Assert.Contains("\"jobs\", \"export\", $recordedJobId, \"--format\", \"markdown\", \"--workspace\", $workspace", script, StringComparison.Ordinal);
+        Assert.Contains("\"type\":\"jobs.list\"", script, StringComparison.Ordinal);
+        Assert.Contains("\"type\":\"jobs.show\"", script, StringComparison.Ordinal);
+        Assert.Contains("# C# AI CLI Job", script, StringComparison.Ordinal);
         Assert.Contains("\"status\", \"--workspace\", $workspace", script, StringComparison.Ordinal);
         Assert.Contains("\"models\", \"--workspace\", $workspace", script, StringComparison.Ordinal);
         Assert.Contains("modelListApi: not called", script, StringComparison.Ordinal);

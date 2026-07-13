@@ -78,6 +78,29 @@ Common skill failures:
 
 `skills run --dry-run` should not call a model, write reports, run shell/patch/MCP tools, or save a session. Non-dry-run `skills run` uses the same approval, workspace guard, disabled-tool, shell policy, trace, session, and report behavior as `exec`.
 
+Passing `--record-job` is an explicit persistence request. For a dry-run it writes compact plan metadata only to the user-level job store; it still does not write the workspace or run the model/tools.
+
+## Job History
+
+Job recording is opt-in. Record an execution or a skill dry-run, then list the local user-level store before looking up an individual job:
+
+```powershell
+artifacts\release\caicli-0.3.3-win-x64\caicli.exe exec --record-job --job-name smoke --workspace . "Summarize @file:README.md"
+artifacts\release\caicli-0.3.3-win-x64\caicli.exe skills run review-only --record-job --dry-run --workspace . -- "@file:README.md"
+artifacts\release\caicli-0.3.3-win-x64\caicli.exe jobs list --output json --workspace .
+artifacts\release\caicli-0.3.3-win-x64\caicli.exe jobs show <job-id> --output json --workspace .
+artifacts\release\caicli-0.3.3-win-x64\caicli.exe jobs export <job-id> --format markdown --workspace .
+```
+
+Common job failures and diagnostics:
+
+- `job-not-found`: the id is malformed or no matching record exists in the active user-level store.
+- `corrupt-job-record`: the file is invalid JSON, uses an unsupported schema, or its id does not match its file name. `jobs list` reports the diagnostic and continues with valid records.
+- `job-record-unreadable`: the record could not be read because of a local file/access race.
+- `job-record-write-failed`: explicit `--record-job` persistence could not be created or finalized; the execution command does not hide recording loss.
+
+The default directory is `%USERPROFILE%\.caicli\jobs`. `CAICLI_USER_PROFILE` selects an isolated profile for smoke or portable verification. Week 50 has no `jobs delete` or automatic retention command; remove obsolete record files manually only after confirming the resolved user profile and job directory.
+
 ## Tool And Approval Failures
 
 Read tools do not require approval. Patch and shell tools do.
