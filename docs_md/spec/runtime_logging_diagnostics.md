@@ -195,6 +195,44 @@ Week 58-59 add source-only Project Pack diagnostics:
   Real Gerber/TIFF tool smoke remains Deferred and may only be introduced behind
   `CAICLI_GERBER_TIFF_TOOL_SMOKE=1` with explicit installed-tool paths and current approval.
 
+Week 60 adds source-only managed Project Pack run diagnostics:
+
+- `packs run gerber-tiff --plan <workspace-file> --dry-run` creates one schema-v1 run under
+  `%USERPROFILE%\.caicli\runs\<run-id>` (or the state root selected by `CAICLI_USER_PROFILE`). The stable layout
+  contains `run.json`, `checkpoint.json`, a sanitized `plan.json`, `input-manifest.json`, and `staging`, `working`,
+  `logs`, `artifacts`, and `reports` directories. This command does not call a model, fake driver, real tool,
+  network service, TIFF verifier, or human decision path.
+- Run ids use `run_yyyyMMddTHHmmssfffZ_<8hex>`. `run.json` and `checkpoint.json` carry matching schema, run id,
+  revision, state, plan fingerprint, and policy fingerprint. Atomic replacement writes checkpoint first and run
+  record second; a crash between them is detected as an inconsistent/corrupt checkpoint and fails closed.
+  Unknown JSON fields and unsupported schemas also fail closed.
+- Run states are `created`, `discovered`, `staged`, `ready`, `running`, `verifying`,
+  `awaiting-acceptance`, `accepted`, `rejected`, `failed`, `canceled`, and `interrupted`. Only the compiled
+  transition table is allowed. A fake driver used by tests emits explicit success/failure/timeout/cancel/
+  partial-output/interrupted stage events through this same table; fake success ends at `awaiting-acceptance`
+  and is not real conversion or TIFF verification evidence.
+- Staging copies only supported files declared in the plan inventory. Source relative path, kind, layer role,
+  tool-input flag, size, and SHA256 are revalidated before copy; destination names are generated as bounded flat
+  mappings; source and destination SHA256 are checked after copy. Unknown files and raw contents are absent from
+  `input-manifest.json` and `plan.json`.
+- Pre-run and resume checks rebuild the Week 59 deterministic plan and compare plan id/fingerprint, current input
+  inventory, static tool identity, no-overwrite output boundary, and current policy fingerprint. Approval grants,
+  tokens, and overrides are not stored. `staged`/`ready` can continue only after current reapproval;
+  `verifying` additionally requires complete managed artifact hashes; `awaiting-acceptance` can continue only at
+  the later human gate. `running`/`interrupted` returns `pack-run-restart-required` and never auto-replays execute.
+- Each CLI dry-run creates a normal job record whose `project-pack-run` and `project-pack-input-manifest`
+  artifacts point to the managed evidence. The run record carries the job id and an optional validated queue id.
+  The job `taskReport` remains null: pack run state is an operational checkpoint and does not create a second
+  task-report truth.
+- `packs runs show` reads the same run/checkpoint pair. `packs resume --dry-run` renders eligibility only.
+  `packs cancel` transitions one non-terminal run to `canceled`. These paths do not start workers or external
+  processes. A short exclusive mutation lock plus revision check prevents same-run double writes; it is not a
+  cross-process worker lease or heartbeat.
+- Week 60 packaged smoke is credential-free, model-free, network-free, and real-tool-free. It verifies source and
+  staged hashes, managed layout, run/job correlation, resume/cancel, no conversion artifacts, atomic temp cleanup,
+  and unchanged `caicli`/`gerbv`/`magick` process sets. `CAICLI_GERBER_TIFF_TOOL_SMOKE=1` still does not execute a
+  tool until the Week 61 adapter is available.
+
 Trace and verbose diagnostics must redact secrets before writing output. Redaction covers API keys, access/refresh tokens, passwords, `Authorization` headers and common variants, `secretKey`, `privateKey`, nested or escaped `argumentsJson`, OpenAI `sk-...` keys, and GitHub token formats such as `ghp_...` and `github_pat_...`. Diagnostics may record key presence and source, but never raw key values.
 
 `logs path` prints the resolved CLI log directory. It must not create the directory just to print the path.

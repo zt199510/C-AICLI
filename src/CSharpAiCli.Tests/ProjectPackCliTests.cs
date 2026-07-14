@@ -2,6 +2,8 @@ using System.Text.Json.Nodes;
 using CSharpAiCli.Cli;
 using CSharpAiCli.Core;
 using CSharpAiCli.ProjectPacks;
+using CSharpAiCli.ProjectPacks.GerberTiff;
+using CSharpAiCli.ProjectPacks.Runtime;
 
 namespace CSharpAiCli.Tests;
 
@@ -269,6 +271,136 @@ public sealed class ProjectPackCliTests
         Assert.Contains("outputSource: --output-dir", output.ToString(), StringComparison.Ordinal);
         Assert.Contains("conversionExecuted: false", output.ToString(), StringComparison.Ordinal);
         Assert.False(Directory.Exists(Path.Combine(temp.Path, "planned-output")));
+    }
+
+    [Fact]
+    public void Packs_run_dry_run_stages_inputs_and_correlates_job_without_task_report_truth()
+    {
+        using TempDirectory temp = TempDirectory.Create();
+        CliEnvironmentSnapshot snapshot = CreateSnapshot(temp.Path, temp.Path);
+        string planPath = WritePlan(temp.Path, snapshot.Workspace, toolPaths: null);
+        using StringWriter output = new();
+
+        int exitCode = CliCommandFactory.Create(output, _ => snapshot)
+            .Parse(
+            [
+                "packs", "run", "gerber-tiff",
+                "--plan", Path.GetFileName(planPath),
+                "--dry-run", "--output", "json",
+                "--workspace", temp.Path
+            ])
+            .Invoke();
+
+        JsonObject root = Assert.IsType<JsonObject>(JsonNode.Parse(output.ToString()));
+        Assert.Equal(0, exitCode);
+        Assert.Equal("packs.run", root["type"]?.GetValue<string>());
+        JsonObject run = Assert.IsType<JsonObject>(root["run"]);
+        string runId = run["runId"]!.GetValue<string>();
+        string jobId = Assert.IsType<JsonObject>(run["correlation"])["jobId"]!.GetValue<string>();
+        Assert.Equal(ProjectPackRunState.Ready, run["state"]?.GetValue<string>());
+        Assert.False(Assert.IsType<JsonObject>(root["checkpoint"])["approvalPersisted"]?.GetValue<bool>());
+
+        ManagedProjectPackRunStore runStore = ManagedProjectPackRunStore.Create(snapshot);
+        ManagedProjectPackRunLayout layout = runStore.GetLayout(runId);
+        Assert.True(File.Exists(layout.RunRecordPath));
+        Assert.Single(Directory.EnumerateFiles(layout.StagingPath));
+        Assert.DoesNotContain("private-gerber", File.ReadAllText(layout.InputManifestPath), StringComparison.Ordinal);
+        JobRecord job = Assert.IsType<JobRecord>(JobRecordStore.Create(snapshot).Read(jobId).Record);
+        Assert.Equal(JobStatus.DryRun, job.Status);
+        Assert.Null(job.TaskReport);
+        Assert.Contains(job.Artifacts, artifact => artifact.Kind == JobArtifactKind.ProjectPackRun && artifact.Exists);
+        Assert.Contains(job.Artifacts, artifact => artifact.Kind == JobArtifactKind.ProjectPackInputManifest && artifact.Exists);
+    }
+
+    [Fact]
+    public void Packs_runs_show_resume_and_cancel_use_the_same_checkpoint()
+    {
+        using TempDirectory temp = TempDirectory.Create();
+        CliEnvironmentSnapshot snapshot = CreateSnapshot(temp.Path, temp.Path);
+        string planPath = WritePlan(temp.Path, snapshot.Workspace, toolPaths: null);
+        using StringWriter runOutput = new();
+        int runExit = CliCommandFactory.Create(runOutput, _ => snapshot)
+            .Parse(["packs", "run", "gerber-tiff", "--plan", Path.GetFileName(planPath), "--dry-run", "--output", "json", "--workspace", temp.Path])
+            .Invoke();
+        string runId = Assert.IsType<JsonObject>(Assert.IsType<JsonObject>(JsonNode.Parse(runOutput.ToString()))["run"])["runId"]!.GetValue<string>();
+
+        using StringWriter showOutput = new();
+        int showExit = CliCommandFactory.Create(showOutput, _ => snapshot)
+            .Parse(["packs", "runs", "show", runId, "--output", "json", "--workspace", temp.Path])
+            .Invoke();
+        using StringWriter resumeOutput = new();
+        int resumeExit = CliCommandFactory.Create(resumeOutput, _ => snapshot)
+            .Parse(["packs", "resume", runId, "--dry-run", "--output", "json", "--workspace", temp.Path])
+            .Invoke();
+        using StringWriter cancelOutput = new();
+        int cancelExit = CliCommandFactory.Create(cancelOutput, _ => snapshot)
+            .Parse(["packs", "cancel", runId, "--output", "json", "--workspace", temp.Path])
+            .Invoke();
+        using StringWriter terminalResumeOutput = new();
+        int terminalResumeExit = CliCommandFactory.Create(terminalResumeOutput, _ => snapshot)
+            .Parse(["packs", "resume", runId, "--dry-run", "--output", "json", "--workspace", temp.Path])
+            .Invoke();
+
+        Assert.Equal(0, runExit);
+        Assert.Equal(0, showExit);
+        Assert.Equal(ProjectPackRunState.Ready,
+            Assert.IsType<JsonObject>(Assert.IsType<JsonObject>(JsonNode.Parse(showOutput.ToString()))["run"])["state"]?.GetValue<string>());
+        Assert.Equal(0, resumeExit);
+        Assert.True(Assert.IsType<JsonObject>(JsonNode.Parse(resumeOutput.ToString()))["eligible"]?.GetValue<bool>());
+        Assert.Equal(0, cancelExit);
+        Assert.Equal(ProjectPackRunState.Canceled,
+            Assert.IsType<JsonObject>(Assert.IsType<JsonObject>(JsonNode.Parse(cancelOutput.ToString()))["run"])["state"]?.GetValue<string>());
+        Assert.Equal(1, terminalResumeExit);
+        Assert.False(Assert.IsType<JsonObject>(JsonNode.Parse(terminalResumeOutput.ToString()))["eligible"]?.GetValue<bool>());
+    }
+
+    [Fact]
+    public void Packs_run_without_dry_run_fails_without_creating_run_or_job_state()
+    {
+        using TempDirectory temp = TempDirectory.Create();
+        CliEnvironmentSnapshot snapshot = CreateSnapshot(temp.Path, temp.Path);
+        string planPath = WritePlan(temp.Path, snapshot.Workspace, toolPaths: null);
+        using StringWriter output = new();
+
+        int exitCode = CliCommandFactory.Create(output, _ => snapshot)
+            .Parse(["packs", "run", "gerber-tiff", "--plan", Path.GetFileName(planPath), "--output", "json", "--workspace", temp.Path])
+            .Invoke();
+
+        Assert.Equal(2, exitCode);
+        Assert.Contains("pack-real-execution-deferred", output.ToString(), StringComparison.Ordinal);
+        Assert.False(Directory.Exists(ManagedProjectPackRunStore.Create(snapshot).RunsRoot));
+        Assert.False(Directory.Exists(JobRecordStore.Create(snapshot).JobDirectory));
+    }
+
+    [Fact]
+    public void Run_correlation_validates_queue_and_job_ids_and_renderer_redacts_pointer_metadata()
+    {
+        DateTimeOffset now = DateTimeOffset.Parse("2026-07-14T00:00:00Z");
+        ProjectPackRunCorrelation correlation = new(TaskQueueIdGenerator.Create(now), JobIdGenerator.Create(now));
+        ProjectPackRunArtifactPointer pointer = new(
+            "evidence", "external-pointer", "external-pointer", "apiKey=secret-value", false);
+
+        Assert.NotNull(correlation.QueueId);
+        Assert.NotNull(correlation.JobId);
+        Assert.Contains("[redacted]", pointer.Path, StringComparison.Ordinal);
+        Assert.Throws<ArgumentException>(() => new ProjectPackRunCorrelation("../queue", correlation.JobId));
+    }
+
+    private static string WritePlan(
+        string workspace,
+        WorkspaceContext context,
+        IReadOnlyDictionary<string, string>? toolPaths)
+    {
+        string input = Path.Combine(workspace, "input");
+        Directory.CreateDirectory(input);
+        File.WriteAllText(Path.Combine(input, "board.gbr"), "private-gerber");
+        File.WriteAllText(Path.Combine(input, "unknown.txt"), "private-unknown");
+        GerberTiffConversionPlan plan = new GerberTiffConversionPlanBuilder().Build(
+            context, "input", "output", toolPaths);
+        Assert.True(plan.ReadyForStaging);
+        string path = Path.Combine(workspace, "plan.json");
+        File.WriteAllText(path, GerberTiffPlanRenderer.RenderJson(plan, "--workspace"));
+        return path;
     }
 
     private static CliEnvironmentSnapshot CreateSnapshot(string? workspacePath, string userProfileRoot)

@@ -81,6 +81,16 @@ public sealed class SmokeTestScriptTests
         Assert.Contains("\"conversionExecuted\":false", script, StringComparison.Ordinal);
         Assert.Contains("packs plan created the output directory", script, StringComparison.Ordinal);
         Assert.Contains("packs list/doctor/plan created persistent job state", script, StringComparison.Ordinal);
+        Assert.Contains("\"packs\", \"run\", \"gerber-tiff\"", script, StringComparison.Ordinal);
+        Assert.Contains("\"--plan\", \"gerber-tiff-plan.json\", \"--dry-run\"", script, StringComparison.Ordinal);
+        Assert.Contains("\"packs\", \"runs\", \"show\", $packRunId", script, StringComparison.Ordinal);
+        Assert.Contains("\"packs\", \"resume\", $packRunId, \"--dry-run\"", script, StringComparison.Ordinal);
+        Assert.Contains("\"packs\", \"cancel\", $packRunId", script, StringComparison.Ordinal);
+        Assert.Contains("packs run staging changed source input or failed post-copy hash verification", script, StringComparison.Ordinal);
+        Assert.Contains("packs run dry-run produced fake or real conversion artifacts", script, StringComparison.Ordinal);
+        Assert.Contains("packs run left atomic temporary files behind", script, StringComparison.Ordinal);
+        Assert.Contains("packs run dry-run changed the caicli/gerbv/magick process set", script, StringComparison.Ordinal);
+        Assert.Contains("\"taskReport\": null", script, StringComparison.Ordinal);
         Assert.Contains("\"jobs\", \"list\", \"--output\", \"json\", \"--workspace\", $workspace", script, StringComparison.Ordinal);
         Assert.Contains("\"exec\", \"--record-job\", \"--job-name\", \"smoke-missing-model\"", script, StringComparison.Ordinal);
         Assert.Contains("\"skills\", \"run\", \"review-only\", \"--record-job\", \"--dry-run\"", script, StringComparison.Ordinal);

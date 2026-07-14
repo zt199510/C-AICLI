@@ -1,6 +1,6 @@
 # 第 60 周 Isolated Run Staging、Checkpoint 与 Safe Resume Foundation Implementation Plan
 
-状态：计划中
+状态：已完成
 
 **Goal:** 建立每次 Project Pack 运行的隔离目录、不可变输入 manifest、状态机和 checkpoint，使失败、取消或进程崩溃后仍能判断哪些阶段可以安全恢复，并且不改变源输入。
 
@@ -88,19 +88,19 @@ caicli packs resume <run-id> --dry-run
 
 ## 任务清单
 
-- [ ] Step 1: 定义 run id、run record、stage/checkpoint DTO 和 transition table。
-- [ ] Step 2: 实现 managed run root/layout 和 path/reparse protection。
-- [ ] Step 3: 实现 atomic run/checkpoint store 与 corrupt diagnostics。
-- [ ] Step 4: 实现 bounded staging copy、rename mapping 和 post-copy hash verification。
-- [ ] Step 5: 实现 pre-run revalidation：plan/input/tool/output/policy。
-- [ ] Step 6: 实现 fake driver execution contract 和 stage events。
-- [ ] Step 7: 实现 cancel/resume eligibility，不自动重跑 interrupted execute。
-- [ ] Step 8: 接入 queue/job correlation 和 artifact pointer。
-- [ ] Step 9: 增加 run store/staging/state/resume/security tests。
-- [ ] Step 10: 增加 dry-run packaged smoke 和 cleanup checks。
-- [ ] Step 11: 更新 runtime diagnostics/security/known limitations 草稿。
-- [ ] Step 12: 运行 build/test/default smoke。
-- [ ] Step 13: 创建 `60_week_review.md`，冻结 Week 61 外部执行前置条件。
+- [x] Step 1: 定义 run id、run record、stage/checkpoint DTO 和 transition table。
+- [x] Step 2: 实现 managed run root/layout 和 path/reparse protection。
+- [x] Step 3: 实现 atomic run/checkpoint store 与 corrupt diagnostics。
+- [x] Step 4: 实现 bounded staging copy、rename mapping 和 post-copy hash verification。
+- [x] Step 5: 实现 pre-run revalidation：plan/input/tool/output/policy。
+- [x] Step 6: 实现 fake driver execution contract 和 stage events。
+- [x] Step 7: 实现 cancel/resume eligibility，不自动重跑 interrupted execute。
+- [x] Step 8: 接入 queue/job correlation 和 artifact pointer。
+- [x] Step 9: 增加 run store/staging/state/resume/security tests。
+- [x] Step 10: 增加 dry-run packaged smoke 和 cleanup checks。
+- [x] Step 11: 更新 runtime diagnostics/security/known limitations 草稿。
+- [x] Step 12: 运行 build/test/default smoke。
+- [x] Step 13: 创建 `60_week_review.md`，冻结 Week 61 外部执行前置条件。
 
 ## 验收标准
 

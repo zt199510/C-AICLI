@@ -26,6 +26,8 @@ public static class JobArtifactKind
     public const string Session = "session";
     public const string SkillPlan = "skill-plan";
     public const string Automation = "automation";
+    public const string ProjectPackRun = "project-pack-run";
+    public const string ProjectPackInputManifest = "project-pack-input-manifest";
 }
 
 public sealed record JobSkillSummary

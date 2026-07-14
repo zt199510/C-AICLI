@@ -7,6 +7,7 @@ using System.Text.Json.Nodes;
 using CSharpAiCli.Core;
 using CSharpAiCli.ProjectPacks;
 using CSharpAiCli.ProjectPacks.GerberTiff;
+using CSharpAiCli.ProjectPacks.Runtime;
 
 namespace CSharpAiCli.Cli;
 
@@ -1952,6 +1953,370 @@ public static class CliCommandFactory
             return plan.Runnable ? 0 : 1;
         });
         packsCommand.Subcommands.Add(packsPlanCommand);
+
+        Command packsRunCommand = new("run", "Create an isolated managed run and stage frozen inputs; Week 60 requires --dry-run.");
+        Argument<string> packsRunPackArgument = new("pack")
+        {
+            Description = "Registered project pack id."
+        };
+        packsRunPackArgument.Validators.Add(result =>
+        {
+            string packId = result.GetValueOrDefault<string>() ?? string.Empty;
+            if (!projectPackRegistry.TryGet(packId, out _))
+            {
+                result.AddError($"Unknown project pack '{packId}'.");
+            }
+        });
+        Option<string> packsRunPlanOption = new("--plan")
+        {
+            Description = "Read one packs.plan JSON file from inside the workspace."
+        };
+        packsRunPlanOption.Validators.Add(result =>
+        {
+            if (result.Implicit || string.IsNullOrWhiteSpace(result.GetValueOrDefault<string>()))
+            {
+                result.AddError("--plan is required.");
+            }
+        });
+        Option<bool> packsRunDryRunOption = new("--dry-run")
+        {
+            Description = "Persist isolated staging evidence without executing fake or real conversion tools."
+        };
+        Option<string[]> packsRunToolPathOption = new("--tool-path")
+        {
+            Description = "Revalidate [dependency=]absolute-path without starting the tool.",
+            Arity = ArgumentArity.OneOrMore,
+            AllowMultipleArgumentsPerToken = true
+        };
+        Option<bool> packsRunJsonOption = new("--json")
+        {
+            Description = "Write a single JSON project pack run object."
+        };
+        Option<string> packsRunOutputOption = new("--output")
+        {
+            Description = "Select text or json output."
+        };
+        packsRunOutputOption.DefaultValueFactory = _ => "text";
+        AddTextJsonOutputValidator(packsRunOutputOption);
+        packsRunCommand.Arguments.Add(packsRunPackArgument);
+        packsRunCommand.Options.Add(packsRunPlanOption);
+        packsRunCommand.Options.Add(packsRunDryRunOption);
+        packsRunCommand.Options.Add(packsRunToolPathOption);
+        packsRunCommand.Options.Add(packsRunJsonOption);
+        packsRunCommand.Options.Add(packsRunOutputOption);
+        packsRunCommand.SetAction(parseResult =>
+        {
+            string? workspacePath = parseResult.GetValue(workspaceOption);
+            string packId = parseResult.GetValue(packsRunPackArgument) ?? string.Empty;
+            string? planPath = parseResult.GetValue(packsRunPlanOption);
+            bool dryRun = parseResult.GetValue(packsRunDryRunOption);
+            string[] toolPathValues = parseResult.GetValue(packsRunToolPathOption) ?? [];
+            bool jsonOutput = IsJsonOutputRequested(
+                parseResult.GetValue(packsRunJsonOption),
+                parseResult.GetValue(packsRunOutputOption) ?? "text");
+            CliEnvironmentSnapshot snapshot = workspaceSnapshotProvider(workspacePath);
+            WriteVerboseDiagnostics(parseResult, "packs run", snapshot, humanReadableOutput: !jsonOutput);
+            if (!dryRun)
+            {
+                output.WriteLine(ProjectPackRunRenderer.RenderFailure(
+                    "packs.run",
+                    "pack-real-execution-deferred",
+                    "Week 60 only supports --dry-run staging; fake and real tool execution are not exposed by this command.",
+                    jsonOutput));
+                return 2;
+            }
+
+            if (!projectPackRegistry.TryGet(packId, out IProjectPack? registeredPack) ||
+                registeredPack is not GerberTiffWorkflowPack gerberTiffPack)
+            {
+                output.WriteLine(ProjectPackRunRenderer.RenderFailure(
+                    "packs.run", "pack-run-not-supported", "Project pack does not support Week 60 isolated staging.", jsonOutput));
+                return 1;
+            }
+
+            if (!TryParseProjectPackToolPaths(
+                gerberTiffPack.Manifest,
+                toolPathValues,
+                out Dictionary<string, string> toolPaths,
+                out string? bindingError))
+            {
+                output.WriteLine(ProjectPackRunRenderer.RenderFailure(
+                    "packs.run", "pack-tool-binding-invalid", bindingError ?? "Project pack tool binding is invalid.", jsonOutput));
+                return 2;
+            }
+
+            if (!TryReadProjectPackPlan(snapshot.Workspace, planPath, out string? planJson, out string? planErrorCode, out string? planError))
+            {
+                output.WriteLine(ProjectPackRunRenderer.RenderFailure(
+                    "packs.run", planErrorCode ?? ProjectPackRunErrorCode.PlanInvalid,
+                    planError ?? "Project pack plan could not be read.", jsonOutput));
+                return 1;
+            }
+
+            GerberTiffRunPlanSnapshot plan;
+            try
+            {
+                plan = GerberTiffRunPlanLoader.Load(planJson!);
+            }
+            catch (ProjectPackContractException exception)
+            {
+                output.WriteLine(ProjectPackRunRenderer.RenderFailure(
+                    "packs.run", exception.ErrorCode, exception.Message, jsonOutput));
+                return 1;
+            }
+
+            if (!string.Equals(plan.PackId, packId, StringComparison.Ordinal))
+            {
+                output.WriteLine(ProjectPackRunRenderer.RenderFailure(
+                    "packs.run", ProjectPackRunErrorCode.PlanInvalid,
+                    "Project pack plan does not match the selected pack.", jsonOutput));
+                return 1;
+            }
+
+            DateTimeOffset nowUtc = utcNowProvider();
+            string runId = ProjectPackRunId.Create(nowUtc);
+            string jobId = JobIdGenerator.Create(nowUtc);
+            JobRecordStore jobStore = JobRecordStore.Create(snapshot);
+            JobRecord job = JobRecord.CreateRunning(
+                jobId,
+                nowUtc,
+                new JobCommandSummary(
+                    "packs run",
+                    Task: plan.PlanId,
+                    WorkspaceRoot: snapshot.Workspace.RootPath,
+                    OutputMode: jsonOutput ? "json" : "text",
+                    DryRun: true),
+                runId);
+            try
+            {
+                jobStore.Create(job);
+            }
+            catch (Exception exception) when (IsJobStoreException(exception))
+            {
+                output.WriteLine(ProjectPackRunRenderer.RenderFailure(
+                    "packs.run", "job-record-write-failed", "Project pack run job record could not be created.", jsonOutput));
+                return 1;
+            }
+
+            DiagnosticContext? traceContext = CreateTraceContext(parseResult, snapshot);
+            TryWriteTraceCommandEvent(
+                "packs run",
+                snapshot,
+                traceContext,
+                "command.start",
+                sequence: 1,
+                "started",
+                summary: "Project pack isolated dry-run staging requested.",
+                timestampUtc: nowUtc);
+            ManagedProjectPackRunStore runStore = ManagedProjectPackRunStore.Create(snapshot);
+            ProjectPackRunMutationResult result = new ProjectPackRunService(runStore).CreateAndStage(
+                plan,
+                snapshot.Workspace,
+                toolPaths,
+                GetProjectPackPolicyFingerprint(snapshot, packId),
+                nowUtc,
+                new ProjectPackRunCorrelation(jobId: jobId),
+                runId,
+                CancellationToken.None);
+            List<JobArtifact> artifacts = [];
+            ManagedProjectPackRunLayout layout = runStore.GetLayout(runId);
+            if (File.Exists(layout.RunRecordPath))
+            {
+                artifacts.Add(JobArtifact.FromPath(
+                    JobArtifactKind.ProjectPackRun,
+                    layout.RunRecordPath,
+                    $"packRunId={runId}; operational checkpoint pointer only"));
+            }
+
+            if (File.Exists(layout.InputManifestPath))
+            {
+                artifacts.Add(JobArtifact.FromPath(
+                    JobArtifactKind.ProjectPackInputManifest,
+                    layout.InputManifestPath,
+                    "Immutable staged-input identity manifest."));
+            }
+
+            try
+            {
+                JobRecord completedJob = job.WithStatus(
+                    result.Succeeded ? JobStatus.DryRun : JobStatus.Failed,
+                    utcNowProvider(),
+                    exitCode: result.Succeeded ? 0 : 1,
+                    stopReason: result.Succeeded ? "dry-run-staged" : "staging-failed",
+                    errorCode: result.Diagnostic?.ErrorCode,
+                    summary: result.Succeeded
+                        ? "Project pack inputs were staged; no conversion or business verification was executed."
+                        : result.Diagnostic?.Summary,
+                    taskReport: null,
+                    artifacts: artifacts,
+                    warnings:
+                    [
+                        $"packRunId={runId}",
+                        "Project pack run state remains the operational checkpoint; taskReport was not duplicated."
+                    ]);
+                jobStore.Update(completedJob);
+            }
+            catch (Exception exception) when (IsJobStoreException(exception))
+            {
+                output.WriteLine(ProjectPackRunRenderer.RenderFailure(
+                    "packs.run", "job-record-write-failed", "Project pack run job record could not be completed.", jsonOutput, runId));
+                return 1;
+            }
+
+            if (!result.Succeeded || result.Record is null || result.Checkpoint is null)
+            {
+                output.WriteLine(ProjectPackRunRenderer.RenderFailure(
+                    "packs.run",
+                    result.Diagnostic?.ErrorCode ?? ProjectPackRunErrorCode.RecordWriteFailed,
+                    result.Diagnostic?.Summary ?? "Project pack run could not be staged.",
+                    jsonOutput,
+                    runId));
+                return 1;
+            }
+
+            output.WriteLine(jsonOutput
+                ? ProjectPackRunRenderer.RenderJson(result.Record, result.Checkpoint)
+                : ProjectPackRunRenderer.RenderText(result.Record, result.Checkpoint));
+            TryWriteTraceCommandEvent(
+                "packs run",
+                snapshot,
+                traceContext,
+                "command.complete",
+                sequence: 2,
+                "success",
+                summary: "Project pack isolated dry-run staging completed without tool execution.",
+                timestampUtc: utcNowProvider());
+            return 0;
+        });
+        packsCommand.Subcommands.Add(packsRunCommand);
+
+        Command packsRunsCommand = new("runs", "Inspect managed project pack run checkpoints.");
+        Command packsRunsShowCommand = new("show", "Show one managed project pack run without executing it.");
+        Argument<string> packsRunsShowIdArgument = new("run-id") { Description = "Project pack run id." };
+        Option<bool> packsRunsShowJsonOption = new("--json") { Description = "Write a single JSON project pack run object." };
+        Option<string> packsRunsShowOutputOption = new("--output") { Description = "Select text or json output." };
+        packsRunsShowOutputOption.DefaultValueFactory = _ => "text";
+        AddTextJsonOutputValidator(packsRunsShowOutputOption);
+        packsRunsShowCommand.Arguments.Add(packsRunsShowIdArgument);
+        packsRunsShowCommand.Options.Add(packsRunsShowJsonOption);
+        packsRunsShowCommand.Options.Add(packsRunsShowOutputOption);
+        packsRunsShowCommand.SetAction(parseResult =>
+        {
+            string? workspacePath = parseResult.GetValue(workspaceOption);
+            string runId = parseResult.GetValue(packsRunsShowIdArgument) ?? string.Empty;
+            bool jsonOutput = IsJsonOutputRequested(
+                parseResult.GetValue(packsRunsShowJsonOption),
+                parseResult.GetValue(packsRunsShowOutputOption) ?? "text");
+            CliEnvironmentSnapshot snapshot = workspaceSnapshotProvider(workspacePath);
+            ProjectPackRunReadResult read = ManagedProjectPackRunStore.Create(snapshot).Read(runId);
+            if (!read.Succeeded || read.Record is null || read.Checkpoint is null)
+            {
+                output.WriteLine(ProjectPackRunRenderer.RenderFailure(
+                    "packs.run", read.Diagnostic?.ErrorCode ?? ProjectPackRunErrorCode.NotFound,
+                    read.Diagnostic?.Summary ?? "Project pack run was not found.", jsonOutput, runId));
+                return 1;
+            }
+
+            output.WriteLine(jsonOutput
+                ? ProjectPackRunRenderer.RenderJson(read.Record, read.Checkpoint)
+                : ProjectPackRunRenderer.RenderText(read.Record, read.Checkpoint));
+            return 0;
+        });
+        packsRunsCommand.Subcommands.Add(packsRunsShowCommand);
+        packsCommand.Subcommands.Add(packsRunsCommand);
+
+        Command packsCancelCommand = new("cancel", "Cancel one non-terminal managed project pack run.");
+        Argument<string> packsCancelIdArgument = new("run-id") { Description = "Project pack run id." };
+        Option<bool> packsCancelJsonOption = new("--json") { Description = "Write a single JSON project pack run object." };
+        Option<string> packsCancelOutputOption = new("--output") { Description = "Select text or json output." };
+        packsCancelOutputOption.DefaultValueFactory = _ => "text";
+        AddTextJsonOutputValidator(packsCancelOutputOption);
+        packsCancelCommand.Arguments.Add(packsCancelIdArgument);
+        packsCancelCommand.Options.Add(packsCancelJsonOption);
+        packsCancelCommand.Options.Add(packsCancelOutputOption);
+        packsCancelCommand.SetAction(parseResult =>
+        {
+            string? workspacePath = parseResult.GetValue(workspaceOption);
+            string runId = parseResult.GetValue(packsCancelIdArgument) ?? string.Empty;
+            bool jsonOutput = IsJsonOutputRequested(
+                parseResult.GetValue(packsCancelJsonOption),
+                parseResult.GetValue(packsCancelOutputOption) ?? "text");
+            CliEnvironmentSnapshot snapshot = workspaceSnapshotProvider(workspacePath);
+            ProjectPackRunMutationResult result = new ProjectPackRunService(ManagedProjectPackRunStore.Create(snapshot))
+                .Cancel(runId, utcNowProvider());
+            if (!result.Succeeded || result.Record is null || result.Checkpoint is null)
+            {
+                output.WriteLine(ProjectPackRunRenderer.RenderFailure(
+                    "packs.cancel", result.Diagnostic?.ErrorCode ?? ProjectPackRunErrorCode.TransitionInvalid,
+                    result.Diagnostic?.Summary ?? "Project pack run could not be canceled.", jsonOutput, runId));
+                return 1;
+            }
+
+            output.WriteLine(jsonOutput
+                ? ProjectPackRunRenderer.RenderJson(result.Record, result.Checkpoint)
+                : ProjectPackRunRenderer.RenderText(result.Record, result.Checkpoint));
+            return 0;
+        });
+        packsCommand.Subcommands.Add(packsCancelCommand);
+
+        Command packsResumeCommand = new("resume", "Revalidate safe resume eligibility without replaying execute.");
+        Argument<string> packsResumeIdArgument = new("run-id") { Description = "Project pack run id." };
+        Option<bool> packsResumeDryRunOption = new("--dry-run") { Description = "Evaluate eligibility without executing any stage." };
+        Option<string[]> packsResumeToolPathOption = new("--tool-path")
+        {
+            Description = "Revalidate [dependency=]absolute-path without starting the tool.",
+            Arity = ArgumentArity.OneOrMore,
+            AllowMultipleArgumentsPerToken = true
+        };
+        Option<bool> packsResumeJsonOption = new("--json") { Description = "Write a single JSON resume eligibility object." };
+        Option<string> packsResumeOutputOption = new("--output") { Description = "Select text or json output." };
+        packsResumeOutputOption.DefaultValueFactory = _ => "text";
+        AddTextJsonOutputValidator(packsResumeOutputOption);
+        packsResumeCommand.Arguments.Add(packsResumeIdArgument);
+        packsResumeCommand.Options.Add(packsResumeDryRunOption);
+        packsResumeCommand.Options.Add(packsResumeToolPathOption);
+        packsResumeCommand.Options.Add(packsResumeJsonOption);
+        packsResumeCommand.Options.Add(packsResumeOutputOption);
+        packsResumeCommand.SetAction(parseResult =>
+        {
+            string? workspacePath = parseResult.GetValue(workspaceOption);
+            string runId = parseResult.GetValue(packsResumeIdArgument) ?? string.Empty;
+            bool dryRun = parseResult.GetValue(packsResumeDryRunOption);
+            bool jsonOutput = IsJsonOutputRequested(
+                parseResult.GetValue(packsResumeJsonOption),
+                parseResult.GetValue(packsResumeOutputOption) ?? "text");
+            CliEnvironmentSnapshot snapshot = workspaceSnapshotProvider(workspacePath);
+            if (!dryRun)
+            {
+                output.WriteLine(ProjectPackRunRenderer.RenderFailure(
+                    "packs.resume", "pack-resume-execution-deferred",
+                    "Week 60 resume only evaluates eligibility; pass --dry-run.", jsonOutput, runId));
+                return 2;
+            }
+
+            string[] toolPathValues = parseResult.GetValue(packsResumeToolPathOption) ?? [];
+            GerberTiffWorkflowPack pack = new();
+            if (!TryParseProjectPackToolPaths(pack.Manifest, toolPathValues,
+                out Dictionary<string, string> toolPaths, out string? bindingError))
+            {
+                output.WriteLine(ProjectPackRunRenderer.RenderFailure(
+                    "packs.resume", "pack-tool-binding-invalid", bindingError ?? "Project pack tool binding is invalid.", jsonOutput, runId));
+                return 2;
+            }
+
+            ProjectPackResumeEligibility eligibility = new ProjectPackRunService(ManagedProjectPackRunStore.Create(snapshot))
+                .EvaluateResume(
+                    runId,
+                    snapshot.Workspace,
+                    toolPaths,
+                    GetProjectPackPolicyFingerprint(snapshot, GerberTiffWorkflowPack.ProfileName),
+                    CancellationToken.None);
+            output.WriteLine(jsonOutput
+                ? ProjectPackRunRenderer.RenderResumeJson(runId, eligibility)
+                : ProjectPackRunRenderer.RenderResumeText(runId, eligibility));
+            return eligibility.Eligible ? 0 : 1;
+        });
+        packsCommand.Subcommands.Add(packsResumeCommand);
 
         Command skillsCommand = new("skills", "List and run local skill workflow packs.");
         Command skillsListCommand = new("list", "List built-in and workspace-local skill packs.");
@@ -5768,6 +6133,80 @@ public static class CliCommandFactory
 
         return artifacts;
     }
+
+    private static bool TryReadProjectPackPlan(
+        WorkspaceContext workspace,
+        string? requestedPath,
+        out string? json,
+        out string? errorCode,
+        out string? summary)
+    {
+        json = null;
+        errorCode = null;
+        summary = null;
+        if (string.IsNullOrWhiteSpace(requestedPath))
+        {
+            errorCode = ProjectPackRunErrorCode.PlanInvalid;
+            summary = "An explicit project pack plan file is required.";
+            return false;
+        }
+
+        WorkspaceGuardResult guard = new WorkspaceGuard().ResolvePath(workspace, requestedPath);
+        if (!guard.IsAllowed || guard.FullPath is null || !File.Exists(guard.FullPath))
+        {
+            errorCode = ProjectPackRunErrorCode.PlanInvalid;
+            summary = "Project pack plan must be a file inside the workspace.";
+            return false;
+        }
+
+        try
+        {
+            ManagedProjectPackRunStore.EnsureNoReparseInExistingChain(guard.FullPath);
+            FileInfo info = new(guard.FullPath);
+            if (info.Length is <= 0 or > 2 * 1024 * 1024)
+            {
+                errorCode = ProjectPackRunErrorCode.PlanInvalid;
+                summary = "Project pack plan file is empty or exceeds the size limit.";
+                return false;
+            }
+
+            using FileStream stream = new(
+                guard.FullPath,
+                FileMode.Open,
+                FileAccess.Read,
+                FileShare.Read,
+                64 * 1024,
+                FileOptions.SequentialScan);
+            using StreamReader reader = new(stream, Encoding.UTF8, detectEncodingFromByteOrderMarks: true);
+            json = reader.ReadToEnd();
+            info.Refresh();
+            if (!info.Exists || info.Length != stream.Length)
+            {
+                json = null;
+                errorCode = ProjectPackRunErrorCode.PlanInvalid;
+                summary = "Project pack plan changed while it was read.";
+                return false;
+            }
+
+            return true;
+        }
+        catch (ProjectPackContractException exception)
+        {
+            errorCode = exception.ErrorCode;
+            summary = exception.Message;
+            return false;
+        }
+        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or NotSupportedException)
+        {
+            errorCode = ProjectPackRunErrorCode.PlanInvalid;
+            summary = "Project pack plan could not be read safely.";
+            return false;
+        }
+    }
+
+    private static string GetProjectPackPolicyFingerprint(CliEnvironmentSnapshot snapshot, string packId) =>
+        ProjectPackRunPolicyFingerprint.Compute(
+            $"pack={packId};schema={ProjectPackSchema.CurrentVersion};approval={snapshot.Configuration.ApprovalMode}");
 
     private static bool IsJobStoreException(Exception exception)
     {

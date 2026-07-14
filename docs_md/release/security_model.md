@@ -243,7 +243,45 @@ requires every mandatory static tool identity to be available, but it is not exe
 Week 60/61 must revalidate the fingerprint, tool/input/output/policy state and obtain new approval before any
 process starts.
 
-The protocol-v1 fake driver is a known test fixture only. `succeeded`, file existence, metadata validity, or preview availability does not establish real-tool or business correctness; `partial-output` is always failure evidence. Real conversion, staging, TIFF verification, resume, artifact prune, and accept/reject remain Deferred.
+Week 60 adds managed run staging and checkpoint foundations as 0.5.0 source-only Preview. `packs run` requires an
+existing workspace-local `packs.plan` JSON file and `--dry-run`; omitting `--dry-run` fails before job or run state
+is created. The plan is bounded, schema checked, and projected into a sanitized managed copy so unknown fields,
+raw input content, approval material, and arbitrary tool arguments are not persisted.
+
+The managed root is `%USERPROFILE%\.caicli\runs\<run-id>` or the equivalent `CAICLI_USER_PROFILE` state root.
+Run ids are validated before path construction. Canonical containment and every existing path component are
+checked for reparse points before directory creation, reads, writes, staging, and managed artifact verification.
+Run/checkpoint writes use same-directory temporary files, durable flush, atomic rename, a short exclusive mutation
+lock, and optimistic revision checks. Missing, oversized, unknown-field, unsupported-schema, mismatched-id,
+mismatched-revision, mismatched-state, or mismatched-fingerprint records fail closed and are not repaired or
+guessed.
+
+Staging remains source-read-only. Only supported inventory entries are copied; unknown files are never copied.
+Each source is re-resolved through the workspace guard, rejected on a reparse chain, checked against the frozen
+relative path/size/SHA256, copied through bounded streaming IO to a generated flat name with create-new semantics,
+and hashed again at source and destination. The explicit workspace output remains no-overwrite and is not created
+by Week 60 dry-run.
+
+Pre-run and resume rebuild the deterministic Gerber/TIFF plan using current input, static tool identity, output,
+and policy state. Tool paths and approval grants are invocation-local. Checkpoints always serialize
+`approvalPersisted=false` and contain no approval token/override, raw argv, raw input, API key, or portable absolute
+tool path. `staged`/`ready` requires current approval before later execution; `verifying` requires complete managed
+artifact hashes and current approval for the inspect tool; `awaiting-acceptance` is limited to the later human
+decision. `running` or `interrupted` execute is never automatically replayed and returns an explicit restart
+requirement after revalidation.
+
+One ordinary job record indexes each CLI dry-run through `project-pack-run` and
+`project-pack-input-manifest` artifact pointers. The run record contains the job id and an optional validated queue
+id; it does not duplicate `taskReport`, and the job task-report field remains null. No new queue command family,
+worker, scheduler, concurrent writer, process lease/heartbeat, remote runner, API control route, or SSE path is
+introduced.
+
+The protocol-v1/in-process fake driver is a known test fixture only. It validates state events for success,
+failure, timeout, cancellation, partial output, and interruption, but the CLI dry-run does not execute it.
+`succeeded`, file existence, metadata validity, artifact hashes, or preview availability does not establish
+real-tool or business correctness; `partial-output` is always failure evidence. Real Gerbv/ImageMagick execution,
+TIFF verification, human accept/reject commands, managed artifact prune, and automatic execute restart remain
+Deferred.
 
 ## Changes View
 

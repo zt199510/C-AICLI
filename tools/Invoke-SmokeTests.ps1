@@ -465,6 +465,7 @@ Write-Output 'bugfix verification passed'
     New-Item -ItemType Directory -Path $gerberInput | Out-Null
     Set-Content -LiteralPath (Join-Path $gerberInput "board.GBR") -Value "SMOKE-GERBER-RAW-CONTENT" -Encoding UTF8
     Set-Content -LiteralPath (Join-Path $gerberInput "notes.txt") -Value "SMOKE-UNKNOWN-RAW-CONTENT" -Encoding UTF8
+    $gerberSourceHashBefore = (Get-FileHash -LiteralPath (Join-Path $gerberInput "board.GBR") -Algorithm SHA256).Hash
     $packsPlan = Invoke-CaiCli -Arguments @(
         "packs", "plan", "gerber-tiff",
         "--input", "gerber-input", "--output-dir", "gerber-output",
@@ -488,12 +489,98 @@ Write-Output 'bugfix verification passed'
     if (Test-Path -LiteralPath (Join-Path $userProfile ".caicli\jobs")) {
         throw "packs list/doctor/plan created persistent job state."
     }
-    if ((Test-Path -LiteralPath (Join-Path $workspace ".caicli\pack-runs")) -or
-        (Test-Path -LiteralPath (Join-Path $userProfile ".caicli\pack-runs"))) {
+    if ((Test-Path -LiteralPath (Join-Path $workspace ".caicli\runs")) -or
+        (Test-Path -LiteralPath (Join-Path $userProfile ".caicli\runs"))) {
         throw "packs list/doctor/plan created a persistent pack run directory."
     }
+
+    $packPlanPath = Join-Path $workspace "gerber-tiff-plan.json"
+    [System.IO.File]::WriteAllText($packPlanPath, $packsPlan.Output, [System.Text.UTF8Encoding]::new($false))
+    $packProcessesBefore = @(Get-Process -Name "caicli", "gerbv", "magick" -ErrorAction SilentlyContinue | Select-Object -ExpandProperty Id | Sort-Object)
+    $packsRun = Invoke-CaiCli -Arguments @(
+        "packs", "run", "gerber-tiff",
+        "--plan", "gerber-tiff-plan.json", "--dry-run",
+        "--output", "json", "--workspace", $workspace
+    )
+    Assert-ExitCode $packsRun 0 "packs run dry-run"
+    Assert-Contains $packsRun.Output '"type":"packs.run"' "packs run dry-run"
+    Assert-Contains $packsRun.Output '"state":"ready"' "packs run dry-run"
+    Assert-Contains $packsRun.Output '"approvalPersisted":false' "packs run approval persistence"
+    Assert-NotContains $packsRun.Output "SMOKE-GERBER-RAW-CONTENT" "packs run raw Gerber exclusion"
+    Assert-NotContains $packsRun.Output "SMOKE-UNKNOWN-RAW-CONTENT" "packs run unknown content exclusion"
+    $packsRunJson = $packsRun.Output | ConvertFrom-Json
+    $packRunId = [string]$packsRunJson.run.runId
+    $packJobId = [string]$packsRunJson.run.correlation.jobId
+    if ([string]::IsNullOrWhiteSpace($packRunId) -or [string]::IsNullOrWhiteSpace($packJobId)) {
+        throw "packs run dry-run did not return run/job correlation."
+    }
+
+    $packRunRoot = Join-Path $userProfile ".caicli\runs\$packRunId"
+    $packStaging = Join-Path $packRunRoot "staging"
+    $packInputManifest = Join-Path $packRunRoot "input-manifest.json"
+    $packArtifacts = Join-Path $packRunRoot "artifacts"
+    foreach ($requiredRunPath in @(
+        (Join-Path $packRunRoot "run.json"),
+        (Join-Path $packRunRoot "checkpoint.json"),
+        (Join-Path $packRunRoot "plan.json"),
+        $packInputManifest,
+        $packStaging,
+        (Join-Path $packRunRoot "working"),
+        (Join-Path $packRunRoot "logs"),
+        $packArtifacts,
+        (Join-Path $packRunRoot "reports")
+    )) {
+        if (-not (Test-Path -LiteralPath $requiredRunPath)) {
+            throw "packs run managed layout is missing $requiredRunPath."
+        }
+    }
+
+    $stagedFiles = @(Get-ChildItem -LiteralPath $packStaging -File)
+    if ($stagedFiles.Count -ne 1 -or $stagedFiles[0].Name -ne "0001-input-0001.gbr") {
+        throw "packs run staging did not contain exactly the safe-mapped inventory input."
+    }
+    $gerberSourceHashAfter = (Get-FileHash -LiteralPath (Join-Path $gerberInput "board.GBR") -Algorithm SHA256).Hash
+    $stagedHash = (Get-FileHash -LiteralPath $stagedFiles[0].FullName -Algorithm SHA256).Hash
+    if ($gerberSourceHashBefore -ne $gerberSourceHashAfter -or $gerberSourceHashBefore -ne $stagedHash) {
+        throw "packs run staging changed source input or failed post-copy hash verification."
+    }
+    $manifestText = [System.IO.File]::ReadAllText($packInputManifest)
+    Assert-NotContains $manifestText "SMOKE-GERBER-RAW-CONTENT" "packs run manifest raw Gerber exclusion"
+    Assert-NotContains $manifestText "notes.txt" "packs run manifest unknown exclusion"
+    if (@(Get-ChildItem -LiteralPath $packArtifacts -File).Count -ne 0) {
+        throw "packs run dry-run produced fake or real conversion artifacts."
+    }
+    if (@(Get-ChildItem -LiteralPath $packRunRoot -Recurse -File -Filter "*.tmp").Count -ne 0) {
+        throw "packs run left atomic temporary files behind."
+    }
+
+    $packJobPath = Join-Path $userProfile ".caicli\jobs\$packJobId.job.json"
+    if (-not (Test-Path -LiteralPath $packJobPath)) {
+        throw "packs run did not create the correlated job record."
+    }
+    $packJobText = [System.IO.File]::ReadAllText($packJobPath)
+    Assert-Contains $packJobText '"kind": "project-pack-run"' "packs run job artifact pointer"
+    Assert-Contains $packJobText '"taskReport": null' "packs run no duplicate task report"
+
+    $packsRunShow = Invoke-CaiCli -Arguments @("packs", "runs", "show", $packRunId, "--output", "json", "--workspace", $workspace)
+    Assert-ExitCode $packsRunShow 0 "packs runs show"
+    Assert-Contains $packsRunShow.Output '"state":"ready"' "packs runs show"
+    $packsResume = Invoke-CaiCli -Arguments @("packs", "resume", $packRunId, "--dry-run", "--output", "json", "--workspace", $workspace)
+    Assert-ExitCode $packsResume 0 "packs resume dry-run"
+    Assert-Contains $packsResume.Output '"eligible":true' "packs resume dry-run"
+    Assert-Contains $packsResume.Output '"requiresApproval":true' "packs resume reapproval"
+    $packsCancel = Invoke-CaiCli -Arguments @("packs", "cancel", $packRunId, "--output", "json", "--workspace", $workspace)
+    Assert-ExitCode $packsCancel 0 "packs cancel"
+    Assert-Contains $packsCancel.Output '"state":"canceled"' "packs cancel"
+    $packsResumeCanceled = Invoke-CaiCli -Arguments @("packs", "resume", $packRunId, "--dry-run", "--output", "json", "--workspace", $workspace)
+    Assert-ExitCode $packsResumeCanceled 1 "packs resume canceled"
+    Assert-Contains $packsResumeCanceled.Output '"eligible":false' "packs resume canceled"
+    $packProcessesAfter = @(Get-Process -Name "caicli", "gerbv", "magick" -ErrorAction SilentlyContinue | Select-Object -ExpandProperty Id | Sort-Object)
+    if (@(Compare-Object -ReferenceObject $packProcessesBefore -DifferenceObject $packProcessesAfter).Count -ne 0) {
+        throw "packs run dry-run changed the caicli/gerbv/magick process set."
+    }
     if ($gerberTiffToolSmokeOptIn) {
-        Write-Host "real Gerber/TIFF tool smoke remains Deferred in Week 59; no conversion was executed."
+        Write-Host "real Gerber/TIFF tool smoke remains Deferred until the Week 61 adapter is available; no conversion was executed."
     } else {
         Write-Host "real Gerber/TIFF tool smoke skipped: set CAICLI_GERBER_TIFF_TOOL_SMOKE=1 after the Week 61 adapter is available."
     }
