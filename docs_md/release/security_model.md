@@ -214,6 +214,18 @@ API control routes, queue workers, automation/pipeline execution, SSE, browser U
 - Skill safety can restrict tools, such as read-only mode or disabling shell/MCP. It cannot bypass approval, shell policy, workspace guard, disabled tools, or dangerous-command detection.
 - Skill metadata is recorded in text output, NDJSON, trace, session task reports, and markdown reports so the selected pack and boundary can be audited later.
 
+## Project Pack v1 Development Boundary
+
+Week 58 Project Pack source changes are a future 0.5.0 Preview boundary, not part of the accepted 0.4.0 artifact. A Project Pack is a deterministic domain-tool contract and is not a model-guided skill. Models, prompts, skills, pipeline roles, automation manifests, and workspace files cannot create or extend real executable names, arguments, cwd, environment, or output paths.
+
+`packs list` and default `packs doctor` are model-free, network-free static paths. Static doctor accepts only explicit tool bindings, checks a canonical regular file, executable filename allowlist, reparse-point chain, size, SHA256, and optional trusted hash, and does not start a process or request approval. Generic manifest/identity/plan/stage/artifact/diagnostic DTOs do not contain user-machine absolute tool paths or Gerber/TIFF-specific fields.
+
+`packs doctor --probe` is the only Week 58 process path. It rechecks identity before and after the probe, requests current `shell`-risk approval, and starts the exact canonical executable with pack-owned `ProcessStartInfo.ArgumentList` values. It does not invoke a shell. Probe cwd is a unique managed temp directory; inherited environment is cleared and replaced with a small allowlist; stdout/stderr, time, cancellation, and process-tree cleanup are bounded. Text/JSON output contains filename/hash/source and redacted bounded output, not the executable absolute path. Explicit trace records a bounded start/complete summary.
+
+Approval and trust are invocation-local and are not written to a checkpoint, manifest, job, session, or report. A later probe, resume, restart, or execution must revalidate executable/input/output/policy identity and request approval again. Hash mismatch blocks probe. The registry is compiled in and does not scan workspace plugins, download packs, execute repository hooks, or provide a marketplace.
+
+The protocol-v1 fake driver is a known test fixture only. `succeeded`, file existence, metadata validity, or preview availability does not establish real-tool or business correctness; `partial-output` is always failure evidence. Real conversion, staging, TIFF verification, resume, artifact prune, and accept/reject remain Deferred.
+
 ## Changes View
 
 `caicli changes` is a read-only local review entry point. It combines git status/diff stat, changed files, and optional latest session `taskReport` data.

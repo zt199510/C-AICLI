@@ -1,0 +1,14 @@
+{
+  "protocolVersion": 1,
+  "status": "failed",
+  "outputs": [],
+  "diagnostics": [
+    {
+      "code": "fake-conversion-failed",
+      "severity": "error",
+      "summary": "Fake driver returned a controlled failure.",
+      "dependencyId": "fake-driver",
+      "stageId": "convert"
+    }
+  ]
+}

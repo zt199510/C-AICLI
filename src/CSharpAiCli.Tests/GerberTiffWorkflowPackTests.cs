@@ -1,10 +1,26 @@
 using CSharpAiCli.Core;
 using CSharpAiCli.ProjectPacks.GerberTiff;
+using CSharpAiCli.ProjectPacks;
 
 namespace CSharpAiCli.Tests;
 
 public sealed class GerberTiffWorkflowPackTests
 {
+    [Fact]
+    public void Manifest_remains_contract_only_and_declares_no_machine_paths()
+    {
+        ProjectPackManifest manifest = new GerberTiffWorkflowPack().Manifest;
+
+        Assert.Equal("gerber-tiff", manifest.Id);
+        Assert.Equal(2, manifest.Dependencies.Count);
+        Assert.All(manifest.Dependencies, dependency => Assert.All(
+            dependency.ExecutableFileNames,
+            fileName => Assert.Equal(fileName, Path.GetFileName(fileName))));
+        Assert.All(
+            manifest.Stages.Where(stage => stage.DependencyId is not null),
+            stage => Assert.Equal(ProjectPackRestartPolicy.ManualReapproval, stage.RestartPolicy));
+    }
+
     [Fact]
     public void Status_report_reads_plan_document_fixture_without_hardcoded_path()
     {

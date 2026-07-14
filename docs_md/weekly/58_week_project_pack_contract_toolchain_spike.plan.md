@@ -1,6 +1,6 @@
 # 第 58 周 Project Pack Contract 与 Gerber/TIFF Toolchain Spike Implementation Plan
 
-状态：计划中
+状态：已完成（Toolchain Gate Passed；真实执行 Deferred）
 
 **Goal:** 冻结 0.5.0 Project Pack v1 边界，并用真实 Windows 工具、授权 fixture 和 TIFF inspection 候选完成技术/许可 spike，避免后续围绕不可用工具或 fake-only contract 开发。
 
@@ -95,19 +95,19 @@ caicli packs doctor gerber-tiff --tool-path "<configured-tool>" --probe
 
 ## 任务清单
 
-- [ ] Step 1: 记录 0.4.0 干净 release baseline 和本周起点验证。
-- [ ] Step 2: 收集实际 Gerber/TIFF 工具、参数、fixture 和验收规则。
-- [ ] Step 3: 至少完成一个真实工具的 Windows 命令行转换 spike。
-- [ ] Step 4: 完成 tool/fixture/TIFF library license 与分发结论。
-- [ ] Step 5: 编写 Project Pack 与 skill/pipeline/automation 的职责说明。
-- [ ] Step 6: 定义 Project Pack v1 manifest、dependency、plan、stage、artifact 和 diagnostic DTO。
-- [ ] Step 7: 定义 pack registry 与 `packs list/doctor` command contract。
-- [ ] Step 8: 定义 external tool identity、probe、trust/approval 和 hash-change 语义。
-- [ ] Step 9: 定义 fake tool driver protocol 和测试 fixture 目录布局。
-- [ ] Step 10: 增加 contract/registry/doctor/fake-driver tests。
-- [ ] Step 11: 更新 capability/known-limitations 草稿，保持 real execution 未 Accepted。
-- [ ] Step 12: 运行 build/test。
-- [ ] Step 13: 创建 `58_week_review.md`，明确 Gate 通过/阻塞结论和 Week 59 输入。
+- [x] Step 1: 记录 0.4.0 干净 release baseline 和本周起点验证。
+- [x] Step 2: 收集实际 Gerber/TIFF 工具、参数、fixture 和验收规则。
+- [x] Step 3: 至少完成一个真实工具的 Windows 命令行转换 spike。
+- [x] Step 4: 完成 tool/fixture/TIFF library license 与分发结论。
+- [x] Step 5: 编写 Project Pack 与 skill/pipeline/automation 的职责说明。
+- [x] Step 6: 定义 Project Pack v1 manifest、dependency、plan、stage、artifact 和 diagnostic DTO。
+- [x] Step 7: 定义 pack registry 与 `packs list/doctor` command contract。
+- [x] Step 8: 定义 external tool identity、probe、trust/approval 和 hash-change 语义。
+- [x] Step 9: 定义 fake tool driver protocol 和测试 fixture 目录布局。
+- [x] Step 10: 增加 contract/registry/doctor/fake-driver tests。
+- [x] Step 11: 更新 capability/known-limitations 草稿，保持 real execution 未 Accepted。
+- [x] Step 12: 运行 build/test。
+- [x] Step 13: 创建 `58_week_review.md`，明确 Gate 通过/阻塞结论和 Week 59 输入。
 
 ## 验收标准
 

@@ -1,5 +1,16 @@
 # C# AI CLI Capability Status
 
+## 0.5.0 Development Draft
+
+Week 58 source changes are not part of the accepted `0.4.0` package. The status below is a development boundary for the future `0.5.0` line, not a release acceptance decision.
+
+| Capability | Status | Notes |
+|---|---|---|
+| Project Pack v1 contract and registry | Preview (source only) | Generic manifest/capability/dependency/tool identity/plan/stage/artifact/diagnostic contracts and a compiled-in registry are implemented with contract tests. Generic DTOs contain no Gerber/TIFF-specific fields or user-machine absolute paths. |
+| `packs list` and static `packs doctor` | Preview (source only) | Text/JSON list and doctor paths are model-free and network-free. Static doctor checks explicit tool bindings, canonical regular-file identity, reparse points, size, SHA256, and trust status without starting a process. |
+| Explicit `packs doctor --probe` | Preview (source only) | Fixed typed version probes run only after static identity checks and current `shell`-risk approval. Probe cwd/env/output/time are bounded, cancellation/timeout clean the process tree, and approval/trust are not persisted. |
+| Gerber/TIFF real workflow execution | Deferred | Gerbv/ImageMagick/LibTIFF and a CC0 fixture passed the Week 58 technical/license spike, but C-AICLI does not implement real run, staging, TIFF verification, resume, artifact lifecycle, accept/reject, or real-tool smoke yet. |
+
 ## 0.4.0 Release Capabilities
 
 Status meaning:
@@ -57,7 +68,7 @@ Status meaning:
 |---|---|---|
 | Microsoft Agent Framework real backend | Deferred | Adapter project and tool bridge exist; real framework package/runtime is not enabled. |
 | MCP remote/http transport | Deferred | Stdio MCP v1 is available for user-configured stdio servers in registry/tool paths and for explicit `mcp doctor` diagnostics; remote/http transport is not enabled. |
-| Gerber/TIFF real workflow execution | Deferred | Project pack status/profile MVP exists; real toolchain execution is not enabled. |
+| Gerber/TIFF real workflow execution | Deferred | The accepted 0.4.0 package contains only the earlier project pack status/profile MVP. Week 58 source-only contract/doctor work does not enable conversion in this release. |
 | Dotnet tool package | Deferred | Windows self-contained package is the current release artifact. |
 | Remote skill marketplace and user-level skill distribution | Deferred | Only built-in packs and workspace-local `.caicli/skills` JSON manifests are supported. Remote marketplaces, automatic updates, signing/trust chains, YAML manifests, user-level skill directories, and team knowledge distribution are not enabled. |
 | Background automation, CI providers, API control/SSE | Deferred | Local automation validation/dry-run/manual trigger, provider-neutral CI artifacts, and a read-only localhost API Preview are available. Automatic schedule execution, Windows Task Scheduler registration, GitHub/GitLab/Azure DevOps API integration, PR comments, uploads, API control routes, SSE, authentication/TLS, service installation, concurrent workers, webhooks, remote binds/runners, and remote control are not enabled. |
@@ -65,4 +76,4 @@ Status meaning:
 
 ## Release Decision
 
-Release `0.4.0` is the current accepted package and is documented by `final_acceptance_0.4.0.md`. The Accepted and Solidified rows above are included in the release. The local API/daemon remains Preview and default-off. Deferred capabilities are not current behavior and must not be presented as implied by local automation, CI artifacts, or the read-only Preview.
+Release `0.4.0` is the current accepted package and is documented by `final_acceptance_0.4.0.md`. Only the Accepted and Solidified rows in the 0.4.0 section are included in that release. The local API/daemon remains Preview and default-off. The 0.5.0 development draft is source-only and does not change the 0.4.0 release decision. Deferred capabilities are not current behavior and must not be presented as implied by local automation, CI artifacts, Project Pack contracts, or the read-only Preview.

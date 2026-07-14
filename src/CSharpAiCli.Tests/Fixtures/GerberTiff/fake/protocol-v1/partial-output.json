@@ -1,0 +1,20 @@
+{
+  "protocolVersion": 1,
+  "status": "partial-output",
+  "outputs": [
+    {
+      "id": "partial-evidence",
+      "size": 128,
+      "sha256": "BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB"
+    }
+  ],
+  "diagnostics": [
+    {
+      "code": "fake-partial-output",
+      "severity": "error",
+      "summary": "Fake driver retained bounded partial-output evidence.",
+      "dependencyId": "fake-driver",
+      "stageId": "convert"
+    }
+  ]
+}

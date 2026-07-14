@@ -5,6 +5,7 @@
 - Version `0.4.0` is the current accepted local Windows release. Week 50-56 local engineering automation capabilities are part of this release with the status boundaries documented below.
 - The primary supported artifact is the `win-x64` self-contained single-file package.
 - Dotnet tool packaging is not part of the `0.4.0` release package.
+- Week 58 Project Pack contracts and `packs list/doctor` are 0.5.0 source-only Preview work. They are not included in the accepted 0.4.0 artifact and do not make real Gerber/TIFF execution Accepted.
 
 ## Model And Agent Behavior
 
@@ -52,6 +53,11 @@
 - `mcp doctor` can explicitly diagnose configured stdio servers, including workspace config, with a real initialize handshake. Disabled servers are not started.
 - Remote/http MCP transport remains Deferred.
 - The Gerber/TIFF project pack records status/profile behavior, but real Gerber/TIFF conversion execution is Deferred.
+- Week 58 adds a generic Project Pack v1 manifest/registry contract plus `packs list` and static/approval-gated `packs doctor` source paths. Static doctor does not launch tools. `--probe` runs only fixed pack-owned version arguments after current approval and does not persist approval or trust.
+- Project Pack manifests and portable reports do not contain user-machine absolute tool paths. Tool executables are not downloaded from a workspace or network, and the Week 58 Gerbv/ImageMagick binaries used for the spike are not stored in the repository or release.
+- Gerbv `v2.13.0` can return exit code `0` and create a small PNG even when it reports `Unknown file type` and `loaded 0` on stderr. Exit code, file existence, valid metadata, or a preview image alone must not be treated as successful conversion or business verification.
+- The CC0 minimal fixture and its expected PNG/TIFF metadata demonstrate toolchain feasibility only. C-AICLI still has no real `packs run`, input discovery, staging/checkpoint, TIFF verification, safe resume, managed artifact prune, or human accept/reject implementation.
+- Default tests use the protocol-v1 fake driver and do not require Gerbv, ImageMagick, LibTIFF, a model, credentials, network, or real manufacturing data. Fake success/metadata/preview is never real-tool acceptance. Future real-tool smoke remains explicit opt-in through `CAICLI_GERBER_TIFF_TOOL_SMOKE=1` plus caller-provided tool paths.
 
 ## Safety Boundaries
 

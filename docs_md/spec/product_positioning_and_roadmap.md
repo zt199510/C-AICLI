@@ -171,7 +171,7 @@ C-AICLI 的价值在于可控性和工程化：
 
 ### 0.5.0：垂直工程工作流与 Gerber/TIFF v1
 
-状态：已完成 Week 58-65 规划，尚未开始实现。
+状态：Week 58 Project Pack/toolchain Gate 已完成；Week 59-65 待执行，真实 Gerber/TIFF run 仍 Deferred。
 
 目标：第一次用真实 Gerber/TIFF 工程场景验证 0.4.0 的 queue、job、pipeline、artifact、安全和报告底座，形成“发现输入 -> 诊断工具 -> 计划 -> 审批执行 -> TIFF 验证 -> 人工验收 -> artifact 清理”的本地可审计闭环。
 

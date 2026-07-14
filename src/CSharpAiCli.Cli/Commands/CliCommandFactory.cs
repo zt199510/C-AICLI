@@ -5,6 +5,8 @@ using System.Text;
 using System.Text.Json;
 using System.Text.Json.Nodes;
 using CSharpAiCli.Core;
+using CSharpAiCli.ProjectPacks;
+using CSharpAiCli.ProjectPacks.GerberTiff;
 
 namespace CSharpAiCli.Cli;
 
@@ -275,6 +277,7 @@ public static class CliCommandFactory
 
         Func<string?, CliEnvironmentSnapshot> workspaceSnapshotProvider =
             workspacePath => snapshotProvider(workspacePath, null);
+        ProjectPackRegistry projectPackRegistry = new([new GerberTiffWorkflowPack()]);
 
         RootCommand rootCommand = new($"{ProductInfo.CommandName} - {ProductInfo.Description}");
         Option<string> workspaceOption = new("--workspace")
@@ -1643,6 +1646,170 @@ public static class CliCommandFactory
         });
         workflowCommand.Subcommands.Add(workflowListCommand);
         workflowCommand.Subcommands.Add(workflowValidateCommand);
+
+        Command packsCommand = new("packs", "Inspect deterministic project pack contracts and tool dependencies.");
+        Command packsListCommand = new("list", "List built-in project pack contracts without running tools.");
+        Option<bool> packsListJsonOption = new("--json")
+        {
+            Description = "Write a single JSON project pack list object.",
+        };
+        Option<string> packsListOutputOption = new("--output")
+        {
+            Description = "Select text or json output.",
+        };
+        packsListOutputOption.DefaultValueFactory = _ => "text";
+        AddTextJsonOutputValidator(packsListOutputOption);
+        packsListCommand.Options.Add(packsListJsonOption);
+        packsListCommand.Options.Add(packsListOutputOption);
+        packsListCommand.SetAction(parseResult =>
+        {
+            string? workspacePath = parseResult.GetValue(workspaceOption);
+            bool jsonRequested = parseResult.GetValue(packsListJsonOption);
+            string outputMode = parseResult.GetValue(packsListOutputOption) ?? "text";
+            bool jsonOutput = IsJsonOutputRequested(jsonRequested, outputMode);
+            CliEnvironmentSnapshot snapshot = workspaceSnapshotProvider(workspacePath);
+            WriteVerboseDiagnostics(parseResult, "packs list", snapshot, humanReadableOutput: !jsonOutput);
+            output.WriteLine(jsonOutput
+                ? ProjectPackReportRenderer.RenderListJson(projectPackRegistry)
+                : ProjectPackReportRenderer.RenderListText(projectPackRegistry));
+            return 0;
+        });
+
+        Command packsDoctorCommand = new("doctor", "Statically inspect project pack tools; --probe requires approval before execution.");
+        Argument<string> packsDoctorPackArgument = new("pack")
+        {
+            Description = "Registered project pack id.",
+        };
+        packsDoctorPackArgument.Validators.Add(result =>
+        {
+            string packId = result.GetValueOrDefault<string>() ?? string.Empty;
+            if (!projectPackRegistry.TryGet(packId, out _))
+            {
+                result.AddError($"Unknown project pack '{packId}'.");
+            }
+        });
+        Option<string[]> packsDoctorToolPathOption = new("--tool-path")
+        {
+            Description = "Configure [dependency=]absolute-path. A single bare path selects the primary dependency.",
+            Arity = ArgumentArity.OneOrMore,
+            AllowMultipleArgumentsPerToken = true,
+        };
+        Option<bool> packsDoctorProbeOption = new("--probe")
+        {
+            Description = "Run fixed version probes after static identity checks and explicit approval.",
+        };
+        Option<bool> packsDoctorApproveOption = new("--approve")
+        {
+            Description = "Approve this invocation's fixed external tool probes.",
+        };
+        Option<string> packsDoctorApprovalOption = new("--approval")
+        {
+            Description = "Override approval mode for this invocation only.",
+        };
+        Option<bool> packsDoctorJsonOption = new("--json")
+        {
+            Description = "Write a single JSON project pack doctor object.",
+        };
+        Option<string> packsDoctorOutputOption = new("--output")
+        {
+            Description = "Select text or json output.",
+        };
+        packsDoctorOutputOption.DefaultValueFactory = _ => "text";
+        AddApprovalModeValidator(packsDoctorApprovalOption);
+        AddTextJsonOutputValidator(packsDoctorOutputOption);
+        packsDoctorCommand.Arguments.Add(packsDoctorPackArgument);
+        packsDoctorCommand.Options.Add(packsDoctorToolPathOption);
+        packsDoctorCommand.Options.Add(packsDoctorProbeOption);
+        packsDoctorCommand.Options.Add(packsDoctorApproveOption);
+        packsDoctorCommand.Options.Add(packsDoctorApprovalOption);
+        packsDoctorCommand.Options.Add(packsDoctorJsonOption);
+        packsDoctorCommand.Options.Add(packsDoctorOutputOption);
+        packsDoctorCommand.SetAction(parseResult =>
+        {
+            string? workspacePath = parseResult.GetValue(workspaceOption);
+            string packId = parseResult.GetValue(packsDoctorPackArgument) ?? string.Empty;
+            string[] toolPathValues = parseResult.GetValue(packsDoctorToolPathOption) ?? [];
+            bool probe = parseResult.GetValue(packsDoctorProbeOption);
+            bool approve = parseResult.GetValue(packsDoctorApproveOption);
+            string? approvalModeValue = parseResult.GetValue(packsDoctorApprovalOption);
+            bool jsonRequested = parseResult.GetValue(packsDoctorJsonOption);
+            string outputMode = parseResult.GetValue(packsDoctorOutputOption) ?? "text";
+            bool jsonOutput = IsJsonOutputRequested(jsonRequested, outputMode);
+            CliEnvironmentSnapshot snapshot = workspaceSnapshotProvider(workspacePath);
+            WriteVerboseDiagnostics(parseResult, "packs doctor", snapshot, humanReadableOutput: !jsonOutput);
+
+            if (!projectPackRegistry.TryGet(packId, out IProjectPack? pack) || pack is null)
+            {
+                output.WriteLine(jsonOutput
+                    ? JsonSerializer.Serialize(new
+                    {
+                        type = "packs.doctor",
+                        schemaVersion = ProjectPackSchema.CurrentVersion,
+                        pack = packId,
+                        status = "failed",
+                        errorCode = "pack-not-found",
+                        summary = "Project pack is not registered."
+                    }, JsonOptions)
+                    : "Project pack is not registered.");
+                return 1;
+            }
+
+            if (!TryParseProjectPackToolPaths(pack.Manifest, toolPathValues, out Dictionary<string, string> toolPaths, out string? bindingError))
+            {
+                output.WriteLine(jsonOutput
+                    ? JsonSerializer.Serialize(new
+                    {
+                        type = "packs.doctor",
+                        schemaVersion = ProjectPackSchema.CurrentVersion,
+                        pack = packId,
+                        status = "failed",
+                        errorCode = "pack-tool-binding-invalid",
+                        summary = bindingError
+                    }, JsonOptions)
+                    : bindingError);
+                return 2;
+            }
+
+            ApprovalMode? cliApprovalMode = GetApprovalOverride(
+                approvalModeValue,
+                parseResult.GetResult(packsDoctorApprovalOption),
+                approve);
+            IApprovalPolicy approvalPolicy = ApprovalPolicyResolver.Resolve(
+                snapshot.Configuration.ApprovalMode,
+                cliApprovalMode);
+            DiagnosticContext? traceContext = CreateTraceContext(parseResult, snapshot);
+            TryWriteTraceCommandEvent(
+                "packs doctor",
+                snapshot,
+                traceContext,
+                "command.start",
+                sequence: 1,
+                "started",
+                summary: probe ? "Project pack doctor probe requested." : "Project pack static doctor requested.");
+
+            ProjectPackDoctorReport report = new ProjectPackDoctorService().Diagnose(
+                pack,
+                toolPaths,
+                trustedHashes: null,
+                probe,
+                approvalPolicy,
+                CancellationToken.None);
+            output.WriteLine(jsonOutput
+                ? ProjectPackReportRenderer.RenderDoctorJson(report)
+                : ProjectPackReportRenderer.RenderDoctorText(report));
+            TryWriteTraceCommandEvent(
+                "packs doctor",
+                snapshot,
+                traceContext,
+                "command.complete",
+                sequence: 2,
+                report.Succeeded ? "success" : "failure",
+                summary: $"Project pack doctor completed with status {report.Status}.",
+                errorCode: report.Succeeded ? null : "pack-doctor-failed");
+            return report.Succeeded ? 0 : 1;
+        });
+        packsCommand.Subcommands.Add(packsListCommand);
+        packsCommand.Subcommands.Add(packsDoctorCommand);
 
         Command skillsCommand = new("skills", "List and run local skill workflow packs.");
         Command skillsListCommand = new("list", "List built-in and workspace-local skill packs.");
@@ -4293,6 +4460,7 @@ public static class CliCommandFactory
         rootCommand.Subcommands.Add(configCommand);
         rootCommand.Subcommands.Add(mcpCommand);
         rootCommand.Subcommands.Add(workflowCommand);
+        rootCommand.Subcommands.Add(packsCommand);
         rootCommand.Subcommands.Add(skillsCommand);
         rootCommand.Subcommands.Add(toolsCommand);
         rootCommand.Subcommands.Add(logsCommand);
@@ -4949,6 +5117,65 @@ public static class CliCommandFactory
                 result.AddError($"Invalid value for {optionName}. Value must be greater than zero.");
             }
         });
+    }
+
+    private static bool TryParseProjectPackToolPaths(
+        ProjectPackManifest manifest,
+        IReadOnlyList<string> values,
+        out Dictionary<string, string> toolPaths,
+        out string? error)
+    {
+        toolPaths = new Dictionary<string, string>(StringComparer.Ordinal);
+        error = null;
+        string? primaryDependencyId = manifest.Dependencies.FirstOrDefault()?.Id;
+        foreach (string value in values)
+        {
+            if (string.IsNullOrWhiteSpace(value))
+            {
+                error = "Tool path binding cannot be empty.";
+                return false;
+            }
+
+            string dependencyId;
+            string path;
+            int separator = value.IndexOf('=');
+            if (separator > 0)
+            {
+                dependencyId = value[..separator];
+                path = value[(separator + 1)..];
+            }
+            else
+            {
+                if (primaryDependencyId is null || toolPaths.ContainsKey(primaryDependencyId))
+                {
+                    error = "Only one bare --tool-path value is allowed; use dependency=path for additional tools.";
+                    return false;
+                }
+
+                dependencyId = primaryDependencyId;
+                path = value;
+            }
+
+            if (!manifest.Dependencies.Any(dependency => string.Equals(dependency.Id, dependencyId, StringComparison.Ordinal)))
+            {
+                error = $"Unknown project pack dependency '{DiagnosticSecretRedactor.Redact(dependencyId)}'.";
+                return false;
+            }
+
+            if (string.IsNullOrWhiteSpace(path))
+            {
+                error = $"Tool path for dependency '{dependencyId}' cannot be empty.";
+                return false;
+            }
+
+            if (!toolPaths.TryAdd(dependencyId, path))
+            {
+                error = $"Tool path for dependency '{dependencyId}' was specified more than once.";
+                return false;
+            }
+        }
+
+        return true;
     }
 
     private static void AddTextJsonOutputValidator(Option<string> option)

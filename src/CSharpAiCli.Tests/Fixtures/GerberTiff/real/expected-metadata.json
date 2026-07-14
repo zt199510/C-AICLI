@@ -1,0 +1,27 @@
+{
+  "schemaVersion": 1,
+  "fixture": "minimal-square.gbr",
+  "fixtureSha256": "D2FBD6E2393EFC0513915C3B5B2E7C24C80AE90A2102BB75E9CA873B31010D54",
+  "toolchain": {
+    "gerbvVersion": "v2.13.0-dirty",
+    "imageMagickVersion": "7.1.2-27 Q8 x64"
+  },
+  "png": {
+    "width": 126,
+    "height": 126,
+    "pixelFormat": "rgb24",
+    "sha256": "850A2B4A555F2AE4060E6F541D8CE7E73D959C903000F7987C75D3DD4146D747"
+  },
+  "tiff": {
+    "pages": 1,
+    "width": 126,
+    "height": 126,
+    "bitsPerSample": 8,
+    "samplesPerPixel": 3,
+    "photometric": "rgb",
+    "compression": "lzw",
+    "dpiX": 300,
+    "dpiY": 300,
+    "sha256": "FDDFA21D29EF870D94EC953ADF757BD61585957E1519D79BB2480AFF81C89823"
+  }
+}

@@ -1,0 +1,12 @@
+{
+  "protocolVersion": 1,
+  "status": "succeeded",
+  "outputs": [
+    {
+      "id": "primary-output",
+      "size": 1024,
+      "sha256": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
+    }
+  ],
+  "diagnostics": []
+}
