@@ -146,7 +146,7 @@ C-AICLI 的价值在于可控性和工程化：
 
 ### 0.4.0：工程自动化平台化
 
-状态：Week 50-56 的本地 job/queue/pipeline/automation/CI artifact 已实现并完成 hardening；只读 localhost daemon/API 保持 Preview；Week 57 仅进行 release acceptance、版本元数据与 deterministic package 验收。
+状态：已完成，已在 2026-07-14 验收为当前 release；只读 localhost daemon/API 保持 Preview。
 
 目标：在真实 agent 闭环稳定后，引入更强的任务编排。
 
@@ -161,6 +161,13 @@ C-AICLI 的价值在于可控性和工程化：
 - 更完整的 task queue、job history 和 artifact 管理。
 
 0.4.0 的优先级应是本地可审计任务编排，而不是远程平台化。job history、artifact index、task queue、multi-role pipeline 和 CI/report 输出应先在 CLI 与本地文件边界内稳定；daemon/API/SSE 只能作为可选 preview 或后续阶段，不能绕过 approval、workspace guard、secret redaction、trace/log、session/report 或 smoke。
+
+完成确认：
+
+- 版本元数据已更新到 `0.4.0`，当前 release artifact 为 `artifacts/release/caicli-0.4.0-win-x64.zip`。
+- `docs_md/release/final_acceptance_0.4.0.md` 记录 0.4.0 final acceptance、deterministic zip size/SHA256、packaged smoke 和 Accepted/Preview/Deferred 边界。
+- 本地 job history/artifact index、手动 task queue、固定顺序 multi-role pipeline、workspace-local automation validate/plan/dry-run/manual 和 provider-neutral CI artifacts 为 Accepted；default-off、IPv4 loopback-only、read-only daemon/API 为 Preview。
+- Background scheduler、concurrent/remote worker、provider API、API control/SSE、authentication/TLS、remote bind、job/artifact retention/delete 和真实 Gerber/TIFF 执行继续 Deferred。
 
 ### 0.5.0+：垂直行业能力和团队化
 

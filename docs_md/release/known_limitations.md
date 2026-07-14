@@ -2,9 +2,9 @@
 
 ## Release Scope
 
-- Version `0.3.3` is the last accepted local Windows release. Week 50-56 capabilities are implemented on the `0.4.0` candidate line and are not retroactively part of the `0.3.3` artifact.
-- The primary supported artifact remains the `win-x64` self-contained single-file package; Week 57 owns the final `0.4.0` package decision.
-- Dotnet tool packaging is not part of the `0.3.3` release package.
+- Version `0.4.0` is the current accepted local Windows release. Week 50-56 local engineering automation capabilities are part of this release with the status boundaries documented below.
+- The primary supported artifact is the `win-x64` self-contained single-file package.
+- Dotnet tool packaging is not part of the `0.4.0` release package.
 
 ## Model And Agent Behavior
 

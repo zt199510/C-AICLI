@@ -1,10 +1,10 @@
 # C# AI CLI Capability Status
 
-## 0.4.0 Candidate Capabilities
+## 0.4.0 Release Capabilities
 
 Status meaning:
 
-- `Accepted`: implemented on the 0.4.0 development line with local contract, tests, and credential-free smoke coverage; final package acceptance remains Week 57.
+- `Accepted`: included in the accepted 0.4.0 release with local contract, tests, and credential-free packaged smoke coverage.
 - `Solidified`: an Accepted capability inherited from the previously accepted 0.3.x runtime baseline with broader regression history.
 - `Preview`: implemented only behind an explicit opt-in boundary and not part of the default execution surface.
 - `Deferred`: not available as current behavior and must not be inferred from an Accepted or Preview entry.
@@ -63,6 +63,6 @@ Status meaning:
 | Background automation, CI providers, API control/SSE | Deferred | Local automation validation/dry-run/manual trigger, provider-neutral CI artifacts, and a read-only localhost API Preview are available. Automatic schedule execution, Windows Task Scheduler registration, GitHub/GitLab/Azure DevOps API integration, PR comments, uploads, API control routes, SSE, authentication/TLS, service installation, concurrent workers, webhooks, remote binds/runners, and remote control are not enabled. |
 | Interactive approval UI | Deferred | Non-interactive approval modes are available. Interactive prompts, richer approval UI, and automatic sandbox retry escalation are not enabled. |
 
-## Candidate Decision
+## Release Decision
 
-Release `0.3.3` remains the last accepted package and is documented by `final_acceptance_0.3.3.md`. The Accepted and Solidified rows above describe the implemented `0.4.0` candidate after Week 56 hardening; they do not retroactively expand the `0.3.3` artifact. The local API/daemon remains Preview and default-off. Deferred capabilities are not current behavior and must not be presented as implied by local automation, CI artifacts, or the read-only Preview. Week 57 owns version metadata, deterministic package, packaged smoke, and final `0.4.0` release acceptance.
+Release `0.4.0` is the current accepted package and is documented by `final_acceptance_0.4.0.md`. The Accepted and Solidified rows above are included in the release. The local API/daemon remains Preview and default-off. Deferred capabilities are not current behavior and must not be presented as implied by local automation, CI artifacts, or the read-only Preview.

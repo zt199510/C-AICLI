@@ -78,7 +78,7 @@ job record -> task plan -> controlled execution -> artifact/report -> review/che
 | 54 | `54_week_ci_pr_artifacts.plan.md` | 已验收 | 输出 CI/PR 友好的 JSON/markdown/check summary artifacts，并提供 deterministic exit-code policy。 | CI smoke 可在无模型凭据下验证 schema；report/check 不写出 raw secrets。 |
 | 55 | `55_week_local_api_daemon_preview.plan.md` | 已验收 | 实现默认关闭、localhost-only 的只读 daemon/HTTP API Preview，复用 job/queue store 与 renderer；SSE/control 保持 Deferred。 | preview 不影响默认 CLI；API 不扩大工具权限；remote bind 稳定拒绝；docs 明确 Deferred/Preview。 |
 | 56 | `56_week_automation_security_smoke_docs_hardening.plan.md` | 已验收 | 对 job/queue/pipeline/automation/API preview 做安全、观测、smoke 和文档收口。 | high-risk boundary、redaction、storage cleanup、smoke/docs 均回归；不新增大功能。 |
-| 57 | `57_week_cli_0_4_release_acceptance.plan.md` | 计划中 | 0.4.0 发布验收、版本元数据、CHANGELOG、capability status、release zip。 | build/test/smoke 通过；0.4.0 zip size/SHA256 记录；Deferred 边界准确。 |
+| 57 | `57_week_cli_0_4_release_acceptance.plan.md` | 已验收 | 0.4.0 发布验收、版本元数据、CHANGELOG、capability status、release zip。 | build/test/smoke 通过；0.4.0 zip size/SHA256 记录；Deferred 边界准确。 |
 
 ## 关键设计原则
 

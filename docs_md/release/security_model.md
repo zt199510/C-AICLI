@@ -265,7 +265,7 @@ Users can disable tools through `disabledTools` in user or workspace config. Dis
 - Remote/http MCP transport remains Deferred.
 - Gerber/TIFF project pack status/profile support exists, but real Gerber execution is Deferred.
 
-These deferred capabilities remain outside the `0.4.0` candidate boundary and do not alter the accepted `0.3.3` release decision.
+These deferred capabilities remain outside the accepted `0.4.0` release boundary.
 
 ## Current Limitations
 
@@ -274,4 +274,4 @@ These deferred capabilities remain outside the `0.4.0` candidate boundary and do
 - Dangerous command detection and shell policy use conservative text and pattern boundaries, not full shell parsing or semantic proof.
 - Allowlist entries are command text, not exact argv arrays. Unusual quoted arguments containing metacharacters may be conservatively blocked.
 - The release is Windows-focused.
-- Dotnet tool packaging is not enabled for the `0.3.3` package.
+- Dotnet tool packaging is not enabled for the `0.4.0` package.

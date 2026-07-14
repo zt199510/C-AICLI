@@ -5,7 +5,7 @@
 Run `doctor` first:
 
 ```powershell
-artifacts\release\caicli-0.3.3-win-x64\caicli.exe doctor --verbose
+artifacts\release\caicli-0.4.0-win-x64\caicli.exe doctor --verbose
 ```
 
 Common model setup failures:
@@ -22,7 +22,7 @@ Use `models --workspace .` to inspect the effective model and base URL without m
 For a safe real agent check, start with a bounded read-only task:
 
 ```powershell
-artifacts\release\caicli-0.3.3-win-x64\caicli.exe exec --trace --workspace . --approval never --max-turns 2 --max-tool-calls 2 --timeout-seconds 60 "Use workspace.read_text to read README.md, then summarize it in one sentence. Do not modify files or run shell commands."
+artifacts\release\caicli-0.4.0-win-x64\caicli.exe exec --trace --workspace . --approval never --max-turns 2 --max-tool-calls 2 --timeout-seconds 60 "Use workspace.read_text to read README.md, then summarize it in one sentence. Do not modify files or run shell commands."
 ```
 
 If the task stops early, inspect:
@@ -40,8 +40,8 @@ Loop-limit failures usually mean the prompt needs a smaller task, or `--max-turn
 Use `@file:<path>` and `@folder:<path>` only with `exec`:
 
 ```powershell
-artifacts\release\caicli-0.3.3-win-x64\caicli.exe exec --workspace . "Inspect @file:README.md"
-artifacts\release\caicli-0.3.3-win-x64\caicli.exe exec --workspace . "Review @folder:src/CSharpAiCli.Core/Agents"
+artifacts\release\caicli-0.4.0-win-x64\caicli.exe exec --workspace . "Inspect @file:README.md"
+artifacts\release\caicli-0.4.0-win-x64\caicli.exe exec --workspace . "Review @folder:src/CSharpAiCli.Core/Agents"
 ```
 
 Common reference failures:
@@ -58,14 +58,14 @@ Reference failures happen before model execution. They do not call the model, ru
 List available packs before running one:
 
 ```powershell
-artifacts\release\caicli-0.3.3-win-x64\caicli.exe skills list --workspace .
-artifacts\release\caicli-0.3.3-win-x64\caicli.exe skills list --output json --workspace .
+artifacts\release\caicli-0.4.0-win-x64\caicli.exe skills list --workspace .
+artifacts\release\caicli-0.4.0-win-x64\caicli.exe skills list --output json --workspace .
 ```
 
 Use dry-run to inspect the expanded plan without model or tool execution:
 
 ```powershell
-artifacts\release\caicli-0.3.3-win-x64\caicli.exe skills run review-only --dry-run --workspace . -- "@file:README.md"
+artifacts\release\caicli-0.4.0-win-x64\caicli.exe skills run review-only --dry-run --workspace . -- "@file:README.md"
 ```
 
 Common skill failures:
@@ -85,11 +85,11 @@ Passing `--record-job` is an explicit persistence request. For a dry-run it writ
 Job recording is opt-in. Record an execution or a skill dry-run, then list the local user-level store before looking up an individual job:
 
 ```powershell
-artifacts\release\caicli-0.3.3-win-x64\caicli.exe exec --record-job --job-name smoke --workspace . "Summarize @file:README.md"
-artifacts\release\caicli-0.3.3-win-x64\caicli.exe skills run review-only --record-job --dry-run --workspace . -- "@file:README.md"
-artifacts\release\caicli-0.3.3-win-x64\caicli.exe jobs list --output json --workspace .
-artifacts\release\caicli-0.3.3-win-x64\caicli.exe jobs show <job-id> --output json --workspace .
-artifacts\release\caicli-0.3.3-win-x64\caicli.exe jobs export <job-id> --format markdown --workspace .
+artifacts\release\caicli-0.4.0-win-x64\caicli.exe exec --record-job --job-name smoke --workspace . "Summarize @file:README.md"
+artifacts\release\caicli-0.4.0-win-x64\caicli.exe skills run review-only --record-job --dry-run --workspace . -- "@file:README.md"
+artifacts\release\caicli-0.4.0-win-x64\caicli.exe jobs list --output json --workspace .
+artifacts\release\caicli-0.4.0-win-x64\caicli.exe jobs show <job-id> --output json --workspace .
+artifacts\release\caicli-0.4.0-win-x64\caicli.exe jobs export <job-id> --format markdown --workspace .
 ```
 
 Common job failures and diagnostics:
@@ -106,9 +106,9 @@ The default directory is `%USERPROFILE%\.caicli\jobs`. `CAICLI_USER_PROFILE` sel
 Inspect the user-level queue before running an item:
 
 ```powershell
-artifacts\release\caicli-0.3.3-win-x64\caicli.exe queue list --output json --workspace .
-artifacts\release\caicli-0.3.3-win-x64\caicli.exe queue show <queue-id> --output json --workspace .
-artifacts\release\caicli-0.3.3-win-x64\caicli.exe queue run <queue-id> --workspace .
+artifacts\release\caicli-0.4.0-win-x64\caicli.exe queue list --output json --workspace .
+artifacts\release\caicli-0.4.0-win-x64\caicli.exe queue show <queue-id> --output json --workspace .
+artifacts\release\caicli-0.4.0-win-x64\caicli.exe queue run <queue-id> --workspace .
 ```
 
 Common queue failures and diagnostics:
@@ -130,11 +130,11 @@ A failed item can be rerun and receives a new attempt/job pointer. A running ite
 Inspect a plan before execution, then use JSON output to correlate roles with queue and job records:
 
 ```powershell
-artifacts\release\caicli-0.3.3-win-x64\caicli.exe pipeline list --output json
-artifacts\release\caicli-0.3.3-win-x64\caicli.exe pipeline plan fix-review-test --workspace . -- "Fix failing tests"
-artifacts\release\caicli-0.3.3-win-x64\caicli.exe pipeline run fix-review-test --output json --workspace . -- "Fix failing tests"
-artifacts\release\caicli-0.3.3-win-x64\caicli.exe queue show <role-queue-id> --output json --workspace .
-artifacts\release\caicli-0.3.3-win-x64\caicli.exe jobs show <role-job-id> --output json --workspace .
+artifacts\release\caicli-0.4.0-win-x64\caicli.exe pipeline list --output json
+artifacts\release\caicli-0.4.0-win-x64\caicli.exe pipeline plan fix-review-test --workspace . -- "Fix failing tests"
+artifacts\release\caicli-0.4.0-win-x64\caicli.exe pipeline run fix-review-test --output json --workspace . -- "Fix failing tests"
+artifacts\release\caicli-0.4.0-win-x64\caicli.exe queue show <role-queue-id> --output json --workspace .
+artifacts\release\caicli-0.4.0-win-x64\caicli.exe jobs show <role-job-id> --output json --workspace .
 ```
 
 Common pipeline failures and diagnostics:
@@ -151,11 +151,11 @@ Reviewer and security roles should report `boundary.isReadOnly=true`, with write
 Inspect and validate manifests before manual execution:
 
 ```powershell
-artifacts\release\caicli-0.3.3-win-x64\caicli.exe automation list --workspace .
-artifacts\release\caicli-0.3.3-win-x64\caicli.exe automation validate --output json --workspace .
-artifacts\release\caicli-0.3.3-win-x64\caicli.exe automation plan nightly-review --workspace .
-artifacts\release\caicli-0.3.3-win-x64\caicli.exe automation run nightly-review --dry-run --workspace .
-artifacts\release\caicli-0.3.3-win-x64\caicli.exe automation run nightly-review --manual --output json --workspace .
+artifacts\release\caicli-0.4.0-win-x64\caicli.exe automation list --workspace .
+artifacts\release\caicli-0.4.0-win-x64\caicli.exe automation validate --output json --workspace .
+artifacts\release\caicli-0.4.0-win-x64\caicli.exe automation plan nightly-review --workspace .
+artifacts\release\caicli-0.4.0-win-x64\caicli.exe automation run nightly-review --dry-run --workspace .
+artifacts\release\caicli-0.4.0-win-x64\caicli.exe automation run nightly-review --manual --output json --workspace .
 ```
 
 Common automation diagnostics:
@@ -186,7 +186,7 @@ For deterministic local shell checks, call the shell tool directly with an argum
 
 ```powershell
 Set-Content -Path shell-args.json -Value '{"command":"dotnet --version","timeoutMilliseconds":10000}'
-artifacts\release\caicli-0.3.3-win-x64\caicli.exe tools call --workspace . --approval always workspace.run_shell --arguments-file shell-args.json
+artifacts\release\caicli-0.4.0-win-x64\caicli.exe tools call --workspace . --approval always workspace.run_shell --arguments-file shell-args.json
 ```
 
 ## Verification
@@ -212,11 +212,11 @@ Each `exec` run records a read-only `review.gate` event and final `taskReport`. 
 Always inspect the local diff after write-capable work:
 
 ```powershell
-artifacts\release\caicli-0.3.3-win-x64\caicli.exe diff --workspace .
-artifacts\release\caicli-0.3.3-win-x64\caicli.exe diff --stat --workspace .
-artifacts\release\caicli-0.3.3-win-x64\caicli.exe changes --workspace .
-artifacts\release\caicli-0.3.3-win-x64\caicli.exe changes --session smoke-exec --workspace .
-artifacts\release\caicli-0.3.3-win-x64\caicli.exe review --workspace .
+artifacts\release\caicli-0.4.0-win-x64\caicli.exe diff --workspace .
+artifacts\release\caicli-0.4.0-win-x64\caicli.exe diff --stat --workspace .
+artifacts\release\caicli-0.4.0-win-x64\caicli.exe changes --workspace .
+artifacts\release\caicli-0.4.0-win-x64\caicli.exe changes --session smoke-exec --workspace .
+artifacts\release\caicli-0.4.0-win-x64\caicli.exe review --workspace .
 ```
 
 `review` sends the current git diff to the configured model. It is read-only for the workspace and does not run shell or patch tools.
@@ -228,7 +228,7 @@ artifacts\release\caicli-0.3.3-win-x64\caicli.exe review --workspace .
 Use `--report markdown` for a full task report:
 
 ```powershell
-artifacts\release\caicli-0.3.3-win-x64\caicli.exe exec --report markdown --workspace . "Summarize @file:README.md"
+artifacts\release\caicli-0.4.0-win-x64\caicli.exe exec --report markdown --workspace . "Summarize @file:README.md"
 ```
 
 Common report failures:
@@ -246,8 +246,8 @@ When using `--output json --report markdown`, the NDJSON stream should not conta
 Use one of the built-in profiles:
 
 ```powershell
-artifacts\release\caicli-0.3.3-win-x64\caicli.exe exec --expert reviewer --workspace . "Review @folder:src"
-artifacts\release\caicli-0.3.3-win-x64\caicli.exe exec --expert security --workspace . "Audit @folder:src"
+artifacts\release\caicli-0.4.0-win-x64\caicli.exe exec --expert reviewer --workspace . "Review @folder:src"
+artifacts\release\caicli-0.4.0-win-x64\caicli.exe exec --expert security --workspace . "Audit @folder:src"
 ```
 
 Common expert failures:
@@ -261,8 +261,8 @@ Common expert failures:
 Enable trace diagnostics for agent work:
 
 ```powershell
-artifacts\release\caicli-0.3.3-win-x64\caicli.exe exec --trace --workspace . "read README.md"
-artifacts\release\caicli-0.3.3-win-x64\caicli.exe logs show --tail 80
+artifacts\release\caicli-0.4.0-win-x64\caicli.exe exec --trace --workspace . "read README.md"
+artifacts\release\caicli-0.4.0-win-x64\caicli.exe logs show --tail 80
 ```
 
 Trace and command logs are redacted, but they can still contain prompts, paths, summaries, and diffs. Treat them as sensitive local diagnostics.
@@ -270,8 +270,8 @@ Trace and command logs are redacted, but they can still contain prompts, paths, 
 Use sessions when you need a transcript:
 
 ```powershell
-artifacts\release\caicli-0.3.3-win-x64\caicli.exe exec --workspace . --session smoke-exec "inspect README.md"
-artifacts\release\caicli-0.3.3-win-x64\caicli.exe session export --format markdown smoke-exec
+artifacts\release\caicli-0.4.0-win-x64\caicli.exe exec --workspace . --session smoke-exec "inspect README.md"
+artifacts\release\caicli-0.4.0-win-x64\caicli.exe session export --format markdown smoke-exec
 ```
 
 ## Local API / Daemon Preview
@@ -279,8 +279,8 @@ artifacts\release\caicli-0.3.3-win-x64\caicli.exe session export --format markdo
 Use static diagnostics first; neither command starts a listener:
 
 ```powershell
-artifacts\release\caicli-0.3.3-win-x64\caicli.exe daemon doctor --output json
-artifacts\release\caicli-0.3.3-win-x64\caicli.exe api routes --output json
+artifacts\release\caicli-0.4.0-win-x64\caicli.exe daemon doctor --output json
+artifacts\release\caicli-0.4.0-win-x64\caicli.exe api routes --output json
 ```
 
 Common daemon failures:
@@ -324,8 +324,8 @@ User-configured stdio MCP v1 servers can be discovered and called through regist
 Use explicit diagnostics when MCP tools are missing:
 
 ```powershell
-artifacts\release\caicli-0.3.3-win-x64\caicli.exe mcp list
-artifacts\release\caicli-0.3.3-win-x64\caicli.exe mcp doctor
+artifacts\release\caicli-0.4.0-win-x64\caicli.exe mcp list
+artifacts\release\caicli-0.4.0-win-x64\caicli.exe mcp doctor
 ```
 
 MCP stdio startup commands go through shell policy and dangerous-command detection before process start. Disabled servers are not started.

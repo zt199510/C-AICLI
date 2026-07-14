@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.4.0 - 2026-07-14
 
 Added:
 - Week 55 localhost-only Local API / daemon Preview: static `daemon doctor` and `api routes`, explicit `daemon start --preview`, and `api smoke` expose health plus read-only existing jobs/queue metadata. Accepted bind input is normalized to `127.0.0.1`; wildcard, remote, hostname, and IPv6 binds are rejected before startup.
@@ -25,6 +25,7 @@ Added:
 - Week 47 read-only `caicli changes`: summarizes git status/diff stat, changed files, optional latest session task report, commands, verification, remaining risks, trace path, and warnings in text or JSON without calling a model, running shell/patch tools, starting MCP, or writing command logs by default.
 
 Changed:
+- Week 57 promotes the Week 50-56 local engineering automation capabilities to the accepted `0.4.0` release line after version metadata, full build/test, credential-free packaged smoke, daemon/API opt-in smoke, and deterministic package verification. The localhost read-only API/daemon remains Preview; all listed Deferred boundaries remain outside the release.
 - Week 56 hardens queue corrupt-record JSON diagnostics with renderer-level secret redaction. List and cleanup continue with valid records, preserve corrupt files, and never cascade cleanup to jobs or artifacts.
 - The Local API Preview now rejects non-loopback Host values and explicitly bounds request header count/total size. Security regression covers corrupt store diagnostics, response headers, port-in-use, cancellation, and the existing no-control/no-CORS boundary.
 - Default smoke now verifies credential-free corrupt job/queue diagnostics, redaction, valid-record continuity, and cleanup preservation in addition to job/queue/pipeline/automation/CI artifact paths. Daemon/API listener and real-model smoke remain independent opt-ins.
