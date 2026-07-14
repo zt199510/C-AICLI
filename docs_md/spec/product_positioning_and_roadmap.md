@@ -1,6 +1,6 @@
 # C-AICLI 产品定位与路线护栏
 
-更新时间：2026-07-13
+更新时间：2026-07-14
 
 ## 一句话定位
 
@@ -169,18 +169,33 @@ C-AICLI 的价值在于可控性和工程化：
 - 本地 job history/artifact index、手动 task queue、固定顺序 multi-role pipeline、workspace-local automation validate/plan/dry-run/manual 和 provider-neutral CI artifacts 为 Accepted；default-off、IPv4 loopback-only、read-only daemon/API 为 Preview。
 - Background scheduler、concurrent/remote worker、provider API、API control/SSE、authentication/TLS、remote bind、job/artifact retention/delete 和真实 Gerber/TIFF 执行继续 Deferred。
 
-### 0.5.0+：垂直行业能力和团队化
+### 0.5.0：垂直工程工作流与 Gerber/TIFF v1
 
-目标：将 C-AICLI 从通用工程 agent 底座推进到垂直工作流平台。
+状态：已完成 Week 58-65 规划，尚未开始实现。
 
-候选范围：
+目标：第一次用真实 Gerber/TIFF 工程场景验证 0.4.0 的 queue、job、pipeline、artifact、安全和报告底座，形成“发现输入 -> 诊断工具 -> 计划 -> 审批执行 -> TIFF 验证 -> 人工验收 -> artifact 清理”的本地可审计闭环。
 
-- Gerber/TIFF 真实工具链执行。
-- C++ 验证工作流。
-- EDA 辅助流程。
-- 企业内部 MCP server 和插件包。
-- 团队知识库、权限、审计和远程入口。
-- 可选桌面或 Web 工作台，但应作为独立产品线评估。
+详细排期统一维护在 `docs_md/weekly/58_week_cli_0_5_vertical_workflow_schedule.md`。
+
+核心范围：
+
+- Project Pack v1 契约、注册、依赖声明和工具链诊断。
+- Gerber/TIFF bounded input discovery、真实外部工具适配和结构化执行。
+- 每次运行独立 staging/output、checkpoint、cancel 和安全 resume。
+- TIFF metadata/preview/baseline verification 与稳定 JSON/markdown report。
+- managed artifact list/show/verify/export/prune 和人工 accept/reject gate。
+- 默认 fake-tool/fixture smoke 与显式 opt-in 真实工具 smoke。
+
+0.5.0 不同时扩展为通用 C++、EDA 或团队平台。Background scheduler、并行写 worker、自动 provider routing、API control/SSE、远程执行、团队权限、插件市场、桌面/Web UI 和自研完整 Gerber parser 继续 Deferred。
+
+### 0.6.0+：后续垂直能力和团队化
+
+候选方向：
+
+- 通用 C++ 验证工作流和 EDA 辅助流程。
+- 企业内部 MCP server、受控插件分发和团队审计。
+- 在本地垂直工作流稳定后评估 scheduler、并发只读 worker 和 provider integration。
+- 远程入口、团队知识库、权限平台以及可选桌面/Web 工作台必须作为独立产品线评估。
 
 ## 目标偏离检查清单
 
