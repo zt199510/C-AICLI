@@ -5,7 +5,7 @@
 - Version `0.4.0` is the current accepted local Windows release. Week 50-56 local engineering automation capabilities are part of this release with the status boundaries documented below.
 - The primary supported artifact is the `win-x64` self-contained single-file package.
 - Dotnet tool packaging is not part of the `0.4.0` release package.
-- Week 58 Project Pack contracts and `packs list/doctor` are 0.5.0 source-only Preview work. They are not included in the accepted 0.4.0 artifact and do not make real Gerber/TIFF execution Accepted.
+- Week 58-59 Project Pack contracts, `packs list/doctor`, bounded Gerber/TIFF inventory, and `packs plan` are 0.5.0 source-only Preview work. They are not included in the accepted 0.4.0 artifact and do not make real Gerber/TIFF execution Accepted.
 
 ## Model And Agent Behavior
 
@@ -54,9 +54,12 @@
 - Remote/http MCP transport remains Deferred.
 - The Gerber/TIFF project pack records status/profile behavior, but real Gerber/TIFF conversion execution is Deferred.
 - Week 58 adds a generic Project Pack v1 manifest/registry contract plus `packs list` and static/approval-gated `packs doctor` source paths. Static doctor does not launch tools. `--probe` runs only fixed pack-owned version arguments after current approval and does not persist approval or trust.
+- Week 59 adds explicit-directory discovery and `packs plan gerber-tiff` text/JSON. The v1 input is workspace-local only: no single-file shortcut, ZIP/archive extraction, URL, UNC/network path, glob, device path, or reparse tree. Limits are depth 8, 256 files, 256 directories, 64 MiB per supported file, 512 MiB total, 512 workspace-relative path characters, and 10 seconds for scan plus hash.
+- Extension and filename classification is deterministic metadata, not a complete RS-274X/Excellon parser. At least one Gerber layer is required; drill is optional. `.gbrjob` is hash evidence only and is never passed to an external tool. Unknown files are reported without reading/hashing their contents or adding them to tool input/fingerprint.
+- A Week 59 plan with `readyForStaging=true` can freeze safe input/output metadata even when tools are missing. `runnable=true` additionally means required static tool identities were supplied; it does not mean conversion ran or was approved. Every plan has `conversionExecuted=false`, `executionAuthorized=false`, and `approvalPersisted=false`.
 - Project Pack manifests and portable reports do not contain user-machine absolute tool paths. Tool executables are not downloaded from a workspace or network, and the Week 58 Gerbv/ImageMagick binaries used for the spike are not stored in the repository or release.
 - Gerbv `v2.13.0` can return exit code `0` and create a small PNG even when it reports `Unknown file type` and `loaded 0` on stderr. Exit code, file existence, valid metadata, or a preview image alone must not be treated as successful conversion or business verification.
-- The CC0 minimal fixture and its expected PNG/TIFF metadata demonstrate toolchain feasibility only. C-AICLI still has no real `packs run`, input discovery, staging/checkpoint, TIFF verification, safe resume, managed artifact prune, or human accept/reject implementation.
+- The CC0 minimal fixture and its expected PNG/TIFF metadata demonstrate toolchain feasibility only. C-AICLI still has no real `packs run`, staging/checkpoint, TIFF verification, safe resume, managed artifact prune, or human accept/reject implementation. Inventory, metadata validity, a plan fingerprint, fake success, file existence, or preview output alone is not real business verification.
 - Default tests use the protocol-v1 fake driver and do not require Gerbv, ImageMagick, LibTIFF, a model, credentials, network, or real manufacturing data. Fake success/metadata/preview is never real-tool acceptance. Future real-tool smoke remains explicit opt-in through `CAICLI_GERBER_TIFF_TOOL_SMOKE=1` plus caller-provided tool paths.
 
 ## Safety Boundaries

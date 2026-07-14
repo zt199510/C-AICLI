@@ -216,13 +216,32 @@ API control routes, queue workers, automation/pipeline execution, SSE, browser U
 
 ## Project Pack v1 Development Boundary
 
-Week 58 Project Pack source changes are a future 0.5.0 Preview boundary, not part of the accepted 0.4.0 artifact. A Project Pack is a deterministic domain-tool contract and is not a model-guided skill. Models, prompts, skills, pipeline roles, automation manifests, and workspace files cannot create or extend real executable names, arguments, cwd, environment, or output paths.
+Week 58-59 Project Pack source changes are a future 0.5.0 Preview boundary, not part of the accepted 0.4.0 artifact. A Project Pack is a deterministic domain-tool contract and is not a model-guided skill. Models, prompts, skills, pipeline roles, automation manifests, and workspace files cannot create or extend real executable names, arguments, cwd, environment, or output paths.
 
 `packs list` and default `packs doctor` are model-free, network-free static paths. Static doctor accepts only explicit tool bindings, checks a canonical regular file, executable filename allowlist, reparse-point chain, size, SHA256, and optional trusted hash, and does not start a process or request approval. Generic manifest/identity/plan/stage/artifact/diagnostic DTOs do not contain user-machine absolute tool paths or Gerber/TIFF-specific fields.
 
 `packs doctor --probe` is the only Week 58 process path. It rechecks identity before and after the probe, requests current `shell`-risk approval, and starts the exact canonical executable with pack-owned `ProcessStartInfo.ArgumentList` values. It does not invoke a shell. Probe cwd is a unique managed temp directory; inherited environment is cleared and replaced with a small allowlist; stdout/stderr, time, cancellation, and process-tree cleanup are bounded. Text/JSON output contains filename/hash/source and redacted bounded output, not the executable absolute path. Explicit trace records a bounded start/complete summary.
 
 Approval and trust are invocation-local and are not written to a checkpoint, manifest, job, session, or report. A later probe, resume, restart, or execution must revalidate executable/input/output/policy identity and request approval again. Hash mismatch blocks probe. The registry is compiled in and does not scan workspace plugins, download packs, execute repository hooks, or provide a marketplace.
+
+`packs plan gerber-tiff` is a static Week 59 path. It accepts one explicit directory inside the canonical
+workspace and rejects URL, UNC/network, device, glob, parent-traversal, reparse/symlink, outside, over-depth,
+over-count, over-byte, over-path, timed-out, unreadable, changing, duplicate, ambiguous, and missing-Gerber
+input. Discovery hashes supported Gerber/drill and `.gbrjob` sidecar files through bounded streaming IO.
+Unknown files are listed with metadata warnings but their contents are not read, hashed, or passed to a tool.
+
+Plan output contains only workspace-relative input/output paths, sorted metadata/SHA256, static tool identity,
+fixed stage declarations, expected artifact slots, diagnostics, and a deterministic fingerprint. It does not
+contain raw input content, absolute tool paths, arbitrary argv, approval bypass, or model text. `--output-dir`
+must not exist, must remain outside the input tree, and is only validated; `--output` remains the text/JSON
+renderer selector. Plan does not create a job, queue item, run directory, output directory, session, or report,
+and it never executes conversion. Explicit trace remains the only optional diagnostic persistence.
+
+`readyForStaging=true` means the input and no-overwrite output boundary can be frozen. `runnable=true` also
+requires every mandatory static tool identity to be available, but it is not execution approval:
+`conversionExecuted`, `executionAuthorized`, and `approvalPersisted` remain false in every Week 59 plan.
+Week 60/61 must revalidate the fingerprint, tool/input/output/policy state and obtain new approval before any
+process starts.
 
 The protocol-v1 fake driver is a known test fixture only. `succeeded`, file existence, metadata validity, or preview availability does not establish real-tool or business correctness; `partial-output` is always failure evidence. Real conversion, staging, TIFF verification, resume, artifact prune, and accept/reject remain Deferred.
 

@@ -197,6 +197,80 @@ public sealed class ProjectPackCliTests
         Assert.Contains("stderrCharacters", json, StringComparison.Ordinal);
     }
 
+    [Fact]
+    public void Packs_plan_json_is_static_deterministic_and_does_not_create_output_or_persistent_state()
+    {
+        using TempDirectory temp = TempDirectory.Create();
+        string input = Path.Combine(temp.Path, "input");
+        string outputDirectory = Path.Combine(temp.Path, "output");
+        Directory.CreateDirectory(input);
+        File.WriteAllText(Path.Combine(input, "board.GBR"), "private-gerber-content");
+        File.WriteAllText(Path.Combine(input, "notes.txt"), "unknown-private-content");
+        string gerbv = Path.Combine(temp.Path, "gerbv.exe");
+        string magick = Path.Combine(temp.Path, "magick.exe");
+        File.WriteAllText(gerbv, "static-gerbv-fixture");
+        File.WriteAllText(magick, "static-magick-fixture");
+        using StringWriter output = new();
+
+        int exitCode = CliCommandFactory.Create(output, path => CreateSnapshot(path, temp.Path))
+            .Parse(
+            [
+                "packs", "plan", "gerber-tiff",
+                "--input", "input",
+                "--output-dir", "output",
+                "--tool-path", "gerbv=" + gerbv, "imagemagick=" + magick,
+                "--output", "json",
+                "--workspace", temp.Path
+            ])
+            .Invoke();
+
+        JsonObject root = Assert.IsType<JsonObject>(JsonNode.Parse(output.ToString()));
+        Assert.Equal(0, exitCode);
+        Assert.Equal("packs.plan", root["type"]?.GetValue<string>());
+        Assert.Equal("gerber-tiff.plan.v1", root["planSchema"]?.GetValue<string>());
+        Assert.Equal("runnable", root["status"]?.GetValue<string>());
+        Assert.True(root["readyForStaging"]?.GetValue<bool>());
+        Assert.True(root["runnable"]?.GetValue<bool>());
+        Assert.False(root["conversionExecuted"]?.GetValue<bool>());
+        Assert.False(root["executionAuthorized"]?.GetValue<bool>());
+        Assert.NotNull(root["fingerprint"]?.GetValue<string>());
+        Assert.DoesNotContain(temp.Path, output.ToString(), StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("private-gerber-content", output.ToString(), StringComparison.Ordinal);
+        Assert.DoesNotContain("unknown-private-content", output.ToString(), StringComparison.Ordinal);
+        Assert.False(Directory.Exists(outputDirectory));
+        Assert.False(Directory.Exists(Path.Combine(temp.Path, ".caicli")));
+        Assert.False(Directory.Exists(Path.Combine(temp.Path, "profile")));
+    }
+
+    [Fact]
+    public void Packs_plan_text_uses_output_dir_while_output_remains_renderer_mode()
+    {
+        using TempDirectory temp = TempDirectory.Create();
+        Directory.CreateDirectory(Path.Combine(temp.Path, "input"));
+        File.WriteAllText(Path.Combine(temp.Path, "input", "board.gbr"), "gerber");
+        string gerbv = Path.Combine(temp.Path, "gerbv.exe");
+        string magick = Path.Combine(temp.Path, "magick.exe");
+        File.WriteAllText(gerbv, "static-gerbv-fixture");
+        File.WriteAllText(magick, "static-magick-fixture");
+        using StringWriter output = new();
+
+        int exitCode = CliCommandFactory.Create(output, path => CreateSnapshot(path, temp.Path))
+            .Parse(
+            [
+                "packs", "plan", "gerber-tiff",
+                "--input", "input", "--output-dir", "planned-output", "--output", "text",
+                "--tool-path", "gerbv=" + gerbv, "imagemagick=" + magick,
+                "--workspace", temp.Path
+            ])
+            .Invoke();
+
+        Assert.Equal(0, exitCode);
+        Assert.Contains("outputDirectory: planned-output", output.ToString(), StringComparison.Ordinal);
+        Assert.Contains("outputSource: --output-dir", output.ToString(), StringComparison.Ordinal);
+        Assert.Contains("conversionExecuted: false", output.ToString(), StringComparison.Ordinal);
+        Assert.False(Directory.Exists(Path.Combine(temp.Path, "planned-output")));
+    }
+
     private static CliEnvironmentSnapshot CreateSnapshot(string? workspacePath, string userProfileRoot)
     {
         string workspace = workspacePath ?? userProfileRoot;

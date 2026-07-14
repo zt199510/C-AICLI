@@ -103,11 +103,23 @@ Gerber:   .gbr .ger .gbx .gtl .gbl .gts .gbs .gto .gbo .gm1
 Excellon: .drl .xln
 ```
 
+报告级 sidecar allowlist 仅包含 `.gbrjob`。sidecar 会进入 bounded metadata/hash inventory 和 plan
+fingerprint，但不解析 raw content，也不作为 argv 输入传给 Gerbv 或 ImageMagick。未知扩展名只形成
+bounded warning，不计算内容 hash、不进入工具输入或 fingerprint。
+
+required layer group 冻结为“至少一个 Gerber layer”；drill、sidecar、generic Gerber 以及
+top/bottom copper、solder mask、silkscreen、board outline 具体角色均为 optional。`.gtl/.gbl/.gts/
+.gbs/.gto/.gbo/.gm1` 直接映射到具体角色；`.gbr/.ger/.gbx` 只允许确定性文件名提示或
+`generic-gerber`，不调用模型猜测 layer mapping。
+
 扩展名只用于 bounded inventory，不证明内容合法；Gerbv stderr、loaded count 和后续 verification
 仍须检查。Week 59 初始上限为：recursion depth `8`、file count `256`、single file
 `67108864` bytes（64 MiB）、total bytes `536870912`（512 MiB）。超限、空 inventory、重复
 canonical path、case collision、outside path、unreadable file 和 reparse point 必须产生稳定 diagnostic，
 不能静默截断后继续转换。
+
+为补齐枚举与路径边界，v1 同时冻结 directory count `256`、workspace-relative path length `512`
+characters 和 monotonic scan/hash time `10000 ms`。这些上限是硬失败，不允许静默截断后继续计划。
 
 这些值是 discovery/preflight 输入，不授权真实工具执行，也不进入通用 Project Pack DTO 的领域字段。
 

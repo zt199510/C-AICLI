@@ -172,6 +172,29 @@ Week 55-56 add Preview and storage diagnostics hardening:
 - The Preview rejects unsupported method/body/Host/filter/route inputs with bounded JSON errors and applies no-store/nosniff, no-server-header, no-CORS, connection/request/header limits.
 - Default smoke clears model credentials and exercises credential-free job/queue/pipeline/automation/CI artifact paths. Real model and daemon/API smoke remain independent opt-ins through `CAICLI_REAL_MODEL_SMOKE=1` and `CAICLI_DAEMON_SMOKE=1`.
 
+Week 58-59 add source-only Project Pack diagnostics:
+
+- `packs list` emits local text or one `type="packs.list"` JSON object. Static `packs doctor` emits
+  `type="packs.doctor"`; only explicit doctor `--probe` can start a process, after current approval and bounded
+  typed executable/argument checks.
+- `packs plan gerber-tiff` emits text or one `type="packs.plan"`, `schemaVersion=1`,
+  `planSchema="gerber-tiff.plan.v1"` JSON object. Status is `blocked`, `ready-for-staging`, or `runnable`.
+  Exit code is zero only for `runnable`; a safe frozen inventory with missing tools is `ready-for-staging` and
+  returns one.
+- Plan JSON records workspace-relative canonical input/output, sorted inventory kind/role/size/SHA256, static
+  redacted tool identity, fixed stages/timeouts/restart policy, expected artifact slots, stable diagnostics,
+  readiness flags, and a deterministic SHA256 fingerprint. It declares raw input content, absolute tool paths,
+  arbitrary tool arguments, unknown-file hashes, and approval bypass absent.
+- Unknown files are listed but excluded from hash/tool input/fingerprint. Unsafe, unreadable, changing,
+  ambiguous, duplicate, missing, or over-limit supported input prevents a fingerprint/runnable plan.
+- `packs list/doctor/plan` do not create queue/job/run/session/report state or write the workspace. `packs plan`
+  validates `--output-dir` with no-overwrite semantics and never creates it. When recursive `--trace` is
+  explicitly enabled, start/complete summaries use the existing redacted trace path; raw inventory content and
+  absolute tool paths are not trace payloads.
+- Default packaged smoke exercises credential-free list/static-doctor/plan and expects no conversion.
+  Real Gerber/TIFF tool smoke remains Deferred and may only be introduced behind
+  `CAICLI_GERBER_TIFF_TOOL_SMOKE=1` with explicit installed-tool paths and current approval.
+
 Trace and verbose diagnostics must redact secrets before writing output. Redaction covers API keys, access/refresh tokens, passwords, `Authorization` headers and common variants, `secretKey`, `privateKey`, nested or escaped `argumentsJson`, OpenAI `sk-...` keys, and GitHub token formats such as `ghp_...` and `github_pat_...`. Diagnostics may record key presence and source, but never raw key values.
 
 `logs path` prints the resolved CLI log directory. It must not create the directory just to print the path.

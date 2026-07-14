@@ -1811,6 +1811,148 @@ public static class CliCommandFactory
         packsCommand.Subcommands.Add(packsListCommand);
         packsCommand.Subcommands.Add(packsDoctorCommand);
 
+        Command packsPlanCommand = new("plan", "Build a bounded deterministic project pack plan without running conversion.");
+        Argument<string> packsPlanPackArgument = new("pack")
+        {
+            Description = "Registered project pack id.",
+        };
+        packsPlanPackArgument.Validators.Add(result =>
+        {
+            string packId = result.GetValueOrDefault<string>() ?? string.Empty;
+            if (!projectPackRegistry.TryGet(packId, out _))
+            {
+                result.AddError($"Unknown project pack '{packId}'.");
+            }
+        });
+        Option<string> packsPlanInputOption = new("--input")
+        {
+            Description = "Use one explicit input directory inside the workspace.",
+        };
+        packsPlanInputOption.Validators.Add(result =>
+        {
+            if (result.Implicit || string.IsNullOrWhiteSpace(result.GetValueOrDefault<string>()))
+            {
+                result.AddError("--input is required.");
+            }
+        });
+        Option<string> packsPlanOutputDirectoryOption = new("--output-dir")
+        {
+            Description = "Validate one new output directory inside the workspace without creating it.",
+        };
+        packsPlanOutputDirectoryOption.Validators.Add(result =>
+        {
+            if (result.Implicit || string.IsNullOrWhiteSpace(result.GetValueOrDefault<string>()))
+            {
+                result.AddError("--output-dir is required.");
+            }
+        });
+        Option<string[]> packsPlanToolPathOption = new("--tool-path")
+        {
+            Description = "Statically inspect [dependency=]absolute-path without starting the tool.",
+            Arity = ArgumentArity.OneOrMore,
+            AllowMultipleArgumentsPerToken = true,
+        };
+        Option<bool> packsPlanJsonOption = new("--json")
+        {
+            Description = "Write a single JSON project pack plan object.",
+        };
+        Option<string> packsPlanOutputOption = new("--output")
+        {
+            Description = "Select text or json output.",
+        };
+        packsPlanOutputOption.DefaultValueFactory = _ => "text";
+        AddTextJsonOutputValidator(packsPlanOutputOption);
+        packsPlanCommand.Arguments.Add(packsPlanPackArgument);
+        packsPlanCommand.Options.Add(packsPlanInputOption);
+        packsPlanCommand.Options.Add(packsPlanOutputDirectoryOption);
+        packsPlanCommand.Options.Add(packsPlanToolPathOption);
+        packsPlanCommand.Options.Add(packsPlanJsonOption);
+        packsPlanCommand.Options.Add(packsPlanOutputOption);
+        packsPlanCommand.SetAction(parseResult =>
+        {
+            string? workspacePath = parseResult.GetValue(workspaceOption);
+            string packId = parseResult.GetValue(packsPlanPackArgument) ?? string.Empty;
+            string? inputDirectory = parseResult.GetValue(packsPlanInputOption);
+            string? outputDirectory = parseResult.GetValue(packsPlanOutputDirectoryOption);
+            string[] toolPathValues = parseResult.GetValue(packsPlanToolPathOption) ?? [];
+            bool jsonRequested = parseResult.GetValue(packsPlanJsonOption);
+            string outputMode = parseResult.GetValue(packsPlanOutputOption) ?? "text";
+            bool jsonOutput = IsJsonOutputRequested(jsonRequested, outputMode);
+            CliEnvironmentSnapshot snapshot = workspaceSnapshotProvider(workspacePath);
+            WriteVerboseDiagnostics(parseResult, "packs plan", snapshot, humanReadableOutput: !jsonOutput);
+
+            if (!projectPackRegistry.TryGet(packId, out IProjectPack? registeredPack) ||
+                registeredPack is not GerberTiffWorkflowPack gerberTiffPack)
+            {
+                output.WriteLine(jsonOutput
+                    ? JsonSerializer.Serialize(new
+                    {
+                        type = "packs.plan",
+                        schemaVersion = ProjectPackSchema.CurrentVersion,
+                        pack = packId,
+                        status = "blocked",
+                        errorCode = "pack-plan-not-supported",
+                        summary = "Project pack does not provide a v1 deterministic plan builder."
+                    }, JsonOptions)
+                    : "Project pack does not provide a v1 deterministic plan builder.");
+                return 1;
+            }
+
+            if (!TryParseProjectPackToolPaths(
+                gerberTiffPack.Manifest,
+                toolPathValues,
+                out Dictionary<string, string> toolPaths,
+                out string? bindingError))
+            {
+                output.WriteLine(jsonOutput
+                    ? JsonSerializer.Serialize(new
+                    {
+                        type = "packs.plan",
+                        schemaVersion = ProjectPackSchema.CurrentVersion,
+                        pack = packId,
+                        status = "blocked",
+                        errorCode = "pack-tool-binding-invalid",
+                        summary = bindingError
+                    }, JsonOptions)
+                    : bindingError);
+                return 2;
+            }
+
+            DiagnosticContext? traceContext = CreateTraceContext(parseResult, snapshot);
+            TryWriteTraceCommandEvent(
+                "packs plan",
+                snapshot,
+                traceContext,
+                "command.start",
+                sequence: 1,
+                "started",
+                summary: "Project pack static plan requested.");
+            GerberTiffConversionPlan plan = new GerberTiffConversionPlanBuilder(gerberTiffPack).Build(
+                snapshot.Workspace,
+                inputDirectory,
+                outputDirectory,
+                toolPaths,
+                trustedHashes: null,
+                CancellationToken.None);
+            string workspaceSource = string.IsNullOrWhiteSpace(workspacePath) ? "current-directory" : "--workspace";
+            output.WriteLine(jsonOutput
+                ? GerberTiffPlanRenderer.RenderJson(plan, workspaceSource)
+                : GerberTiffPlanRenderer.RenderText(plan, workspaceSource));
+            TryWriteTraceCommandEvent(
+                "packs plan",
+                snapshot,
+                traceContext,
+                "command.complete",
+                sequence: 2,
+                plan.Runnable ? "success" : "failure",
+                summary: plan.Runnable
+                    ? "Project pack runnable plan generated."
+                    : "Project pack plan completed without runnable conversion authorization.",
+                errorCode: plan.Runnable ? null : "pack-plan-blocked");
+            return plan.Runnable ? 0 : 1;
+        });
+        packsCommand.Subcommands.Add(packsPlanCommand);
+
         Command skillsCommand = new("skills", "List and run local skill workflow packs.");
         Command skillsListCommand = new("list", "List built-in and workspace-local skill packs.");
         Option<bool> skillsListJsonOption = new("--json")

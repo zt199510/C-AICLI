@@ -70,6 +70,17 @@ public sealed class SmokeTestScriptTests
         Assert.Contains("dryRun: true", script, StringComparison.Ordinal);
         Assert.Contains("skill: review-only", script, StringComparison.Ordinal);
         Assert.Contains("allowWrites=false", script, StringComparison.Ordinal);
+        Assert.Contains("CAICLI_GERBER_TIFF_TOOL_SMOKE", script, StringComparison.Ordinal);
+        Assert.Contains("\"packs\", \"list\", \"--workspace\", $workspace", script, StringComparison.Ordinal);
+        Assert.Contains("\"packs\", \"doctor\", \"gerber-tiff\"", script, StringComparison.Ordinal);
+        Assert.Contains("\"packs\", \"plan\", \"gerber-tiff\"", script, StringComparison.Ordinal);
+        Assert.Contains("\"--input\", \"gerber-input\", \"--output-dir\", \"gerber-output\"", script, StringComparison.Ordinal);
+        Assert.Contains("\"type\":\"packs.plan\"", script, StringComparison.Ordinal);
+        Assert.Contains("\"readyForStaging\":true", script, StringComparison.Ordinal);
+        Assert.Contains("\"runnable\":false", script, StringComparison.Ordinal);
+        Assert.Contains("\"conversionExecuted\":false", script, StringComparison.Ordinal);
+        Assert.Contains("packs plan created the output directory", script, StringComparison.Ordinal);
+        Assert.Contains("packs list/doctor/plan created persistent job state", script, StringComparison.Ordinal);
         Assert.Contains("\"jobs\", \"list\", \"--output\", \"json\", \"--workspace\", $workspace", script, StringComparison.Ordinal);
         Assert.Contains("\"exec\", \"--record-job\", \"--job-name\", \"smoke-missing-model\"", script, StringComparison.Ordinal);
         Assert.Contains("\"skills\", \"run\", \"review-only\", \"--record-job\", \"--dry-run\"", script, StringComparison.Ordinal);

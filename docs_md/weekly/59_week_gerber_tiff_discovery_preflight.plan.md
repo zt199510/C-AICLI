@@ -1,6 +1,6 @@
 # 第 59 周 Gerber/TIFF Input Discovery、Preflight 与 Conversion Plan Implementation Plan
 
-状态：计划中
+状态：已完成
 
 **Goal:** 在不执行转换的前提下，将 workspace 内 Gerber/钻孔输入安全地投影为 bounded inventory、tool preflight 和 deterministic conversion plan，为 Week 60 staging 和 Week 61 执行提供冻结输入。
 
@@ -91,18 +91,18 @@ Plan 至少包含：
 
 ## 任务清单
 
-- [ ] Step 1: 冻结 v1 input allowlist、required/optional layer 和 inventory limits。
-- [ ] Step 2: 实现 bounded input discovery 和 canonical workspace guard。
-- [ ] Step 3: 实现 Gerber/drill/sidecar classifier 和 ambiguity diagnostics。
-- [ ] Step 4: 实现 streaming size/hash metadata 和 stable sort。
-- [ ] Step 5: 实现 static doctor 与 approval-gated tool probe。
-- [ ] Step 6: 实现 conversion plan builder、fingerprint 和 no-overwrite validation。
-- [ ] Step 7: 增加 `packs plan gerber-tiff` text/JSON CLI。
-- [ ] Step 8: 增加 discovery/preflight/plan unit 与 CLI tests。
-- [ ] Step 9: 增加 default smoke 的 list/doctor/plan credential-free 路径。
-- [ ] Step 10: 更新 quickstart/security/known limitations 草稿。
-- [ ] Step 11: 运行 build/test/default smoke。
-- [ ] Step 12: 创建 `59_week_review.md`，冻结 Week 60 staging 输入契约。
+- [x] Step 1: 冻结 v1 input allowlist、required/optional layer 和 inventory limits。
+- [x] Step 2: 实现 bounded input discovery 和 canonical workspace guard。
+- [x] Step 3: 实现 Gerber/drill/sidecar classifier 和 ambiguity diagnostics。
+- [x] Step 4: 实现 streaming size/hash metadata 和 stable sort。
+- [x] Step 5: 实现 static doctor 与 approval-gated tool probe。
+- [x] Step 6: 实现 conversion plan builder、fingerprint 和 no-overwrite validation。
+- [x] Step 7: 增加 `packs plan gerber-tiff` text/JSON CLI。
+- [x] Step 8: 增加 discovery/preflight/plan unit 与 CLI tests。
+- [x] Step 9: 增加 default smoke 的 list/doctor/plan credential-free 路径。
+- [x] Step 10: 更新 quickstart/security/known limitations 草稿。
+- [x] Step 11: 运行 build/test/default smoke。
+- [x] Step 12: 创建 `59_week_review.md`，冻结 Week 60 staging 输入契约。
 
 ## 验收标准
 

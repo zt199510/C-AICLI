@@ -160,6 +160,23 @@ MCP config/list/doctor are available. User-configured stdio MCP servers can be d
 
 Local skills are lightweight workflow packs. `skills list` shows built-in packs plus workspace-local JSON manifests under `.caicli/skills`. `skills run <name> --dry-run -- <task>` expands the selected pack into expert/report/reference/safety/validation metadata without calling a model, writing files, running shell, or starting MCP. Non-dry-run `skills run` uses the same agentic safety path as `exec`; pack validation commands are hints and do not execute directly. Remote skill marketplaces, automatic updates, YAML manifests, user-level skill directories, and Gerber/TIFF real workflow execution remain enhanced Deferred capabilities.
 
+The future 0.5.0 source tree also contains a Project Pack Preview. These commands are not part of the accepted
+0.4.0 package:
+
+```powershell
+caicli packs list --output json --workspace .
+caicli packs doctor gerber-tiff --output json --workspace .
+caicli packs doctor gerber-tiff --tool-path "gerbv=C:\Tools\gerbv\gerbv.exe" --probe --approval always --workspace .
+caicli packs plan gerber-tiff --input .\samples\board-a --output-dir .\out\board-a --output json --workspace .
+```
+
+`packs plan` accepts one explicit workspace directory, never creates `--output-dir`, and never runs conversion.
+`--output` selects only `text` or `json`. With no configured tool identities it can still return a deterministic
+`ready-for-staging` fingerprint, but returns exit code `1` and `runnable=false`. Supplying static `--tool-path`
+bindings only inspects regular-file identity and SHA256; it does not start the tools. Only explicit
+`packs doctor --probe` may start a fixed version probe, and it still requires current approval. Plan output uses
+workspace-relative paths and does not store raw Gerber, drill, sidecar, or unknown file content.
+
 Local job history is opt-in for execution commands. `jobs list/show/export` reads job records from the user-level store under `%USERPROFILE%\.caicli\jobs`; these read commands do not call a model, run shell/patch tools, start MCP, write command logs, or write workspace files.
 
 ## 10. Run An Agentic Exec Task

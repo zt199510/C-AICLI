@@ -294,6 +294,7 @@ $oldOpenAiKey = $env:OPENAI_API_KEY
 $oldOpenAiModel = $env:OPENAI_MODEL
 $realModelSmokeOptIn = [System.String]::Equals($env:CAICLI_REAL_MODEL_SMOKE, "1", [System.StringComparison]::Ordinal)
 $daemonSmokeOptIn = [System.String]::Equals($env:CAICLI_DAEMON_SMOKE, "1", [System.StringComparison]::Ordinal)
+$gerberTiffToolSmokeOptIn = [System.String]::Equals($env:CAICLI_GERBER_TIFF_TOOL_SMOKE, "1", [System.StringComparison]::Ordinal)
 
 try {
     New-Item -ItemType Directory -Path $workspace, $userProfile | Out-Null
@@ -442,6 +443,60 @@ Write-Output 'bugfix verification passed'
     Assert-Contains $workflowValidate.Output "validationCommand: dotnet test" "workflow validate"
     Assert-Contains $workflowValidate.Output "execution: not run" "workflow validate"
     Remove-Item -LiteralPath (Join-Path $workspaceConfigDir "config.json") -Force
+
+    $packsList = Invoke-CaiCli -Arguments @("packs", "list", "--workspace", $workspace)
+    Assert-ExitCode $packsList 0 "packs list"
+    Assert-Contains $packsList.Output "pack: gerber-tiff" "packs list"
+    Assert-Contains $packsList.Output "status: contract-only" "packs list"
+
+    $packsListJson = Invoke-CaiCli -Arguments @("packs", "list", "--output", "json", "--workspace", $workspace)
+    Assert-ExitCode $packsListJson 0 "packs list json"
+    Assert-Contains $packsListJson.Output '"type":"packs.list"' "packs list json"
+    Assert-Contains $packsListJson.Output '"id":"gerber-tiff"' "packs list json"
+
+    $packsDoctor = Invoke-CaiCli -Arguments @("packs", "doctor", "gerber-tiff", "--output", "json", "--workspace", $workspace)
+    Assert-ExitCode $packsDoctor 1 "packs static doctor without configured tools"
+    Assert-Contains $packsDoctor.Output '"type":"packs.doctor"' "packs static doctor"
+    Assert-Contains $packsDoctor.Output '"status":"unavailable"' "packs static doctor"
+    Assert-Contains $packsDoctor.Output '"probeRequested":false' "packs static doctor"
+
+    $gerberInput = Join-Path $workspace "gerber-input"
+    $gerberOutput = Join-Path $workspace "gerber-output"
+    New-Item -ItemType Directory -Path $gerberInput | Out-Null
+    Set-Content -LiteralPath (Join-Path $gerberInput "board.GBR") -Value "SMOKE-GERBER-RAW-CONTENT" -Encoding UTF8
+    Set-Content -LiteralPath (Join-Path $gerberInput "notes.txt") -Value "SMOKE-UNKNOWN-RAW-CONTENT" -Encoding UTF8
+    $packsPlan = Invoke-CaiCli -Arguments @(
+        "packs", "plan", "gerber-tiff",
+        "--input", "gerber-input", "--output-dir", "gerber-output",
+        "--output", "json", "--workspace", $workspace
+    )
+    Assert-ExitCode $packsPlan 1 "packs plan without configured tools"
+    Assert-Contains $packsPlan.Output '"type":"packs.plan"' "packs plan"
+    Assert-Contains $packsPlan.Output '"planSchema":"gerber-tiff.plan.v1"' "packs plan"
+    Assert-Contains $packsPlan.Output '"status":"ready-for-staging"' "packs plan"
+    Assert-Contains $packsPlan.Output '"readyForStaging":true' "packs plan"
+    Assert-Contains $packsPlan.Output '"runnable":false' "packs plan"
+    Assert-Contains $packsPlan.Output '"conversionExecuted":false' "packs plan"
+    Assert-Contains $packsPlan.Output '"executionAuthorized":false' "packs plan"
+    Assert-Contains $packsPlan.Output '"unknownFileContentHashed":false' "packs plan"
+    Assert-NotContains $packsPlan.Output "SMOKE-GERBER-RAW-CONTENT" "packs plan raw Gerber exclusion"
+    Assert-NotContains $packsPlan.Output "SMOKE-UNKNOWN-RAW-CONTENT" "packs plan unknown content exclusion"
+    Assert-NotContains $packsPlan.Output $workspace "packs plan absolute workspace path exclusion"
+    if (Test-Path -LiteralPath $gerberOutput) {
+        throw "packs plan created the output directory."
+    }
+    if (Test-Path -LiteralPath (Join-Path $userProfile ".caicli\jobs")) {
+        throw "packs list/doctor/plan created persistent job state."
+    }
+    if ((Test-Path -LiteralPath (Join-Path $workspace ".caicli\pack-runs")) -or
+        (Test-Path -LiteralPath (Join-Path $userProfile ".caicli\pack-runs"))) {
+        throw "packs list/doctor/plan created a persistent pack run directory."
+    }
+    if ($gerberTiffToolSmokeOptIn) {
+        Write-Host "real Gerber/TIFF tool smoke remains Deferred in Week 59; no conversion was executed."
+    } else {
+        Write-Host "real Gerber/TIFF tool smoke skipped: set CAICLI_GERBER_TIFF_TOOL_SMOKE=1 after the Week 61 adapter is available."
+    }
 
     $skillsList = Invoke-CaiCli -Arguments @("skills", "list", "--workspace", $workspace)
     Assert-ExitCode $skillsList 0 "skills list"
