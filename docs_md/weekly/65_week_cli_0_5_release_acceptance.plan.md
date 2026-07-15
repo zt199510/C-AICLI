@@ -61,13 +61,13 @@
 
 ## 任务清单
 
-- [ ] Step 1: 汇总 Week 58-64 review，确认没有未完成实现范围。
+- [x] Step 1: 汇总 Week 58-64 review，确认没有未完成实现范围。
 - [ ] Step 2: 确认真实工具/fixture/license/verification Gate 证据仍有效。
 - [ ] Step 3: 确认 release source clean、revision 固定且可 tag/引用。
-- [ ] Step 4: 更新 version/assembly/file metadata 到 `0.5.0`。
-- [ ] Step 5: 更新 CHANGELOG 和全部 release/runtime docs。
-- [ ] Step 6: 创建 `docs_md/release/final_acceptance_0.5.0.md`。
-- [ ] Step 7: 运行 Release build 和 full test suite。
+- [x] Step 4: 更新 version/assembly/file metadata 到 `0.5.0`。
+- [x] Step 5: 更新 CHANGELOG 和全部 release/runtime docs。
+- [x] Step 6: 创建 `docs_md/release/final_acceptance_0.5.0.md`。
+- [x] Step 7: 运行 Release build 和 full test suite。
 - [ ] Step 8: 构建 packaged executable，运行 default fake-tool smoke。
 - [ ] Step 9: 运行 real-tool opt-in smoke，记录 tool/version/hash/fixture fingerprint。
 - [ ] Step 10: 连续两次从同一 clean source revision 构建 release package。

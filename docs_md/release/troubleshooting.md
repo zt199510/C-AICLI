@@ -5,7 +5,7 @@
 Run `doctor` first:
 
 ```powershell
-artifacts\release\caicli-0.4.0-win-x64\caicli.exe doctor --verbose
+artifacts\release\caicli-0.5.0-win-x64\caicli.exe doctor --verbose
 ```
 
 Common model setup failures:
@@ -189,7 +189,7 @@ Set-Content -Path shell-args.json -Value '{"command":"dotnet --version","timeout
 artifacts\release\caicli-0.4.0-win-x64\caicli.exe tools call --workspace . --approval always workspace.run_shell --arguments-file shell-args.json
 ```
 
-## Gerber/TIFF Controlled Conversion Preview
+## Gerber/TIFF Controlled Conversion
 
 Start with static planning and explicit fixed probes. Both tools are mandatory for a real run:
 

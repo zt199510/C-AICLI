@@ -214,9 +214,9 @@ API control routes, queue workers, automation/pipeline execution, SSE, browser U
 - Skill safety can restrict tools, such as read-only mode or disabling shell/MCP. It cannot bypass approval, shell policy, workspace guard, disabled tools, or dangerous-command detection.
 - Skill metadata is recorded in text output, NDJSON, trace, session task reports, and markdown reports so the selected pack and boundary can be audited later.
 
-## Project Pack v1 Development Boundary
+## Project Pack v1 Release Boundary
 
-Week 58-59 Project Pack source changes are a future 0.5.0 Preview boundary, not part of the accepted 0.4.0 artifact. A Project Pack is a deterministic domain-tool contract and is not a model-guided skill. Models, prompts, skills, pipeline roles, automation manifests, and workspace files cannot create or extend real executable names, arguments, cwd, environment, or output paths.
+Project Pack v1 is the deterministic domain-tool contract in the blocked 0.5.0 candidate and is not a model-guided skill. Models, prompts, skills, pipeline roles, automation manifests, and workspace files cannot create or extend real executable names, arguments, cwd, environment, or output paths.
 
 `packs list` and default `packs doctor` are model-free, network-free static paths. Static doctor accepts only explicit tool bindings, checks a canonical regular file, executable filename allowlist, reparse-point chain, size, SHA256, and optional trusted hash, and does not start a process or request approval. Generic manifest/identity/plan/stage/artifact/diagnostic DTOs do not contain user-machine absolute tool paths or Gerber/TIFF-specific fields.
 

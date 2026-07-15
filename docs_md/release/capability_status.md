@@ -1,8 +1,14 @@
 # C# AI CLI Capability Status
 
-## 0.5.0 Development Draft
+## 0.5.0 Candidate Capabilities (Blocked)
 
-Week 58-64 source changes are not part of the accepted `0.4.0` package. The status below is a development boundary for the future `0.5.0` line, not a release acceptance decision.
+The bounded Week 58-64 vertical workflow remains a 0.5.0 candidate. Project Pack v1 list/doctor/plan, bounded Gerber/TIFF inventory, approval-gated typed conversion, isolated staging/checkpoint, TIFF verification/preview, explicit human accept/reject, safe resume/new-attempt restart, and managed artifact list/show/verify/export/prune are implemented, but current-revision exact-tool opt-in smoke is unavailable. They are not promoted to Accepted. External Gerbv/ImageMagick binaries remain user-configured and are not redistributed.
+
+Local API/daemon remains Preview. ZIP/network input, full Gerber/Excellon/TIFF parsing, generic C++/EDA packs, scheduler, parallel/concurrent writers, remote runner, provider routing, API control/SSE/auth/TLS, team platform, marketplace, and UI remain Deferred.
+
+## Week 64 Pre-Release Validation Record
+
+The table below preserves the source-only status at the end of Week 64. It is historical validation evidence; the 0.5.0 release decision above supersedes those pre-release labels without expanding their technical scope.
 
 | Capability | Status | Notes |
 |---|---|---|
@@ -83,4 +89,4 @@ Status meaning:
 
 ## Release Decision
 
-Release `0.4.0` is the current accepted package and is documented by `final_acceptance_0.4.0.md`. Only the Accepted and Solidified rows in the 0.4.0 section are included in that release. The local API/daemon remains Preview and default-off. The 0.5.0 development draft is source-only and does not change the 0.4.0 release decision. Deferred capabilities are not current behavior and must not be presented as implied by local automation, CI artifacts, Project Pack contracts, or the read-only Preview.
+Release `0.4.0` remains the current accepted package. The blocked 0.5.0 decision is documented by `final_acceptance_0.5.0.md`. The local API/daemon remains Preview and default-off. Deferred capabilities are not current behavior and must not be presented as implied by local automation, CI artifacts, Project Pack contracts, or the read-only Preview.

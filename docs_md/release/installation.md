@@ -2,19 +2,19 @@
 
 ## Supported Package
 
-The accepted `0.4.0` release is a Windows `win-x64` self-contained package produced by:
+The `0.5.0` Windows `win-x64` self-contained package remains a blocked candidate. Candidate packaging from a recorded clean source revision uses:
 
 ```powershell
-powershell -NoProfile -ExecutionPolicy Bypass -File tools/Build-Release.ps1
+powershell -NoProfile -ExecutionPolicy Bypass -File tools/Build-Release.ps1 -ReleaseAcceptance
 ```
 
 The script writes the executable to:
 
 ```text
-artifacts/release/caicli-0.4.0-win-x64/caicli.exe
+artifacts/release/caicli-0.5.0-win-x64/caicli.exe
 ```
 
-The package also includes `release-manifest.json`, which records the version, runtime, target framework, and executable name.
+The package also includes `release-manifest.json`, which records version, runtime, framework, clean source revision, locked SDK, PDB policy, acceptance mode, and payload inventory. The adjacent checksums JSON records publish and ZIP SHA256 values. Gerbv and ImageMagick are not bundled; configure reviewed local executable paths before using the Gerber/TIFF pack.
 
 ## Prerequisites
 

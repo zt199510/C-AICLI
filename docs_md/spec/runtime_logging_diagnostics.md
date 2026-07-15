@@ -288,6 +288,10 @@ Trace and verbose diagnostics must redact secrets before writing output. Redacti
 
 Known residual risk: parse-time `System.CommandLine` validation errors can return before trace context creation. This is accepted because no model/tool flow has begun.
 
+## 0.5.0 Release Diagnostics
+
+The Week 58-64 Project Pack, controlled Gerber/TIFF execution, TIFF verification/preview, human decision, safe resume/restart, and managed artifact lifecycle diagnostics are implemented in the blocked 0.5.0 candidate. Approval material remains invocation-local; resume/restart revalidate current tool, input, output, and policy identity. Default smoke remains fake/local/model-free/network-free, while release acceptance still requires explicit current-revision `CAICLI_GERBER_TIFF_TOOL_SMOKE=1` evidence with frozen executable/fixture/baseline hashes.
+
 ## Chat 边界
 
 第 4 周只添加 `chat` 的 Phase 02 边界提示。该命令用于告诉用户模型客户端和流式渲染器属于第 5-6 周，不执行模型调用。

@@ -104,7 +104,7 @@ Shell execution policy can be constrained from user or workspace config:
 
 `deniedCommands` take precedence over `allowedCommands`. An empty configured allowlist denies all shell commands. Prefix allowlist entries permit ordinary arguments but reject shell control and metacharacter syntax after the prefix. The policy applies before approval and before execution for `workspace.run_shell` and MCP stdio startup commands.
 
-## Gerber/TIFF External Tools (0.5.0 Source Preview)
+## Gerber/TIFF External Tools (0.5.0)
 
 Controlled Gerber/TIFF conversion does not discover, install, download, or update external tools. Both mandatory
 executables must be bound explicitly for `packs plan` and `packs run`:

@@ -3,13 +3,13 @@
 ## 1. Verify The Release
 
 ```powershell
-artifacts\release\caicli-0.4.0-win-x64\caicli.exe version
+artifacts\release\caicli-0.5.0-win-x64\caicli.exe version
 ```
 
 Expected shape:
 
 ```text
-caicli 0.4.0
+caicli 0.5.0
 target framework: net9.0
 release runtime: win-x64
 ```
@@ -17,7 +17,7 @@ release runtime: win-x64
 ## 2. Run Doctor
 
 ```powershell
-artifacts\release\caicli-0.4.0-win-x64\caicli.exe doctor
+artifacts\release\caicli-0.5.0-win-x64\caicli.exe doctor
 ```
 
 Without a configured key, `doctor` should still succeed and report:

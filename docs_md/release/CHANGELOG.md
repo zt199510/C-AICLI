@@ -1,6 +1,6 @@
 # Changelog
 
-## 0.5.0 - Candidate (unreleased)
+## 0.5.0 - Candidate (blocked)
 
 Added:
 - Project Pack v1 deterministic domain-tool runtime with `packs list/doctor/plan/run/verify/preview/resume/recover/restart/accept/reject`, strict schema-v1 managed run/checkpoint/artifact state, and `artifacts list/show/verify/export/prune`.
@@ -16,7 +16,8 @@ Changed:
 - `Build-Release.ps1` now rejects dirty source by default, records source revision/cleanliness/SDK/configuration/PDB policy and SHA256 inventory, emits an independent package checksum artifact, excludes PDBs by policy, and supports explicit `-AllowDirtySource` only for non-acceptance validation packages.
 
 Release boundary:
-- This is a source candidate, not an Accepted release. Version metadata and the existing accepted artifact remain 0.4.0 until Week 65 completes clean-source final acceptance. Fake driver success, file existence, metadata validity, preview generation, or a dirty validation package is not release acceptance.
+- Week 65 release acceptance is blocked because current-revision exact-tool opt-in smoke could not run. Fake driver success, file existence, metadata validity, preview generation, historical real-tool evidence, or a candidate package is not substituted for this gate.
+- External Gerbv and ImageMagick binaries are user-installed and are not redistributed in the package. Local API/daemon remains Preview; scheduler, concurrent/remote workers, provider routing, API control/SSE, marketplace, team platform, UI, ZIP/network input, and general CAM/EDA correctness remain Deferred.
 
 ## 0.4.0 - 2026-07-14
 

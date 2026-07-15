@@ -2,11 +2,12 @@
 
 ## Release Scope
 
-- Version `0.4.0` is the current accepted local Windows release. Week 50-56 local engineering automation capabilities are part of this release with the status boundaries documented below.
+- Version `0.4.0` remains the current accepted local Windows release. Version `0.5.0` is a blocked candidate because current-revision exact-tool opt-in smoke evidence is unavailable.
 - The primary supported artifact is the `win-x64` self-contained single-file package.
-- Dotnet tool packaging is not part of the `0.4.0` release package.
-- Week 58-64 Project Pack contracts, discovery/plan, managed staging/checkpoint, controlled conversion, TIFF verification, managed preview/report evidence, artifact lifecycle, human acceptance, safe resume/restart, and hardening are 0.5.0 source-only Preview work. They are not included in the accepted 0.4.0 artifact and do not change the 0.4.0 release decision.
-- Week 64 validation builds may use explicit `-AllowDirtySource`, but their manifest records `sourceDirty=true` and `releaseAcceptance=false`. Only a later clean `-ReleaseAcceptance` build can be considered for Week 65 acceptance. PDBs are excluded by the frozen release policy; revision/SDK/inventory/checksums are evidence, not semantic correctness proof.
+- Dotnet tool packaging is not part of the `0.5.0` release package.
+- Project Pack is a deterministic domain-tool flow, not a skill. The model cannot generate or extend real Gerbv/ImageMagick arguments. Only the frozen single-layer authorized fixture/toolchain path has real conversion and strict verification evidence; this is not general CAM/EDA manufacturing correctness.
+- Gerbv and ImageMagick are not redistributed. Missing or changed tools fail closed through `packs doctor/plan/run`; approval is invocation-local, and resume/restart revalidate tool/input/output/policy and require fresh approval.
+- Release packages require clean `-ReleaseAcceptance` builds. PDBs are excluded by policy; revision/SDK/inventory/checksums prove build provenance and reproducibility, not semantic correctness.
 
 ## Model And Agent Behavior
 
