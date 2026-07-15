@@ -63,19 +63,19 @@
 
 - [x] Step 1: 汇总 Week 58-64 review，确认没有未完成实现范围。
 - [ ] Step 2: 确认真实工具/fixture/license/verification Gate 证据仍有效。
-- [ ] Step 3: 确认 release source clean、revision 固定且可 tag/引用。
+- [x] Step 3: 确认 release source clean、revision 固定且可 tag/引用。
 - [x] Step 4: 更新 version/assembly/file metadata 到 `0.5.0`。
 - [x] Step 5: 更新 CHANGELOG 和全部 release/runtime docs。
 - [x] Step 6: 创建 `docs_md/release/final_acceptance_0.5.0.md`。
 - [x] Step 7: 运行 Release build 和 full test suite。
-- [ ] Step 8: 构建 packaged executable，运行 default fake-tool smoke。
+- [x] Step 8: 构建 packaged executable，运行 default fake-tool smoke。
 - [ ] Step 9: 运行 real-tool opt-in smoke，记录 tool/version/hash/fixture fingerprint。
-- [ ] Step 10: 连续两次从同一 clean source revision 构建 release package。
-- [ ] Step 11: 比较 artifact inventory、zip size/SHA256 和 manifest sourceRevision/checksums。
-- [ ] Step 12: 验证 packaged `caicli.exe version`、`packs list/doctor`、`artifacts list` 和 missing-tool diagnostics。
-- [ ] Step 13: 检查无残留 `caicli`/tool process 和 smoke/run temp directories。
+- [x] Step 10: 连续两次从同一 clean source revision 构建 release package。
+- [x] Step 11: 比较 artifact inventory、zip size/SHA256 和 manifest sourceRevision/checksums。
+- [x] Step 12: 验证 packaged `caicli.exe version`、`packs list/doctor`、`artifacts list` 和 missing-tool diagnostics。
+- [x] Step 13: 检查无残留 `caicli`/tool process 和 smoke/run temp directories。
 - [ ] Step 14: 生成独立 checksum artifact/发布说明，创建 release tag。
-- [ ] Step 15: 创建 `65_week_review.md`，记录最终 Accepted/Blocked decision。
+- [x] Step 15: 创建 `65_week_review.md`，记录最终 Accepted/Blocked decision。
 
 ## 验收矩阵
 
