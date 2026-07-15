@@ -571,6 +571,14 @@ Write-Output 'bugfix verification passed'
     Assert-ExitCode $packsResume 0 "packs resume dry-run"
     Assert-Contains $packsResume.Output '"eligible":true' "packs resume dry-run"
     Assert-Contains $packsResume.Output '"requiresApproval":true' "packs resume reapproval"
+    $packsVerifyReady = Invoke-CaiCli -Arguments @("packs", "verify", $packRunId, "--output", "json", "--workspace", $workspace)
+    Assert-ExitCode $packsVerifyReady 1 "packs verify rejects dry-run ready state"
+    Assert-Contains $packsVerifyReady.Output '"type":"packs.verify"' "packs verify fake boundary"
+    Assert-Contains $packsVerifyReady.Output "pack-tiff-run-state-invalid" "packs verify fake boundary"
+    if (@(Get-ChildItem -LiteralPath (Join-Path $packRunRoot "reports") -File).Count -ne 0 -or
+        @(Get-ChildItem -LiteralPath $packArtifacts -File -Recurse).Count -ne 0) {
+        throw "packs verify ready-state rejection created fake verification or preview evidence."
+    }
     $packsCancel = Invoke-CaiCli -Arguments @("packs", "cancel", $packRunId, "--output", "json", "--workspace", $workspace)
     Assert-ExitCode $packsCancel 0 "packs cancel"
     Assert-Contains $packsCancel.Output '"state":"canceled"' "packs cancel"
@@ -669,10 +677,53 @@ Write-Output 'bugfix verification passed'
         if ($realInputHashBefore -ne $realInputHashAfter) {
             throw "real Gerber/TIFF controlled conversion changed the authorized source fixture."
         }
+
+        $realVerify = Invoke-CaiCli -Arguments @(
+            "packs", "verify", $realRunId,
+            "--output", "json", "--workspace", $workspace
+        )
+        Assert-ExitCode $realVerify 0 "real Gerber/TIFF TIFF verification"
+        Assert-Contains $realVerify.Output '"type":"packs.verify"' "real Gerber/TIFF TIFF verification"
+        Assert-Contains $realVerify.Output '"hardVerificationPassed":true' "real Gerber/TIFF TIFF verification"
+        Assert-Contains $realVerify.Output '"level":"file-valid","status":"passed"' "real Gerber/TIFF file verification level"
+        Assert-Contains $realVerify.Output '"level":"metadata-valid","status":"passed"' "real Gerber/TIFF metadata verification level"
+        Assert-Contains $realVerify.Output '"level":"content-compared","status":"not-requested"' "real Gerber/TIFF content comparison boundary"
+        Assert-Contains $realVerify.Output '"humanReviewRequired":true' "real Gerber/TIFF human gate"
+        Assert-Contains $realVerify.Output '"correctnessProof":false' "real Gerber/TIFF correctness boundary"
+
+        $realPreview = Invoke-CaiCli -Arguments @(
+            "packs", "preview", $realRunId,
+            "--output", "json", "--workspace", $workspace
+        )
+        Assert-ExitCode $realPreview 0 "real Gerber/TIFF managed preview"
+        Assert-Contains $realPreview.Output '"type":"packs.preview"' "real Gerber/TIFF managed preview"
+        Assert-Contains $realPreview.Output '"correctnessProof":false' "real Gerber/TIFF preview correctness boundary"
+        Assert-Contains $realPreview.Output '"automaticallyOpened":false' "real Gerber/TIFF preview open boundary"
+        Assert-Contains $realPreview.Output '"automaticallyUploaded":false' "real Gerber/TIFF preview upload boundary"
+        $realRunAfterVerification = Invoke-CaiCli -Arguments @(
+            "packs", "runs", "show", $realRunId,
+            "--output", "json", "--workspace", $workspace
+        )
+        Assert-ExitCode $realRunAfterVerification 0 "real Gerber/TIFF verified run"
+        Assert-Contains $realRunAfterVerification.Output '"state":"awaiting-acceptance"' "real Gerber/TIFF verified run"
+        Assert-Contains $realRunAfterVerification.Output '"approvalPersisted":false' "real Gerber/TIFF verified run approval boundary"
+        $realVerificationReports = @(Get-ChildItem -LiteralPath (Join-Path $realRunRoot "reports") -File)
+        if (@($realVerificationReports | Where-Object { $_.Name -like "verification-r*.json" }).Count -ne 1 -or
+            @($realVerificationReports | Where-Object { $_.Name -like "verification-r*.md" }).Count -ne 1 -or
+            @($realVerificationReports | Where-Object { $_.Name -like "preview-r*.json" }).Count -ne 1) {
+            throw "real Gerber/TIFF verification did not create the stable managed JSON/markdown/preview reports."
+        }
+        $realPreviewFiles = @(Get-ChildItem -LiteralPath (Join-Path $realRunRoot "artifacts\previews") -File -Filter "*.png")
+        if ($realPreviewFiles.Count -ne 1 -or $realPreviewFiles[0].Length -le 0) {
+            throw "real Gerber/TIFF preview did not create exactly one non-empty managed PNG."
+        }
+
         $realJobPath = Join-Path $userProfile ".caicli\jobs\$realJobId.job.json"
         $realJobText = [System.IO.File]::ReadAllText($realJobPath)
         Assert-Contains $realJobText '"kind": "project-pack-conversion-output"' "real Gerber/TIFF job output pointer"
         Assert-Contains $realJobText '"kind": "project-pack-execution-log"' "real Gerber/TIFF job log pointer"
+        Assert-Contains $realJobText '"kind": "project-pack-verification-report"' "real Gerber/TIFF job verification pointer"
+        Assert-Contains $realJobText '"kind": "project-pack-preview"' "real Gerber/TIFF job preview pointer"
         Assert-Contains $realJobText '"taskReport": null' "real Gerber/TIFF no duplicate task report"
         if (@(Get-ChildItem -LiteralPath $realRunRoot -Recurse -File -Filter "*.tmp").Count -ne 0) {
             throw "real Gerber/TIFF controlled conversion left atomic temporary files behind."
@@ -682,7 +733,7 @@ Write-Output 'bugfix verification passed'
             throw "real Gerber/TIFF controlled conversion left a gerbv or magick process behind."
         }
 
-        Write-Host "real Gerber/TIFF conversion executed; TIFF engineering verification remains pending"
+        Write-Host "real Gerber/TIFF conversion, TIFF metadata verification, and managed preview passed; human acceptance remains pending"
         Write-Host "gerbv: $($realGerbvOperation.tool.version) SHA256=$realGerbvHash"
         Write-Host "imagemagick: $($realImageMagickOperation.tool.version) SHA256=$realImageMagickHash"
         Write-Host "input: SHA256=$realInputHashAfter"

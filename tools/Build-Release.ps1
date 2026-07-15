@@ -63,11 +63,27 @@ dotnet publish $projectPath `
     -p:IncludeNativeLibrariesForSelfExtract=true `
     -p:EnableCompressionInSingleFile=true `
     --output $resolvedPublishDir
+if ($LASTEXITCODE -ne 0) {
+    throw "dotnet publish failed with exit code $LASTEXITCODE."
+}
 
 $exePath = Join-Path $resolvedPublishDir "caicli.exe"
 if (-not (Test-Path -LiteralPath $exePath)) {
     throw "Expected executable was not produced: $exePath"
 }
+
+$magickNetVersion = "14.15.0"
+$nugetPackagesRoot = if ([string]::IsNullOrWhiteSpace($env:NUGET_PACKAGES)) {
+    Join-Path $env:USERPROFILE ".nuget\packages"
+} else {
+    $env:NUGET_PACKAGES
+}
+$magickNetNotice = Join-Path $nugetPackagesRoot "magick.net-q8-x64\$magickNetVersion\Notice.txt"
+if (-not (Test-Path -LiteralPath $magickNetNotice -PathType Leaf)) {
+    throw "Magick.NET third-party notice not found for package version $magickNetVersion. Restore packages before release build."
+}
+Copy-Item -LiteralPath $magickNetNotice `
+    -Destination (Join-Path $resolvedPublishDir "THIRD-PARTY-NOTICES-MAGICK.NET.txt")
 
 $manifest = [ordered]@{
     product = "C# AI CLI"
@@ -79,6 +95,7 @@ $manifest = [ordered]@{
     selfContained = $true
     executable = "caicli.exe"
     builtFromVersion = $version
+    thirdPartyNotices = @("THIRD-PARTY-NOTICES-MAGICK.NET.txt")
 }
 
 $manifestPath = Join-Path $resolvedPublishDir "release-manifest.json"

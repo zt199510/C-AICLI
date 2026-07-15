@@ -1,8 +1,8 @@
 # Gerber/TIFF Toolchain Gate
 
-更新时间：2026-07-14
+更新时间：2026-07-15
 
-状态：Week 58 Gate Passed（技术与许可 spike）；真实运行能力仍 Deferred
+状态：Week 58 Gate Passed；Week 61 controlled conversion 与 Week 62 managed verification 为 0.5.0 source Preview
 
 ## 结论
 
@@ -26,6 +26,7 @@ Week 58 不将任何第三方二进制提交到仓库或打入 release。
 | Gerbv | `gerbv/gerbv` GitHub release `v2.13.0`，Windows MSYS2 UCRT64 portable ZIP | GPL-2.0-or-later；发布包包含 `COPYING` | 允许在履行 GPL 二进制/对应源代码、版权和许可证义务后再分发 | 0.5.0 默认不再分发；用户安装或解压后显式配置绝对路径 |
 | ImageMagick | 官方 Windows release `7.1.2-27` portable Q8 x64 | ImageMagick License；允许商业使用和再分发，要求保留许可证与归属 | 可以合规再分发，但仍有 attribution、NOTICE 和供应链维护成本 | 0.5.0 默认不再分发；用户显式配置绝对路径 |
 | LibTIFF `tiffinfo` | Anaconda `libtiff 4.5.1 hd77b12b_0`，上游 LibTIFF `4.5.1` | HPND-style LibTIFF license | 允许使用、修改和再分发，需保留版权与许可文本 | 仅作为 Week 58 独立复核工具；不成为默认运行依赖 |
+| Magick.NET managed binding | NuGet `Magick.NET-Q8-x64 14.15.0`，内含 ImageMagick `7.1.2-27` 与 LibTIFF `4.7.2` | Magick.NET Apache-2.0；ImageMagick 与 transitive codec licenses 见包内 `Notice.txt` | 允许按各 notice 条件再分发；release 必须携带完整 attribution/license 文本 | Week 62 verifier 的固定 managed dependency；release build 复制精确包 notice，不替代用户配置的外部 `magick.exe` |
 
 许可证结论是工程 Gate，不是针对任意分发组合的法律意见。若后续决定捆绑任一工具，
 Week 65 前必须重新核对精确 artifact、transitive notices、对应源代码义务和 release 内容。

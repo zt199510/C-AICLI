@@ -1,6 +1,6 @@
 # 第 62 周 TIFF Artifact Inspection、Preview 与 Verification Implementation Plan
 
-状态：计划中
+状态：已完成
 
 **Goal:** 对 Week 61 生成的 TIFF 做有界、可重复、可解释的工程验证，生成 metadata、preview/contact sheet、baseline comparison 和稳定报告，避免仅凭“文件存在”判定转换成功。
 
@@ -47,6 +47,21 @@
 
 任何较低层通过都不能隐式代表较高层通过。
 
+## Frozen v1 TIFF Contract
+
+- Metadata fields: file size/SHA256/byte order, frame count, and per-frame width/height, DPI X/Y,
+  bits/sample, samples/pixel, pixel format, compression, orientation, alpha presence, pixel count and decoded bytes.
+- Supported hard-verification input: classic TIFF (`II*` or `MM*`), one to 32 frames, 8-bit RGB without alpha,
+  LZW compression, PixelsPerInch density, and declared `.tiff` outputs only. BigTIFF and every undeclared
+  compression/pixel format fail with a stable unsupported diagnostic rather than being partially accepted.
+- Resource limits: 256 MiB/file, 32,768 pixels/dimension, 100,000,000 pixels/frame, 128,000,000 pixels total,
+  32 frames, 512 MiB decoded RGBA memory, 15 seconds/decode, and 2,048 pixels/preview edge.
+- Pixel comparison uses `rgba8-absolute-v1`: decoded sRGB RGBA8, visual top-left orientation, straight alpha,
+  an explicit maximum per-channel delta and maximum count of pixels exceeding that delta. Reports include both
+  observed values and normalized pixel SHA256; they never collapse the result to a vague similarity score.
+- Exact file SHA256 comparison is permitted only when the baseline declares `byteDeterministic=true` and records
+  the producing tool/input identity. Preview state is always separate from hard verification state.
+
 ## 用户入口草案
 
 ```powershell
@@ -79,19 +94,19 @@ Preview 命令只返回 artifact path/metadata；CLI 不启动默认图片查看
 
 ## 任务清单
 
-- [ ] Step 1: 冻结 TIFF metadata、resource limits 和 verification levels。
-- [ ] Step 2: 实现 bounded TIFF reader/decoder wrapper 和 stable diagnostics。
-- [ ] Step 3: 实现 declared output inventory 与 file/hash revalidation。
-- [ ] Step 4: 定义 baseline manifest/schema、tolerance 和 source boundary。
-- [ ] Step 5: 实现 metadata/exact-hash/pixel comparison。
-- [ ] Step 6: 实现 managed PNG preview/contact sheet 生成。
-- [ ] Step 7: 实现 `packs verify/preview` text/JSON 和 markdown report。
-- [ ] Step 8: 将 verification/preview/report artifacts 接入 run/job。
-- [ ] Step 9: 增加 malicious/corrupt/large TIFF、baseline 和 renderer tests。
-- [ ] Step 10: 扩展 default fake fixture smoke 和 real-tool verification smoke。
-- [ ] Step 11: 更新 quickstart/security/known limitations/runtime diagnostics 草稿。
-- [ ] Step 12: 运行 build/test/default smoke/real-tool smoke。
-- [ ] Step 13: 创建 `62_week_review.md`，冻结 Week 63 human gate/artifact contract。
+- [x] Step 1: 冻结 TIFF metadata、resource limits 和 verification levels。
+- [x] Step 2: 实现 bounded TIFF reader/decoder wrapper 和 stable diagnostics。
+- [x] Step 3: 实现 declared output inventory 与 file/hash revalidation。
+- [x] Step 4: 定义 baseline manifest/schema、tolerance 和 source boundary。
+- [x] Step 5: 实现 metadata/exact-hash/pixel comparison。
+- [x] Step 6: 实现 managed PNG preview/contact sheet 生成。
+- [x] Step 7: 实现 `packs verify/preview` text/JSON 和 markdown report。
+- [x] Step 8: 将 verification/preview/report artifacts 接入 run/job。
+- [x] Step 9: 增加 malicious/corrupt/large TIFF、baseline 和 renderer tests。
+- [x] Step 10: 扩展 default fake fixture smoke 和 real-tool verification smoke。
+- [x] Step 11: 更新 quickstart/security/known limitations/runtime diagnostics 草稿。
+- [x] Step 12: 运行 build/test/default smoke/real-tool smoke。
+- [x] Step 13: 创建 `62_week_review.md`，冻结 Week 63 human gate/artifact contract。
 
 ## 验收标准
 

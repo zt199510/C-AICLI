@@ -631,6 +631,115 @@ public sealed class ProjectPackRunService
             stages: resultStages);
     }
 
+    public ProjectPackRunMutationResult CompleteVerification(
+        string runId,
+        bool succeeded,
+        IReadOnlyList<ProjectPackRunArtifactPointer> evidence,
+        DateTimeOffset nowUtc,
+        string? errorCode,
+        string summary)
+    {
+        ArgumentNullException.ThrowIfNull(evidence);
+        ArgumentException.ThrowIfNullOrWhiteSpace(summary);
+        ProjectPackRunReadResult read = store.Read(runId);
+        if (!read.Succeeded || read.Record is null || read.Checkpoint is null)
+        {
+            return FromReadFailure(read, runId);
+        }
+
+        ProjectPackRunRecord record = read.Record;
+        ProjectPackRunCheckpoint checkpoint = read.Checkpoint;
+        if (record.State != ProjectPackRunState.Verifying)
+        {
+            return ProjectPackRunMutationResult.Failure(
+                TiffVerificationErrorCode.RunStateInvalid,
+                "TIFF verification can complete only from the verifying state.",
+                runId: runId);
+        }
+
+        ProjectPackRunArtifactPointer[] artifacts;
+        try
+        {
+            artifacts = record.Artifacts.Concat(evidence).ToArray();
+            if (artifacts.Select(artifact => artifact.Id).Distinct(StringComparer.Ordinal).Count() != artifacts.Length)
+            {
+                throw new ProjectPackContractException(
+                    ProjectPackRunErrorCode.RecordCorrupt,
+                    "TIFF verification evidence contains a duplicate artifact id.");
+            }
+        }
+        catch (ProjectPackContractException exception)
+        {
+            return ProjectPackRunMutationResult.Failure(exception.ErrorCode, exception.Message, runId: runId);
+        }
+
+        ProjectPackStageCheckpoint[] stages = ReplaceStage(
+            checkpoint.Stages,
+            "inspect",
+            new ProjectPackStageCheckpoint(
+                "inspect",
+                succeeded ? ProjectPackStageStatus.Succeeded : ProjectPackStageStatus.Failed,
+                1,
+                nowUtc,
+                nowUtc,
+                succeeded ? null : errorCode ?? TiffVerificationErrorCode.DecodeFailed,
+                summary,
+                evidence));
+        return Advance(
+            record,
+            checkpoint,
+            succeeded ? ProjectPackRunState.AwaitingAcceptance : ProjectPackRunState.Failed,
+            nowUtc,
+            succeeded ? null : errorCode ?? TiffVerificationErrorCode.DecodeFailed,
+            summary,
+            artifacts: artifacts,
+            stages: stages);
+    }
+
+    public ProjectPackRunMutationResult AttachVerificationEvidence(
+        string runId,
+        IReadOnlyList<ProjectPackRunArtifactPointer> evidence,
+        DateTimeOffset nowUtc,
+        string summary)
+    {
+        ArgumentNullException.ThrowIfNull(evidence);
+        ArgumentException.ThrowIfNullOrWhiteSpace(summary);
+        ProjectPackRunReadResult read = store.Read(runId);
+        if (!read.Succeeded || read.Record is null || read.Checkpoint is null)
+        {
+            return FromReadFailure(read, runId);
+        }
+
+        if (read.Record.State != ProjectPackRunState.AwaitingAcceptance)
+        {
+            return ProjectPackRunMutationResult.Failure(
+                TiffVerificationErrorCode.RunStateInvalid,
+                "Preview evidence can be attached only after hard verification.",
+                runId: runId);
+        }
+
+        try
+        {
+            ProjectPackRunArtifactPointer[] artifacts = read.Record.Artifacts.Concat(evidence).ToArray();
+            ProjectPackRunRecord updated = read.Record.WithArtifacts(artifacts, nowUtc, summary);
+            ProjectPackRunCheckpoint updatedCheckpoint = new(
+                read.Checkpoint.SchemaVersion,
+                read.Checkpoint.RunId,
+                updated.Revision,
+                updated.State,
+                read.Checkpoint.PlanFingerprint,
+                read.Checkpoint.PolicyFingerprint,
+                nowUtc,
+                read.Checkpoint.Stages,
+                approvalPersisted: false);
+            return store.Update(updated, updatedCheckpoint, read.Record.Revision);
+        }
+        catch (ProjectPackContractException exception)
+        {
+            return ProjectPackRunMutationResult.Failure(exception.ErrorCode, exception.Message, runId: runId);
+        }
+    }
+
     public ProjectPackRunMutationResult Cancel(string runId, DateTimeOffset nowUtc)
     {
         ProjectPackRunReadResult read = store.Read(runId);

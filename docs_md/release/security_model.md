@@ -314,8 +314,39 @@ A successful controlled conversion transitions `ready -> running -> verifying`; 
 pending. The redacted managed execution log records tool filename/version/SHA256, fixed template id, approval
 status, exit/duration, bounded stdout/stderr, cleanup status, and input/output hashes, but not absolute tool paths,
 raw argv, raw input, or approval material. `verifying` proves only that conversion executed and declared hashes
-were recorded. TIFF metadata/content/baseline verification, preview, human accept/reject, execute restart,
-artifact prune, scheduler, concurrent worker, remote runner, and API control remain Deferred.
+were recorded.
+
+Week 62 adds bounded TIFF inspection and preview as a 0.5.0 source-only Preview. It uses the managed
+`Magick.NET-Q8-x64 14.15.0` binding for the Week 58-validated ImageMagick 7.1.2-27 codec. This is an in-process
+library call, not execution of a user-selected executable: it cannot add argv/env/cwd, does not invoke a shell,
+and does not reuse or persist conversion approval. The external Gerbv/`magick.exe` conversion path retains every
+Week 61 typed-process and current-approval requirement.
+
+The decoder serializes access to ImageMagick's process-global resource policy and fixes width/height, frame-list,
+area, memory, single allocation, disk cache, thread, and 15-second time limits. Decode temporary state is directed
+to the managed run working directory. V1 hard verification accepts only classic little/big-endian TIFF, LZW,
+RGB8/no-alpha, PixelsPerInch, and undefined/top-left orientation within the frozen file/dimension/pixel/frame/
+decoded-memory bounds. BigTIFF, corrupt/truncated content, resource-limit errors, other compression/pixel formats,
+and incomplete pixel buffers fail with stable diagnostics. Mature codec use reduces parser risk but does not make
+C-AICLI an OS sandbox; the exact native package remains a third-party attack surface.
+
+Before and after decode, the verifier rechecks the run/plan/input-manifest relationship, canonical/reparse
+boundaries, complete declared output names/counts, source/staging/TIFF size and SHA256, unexpected files, and the
+same locked TIFF identity. Original TIFF, source, staging, and baseline are read-only. Generated JSON/markdown and
+PNG/contact sheets use stable managed paths, create-new/no-overwrite writes, size/hash pointers, and the existing
+run/job artifact index. No generated verification evidence is written beside a source or baseline.
+
+Optional baselines are strict schema-v1 regular files inside the workspace. Unknown fields/versions, URL/network/
+outside paths, identity drift, or baseline mutation fail closed. Exact TIFF SHA256 requires an explicit
+`byteDeterministic=true` claim tied to pack/tool/input identity. Pixel comparison uses decoded sRGB RGBA8,
+top-left orientation, straight alpha, explicit max channel delta, and explicit maximum different-pixel count;
+reports record observed values and normalized pixel hashes rather than a vague similarity score.
+
+`file-valid`, `metadata-valid`, `content-compared`, and `human-review-required` are distinct result levels. Only
+all requested hard checks can move `verifying -> awaiting-acceptance`; no Week 62 path reaches `accepted`.
+Preview generation is permitted only after hard verification, is not a correctness proof, and never starts a
+viewer, uploads data, or uses model vision. Human accept/reject, execute restart, artifact prune, scheduler,
+concurrent worker, remote runner, and API control remain Deferred.
 
 ## Changes View
 
@@ -366,8 +397,9 @@ Users can disable tools through `disabledTools` in user or workspace config. Dis
 - MCP stdio startup commands run dangerous command detection and shell policy checks before process start.
 - MCP startup policy failures surface safe diagnostics in `tools call mcp.*` when configured server/tool discovery is blocked, instead of only returning `unknown-tool`.
 - Remote/http MCP transport remains Deferred.
-- Gerber/TIFF controlled conversion exists only in the 0.5.0 source Preview described above; TIFF verification,
-  human acceptance, and the complete workflow remain Deferred and outside the accepted 0.4.0 artifact.
+- Gerber/TIFF controlled conversion and bounded TIFF verification/preview exist only in the 0.5.0 source Preview
+  described above; human acceptance, artifact lifecycle, and the complete workflow remain Deferred and outside
+  the accepted 0.4.0 artifact.
 
 These deferred capabilities remain outside the accepted `0.4.0` release boundary.
 

@@ -2448,6 +2448,175 @@ public static class CliCommandFactory
         });
         packsCommand.Subcommands.Add(packsResumeCommand);
 
+        Command packsVerifyCommand = new("verify", "Run bounded TIFF verification for one controlled conversion run.");
+        Argument<string> packsVerifyIdArgument = new("run-id") { Description = "Project pack run id." };
+        Option<string> packsVerifyBaselineOption = new("--baseline")
+        {
+            Description = "Use one strict schema-v1 baseline manifest from inside the workspace."
+        };
+        Option<bool> packsVerifyJsonOption = new("--json") { Description = "Write one JSON TIFF verification result." };
+        Option<string> packsVerifyOutputOption = new("--output") { Description = "Select text or json output." };
+        packsVerifyOutputOption.DefaultValueFactory = _ => "text";
+        AddTextJsonOutputValidator(packsVerifyOutputOption);
+        packsVerifyCommand.Arguments.Add(packsVerifyIdArgument);
+        packsVerifyCommand.Options.Add(packsVerifyBaselineOption);
+        packsVerifyCommand.Options.Add(packsVerifyJsonOption);
+        packsVerifyCommand.Options.Add(packsVerifyOutputOption);
+        packsVerifyCommand.SetAction(parseResult =>
+        {
+            string? workspacePath = parseResult.GetValue(workspaceOption);
+            string runId = parseResult.GetValue(packsVerifyIdArgument) ?? string.Empty;
+            string? baselinePath = parseResult.GetValue(packsVerifyBaselineOption);
+            bool jsonOutput = IsJsonOutputRequested(
+                parseResult.GetValue(packsVerifyJsonOption),
+                parseResult.GetValue(packsVerifyOutputOption) ?? "text");
+            CliEnvironmentSnapshot snapshot = workspaceSnapshotProvider(workspacePath);
+            WriteVerboseDiagnostics(parseResult, "packs verify", snapshot, humanReadableOutput: !jsonOutput);
+            DiagnosticContext? traceContext = CreateTraceContext(parseResult, snapshot);
+            TryWriteTraceCommandEvent(
+                "packs verify",
+                snapshot,
+                traceContext,
+                "command.start",
+                sequence: 1,
+                "started",
+                summary: "Bounded TIFF verification requested for an existing managed run.",
+                timestampUtc: utcNowProvider());
+
+            TiffVerificationRunResult verification = new TiffVerificationService(
+                ManagedProjectPackRunStore.Create(snapshot)).Verify(
+                    runId,
+                    snapshot.Workspace,
+                    baselinePath,
+                    utcNowProvider(),
+                    CancellationToken.None);
+            if (verification.PersistenceDiagnostic is not null)
+            {
+                output.WriteLine(ProjectPackRunRenderer.RenderFailure(
+                    "packs.verify",
+                    verification.PersistenceDiagnostic.Code,
+                    verification.PersistenceDiagnostic.Summary,
+                    jsonOutput,
+                    runId));
+                return 1;
+            }
+
+            if (verification.Mutation?.Record is not null &&
+                !TryUpdateProjectPackVerificationJob(
+                    snapshot,
+                    verification.Mutation.Record,
+                    previewCommand: false,
+                    verification.Result.HardVerificationPassed,
+                    utcNowProvider(),
+                    out string? jobError))
+            {
+                output.WriteLine(ProjectPackRunRenderer.RenderFailure(
+                    "packs.verify",
+                    "job-record-write-failed",
+                    jobError ?? "TIFF verification job evidence could not be updated.",
+                    jsonOutput,
+                    runId));
+                return 1;
+            }
+
+            output.WriteLine(jsonOutput
+                ? TiffVerificationRenderer.RenderJson(verification.Result)
+                : TiffVerificationRenderer.RenderText(verification.Result));
+            TryWriteTraceCommandEvent(
+                "packs verify",
+                snapshot,
+                traceContext,
+                "command.complete",
+                sequence: 2,
+                verification.Succeeded ? "success" : "failure",
+                summary: verification.Result.Summary,
+                errorCode: verification.Result.Diagnostics.FirstOrDefault(diagnostic => diagnostic.Severity == "error")?.Code,
+                timestampUtc: utcNowProvider());
+            return verification.Succeeded ? 0 : 1;
+        });
+        packsCommand.Subcommands.Add(packsVerifyCommand);
+
+        Command packsPreviewCommand = new("preview", "Generate managed PNG preview/contact sheet evidence after hard verification.");
+        Argument<string> packsPreviewIdArgument = new("run-id") { Description = "Project pack run id." };
+        Option<bool> packsPreviewJsonOption = new("--json") { Description = "Write one JSON TIFF preview result." };
+        Option<string> packsPreviewOutputOption = new("--output") { Description = "Select text or json output." };
+        packsPreviewOutputOption.DefaultValueFactory = _ => "text";
+        AddTextJsonOutputValidator(packsPreviewOutputOption);
+        packsPreviewCommand.Arguments.Add(packsPreviewIdArgument);
+        packsPreviewCommand.Options.Add(packsPreviewJsonOption);
+        packsPreviewCommand.Options.Add(packsPreviewOutputOption);
+        packsPreviewCommand.SetAction(parseResult =>
+        {
+            string? workspacePath = parseResult.GetValue(workspaceOption);
+            string runId = parseResult.GetValue(packsPreviewIdArgument) ?? string.Empty;
+            bool jsonOutput = IsJsonOutputRequested(
+                parseResult.GetValue(packsPreviewJsonOption),
+                parseResult.GetValue(packsPreviewOutputOption) ?? "text");
+            CliEnvironmentSnapshot snapshot = workspaceSnapshotProvider(workspacePath);
+            WriteVerboseDiagnostics(parseResult, "packs preview", snapshot, humanReadableOutput: !jsonOutput);
+            DiagnosticContext? traceContext = CreateTraceContext(parseResult, snapshot);
+            TryWriteTraceCommandEvent(
+                "packs preview",
+                snapshot,
+                traceContext,
+                "command.start",
+                sequence: 1,
+                "started",
+                summary: "Managed PNG preview/contact sheet generation requested.",
+                timestampUtc: utcNowProvider());
+
+            TiffPreviewRunResult preview = new TiffVerificationService(
+                ManagedProjectPackRunStore.Create(snapshot)).Preview(
+                    runId,
+                    snapshot.Workspace,
+                    utcNowProvider(),
+                    CancellationToken.None);
+            if (preview.PersistenceDiagnostic is not null)
+            {
+                output.WriteLine(ProjectPackRunRenderer.RenderFailure(
+                    "packs.preview",
+                    preview.PersistenceDiagnostic.Code,
+                    preview.PersistenceDiagnostic.Summary,
+                    jsonOutput,
+                    runId));
+                return 1;
+            }
+
+            if (preview.Mutation?.Record is not null &&
+                !TryUpdateProjectPackVerificationJob(
+                    snapshot,
+                    preview.Mutation.Record,
+                    previewCommand: true,
+                    preview.Result.Succeeded,
+                    utcNowProvider(),
+                    out string? jobError))
+            {
+                output.WriteLine(ProjectPackRunRenderer.RenderFailure(
+                    "packs.preview",
+                    "job-record-write-failed",
+                    jobError ?? "TIFF preview job evidence could not be updated.",
+                    jsonOutput,
+                    runId));
+                return 1;
+            }
+
+            output.WriteLine(jsonOutput
+                ? TiffVerificationRenderer.RenderPreviewJson(preview.Result)
+                : TiffVerificationRenderer.RenderPreviewText(preview.Result));
+            TryWriteTraceCommandEvent(
+                "packs preview",
+                snapshot,
+                traceContext,
+                "command.complete",
+                sequence: 2,
+                preview.Succeeded ? "success" : "failure",
+                summary: preview.Result.Summary,
+                errorCode: preview.Result.Diagnostics.FirstOrDefault(diagnostic => diagnostic.Severity == "error")?.Code,
+                timestampUtc: utcNowProvider());
+            return preview.Succeeded ? 0 : 1;
+        });
+        packsCommand.Subcommands.Add(packsPreviewCommand);
+
         Command skillsCommand = new("skills", "List and run local skill workflow packs.");
         Command skillsListCommand = new("list", "List built-in and workspace-local skill packs.");
         Option<bool> skillsListJsonOption = new("--json")
@@ -6406,6 +6575,110 @@ public static class CliCommandFactory
             or ProjectPackContractException)
         {
             return null;
+        }
+    }
+
+    private static bool TryUpdateProjectPackVerificationJob(
+        CliEnvironmentSnapshot snapshot,
+        ProjectPackRunRecord record,
+        bool previewCommand,
+        bool commandSucceeded,
+        DateTimeOffset nowUtc,
+        out string? error)
+    {
+        error = null;
+        string? jobId = record.Correlation.JobId;
+        if (jobId is null)
+        {
+            error = "Project pack run does not contain its original job correlation.";
+            return false;
+        }
+
+        try
+        {
+            JobRecordStore jobStore = JobRecordStore.Create(snapshot);
+            JobRecordReadResult read = jobStore.Read(jobId);
+            if (!read.Succeeded || read.Record is null)
+            {
+                error = "Correlated project pack job record was not found.";
+                return false;
+            }
+
+            ManagedProjectPackRunStore runStore = ManagedProjectPackRunStore.Create(snapshot);
+            ManagedProjectPackRunLayout layout = runStore.GetLayout(record.RunId);
+            List<JobArtifact> artifacts = read.Record.Artifacts
+                .Where(artifact => artifact.Kind != JobArtifactKind.ProjectPackRun &&
+                    artifact.Kind != JobArtifactKind.ProjectPackVerificationReport &&
+                    artifact.Kind != JobArtifactKind.ProjectPackPreview)
+                .ToList();
+            artifacts.Add(JobArtifact.FromPath(
+                JobArtifactKind.ProjectPackRun,
+                layout.RunRecordPath,
+                $"packRunId={record.RunId}; operational checkpoint pointer only"));
+            foreach (ProjectPackRunArtifactPointer pointer in record.Artifacts.Where(pointer => pointer.Kind is
+                "tiff-verification-json" or
+                "tiff-verification-markdown" or
+                "tiff-preview-report" or
+                "tiff-preview" or
+                "tiff-contact-sheet"))
+            {
+                string? path = ResolveProjectPackArtifactPath(pointer, layout, snapshot.Workspace);
+                if (path is null || !File.Exists(path))
+                {
+                    error = "A managed TIFF verification/preview artifact pointer is missing or unsafe.";
+                    return false;
+                }
+
+                string kind = pointer.Kind is "tiff-preview" or "tiff-contact-sheet"
+                    ? JobArtifactKind.ProjectPackPreview
+                    : JobArtifactKind.ProjectPackVerificationReport;
+                artifacts.Add(JobArtifact.FromPath(
+                    kind,
+                    path,
+                    pointer.Kind is "tiff-preview" or "tiff-contact-sheet"
+                        ? "Human-review preview only; not a correctness proof."
+                        : "Deterministic TIFF verification/preview report evidence."));
+            }
+
+            JobArtifact[] uniqueArtifacts = artifacts
+                .GroupBy(artifact => artifact.Kind + "\n" + artifact.Path, StringComparer.Ordinal)
+                .Select(group => group.Last())
+                .ToArray();
+            string status = previewCommand
+                ? read.Record.Status
+                : commandSucceeded ? JobStatus.Succeeded : JobStatus.Failed;
+            string summary = previewCommand
+                ? commandSucceeded
+                    ? "Managed PNG preview/contact sheet evidence was generated; explicit human accept/reject remains required."
+                    : "Managed PNG preview generation was incomplete; hard verification state was unchanged."
+                : commandSucceeded
+                    ? "TIFF hard verification passed; the run is awaiting explicit human acceptance."
+                    : "TIFF hard verification failed; the run did not reach human acceptance.";
+            JobRecord updated = read.Record.WithStatus(
+                status,
+                nowUtc,
+                exitCode: previewCommand ? read.Record.ExitCode : commandSucceeded ? 0 : 1,
+                stopReason: previewCommand
+                    ? commandSucceeded ? "preview-generated-awaiting-acceptance" : "preview-failed-awaiting-acceptance"
+                    : commandSucceeded ? "verification-passed-awaiting-acceptance" : "verification-failed",
+                errorCode: previewCommand || commandSucceeded ? null : record.ErrorCode,
+                summary: summary,
+                taskReport: null,
+                artifacts: uniqueArtifacts,
+                warnings: read.Record.Warnings.Concat(
+                [
+                    previewCommand
+                        ? "Preview is a human-review aid and does not alter hard verification or acceptance."
+                        : "Verification levels are independent; lower-level success does not imply content comparison.",
+                    "Project pack run state remains the operational checkpoint; taskReport was not duplicated."
+                ]).Distinct(StringComparer.Ordinal).ToArray());
+            jobStore.Update(updated);
+            return true;
+        }
+        catch (Exception exception) when (IsJobStoreException(exception) || exception is ProjectPackContractException)
+        {
+            error = "Correlated project pack job record could not be updated safely.";
+            return false;
         }
     }
 

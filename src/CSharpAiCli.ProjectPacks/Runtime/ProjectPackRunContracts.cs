@@ -401,6 +401,30 @@ public sealed record ProjectPackRunRecord
             PolicyFingerprint, State, CreatedAtUtc, nowUtc, correlation, Artifacts, ErrorCode, Summary,
             CancellationRequested, RestartRequired, Redaction);
 
+    public ProjectPackRunRecord WithArtifacts(
+        IReadOnlyList<ProjectPackRunArtifactPointer> artifacts,
+        DateTimeOffset nowUtc,
+        string? summary = null)
+    {
+        ArgumentNullException.ThrowIfNull(artifacts);
+        if (artifacts.Select(artifact => artifact.Id).Distinct(StringComparer.Ordinal).Count() != artifacts.Count)
+        {
+            throw new ProjectPackContractException(
+                ProjectPackRunErrorCode.RecordCorrupt,
+                "Project pack run artifact ids must remain unique.");
+        }
+
+        return Copy(
+            revision: Revision + 1,
+            state: State,
+            nowUtc: nowUtc,
+            errorCode: ErrorCode,
+            summary: summary ?? Summary,
+            cancellationRequested: CancellationRequested,
+            restartRequired: RestartRequired,
+            artifacts: artifacts);
+    }
+
     private ProjectPackRunRecord Copy(
         long revision,
         string state,

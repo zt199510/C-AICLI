@@ -14,8 +14,11 @@ public sealed class ReleaseBuildScriptTests
         Assert.Contains("--runtime $Runtime", script, StringComparison.Ordinal);
         Assert.Contains("--self-contained true", script, StringComparison.Ordinal);
         Assert.Contains("-p:PublishSingleFile=true", script, StringComparison.Ordinal);
+        Assert.Contains("dotnet publish failed with exit code $LASTEXITCODE", script, StringComparison.Ordinal);
         Assert.Contains("caicli.exe", script, StringComparison.Ordinal);
         Assert.Contains("release-manifest.json", script, StringComparison.Ordinal);
+        Assert.Contains("THIRD-PARTY-NOTICES-MAGICK.NET.txt", script, StringComparison.Ordinal);
+        Assert.Contains("magick.net-q8-x64\\$magickNetVersion\\Notice.txt", script, StringComparison.Ordinal);
     }
 
     [Fact]

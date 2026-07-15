@@ -204,8 +204,30 @@ The real run performs fixed Gerbv PNG render and ImageMagick TIFF encode templat
 It re-probes both tools, requests current approval for every external invocation, uses the managed run cwd/temp
 area, refuses existing outputs, captures bounded/redacted process evidence, and records job/run/artifact pointers.
 A successful Week 61 run stops in `verifying`; this means conversion executed and declared output hashes were
-recorded. It does not mean TIFF metadata/content/baseline verification passed, and it cannot enter
-`awaiting-acceptance` until the Week 62 verifier exists.
+recorded. It does not mean TIFF metadata/content/baseline verification passed.
+
+Week 62 source Preview adds bounded TIFF verification and managed human-review previews. Use the `runId` returned
+by `packs run`:
+
+```powershell
+caicli packs verify <run-id> --output json --workspace .
+caicli packs verify <run-id> --baseline .\.caicli\baselines\board-a.json --output json --workspace .
+caicli packs preview <run-id> --output json --workspace .
+caicli packs runs show <run-id> --output json --workspace .
+```
+
+`packs verify` revalidates the declared output inventory, source/staging/TIFF size and SHA256, TIFF signature,
+bounded decode, metadata, and an optional strict workspace-local baseline. It accepts only classic TIFF, LZW,
+RGB8/no-alpha, one to 32 frames, and the frozen file/dimension/pixel/memory/time limits. A baseline can require
+metadata, a proven byte-deterministic exact SHA256, and/or `rgba8-absolute-v1` pixel comparison with explicit
+per-channel and different-pixel tolerances. Unknown schema fields/versions, network/outside baselines, mutation,
+unsupported formats, and mismatches fail closed.
+
+The verifier writes stable JSON and markdown only under the managed run `reports` directory. A hard pass moves
+the run from `verifying` to `awaiting-acceptance`; it never auto-accepts. `packs preview` is then allowed to create
+stable no-overwrite PNG/contact-sheet evidence under managed artifacts. Preview is not a correctness proof and
+the CLI never opens or uploads it. Baseline creation/update and human accept/reject are separate explicit future
+operations; a failed verification never replaces its baseline.
 
 Local job history is opt-in for execution commands. `jobs list/show/export` reads job records from the user-level store under `%USERPROFILE%\.caicli\jobs`; these read commands do not call a model, run shell/patch tools, start MCP, write command logs, or write workspace files.
 

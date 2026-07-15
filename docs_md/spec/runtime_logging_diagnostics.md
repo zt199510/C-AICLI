@@ -233,6 +233,26 @@ Week 60 adds source-only managed Project Pack run diagnostics:
   and unchanged `caicli`/`gerbv`/`magick` process sets. `CAICLI_GERBER_TIFF_TOOL_SMOKE=1` still does not execute a
   tool until the Week 61 adapter is available.
 
+Week 61-62 add controlled conversion and TIFF verification diagnostics:
+
+- A successful controlled conversion records bounded/redacted `logs/conversion-execution.json`, run/job pointers,
+  tool filename/version/SHA256, fixed template id, current approval status, exit/duration, bounded stdout/stderr,
+  cleanup flags, and input/output identities. It stops in `verifying`; this event alone is not TIFF verification.
+- `packs verify <run-id>` emits text or one JSON object with `type="packs.verify"`, schema version, independent
+  verification levels, frozen resource limits, sorted TIFF/frame metadata, optional exact/pixel comparison,
+  bounded diagnostics, and `correctnessProof=false`. JSON stdout remains clean under `--output json`.
+- Verification writes stable `reports/verification-rNNNN.json` and `.md` files with create-new/no-overwrite
+  semantics. Their pointers are appended to the same run/job artifact indexes; job `taskReport` remains null.
+  A hard pass moves only to `awaiting-acceptance`; failure records stable error evidence and enters `failed`.
+- `packs preview <run-id>` emits `type="packs.preview"`, `correctnessProof=false`,
+  `automaticallyOpened=false`, and `automaticallyUploaded=false`. Managed PNG/contact-sheet and preview-report
+  pointers are added only through the same run/job evidence path. Preview does not alter hard verification.
+- Explicit `--trace` records bounded `command.start`/`command.complete` summaries for verify/preview. Trace,
+  JSON, markdown, run, and job diagnostics pass through secret redaction and do not persist raw TIFF/source/
+  baseline content, raw external argv, tool absolute paths, or approval material.
+- Default smoke proves a dry-run/fake-ready checkpoint cannot be verified. Real conversion + verification +
+  preview smoke remains independent and runs only with `CAICLI_GERBER_TIFF_TOOL_SMOKE=1` and explicit tool paths.
+
 Trace and verbose diagnostics must redact secrets before writing output. Redaction covers API keys, access/refresh tokens, passwords, `Authorization` headers and common variants, `secretKey`, `privateKey`, nested or escaped `argumentsJson`, OpenAI `sk-...` keys, and GitHub token formats such as `ghp_...` and `github_pat_...`. Diagnostics may record key presence and source, but never raw key values.
 
 `logs path` prints the resolved CLI log directory. It must not create the directory just to print the path.
