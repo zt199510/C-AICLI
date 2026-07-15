@@ -27,6 +27,8 @@ public sealed record EffectiveConfiguration(
 
     public AgentRunLimits AgentRunLimits { get; init; } = AgentRunLimits.Default;
 
+    public ArtifactRetentionConfiguration ArtifactRetention { get; init; } = ArtifactRetentionConfiguration.Default;
+
     public string AgentRunMaxStepsSource { get; init; } = "default";
 
     public string AgentRunMaxToolCallsSource { get; init; } = "default";

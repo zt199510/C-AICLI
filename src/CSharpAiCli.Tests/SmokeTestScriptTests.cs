@@ -86,7 +86,7 @@ public sealed class SmokeTestScriptTests
         Assert.Contains("\"packs\", \"run\", \"gerber-tiff\"", script, StringComparison.Ordinal);
         Assert.Contains("\"--plan\", \"gerber-tiff-plan.json\", \"--dry-run\"", script, StringComparison.Ordinal);
         Assert.Contains("\"packs\", \"runs\", \"show\", $packRunId", script, StringComparison.Ordinal);
-        Assert.Contains("\"packs\", \"resume\", $packRunId, \"--dry-run\"", script, StringComparison.Ordinal);
+        Assert.Contains("\"packs\", \"resume\", $packRunId, \"--output\"", script, StringComparison.Ordinal);
         Assert.Contains("\"packs\", \"verify\", $packRunId", script, StringComparison.Ordinal);
         Assert.Contains("packs verify ready-state rejection created fake verification or preview evidence", script, StringComparison.Ordinal);
         Assert.Contains("\"packs\", \"cancel\", $packRunId", script, StringComparison.Ordinal);
@@ -97,9 +97,12 @@ public sealed class SmokeTestScriptTests
         Assert.Contains("real Gerber/TIFF tool smoke skipped", script, StringComparison.Ordinal);
         Assert.Contains("\"packs\", \"verify\", $realRunId", script, StringComparison.Ordinal);
         Assert.Contains("\"packs\", \"preview\", $realRunId", script, StringComparison.Ordinal);
+        Assert.Contains("\"packs\", \"accept\", $realRunId", script, StringComparison.Ordinal);
+        Assert.Contains("\"packs\", \"reject\", $realRejectRunId", script, StringComparison.Ordinal);
+        Assert.Contains("\"artifacts\", \"prune\"", script, StringComparison.Ordinal);
         Assert.Contains("\"hardVerificationPassed\":true", script, StringComparison.Ordinal);
         Assert.Contains("\"state\":\"awaiting-acceptance\"", script, StringComparison.Ordinal);
-        Assert.Contains("real Gerber/TIFF conversion, TIFF metadata verification, and managed preview passed; human acceptance remains pending", script, StringComparison.Ordinal);
+        Assert.Contains("real Gerber/TIFF conversion, hard verification, explicit human accept/reject, and controlled managed prune passed", script, StringComparison.Ordinal);
         Assert.Contains("\"--approval\", \"always\"", script, StringComparison.Ordinal);
         Assert.Contains("\"state\":\"verifying\"", script, StringComparison.Ordinal);
         Assert.Contains("\"tiffVerificationPassed\": false", script, StringComparison.Ordinal);

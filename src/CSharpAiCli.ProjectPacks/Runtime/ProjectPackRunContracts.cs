@@ -96,6 +96,10 @@ public static class ProjectPackRunErrorCode
     public const string ResidualProcessDetected = "pack-residual-process-detected";
     public const string RestartRequired = "pack-run-restart-required";
     public const string ResumeNotEligible = "pack-run-resume-not-eligible";
+    public const string AcceptanceNotEligible = "pack-acceptance-not-eligible";
+    public const string HardVerificationRequired = "pack-hard-verification-required";
+    public const string DecisionConflict = "pack-acceptance-decision-conflict";
+    public const string HumanRejected = "pack-human-rejected";
 }
 
 public static class ProjectPackRunTransitionTable
@@ -152,7 +156,14 @@ public static partial class ProjectPackRunId
 
 public sealed record ProjectPackRunCorrelation
 {
-    public ProjectPackRunCorrelation(string? queueId = null, string? jobId = null, string? taskReportPointer = null)
+    public ProjectPackRunCorrelation(
+        string? queueId = null,
+        string? jobId = null,
+        string? taskReportPointer = null,
+        string? rootRunId = null,
+        string? parentRunId = null,
+        int attempt = 1,
+        string? restartedByRunId = null)
     {
         if (queueId is not null && !TaskQueueIdGenerator.IsValid(queueId))
         {
@@ -164,16 +175,32 @@ public sealed record ProjectPackRunCorrelation
             throw new ArgumentException("Project pack run job correlation id is invalid.", nameof(jobId));
         }
 
+        if (rootRunId is not null && !ProjectPackRunId.IsValid(rootRunId) ||
+            parentRunId is not null && !ProjectPackRunId.IsValid(parentRunId) ||
+            restartedByRunId is not null && !ProjectPackRunId.IsValid(restartedByRunId) ||
+            attempt <= 0)
+        {
+            throw new ArgumentException("Project pack restart correlation is invalid.");
+        }
+
         QueueId = queueId;
         JobId = jobId;
         TaskReportPointer = string.IsNullOrWhiteSpace(taskReportPointer)
             ? null
             : Safe(taskReportPointer, 1_024);
+        RootRunId = rootRunId;
+        ParentRunId = parentRunId;
+        Attempt = attempt;
+        RestartedByRunId = restartedByRunId;
     }
 
     public string? QueueId { get; }
     public string? JobId { get; }
     public string? TaskReportPointer { get; }
+    public string? RootRunId { get; }
+    public string? ParentRunId { get; }
+    public int Attempt { get; }
+    public string? RestartedByRunId { get; }
 
     private static string Safe(string value, int maxLength)
     {
@@ -195,7 +222,7 @@ public sealed record ProjectPackRunArtifactPointer
     {
         ProjectPackContractGuard.RequireId(id, nameof(id));
         ProjectPackContractGuard.RequireId(kind, nameof(kind));
-        if (scope is not "managed-run" and not "workspace-output" and not "external-pointer")
+        if (scope is not "managed-run" and not "workspace-output" and not "source" and not "external-pointer")
         {
             throw new ArgumentException("Project pack artifact scope is invalid.", nameof(scope));
         }
@@ -290,6 +317,104 @@ public sealed record ProjectPackRunRedaction(
     bool ApprovalStored,
     string Policy);
 
+public sealed record ProjectPackAcceptanceDecision
+{
+    public ProjectPackAcceptanceDecision(
+        string outcome,
+        string actor,
+        string? reason,
+        DateTimeOffset decidedAtUtc,
+        long basedOnRunRevision,
+        string verificationArtifactId,
+        string verificationSha256)
+    {
+        if (outcome is not ProjectPackRunState.Accepted and not ProjectPackRunState.Rejected ||
+            basedOnRunRevision < 0)
+        {
+            throw new ArgumentException("Project pack acceptance decision is invalid.");
+        }
+
+        if (!ManagedArtifactId.IsValid(verificationArtifactId))
+        {
+            throw new ArgumentException("Project pack verification artifact id is invalid.", nameof(verificationArtifactId));
+        }
+        ProjectPackContractGuard.RequireSha256(verificationSha256, nameof(verificationSha256));
+        Outcome = outcome;
+        Actor = Safe(actor, 256);
+        Reason = SafeOptional(reason, 2_048);
+        DecidedAtUtc = decidedAtUtc;
+        BasedOnRunRevision = basedOnRunRevision;
+        VerificationArtifactId = verificationArtifactId;
+        VerificationSha256 = verificationSha256.ToUpperInvariant();
+    }
+
+    public string Outcome { get; }
+    public string Actor { get; }
+    public string? Reason { get; }
+    public DateTimeOffset DecidedAtUtc { get; }
+    public long BasedOnRunRevision { get; }
+    public string VerificationArtifactId { get; }
+    public string VerificationSha256 { get; }
+
+    private static string Safe(string? value, int maxLength)
+    {
+        string safe = DiagnosticSecretRedactor.Redact(value ?? string.Empty).Trim();
+        if (safe.Length == 0)
+        {
+            throw new ArgumentException("Project pack acceptance actor is required.");
+        }
+
+        return safe.Length <= maxLength ? safe : safe[..maxLength];
+    }
+
+    private static string? SafeOptional(string? value, int maxLength)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+        {
+            return null;
+        }
+
+        string safe = DiagnosticSecretRedactor.Redact(value).Trim();
+        return safe.Length <= maxLength ? safe : safe[..maxLength];
+    }
+}
+
+public sealed record ProjectPackRestartPlan
+{
+    public ProjectPackRestartPlan(
+        string newRunId,
+        int attempt,
+        string outputDirectory,
+        DateTimeOffset plannedAtUtc)
+    {
+        if (!ProjectPackRunId.IsValid(newRunId) || attempt < 2)
+        {
+            throw new ArgumentException("Project pack restart plan is invalid.");
+        }
+
+        NewRunId = newRunId;
+        Attempt = attempt;
+        OutputDirectory = Safe(outputDirectory, 1_024);
+        PlannedAtUtc = plannedAtUtc;
+    }
+
+    public string NewRunId { get; }
+    public int Attempt { get; }
+    public string OutputDirectory { get; }
+    public DateTimeOffset PlannedAtUtc { get; }
+
+    private static string Safe(string? value, int maxLength)
+    {
+        string safe = DiagnosticSecretRedactor.Redact(value ?? string.Empty).Trim();
+        if (safe.Length == 0)
+        {
+            throw new ArgumentException("Project pack restart output directory is required.");
+        }
+
+        return safe.Length <= maxLength ? safe : safe[..maxLength];
+    }
+}
+
 public sealed record ProjectPackRunRecord
 {
     public const int CurrentSchemaVersion = 1;
@@ -312,7 +437,9 @@ public sealed record ProjectPackRunRecord
         string? summary = null,
         bool cancellationRequested = false,
         bool restartRequired = false,
-        ProjectPackRunRedaction? redaction = null)
+        ProjectPackRunRedaction? redaction = null,
+        ProjectPackAcceptanceDecision? acceptance = null,
+        ProjectPackRestartPlan? restartPlan = null)
     {
         if (schemaVersion <= 0 || revision < 0 || !ProjectPackRunId.IsValid(runId) ||
             !ProjectPackRunState.IsKnown(state))
@@ -341,6 +468,13 @@ public sealed record ProjectPackRunRecord
         Summary = SafeOptional(summary, 4_096);
         CancellationRequested = cancellationRequested;
         RestartRequired = restartRequired;
+        if (acceptance is not null && (state != acceptance.Outcome || !ProjectPackRunState.IsTerminal(state)))
+        {
+            throw new ArgumentException("Project pack acceptance decision does not match run state.", nameof(acceptance));
+        }
+
+        Acceptance = acceptance;
+        RestartPlan = restartPlan;
         Redaction = redaction ?? new ProjectPackRunRedaction(
             SecretsRedacted: true,
             RawInputStored: false,
@@ -366,6 +500,8 @@ public sealed record ProjectPackRunRecord
     public string? Summary { get; }
     public bool CancellationRequested { get; }
     public bool RestartRequired { get; }
+    public ProjectPackAcceptanceDecision? Acceptance { get; }
+    public ProjectPackRestartPlan? RestartPlan { get; }
     public ProjectPackRunRedaction Redaction { get; }
 
     public ProjectPackRunRecord Transition(
@@ -399,7 +535,58 @@ public sealed record ProjectPackRunRecord
         new(
             SchemaVersion, RunId, Revision + 1, PackId, PackVersion, PlanId, PlanFingerprint,
             PolicyFingerprint, State, CreatedAtUtc, nowUtc, correlation, Artifacts, ErrorCode, Summary,
-            CancellationRequested, RestartRequired, Redaction);
+            CancellationRequested, RestartRequired, Redaction, Acceptance, RestartPlan);
+
+    public ProjectPackRunRecord WithRestartPlan(
+        ProjectPackRestartPlan restartPlan,
+        ProjectPackRunCorrelation correlation,
+        DateTimeOffset nowUtc) =>
+        new(
+            SchemaVersion, RunId, Revision + 1, PackId, PackVersion, PlanId, PlanFingerprint,
+            PolicyFingerprint, State, CreatedAtUtc, nowUtc, correlation, Artifacts, ErrorCode, Summary,
+            CancellationRequested, RestartRequired, Redaction, Acceptance, restartPlan);
+
+    public ProjectPackRunRecord Decide(
+        ProjectPackAcceptanceDecision decision,
+        DateTimeOffset nowUtc)
+    {
+        ArgumentNullException.ThrowIfNull(decision);
+        if (State != ProjectPackRunState.AwaitingAcceptance || Acceptance is not null ||
+            decision.BasedOnRunRevision != Revision)
+        {
+            throw new ProjectPackContractException(
+                ProjectPackRunErrorCode.TransitionInvalid,
+                "Acceptance decision does not match the current awaiting-acceptance revision.");
+        }
+
+        ProjectPackRunRecord transitioned = Transition(
+            decision.Outcome,
+            nowUtc,
+            summary: decision.Outcome == ProjectPackRunState.Accepted
+                ? "Run was explicitly accepted by a human reviewer."
+                : "Run was explicitly rejected by a human reviewer.");
+        return new ProjectPackRunRecord(
+            transitioned.SchemaVersion,
+            transitioned.RunId,
+            transitioned.Revision,
+            transitioned.PackId,
+            transitioned.PackVersion,
+            transitioned.PlanId,
+            transitioned.PlanFingerprint,
+            transitioned.PolicyFingerprint,
+            transitioned.State,
+            transitioned.CreatedAtUtc,
+            transitioned.UpdatedAtUtc,
+            transitioned.Correlation,
+            transitioned.Artifacts,
+            transitioned.ErrorCode,
+            transitioned.Summary,
+            transitioned.CancellationRequested,
+            transitioned.RestartRequired,
+            transitioned.Redaction,
+            decision,
+            transitioned.RestartPlan);
+    }
 
     public ProjectPackRunRecord WithArtifacts(
         IReadOnlyList<ProjectPackRunArtifactPointer> artifacts,
@@ -437,7 +624,7 @@ public sealed record ProjectPackRunRecord
         new(
             SchemaVersion, RunId, revision, PackId, PackVersion, PlanId, PlanFingerprint,
             PolicyFingerprint, state, CreatedAtUtc, nowUtc, Correlation, artifacts, errorCode, summary,
-            cancellationRequested, restartRequired, Redaction);
+            cancellationRequested, restartRequired, Redaction, Acceptance, RestartPlan);
 
     private static string Safe(string value, int maxLength)
     {

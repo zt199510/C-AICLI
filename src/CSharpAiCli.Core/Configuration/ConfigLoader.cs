@@ -57,6 +57,10 @@ public static class ConfigLoader
         (string baseUrl, string baseUrlSource) = SelectBaseUrl(openAiBaseUrl, userConfig, workspaceConfig, warnings);
         (SecretValue? apiKey, string apiKeySource) = SelectApiKey(openAiApiKey, userConfig);
         ShellPolicyConfiguration shellPolicy = SelectShellPolicy(userConfig, workspaceConfig, warnings);
+        ArtifactRetentionConfiguration artifactRetention = SelectArtifactRetention(
+            userConfig,
+            workspaceConfig,
+            warnings);
         (
             AgentRunLimits agentRunLimits,
             string agentRunMaxStepsSource,
@@ -84,6 +88,7 @@ public static class ConfigLoader
             ApprovalMode = approvalMode,
             ApprovalModeSource = approvalModeSource,
             ShellPolicy = shellPolicy,
+            ArtifactRetention = artifactRetention,
             AgentRunLimits = agentRunLimits,
             AgentRunMaxStepsSource = agentRunMaxStepsSource,
             AgentRunMaxToolCallsSource = agentRunMaxToolCallsSource,
@@ -145,6 +150,7 @@ public static class ConfigLoader
             || config.DisabledTools is { Length: > 0 }
             || HasMeaningfulShellPolicy(config.ShellPolicy)
             || HasMeaningfulAgentRunLimits(config.AgentRunLimits)
+            || config.ArtifactRetention?.DefaultMinimumAgeDays is not null
             || config.McpServers is { Count: > 0 }
             || config.WorkflowProfiles is { Count: > 0 };
     }
@@ -165,6 +171,32 @@ public static class ConfigLoader
                 limits.MaxToolCalls.HasValue ||
                 limits.MaxRetries.HasValue ||
                 limits.TimeoutSeconds.HasValue);
+    }
+
+    private static ArtifactRetentionConfiguration SelectArtifactRetention(
+        CliConfigFile? userConfig,
+        CliConfigFile? workspaceConfig,
+        List<string> warnings)
+    {
+        if (workspaceConfig?.ArtifactRetention?.DefaultMinimumAgeDays is not null)
+        {
+            warnings.Add("ignored artifactRetention from workspace config; managed-store retention is user-level only");
+        }
+
+        int? configured = userConfig?.ArtifactRetention?.DefaultMinimumAgeDays;
+        if (configured is null)
+        {
+            return ArtifactRetentionConfiguration.Default;
+        }
+
+        if (configured < ArtifactRetentionConfiguration.MinimumDays ||
+            configured > ArtifactRetentionConfiguration.MaximumDays)
+        {
+            warnings.Add("ignored invalid artifactRetention.defaultMinimumAgeDays from user config");
+            return ArtifactRetentionConfiguration.Default;
+        }
+
+        return new ArtifactRetentionConfiguration(configured.Value, "user config");
     }
 
     public static bool TryNormalizeBaseUrl(string? value, out string? baseUrl)

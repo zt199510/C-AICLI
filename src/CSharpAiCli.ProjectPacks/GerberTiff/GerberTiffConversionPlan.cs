@@ -143,7 +143,8 @@ public sealed class GerberTiffConversionPlanBuilder
         string? outputDirectory,
         IReadOnlyDictionary<string, string>? toolPaths = null,
         IReadOnlyDictionary<string, string>? trustedHashes = null,
-        CancellationToken cancellationToken = default)
+        CancellationToken cancellationToken = default,
+        bool allowExistingOutputDirectory = false)
     {
         ArgumentNullException.ThrowIfNull(workspace);
         GerberTiffInputInventory inventory = discovery.Discover(workspace, inputDirectory, cancellationToken);
@@ -156,7 +157,8 @@ public sealed class GerberTiffConversionPlanBuilder
                 workspace,
                 outputDirectory,
                 inputFullPath,
-                outputDiagnostics);
+                outputDiagnostics,
+                allowExistingOutputDirectory);
         }
         else
         {

@@ -348,6 +348,47 @@ Preview generation is permitted only after hard verification, is not a correctne
 viewer, uploads data, or uses model vision. Human accept/reject, execute restart, artifact prune, scheduler,
 concurrent worker, remote runner, and API control remain Deferred.
 
+Week 63 adds managed artifact lifecycle, human acceptance, safe resume, and explicit execute restart as a 0.5.0
+source-only Preview. Every run update maintains a strict `artifact-manifest.json` index with deterministic
+artifact id, run/job/queue/attempt owner, ownership boundary, relative path, size/SHA256, verification label,
+retention class, availability, and optional retained tombstone. Missing, unknown-field, unsupported-schema,
+revision/state/owner mismatch, pointer mismatch, corrupt, or reparse manifests fail closed and are not repaired.
+
+`artifacts list/show/export` read only manifest metadata. `artifacts verify` opens the current managed or
+workspace-owned file read-only and recomputes size/SHA256 after containment and reparse checks. External pointers
+are not verified as C-AICLI-owned evidence. JSON/markdown export writes stdout only and does not copy artifact
+content. Local paths remain sensitive metadata and are redacted best-effort.
+
+`packs accept` and `packs reject` are explicit human commands. Only the current `awaiting-acceptance` revision may
+transition, and accept has no bypass: the service reopens exactly one indexed `tiff-verification-json` below the
+current run report root, rechecks path/size/SHA256/schema/run id/hard-pass/level/error identity, and rejects fake,
+preview-only, failed, missing, changed, or inconsistent evidence. The decision stores redacted actor/note or
+reason, time, based-on revision, and verification artifact id/SHA256. A second decision is rejected. No model,
+skill, tool, pipeline, automation, preview, or metadata-only result can invoke or synthesize acceptance.
+
+`packs resume` is still a read-only plan. It revalidates policy, current static tool identity, input inventory,
+staging, output boundary, and declared artifact identities. Pre-execution states require the output to remain
+absent; post-execution states require the frozen output directory and hashes to remain current. Verifying may
+rerun only the bounded in-process verifier. Awaiting acceptance additionally revalidates the hard report and can
+continue only to the human command. Approval grants are never persisted.
+
+`packs restart <run-id> --from execute` accepts only an interrupted parent. It performs current approved fixed
+tool probes before reserving a child run, then records a new run id, job, lineage, incremented attempt, and a new
+`<original>.attempt-NNNN` no-overwrite workspace output. Parent partial evidence remains unchanged. The child
+stages use the same typed executable/`ArgumentList`, bounded cwd/environment/output, approval, timeout/cancel, and
+process-tree cleanup path as Week 61. A reserved attempt cannot be silently duplicated, and a later restart must
+revalidate and request approval again. `packs recover --mark-interrupted` only records a human-confirmed stale
+local `running -> interrupted` transition and correlated job/queue failure; it does not kill or replay a process.
+
+`artifacts prune` defaults to dry-run. Apply candidates must be owned managed artifacts from accepted, rejected,
+failed, or canceled runs and pass age/status/size filters. Before deletion it rereads run/manifest revision,
+rechecks ownership and the artifacts/reports/logs allowlist, rejects reparse/outside paths, verifies identity,
+atomically moves the file to a same-run unique quarantine, and verifies identity again. Race, lock, or per-item
+failure retains content and continues with diagnostics. A successful deletion keeps run/checkpoint/job metadata
+and a manifest/job tombstone with the original path/size/SHA256/reason/time. Source, baseline, explicit workspace
+TIFF, external, pending/running/interrupted/corrupt, and metadata files are never candidates. There is no
+background retention worker, scheduler, shared/remote store, cascading session/trace deletion, or API control.
+
 ## Changes View
 
 `caicli changes` is a read-only local review entry point. It combines git status/diff stat, changed files, and optional latest session `taskReport` data.
@@ -397,9 +438,10 @@ Users can disable tools through `disabledTools` in user or workspace config. Dis
 - MCP stdio startup commands run dangerous command detection and shell policy checks before process start.
 - MCP startup policy failures surface safe diagnostics in `tools call mcp.*` when configured server/tool discovery is blocked, instead of only returning `unknown-tool`.
 - Remote/http MCP transport remains Deferred.
-- Gerber/TIFF controlled conversion and bounded TIFF verification/preview exist only in the 0.5.0 source Preview
-  described above; human acceptance, artifact lifecycle, and the complete workflow remain Deferred and outside
-  the accepted 0.4.0 artifact.
+- Gerber/TIFF controlled conversion, bounded TIFF verification/preview, human acceptance, safe resume/restart,
+  and managed artifact lifecycle exist only in the 0.5.0 source Preview described above. Week 64 hardening and
+  Week 65 release acceptance remain incomplete, and all vertical workflow source changes stay outside the
+  accepted 0.4.0 artifact.
 
 These deferred capabilities remain outside the accepted `0.4.0` release boundary.
 

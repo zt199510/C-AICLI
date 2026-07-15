@@ -214,10 +214,49 @@ Common controlled conversion failures:
 - `pack-process-cleanup-failed` / `pack-residual-process-detected`: cleanup or descendant checks found an unsafe process condition. The run is interrupted and must not be auto-replayed.
 
 Inspect `packs runs show <run-id> --output json`, the correlated job, and the managed
-`logs/conversion-execution.json`. A `verifying` state is the expected Week 61 success boundary: conversion ran and
-declared hashes exist, but TIFF verification has not run. Do not manually change it to `awaiting-acceptance`.
-`running`/`interrupted` runs are never automatically resumed; inspect partial outputs and wait for the explicit
-restart workflow planned for a later week.
+`logs/conversion-execution.json`. A `verifying` state means conversion ran and declared hashes exist, but TIFF
+verification has not completed. Do not manually change it to `awaiting-acceptance`. Run `packs verify <run-id>`
+and inspect its independent file/metadata/content/human-review levels. Preview remains a review aid, not proof.
+
+### Human decision is refused
+
+Run `packs resume <run-id> --output json`. A decision is allowed only from the current `awaiting-acceptance`
+revision. Accept additionally reopens and verifies the indexed hard-verification JSON path, size/SHA256, schema,
+run id, levels, and absence of error diagnostics. Ready/verifying/failed/canceled/interrupted, fake-driver
+awaiting state, preview-only evidence, a changed report, or an existing decision is refused.
+
+Use `artifacts list --run <run-id>` and `artifacts verify <artifact-id>` to inspect identity. Do not edit a report
+to force acceptance and do not treat metadata validity or preview availability as a bypass. Reject requires
+`--reason`; actor/note/reason are redacted and bounded before persistence.
+
+### Resume or restart reports drift
+
+Resume never reuses approval. Provide the current explicit `--tool-path` bindings for staged/ready/interrupted
+runs and inspect the stable error code. Input/tool/policy drift requires a new plan/run rather than checkpoint
+editing. In verifying/awaiting states, confirm the explicit workspace TIFF and managed report/log identities have
+not moved or changed. Post-execution output may exist only at the frozen directory and must match the inventory.
+
+`running` and `interrupted` are not replayed by resume. If a process crash left a stale running record, first
+confirm at the OS level that no `caicli`, `gerbv`, or `magick` process for that run remains, then use
+`packs recover <run-id> --mark-interrupted`. This records evidence only; it does not terminate a process.
+
+`packs restart <run-id> --from execute` accepts only an interrupted run with `restartRequired=true`. Supply
+current absolute Gerbv/ImageMagick bindings and invocation-local approval. Tool/input/policy drift, an existing
+attempt output, corrupt parent state, or an already-created reserved child fails closed. Inspect the parent
+`restartPlan` and `restartedByRunId`; never remove parent partial evidence or rename existing output to force it.
+
+### Artifact manifest or prune diagnostics
+
+For a corrupt manifest, confirm `CAICLI_USER_PROFILE`, then inspect `run.json`, `checkpoint.json`, and
+`artifact-manifest.json` without editing them. Missing/unsupported/unknown fields, revision/state/owner/pointer
+mismatch, reparse paths, or changed hashes are not repaired. Job/queue pointers are not a second run truth.
+
+Start cleanup with `artifacts prune --older-than 30d --dry-run`. Only owned managed artifacts from accepted,
+rejected, failed, or canceled runs are candidates. Source, baseline, explicit workspace output, external,
+metadata, running/interrupted/corrupt, outside-root, and reparse paths are retained. For apply failures, close
+viewers and rerun dry-run. A race fails quarantine identity recheck and changed content is retained. Successful
+prune keeps run/job metadata and tombstones; there is no restore command. The default age comes from user-level
+`artifactRetention.defaultMinimumAgeDays`; workspace overrides are ignored.
 
 Default smoke intentionally skips real tools. To run the independent opt-in branch, set all three values:
 
@@ -228,8 +267,9 @@ $env:CAICLI_IMAGEMAGICK_PATH = "C:\Tools\ImageMagick\magick.exe"
 tools\Invoke-SmokeTests.ps1
 ```
 
-The opt-in smoke records tool versions/SHA256 and input/output hashes. Its success message says conversion
-executed; it does not claim TIFF engineering verification or business correctness.
+The opt-in smoke records tool versions/SHA256, input/output hashes, hard verification, explicit human accept and
+reject, and controlled managed prune. It does not claim complete PCB manufacturing correctness. Source and
+explicit workspace TIFF outputs must remain after prune.
 
 ## Verification
 

@@ -2389,7 +2389,67 @@ public static class CliCommandFactory
         });
         packsCommand.Subcommands.Add(packsCancelCommand);
 
-        Command packsResumeCommand = new("resume", "Revalidate safe resume eligibility without replaying execute.");
+        Command packsRecoverCommand = new("recover", "Explicitly mark a stale running local run as interrupted without replaying it.");
+        Argument<string> packsRecoverIdArgument = new("run-id") { Description = "Stale running project pack run id." };
+        Option<bool> packsRecoverInterruptedOption = new("--mark-interrupted")
+        {
+            Description = "Confirm the execute process is no longer active and record interrupted evidence."
+        };
+        packsRecoverInterruptedOption.Validators.Add(result =>
+        {
+            if (!result.GetValueOrDefault<bool>())
+            {
+                result.AddError("--mark-interrupted is required for manual recovery.");
+            }
+        });
+        Option<bool> packsRecoverJsonOption = new("--json") { Description = "Write one JSON project pack run object." };
+        Option<string> packsRecoverOutputOption = new("--output") { Description = "Select text or json output." };
+        packsRecoverOutputOption.DefaultValueFactory = _ => "text";
+        AddTextJsonOutputValidator(packsRecoverOutputOption);
+        packsRecoverCommand.Arguments.Add(packsRecoverIdArgument);
+        packsRecoverCommand.Options.Add(packsRecoverInterruptedOption);
+        packsRecoverCommand.Options.Add(packsRecoverJsonOption);
+        packsRecoverCommand.Options.Add(packsRecoverOutputOption);
+        packsRecoverCommand.SetAction(parseResult =>
+        {
+            string runId = parseResult.GetValue(packsRecoverIdArgument) ?? string.Empty;
+            bool jsonOutput = IsJsonOutputRequested(
+                parseResult.GetValue(packsRecoverJsonOption),
+                parseResult.GetValue(packsRecoverOutputOption) ?? "text");
+            CliEnvironmentSnapshot snapshot = workspaceSnapshotProvider(parseResult.GetValue(workspaceOption));
+            DateTimeOffset nowUtc = utcNowProvider();
+            ProjectPackRunMutationResult result = new ProjectPackRunService(
+                ManagedProjectPackRunStore.Create(snapshot)).MarkInterrupted(runId, nowUtc);
+            if (!result.Succeeded || result.Record is null || result.Checkpoint is null)
+            {
+                output.WriteLine(ProjectPackRunRenderer.RenderFailure(
+                    "packs.recover",
+                    result.Diagnostic?.ErrorCode ?? ProjectPackRunErrorCode.TransitionInvalid,
+                    result.Diagnostic?.Summary ?? "Stale running project pack run could not be marked interrupted.",
+                    jsonOutput,
+                    runId));
+                return 1;
+            }
+
+            if (!TryUpdateRecoveredProjectPackCorrelations(snapshot, result.Record, nowUtc, out string? correlationError))
+            {
+                output.WriteLine(ProjectPackRunRenderer.RenderFailure(
+                    "packs.recover",
+                    "pack-recovery-correlation-failed",
+                    correlationError ?? "Run was marked interrupted but correlated local metadata could not be updated.",
+                    jsonOutput,
+                    runId));
+                return 1;
+            }
+
+            output.WriteLine(jsonOutput
+                ? ProjectPackRunRenderer.RenderJson(result.Record, result.Checkpoint)
+                : ProjectPackRunRenderer.RenderText(result.Record, result.Checkpoint));
+            return 0;
+        });
+        packsCommand.Subcommands.Add(packsRecoverCommand);
+
+        Command packsResumeCommand = new("resume", "Revalidate and render a safe resume plan without replaying execute.");
         Argument<string> packsResumeIdArgument = new("run-id") { Description = "Project pack run id." };
         Option<bool> packsResumeDryRunOption = new("--dry-run") { Description = "Evaluate eligibility without executing any stage." };
         Option<string[]> packsResumeToolPathOption = new("--tool-path")
@@ -2411,19 +2471,11 @@ public static class CliCommandFactory
         {
             string? workspacePath = parseResult.GetValue(workspaceOption);
             string runId = parseResult.GetValue(packsResumeIdArgument) ?? string.Empty;
-            bool dryRun = parseResult.GetValue(packsResumeDryRunOption);
+            _ = parseResult.GetValue(packsResumeDryRunOption);
             bool jsonOutput = IsJsonOutputRequested(
                 parseResult.GetValue(packsResumeJsonOption),
                 parseResult.GetValue(packsResumeOutputOption) ?? "text");
             CliEnvironmentSnapshot snapshot = workspaceSnapshotProvider(workspacePath);
-            if (!dryRun)
-            {
-                output.WriteLine(ProjectPackRunRenderer.RenderFailure(
-                    "packs.resume", "pack-resume-execution-deferred",
-                    "Week 60 resume only evaluates eligibility; pass --dry-run.", jsonOutput, runId));
-                return 2;
-            }
-
             string[] toolPathValues = parseResult.GetValue(packsResumeToolPathOption) ?? [];
             GerberTiffWorkflowPack pack = new();
             if (!TryParseProjectPackToolPaths(pack.Manifest, toolPathValues,
@@ -2447,6 +2499,265 @@ public static class CliCommandFactory
             return eligibility.Eligible ? 0 : 1;
         });
         packsCommand.Subcommands.Add(packsResumeCommand);
+
+        Command packsRestartCommand = new("restart", "Explicitly restart an interrupted execute stage as a new approved attempt.");
+        Argument<string> packsRestartIdArgument = new("run-id") { Description = "Interrupted project pack run id." };
+        Option<string> packsRestartFromOption = new("--from") { Description = "Restart boundary; v1 requires execute." };
+        packsRestartFromOption.Validators.Add(result =>
+        {
+            if (result.Implicit || result.GetValueOrDefault<string>() != "execute")
+            {
+                result.AddError("--from execute is required.");
+            }
+        });
+        Option<string[]> packsRestartToolPathOption = new("--tool-path")
+        {
+            Description = "Revalidate [dependency=]absolute-path before reserving the new attempt.",
+            Arity = ArgumentArity.OneOrMore,
+            AllowMultipleArgumentsPerToken = true
+        };
+        Option<bool> packsRestartApproveOption = new("--approve")
+        {
+            Description = "Approve this invocation's fixed probes and new-attempt conversion stages."
+        };
+        Option<string> packsRestartApprovalOption = new("--approval")
+        {
+            Description = "Override approval mode for this invocation only."
+        };
+        AddApprovalModeValidator(packsRestartApprovalOption);
+        Option<bool> packsRestartJsonOption = new("--json") { Description = "Write one JSON restart result." };
+        Option<string> packsRestartOutputOption = new("--output") { Description = "Select text or json output." };
+        packsRestartOutputOption.DefaultValueFactory = _ => "text";
+        AddTextJsonOutputValidator(packsRestartOutputOption);
+        packsRestartCommand.Arguments.Add(packsRestartIdArgument);
+        packsRestartCommand.Options.Add(packsRestartFromOption);
+        packsRestartCommand.Options.Add(packsRestartToolPathOption);
+        packsRestartCommand.Options.Add(packsRestartApproveOption);
+        packsRestartCommand.Options.Add(packsRestartApprovalOption);
+        packsRestartCommand.Options.Add(packsRestartJsonOption);
+        packsRestartCommand.Options.Add(packsRestartOutputOption);
+        packsRestartCommand.SetAction(parseResult =>
+        {
+            string parentRunId = parseResult.GetValue(packsRestartIdArgument) ?? string.Empty;
+            bool jsonOutput = IsJsonOutputRequested(
+                parseResult.GetValue(packsRestartJsonOption),
+                parseResult.GetValue(packsRestartOutputOption) ?? "text");
+            CliEnvironmentSnapshot snapshot = workspaceSnapshotProvider(parseResult.GetValue(workspaceOption));
+            GerberTiffWorkflowPack pack = new();
+            if (!TryParseProjectPackToolPaths(
+                pack.Manifest,
+                parseResult.GetValue(packsRestartToolPathOption) ?? [],
+                out Dictionary<string, string> toolPaths,
+                out string? bindingError))
+            {
+                output.WriteLine(ProjectPackRunRenderer.RenderFailure(
+                    "packs.restart",
+                    "pack-tool-binding-invalid",
+                    bindingError ?? "Project pack tool binding is invalid.",
+                    jsonOutput,
+                    parentRunId));
+                return 2;
+            }
+
+            IApprovalPolicy approvalPolicy = ApprovalPolicyResolver.Resolve(
+                snapshot.Configuration.ApprovalMode,
+                GetApprovalOverride(
+                    parseResult.GetValue(packsRestartApprovalOption),
+                    parseResult.GetResult(packsRestartApprovalOption),
+                    parseResult.GetValue(packsRestartApproveOption)));
+            ProjectPackDoctorReport probe = new ProjectPackDoctorService().Diagnose(
+                pack,
+                toolPaths,
+                trustedHashes: null,
+                probe: true,
+                approvalPolicy,
+                CancellationToken.None);
+            if (!probe.Succeeded || probe.Tools.Any(tool => tool.Required && tool.Identity?.Version is null))
+            {
+                string errorCode = MapProjectPackExecutionProbeError(probe);
+                output.WriteLine(ProjectPackRunRenderer.RenderFailure(
+                    "packs.restart",
+                    errorCode,
+                    "Restart requires current approved probes for every mandatory external tool.",
+                    jsonOutput,
+                    parentRunId));
+                return errorCode == ProjectPackRunErrorCode.ApprovalRequired ? 2 : 1;
+            }
+
+            IReadOnlyDictionary<string, ExternalToolIdentity> identities = probe.Tools
+                .Where(tool => tool.Identity is not null)
+                .ToDictionary(tool => tool.DependencyId, tool => tool.Identity!, StringComparer.Ordinal);
+            ManagedProjectPackRunStore runStore = ManagedProjectPackRunStore.Create(snapshot);
+            ProjectPackRestartPreparation preparation = new ProjectPackRestartService(runStore).PrepareExecuteRestart(
+                parentRunId,
+                snapshot.Workspace,
+                toolPaths,
+                GetProjectPackPolicyFingerprint(snapshot, GerberTiffWorkflowPack.ProfileName),
+                utcNowProvider(),
+                CancellationToken.None);
+            if (!preparation.Succeeded || preparation.Plan is null || preparation.NewRunId is null ||
+                preparation.ParentRecord is null || preparation.Attempt is null)
+            {
+                output.WriteLine(ProjectPackRunRenderer.RenderFailure(
+                    "packs.restart",
+                    preparation.Diagnostic?.ErrorCode ?? ProjectPackRunErrorCode.RestartRequired,
+                    preparation.Diagnostic?.Summary ?? "New-attempt restart plan could not be reserved.",
+                    jsonOutput,
+                    parentRunId));
+                return 1;
+            }
+
+            DateTimeOffset nowUtc = utcNowProvider();
+            string jobId = JobIdGenerator.Create(nowUtc);
+            JobRecord job = JobRecord.CreateRunning(
+                jobId,
+                nowUtc,
+                new JobCommandSummary(
+                    "packs restart",
+                    Task: preparation.Plan.PlanId,
+                    WorkspaceRoot: snapshot.Workspace.RootPath,
+                    OutputMode: jsonOutput ? "json" : "text",
+                    DryRun: false),
+                preparation.NewRunId);
+            JobRecordStore jobStore = JobRecordStore.Create(snapshot);
+            try
+            {
+                jobStore.Create(job);
+            }
+            catch (Exception exception) when (IsJobStoreException(exception))
+            {
+                output.WriteLine(ProjectPackRunRenderer.RenderFailure(
+                    "packs.restart",
+                    "job-record-write-failed",
+                    "Reserved restart job record could not be created.",
+                    jsonOutput,
+                    preparation.NewRunId));
+                return 1;
+            }
+
+            ProjectPackRunCorrelation correlation = new(
+                jobId: jobId,
+                rootRunId: preparation.ParentRecord.Correlation.RootRunId ?? parentRunId,
+                parentRunId: parentRunId,
+                attempt: preparation.Attempt.Value);
+            ProjectPackRunService runService = new(runStore);
+            ProjectPackRunMutationResult result = runService.CreateAndStage(
+                preparation.Plan,
+                snapshot.Workspace,
+                toolPaths,
+                GetProjectPackPolicyFingerprint(snapshot, GerberTiffWorkflowPack.ProfileName),
+                nowUtc,
+                correlation,
+                preparation.NewRunId,
+                CancellationToken.None);
+            if (result.Record?.State == ProjectPackRunState.Ready)
+            {
+                result = runService.ExecuteControlled(
+                    preparation.NewRunId,
+                    preparation.Plan,
+                    snapshot.Workspace,
+                    toolPaths,
+                    GetProjectPackPolicyFingerprint(snapshot, GerberTiffWorkflowPack.ProfileName),
+                    new GerberTiffControlledConversionDriver(
+                        preparation.Plan,
+                        snapshot.Workspace,
+                        toolPaths,
+                        identities,
+                        approvalPolicy),
+                    utcNowProvider(),
+                    CancellationToken.None);
+            }
+
+            List<JobArtifact> jobArtifacts = [];
+            ManagedProjectPackRunLayout childLayout = runStore.GetLayout(preparation.NewRunId);
+            if (File.Exists(childLayout.RunRecordPath))
+            {
+                jobArtifacts.Add(JobArtifact.FromPath(
+                    JobArtifactKind.ProjectPackRun,
+                    childLayout.RunRecordPath,
+                    $"packRunId={preparation.NewRunId}; parentRunId={parentRunId}; attempt={preparation.Attempt}"));
+            }
+
+            if (File.Exists(childLayout.InputManifestPath))
+            {
+                jobArtifacts.Add(JobArtifact.FromPath(
+                    JobArtifactKind.ProjectPackInputManifest,
+                    childLayout.InputManifestPath,
+                    "New-attempt immutable staged-input identity manifest."));
+            }
+
+            foreach (ProjectPackRunArtifactPointer pointer in result.Record?.Artifacts ?? [])
+            {
+                if (pointer.Kind is not "conversion-execution-log" and not "tiff-output" and not "render-intermediate")
+                {
+                    continue;
+                }
+
+                string? path = ResolveProjectPackArtifactPath(pointer, childLayout, snapshot.Workspace);
+                if (path is null || !File.Exists(path))
+                {
+                    continue;
+                }
+
+                jobArtifacts.Add(JobArtifact.FromPath(
+                    pointer.Kind == "conversion-execution-log"
+                        ? JobArtifactKind.ProjectPackExecutionLog
+                        : pointer.Kind == "tiff-output"
+                            ? JobArtifactKind.ProjectPackConversionOutput
+                            : pointer.Kind,
+                    path,
+                    "New-attempt controlled conversion evidence."));
+            }
+
+            bool succeeded = result.Record?.State == ProjectPackRunState.Verifying;
+            try
+            {
+                jobStore.Update(job.WithStatus(
+                    succeeded ? JobStatus.Succeeded : JobStatus.Failed,
+                    utcNowProvider(),
+                    exitCode: succeeded ? 0 : 1,
+                    stopReason: succeeded ? "restart-conversion-executed-verification-pending" : "restart-attempt-failed",
+                    errorCode: succeeded ? null : result.Record?.ErrorCode ?? result.Diagnostic?.ErrorCode,
+                    summary: succeeded
+                        ? "New-attempt controlled conversion completed; TIFF verification remains pending."
+                        : result.Record?.Summary ?? result.Diagnostic?.Summary,
+                    taskReport: null,
+                    artifacts: jobArtifacts,
+                    warnings:
+                    [
+                        $"parentRunId={parentRunId}; newRunId={preparation.NewRunId}; attempt={preparation.Attempt}",
+                        "Parent partial evidence was preserved and the new output directory used no-overwrite semantics.",
+                        "Approval was invocation-local and was not persisted for resume or another restart."
+                    ]));
+            }
+            catch (Exception exception) when (IsJobStoreException(exception))
+            {
+                output.WriteLine(ProjectPackRunRenderer.RenderFailure(
+                    "packs.restart",
+                    "job-record-write-failed",
+                    "Restart attempt completed without a safely updated job index.",
+                    jsonOutput,
+                    preparation.NewRunId));
+                return 1;
+            }
+
+            if (!succeeded || result.Record is null || result.Checkpoint is null)
+            {
+                output.WriteLine(ProjectPackRunRenderer.RenderFailure(
+                    "packs.restart",
+                    result.Record?.ErrorCode ?? result.Diagnostic?.ErrorCode ?? ProjectPackRunErrorCode.ExecutionFailed,
+                    result.Record?.Summary ?? result.Diagnostic?.Summary ?? "Restart attempt failed.",
+                    jsonOutput,
+                    preparation.NewRunId));
+                return 1;
+            }
+
+            output.WriteLine(jsonOutput
+                ? ProjectPackRunRenderer.RenderJson(result.Record, result.Checkpoint)
+                : ProjectPackRunRenderer.RenderText(result.Record, result.Checkpoint));
+            return 0;
+        });
+        packsCommand.Subcommands.Add(packsRestartCommand);
 
         Command packsVerifyCommand = new("verify", "Run bounded TIFF verification for one controlled conversion run.");
         Argument<string> packsVerifyIdArgument = new("run-id") { Description = "Project pack run id." };
@@ -2616,6 +2927,359 @@ public static class CliCommandFactory
             return preview.Succeeded ? 0 : 1;
         });
         packsCommand.Subcommands.Add(packsPreviewCommand);
+
+        Command packsAcceptCommand = new("accept", "Record an explicit human acceptance after current hard verification.");
+        Argument<string> packsAcceptIdArgument = new("run-id") { Description = "Project pack run id." };
+        Option<string> packsAcceptActorOption = new("--actor") { Description = "Human reviewer identity for audit evidence." };
+        packsAcceptActorOption.DefaultValueFactory = _ => Environment.UserName;
+        Option<string> packsAcceptNoteOption = new("--note") { Description = "Optional redacted human review note." };
+        Option<bool> packsAcceptJsonOption = new("--json") { Description = "Write one JSON project pack run object." };
+        Option<string> packsAcceptOutputOption = new("--output") { Description = "Select text or json output." };
+        packsAcceptOutputOption.DefaultValueFactory = _ => "text";
+        AddTextJsonOutputValidator(packsAcceptOutputOption);
+        packsAcceptCommand.Arguments.Add(packsAcceptIdArgument);
+        packsAcceptCommand.Options.Add(packsAcceptActorOption);
+        packsAcceptCommand.Options.Add(packsAcceptNoteOption);
+        packsAcceptCommand.Options.Add(packsAcceptJsonOption);
+        packsAcceptCommand.Options.Add(packsAcceptOutputOption);
+        packsAcceptCommand.SetAction(parseResult =>
+        {
+            string runId = parseResult.GetValue(packsAcceptIdArgument) ?? string.Empty;
+            bool jsonOutput = IsJsonOutputRequested(
+                parseResult.GetValue(packsAcceptJsonOption),
+                parseResult.GetValue(packsAcceptOutputOption) ?? "text");
+            CliEnvironmentSnapshot snapshot = workspaceSnapshotProvider(parseResult.GetValue(workspaceOption));
+            ProjectPackRunMutationResult result = new ProjectPackAcceptanceService(
+                ManagedProjectPackRunStore.Create(snapshot)).Accept(
+                    runId,
+                    parseResult.GetValue(packsAcceptActorOption) ?? Environment.UserName,
+                    parseResult.GetValue(packsAcceptNoteOption),
+                    utcNowProvider());
+            if (!result.Succeeded || result.Record is null || result.Checkpoint is null)
+            {
+                output.WriteLine(ProjectPackRunRenderer.RenderFailure(
+                    "packs.accept",
+                    result.Diagnostic?.ErrorCode ?? ProjectPackRunErrorCode.AcceptanceNotEligible,
+                    result.Diagnostic?.Summary ?? "Project pack run could not be accepted.",
+                    jsonOutput,
+                    runId));
+                return 1;
+            }
+
+            if (!TryUpdateProjectPackAcceptanceJob(snapshot, result.Record, utcNowProvider(), out string? jobError))
+            {
+                output.WriteLine(ProjectPackRunRenderer.RenderFailure(
+                    "packs.accept",
+                    "job-record-write-failed",
+                    jobError ?? "Human acceptance job evidence could not be updated.",
+                    jsonOutput,
+                    runId));
+                return 1;
+            }
+
+            output.WriteLine(jsonOutput
+                ? ProjectPackRunRenderer.RenderJson(result.Record, result.Checkpoint)
+                : ProjectPackRunRenderer.RenderText(result.Record, result.Checkpoint));
+            return 0;
+        });
+        packsCommand.Subcommands.Add(packsAcceptCommand);
+
+        Command packsRejectCommand = new("reject", "Record an explicit human rejection after current hard verification.");
+        Argument<string> packsRejectIdArgument = new("run-id") { Description = "Project pack run id." };
+        Option<string> packsRejectReasonOption = new("--reason") { Description = "Required redacted human rejection reason." };
+        packsRejectReasonOption.Validators.Add(result =>
+        {
+            if (result.Implicit || string.IsNullOrWhiteSpace(result.GetValueOrDefault<string>()))
+            {
+                result.AddError("--reason is required.");
+            }
+        });
+        Option<string> packsRejectActorOption = new("--actor") { Description = "Human reviewer identity for audit evidence." };
+        packsRejectActorOption.DefaultValueFactory = _ => Environment.UserName;
+        Option<bool> packsRejectJsonOption = new("--json") { Description = "Write one JSON project pack run object." };
+        Option<string> packsRejectOutputOption = new("--output") { Description = "Select text or json output." };
+        packsRejectOutputOption.DefaultValueFactory = _ => "text";
+        AddTextJsonOutputValidator(packsRejectOutputOption);
+        packsRejectCommand.Arguments.Add(packsRejectIdArgument);
+        packsRejectCommand.Options.Add(packsRejectReasonOption);
+        packsRejectCommand.Options.Add(packsRejectActorOption);
+        packsRejectCommand.Options.Add(packsRejectJsonOption);
+        packsRejectCommand.Options.Add(packsRejectOutputOption);
+        packsRejectCommand.SetAction(parseResult =>
+        {
+            string runId = parseResult.GetValue(packsRejectIdArgument) ?? string.Empty;
+            bool jsonOutput = IsJsonOutputRequested(
+                parseResult.GetValue(packsRejectJsonOption),
+                parseResult.GetValue(packsRejectOutputOption) ?? "text");
+            CliEnvironmentSnapshot snapshot = workspaceSnapshotProvider(parseResult.GetValue(workspaceOption));
+            ProjectPackRunMutationResult result = new ProjectPackAcceptanceService(
+                ManagedProjectPackRunStore.Create(snapshot)).Reject(
+                    runId,
+                    parseResult.GetValue(packsRejectActorOption) ?? Environment.UserName,
+                    parseResult.GetValue(packsRejectReasonOption) ?? string.Empty,
+                    utcNowProvider());
+            if (!result.Succeeded || result.Record is null || result.Checkpoint is null)
+            {
+                output.WriteLine(ProjectPackRunRenderer.RenderFailure(
+                    "packs.reject",
+                    result.Diagnostic?.ErrorCode ?? ProjectPackRunErrorCode.AcceptanceNotEligible,
+                    result.Diagnostic?.Summary ?? "Project pack run could not be rejected.",
+                    jsonOutput,
+                    runId));
+                return 1;
+            }
+
+            if (!TryUpdateProjectPackAcceptanceJob(snapshot, result.Record, utcNowProvider(), out string? jobError))
+            {
+                output.WriteLine(ProjectPackRunRenderer.RenderFailure(
+                    "packs.reject",
+                    "job-record-write-failed",
+                    jobError ?? "Human rejection job evidence could not be updated.",
+                    jsonOutput,
+                    runId));
+                return 1;
+            }
+
+            output.WriteLine(jsonOutput
+                ? ProjectPackRunRenderer.RenderJson(result.Record, result.Checkpoint)
+                : ProjectPackRunRenderer.RenderText(result.Record, result.Checkpoint));
+            return 0;
+        });
+        packsCommand.Subcommands.Add(packsRejectCommand);
+
+        Command artifactsCommand = new("artifacts", "Inspect and safely manage project pack artifact lifecycle records.");
+        Command artifactsListCommand = new("list", "List declared artifacts without modifying them.");
+        Option<string> artifactsListRunOption = new("--run") { Description = "Filter by one project pack run id." };
+        Option<string> artifactsListStatusOption = new("--status") { Description = "Filter by one run state." };
+        Option<bool> artifactsListJsonOption = new("--json") { Description = "Write one stable JSON artifact list." };
+        Option<string> artifactsListOutputOption = new("--output") { Description = "Select text or json output." };
+        artifactsListOutputOption.DefaultValueFactory = _ => "text";
+        AddTextJsonOutputValidator(artifactsListOutputOption);
+        artifactsListCommand.Options.Add(artifactsListRunOption);
+        artifactsListCommand.Options.Add(artifactsListStatusOption);
+        artifactsListCommand.Options.Add(artifactsListJsonOption);
+        artifactsListCommand.Options.Add(artifactsListOutputOption);
+        artifactsListCommand.SetAction(parseResult =>
+        {
+            CliEnvironmentSnapshot snapshot = workspaceSnapshotProvider(parseResult.GetValue(workspaceOption));
+            bool jsonOutput = IsJsonOutputRequested(
+                parseResult.GetValue(artifactsListJsonOption),
+                parseResult.GetValue(artifactsListOutputOption) ?? "text");
+            WriteVerboseDiagnostics(parseResult, "artifacts list", snapshot, humanReadableOutput: !jsonOutput);
+            ManagedArtifactListResult result = ManagedArtifactStore.Create(snapshot).List(
+                parseResult.GetValue(artifactsListRunOption),
+                parseResult.GetValue(artifactsListStatusOption));
+            output.WriteLine(jsonOutput
+                ? ManagedArtifactRenderer.RenderListJson(result)
+                : ManagedArtifactRenderer.RenderListText(result));
+            return result.Diagnostics.Count == 0 ? 0 : 1;
+        });
+        artifactsCommand.Subcommands.Add(artifactsListCommand);
+
+        Command artifactsShowCommand = new("show", "Show one declared artifact without reading its content.");
+        Argument<string> artifactsShowIdArgument = new("artifact-id") { Description = "Managed artifact id." };
+        Option<bool> artifactsShowJsonOption = new("--json") { Description = "Write one stable JSON artifact object." };
+        Option<string> artifactsShowOutputOption = new("--output") { Description = "Select text or json output." };
+        artifactsShowOutputOption.DefaultValueFactory = _ => "text";
+        AddTextJsonOutputValidator(artifactsShowOutputOption);
+        artifactsShowCommand.Arguments.Add(artifactsShowIdArgument);
+        artifactsShowCommand.Options.Add(artifactsShowJsonOption);
+        artifactsShowCommand.Options.Add(artifactsShowOutputOption);
+        artifactsShowCommand.SetAction(parseResult =>
+        {
+            CliEnvironmentSnapshot snapshot = workspaceSnapshotProvider(parseResult.GetValue(workspaceOption));
+            bool jsonOutput = IsJsonOutputRequested(
+                parseResult.GetValue(artifactsShowJsonOption),
+                parseResult.GetValue(artifactsShowOutputOption) ?? "text");
+            ManagedArtifactReadResult result = ManagedArtifactStore.Create(snapshot).Read(
+                parseResult.GetValue(artifactsShowIdArgument) ?? string.Empty);
+            if (!result.Succeeded || result.Manifest is null || result.Artifact is null)
+            {
+                output.WriteLine(ManagedArtifactRenderer.RenderFailure(
+                    "artifacts.show",
+                    result.Diagnostic ?? new ManagedArtifactDiagnostic(ManagedArtifactErrorCode.NotFound, "Managed artifact was not found."),
+                    jsonOutput));
+                return 1;
+            }
+
+            output.WriteLine(jsonOutput
+                ? ManagedArtifactRenderer.RenderShowJson(result.Manifest, result.Artifact)
+                : ManagedArtifactRenderer.RenderShowText(result.Manifest, result.Artifact));
+            return 0;
+        });
+        artifactsCommand.Subcommands.Add(artifactsShowCommand);
+
+        Command artifactsVerifyCommand = new("verify", "Recompute one artifact size and SHA256 through its ownership boundary.");
+        Argument<string> artifactsVerifyIdArgument = new("artifact-id") { Description = "Managed artifact id." };
+        Option<bool> artifactsVerifyJsonOption = new("--json") { Description = "Write one stable JSON verification object." };
+        Option<string> artifactsVerifyOutputOption = new("--output") { Description = "Select text or json output." };
+        artifactsVerifyOutputOption.DefaultValueFactory = _ => "text";
+        AddTextJsonOutputValidator(artifactsVerifyOutputOption);
+        artifactsVerifyCommand.Arguments.Add(artifactsVerifyIdArgument);
+        artifactsVerifyCommand.Options.Add(artifactsVerifyJsonOption);
+        artifactsVerifyCommand.Options.Add(artifactsVerifyOutputOption);
+        artifactsVerifyCommand.SetAction(parseResult =>
+        {
+            CliEnvironmentSnapshot snapshot = workspaceSnapshotProvider(parseResult.GetValue(workspaceOption));
+            bool jsonOutput = IsJsonOutputRequested(
+                parseResult.GetValue(artifactsVerifyJsonOption),
+                parseResult.GetValue(artifactsVerifyOutputOption) ?? "text");
+            ManagedArtifactVerificationResult result = ManagedArtifactStore.Create(snapshot).Verify(
+                parseResult.GetValue(artifactsVerifyIdArgument) ?? string.Empty,
+                snapshot.Workspace);
+            output.WriteLine(jsonOutput
+                ? ManagedArtifactRenderer.RenderVerifyJson(result)
+                : ManagedArtifactRenderer.RenderVerifyText(result));
+            return result.Succeeded ? 0 : 1;
+        });
+        artifactsCommand.Subcommands.Add(artifactsVerifyCommand);
+
+        Command artifactsExportCommand = new("export", "Export one artifact lifecycle record to stdout.");
+        Argument<string> artifactsExportIdArgument = new("artifact-id") { Description = "Managed artifact id." };
+        Option<string> artifactsExportFormatOption = new("--format") { Description = "Select text, json, or markdown." };
+        artifactsExportFormatOption.DefaultValueFactory = _ => "text";
+        artifactsExportFormatOption.Validators.Add(result =>
+        {
+            string format = result.GetValueOrDefault<string>() ?? "text";
+            if (format is not "text" and not "json" and not "markdown")
+            {
+                result.AddError("Invalid value for --format. Allowed values are text, json, and markdown.");
+            }
+        });
+        artifactsExportCommand.Arguments.Add(artifactsExportIdArgument);
+        artifactsExportCommand.Options.Add(artifactsExportFormatOption);
+        artifactsExportCommand.SetAction(parseResult =>
+        {
+            CliEnvironmentSnapshot snapshot = workspaceSnapshotProvider(parseResult.GetValue(workspaceOption));
+            string format = parseResult.GetValue(artifactsExportFormatOption) ?? "text";
+            ManagedArtifactReadResult result = ManagedArtifactStore.Create(snapshot).Read(
+                parseResult.GetValue(artifactsExportIdArgument) ?? string.Empty);
+            if (!result.Succeeded || result.Manifest is null || result.Artifact is null)
+            {
+                output.WriteLine(ManagedArtifactRenderer.RenderFailure(
+                    "artifacts.export",
+                    result.Diagnostic ?? new ManagedArtifactDiagnostic(ManagedArtifactErrorCode.NotFound, "Managed artifact was not found."),
+                    format == "json"));
+                return 1;
+            }
+
+            output.WriteLine(ManagedArtifactRenderer.RenderExport(result.Manifest, result.Artifact, format));
+            return 0;
+        });
+        artifactsCommand.Subcommands.Add(artifactsExportCommand);
+
+        Command artifactsPruneCommand = new("prune", "Dry-run or explicitly apply bounded managed artifact pruning.");
+        Option<string> artifactsPruneOlderOption = new("--older-than") { Description = "Minimum age such as 30d, 12h, or 90m." };
+        artifactsPruneOlderOption.Validators.Add(result =>
+        {
+            if (!result.Implicit && !ManagedArtifactRetentionParser.TryParseAge(result.GetValueOrDefault<string>(), out _))
+            {
+                result.AddError("Invalid --older-than value. Use a positive d, h, or m duration such as 30d.");
+            }
+        });
+        Option<string[]> artifactsPruneStatusOption = new("--status")
+        {
+            Description = "Filter accepted, rejected, failed, or canceled terminal runs.",
+            Arity = ArgumentArity.OneOrMore,
+            AllowMultipleArgumentsPerToken = true
+        };
+        artifactsPruneStatusOption.Validators.Add(result =>
+        {
+            string[] statuses = result.GetValueOrDefault<string[]>() ?? [];
+            if (statuses.Any(status => status is not ProjectPackRunState.Accepted
+                and not ProjectPackRunState.Rejected
+                and not ProjectPackRunState.Failed
+                and not ProjectPackRunState.Canceled))
+            {
+                result.AddError("--status accepts only accepted, rejected, failed, or canceled.");
+            }
+        });
+        Option<long?> artifactsPruneMinimumSizeOption = new("--min-size") { Description = "Minimum declared artifact bytes." };
+        Option<long?> artifactsPruneMaximumSizeOption = new("--max-size") { Description = "Maximum declared artifact bytes." };
+        Option<bool> artifactsPruneDryRunOption = new("--dry-run") { Description = "Render candidates without deletion; this is the default." };
+        Option<bool> artifactsPruneApplyOption = new("--apply") { Description = "Explicitly apply deletion to eligible owned managed artifacts." };
+        Option<bool> artifactsPruneJsonOption = new("--json") { Description = "Write one stable JSON prune result." };
+        Option<string> artifactsPruneOutputOption = new("--output") { Description = "Select text or json output." };
+        artifactsPruneOutputOption.DefaultValueFactory = _ => "text";
+        AddTextJsonOutputValidator(artifactsPruneOutputOption);
+        artifactsPruneCommand.Options.Add(artifactsPruneOlderOption);
+        artifactsPruneCommand.Options.Add(artifactsPruneStatusOption);
+        artifactsPruneCommand.Options.Add(artifactsPruneMinimumSizeOption);
+        artifactsPruneCommand.Options.Add(artifactsPruneMaximumSizeOption);
+        artifactsPruneCommand.Options.Add(artifactsPruneDryRunOption);
+        artifactsPruneCommand.Options.Add(artifactsPruneApplyOption);
+        artifactsPruneCommand.Options.Add(artifactsPruneJsonOption);
+        artifactsPruneCommand.Options.Add(artifactsPruneOutputOption);
+        artifactsPruneCommand.SetAction(parseResult =>
+        {
+            bool apply = parseResult.GetValue(artifactsPruneApplyOption);
+            bool dryRun = parseResult.GetValue(artifactsPruneDryRunOption);
+            bool jsonOutput = IsJsonOutputRequested(
+                parseResult.GetValue(artifactsPruneJsonOption),
+                parseResult.GetValue(artifactsPruneOutputOption) ?? "text");
+            if (apply && dryRun)
+            {
+                output.WriteLine(ManagedArtifactRenderer.RenderFailure(
+                    "artifacts.prune",
+                    new ManagedArtifactDiagnostic(
+                        ManagedArtifactErrorCode.PruneIneligible,
+                        "--dry-run and --apply cannot be used together."),
+                    jsonOutput));
+                return 2;
+            }
+
+            long? minimumSize = parseResult.GetValue(artifactsPruneMinimumSizeOption);
+            long? maximumSize = parseResult.GetValue(artifactsPruneMaximumSizeOption);
+            if (minimumSize < 0 || maximumSize < 0 ||
+                minimumSize is not null && maximumSize is not null && minimumSize > maximumSize)
+            {
+                output.WriteLine(ManagedArtifactRenderer.RenderFailure(
+                    "artifacts.prune",
+                    new ManagedArtifactDiagnostic(
+                        ManagedArtifactErrorCode.PruneIneligible,
+                        "Prune size filters must be non-negative and min-size cannot exceed max-size."),
+                    jsonOutput));
+                return 2;
+            }
+
+            DateTimeOffset nowUtc = utcNowProvider();
+            string[] statuses = parseResult.GetValue(artifactsPruneStatusOption) ?? [];
+            CliEnvironmentSnapshot snapshot = workspaceSnapshotProvider(parseResult.GetValue(workspaceOption));
+            string configuredAge = parseResult.GetValue(artifactsPruneOlderOption) ??
+                snapshot.Configuration.ArtifactRetention.DefaultMinimumAgeDays.ToString(CultureInfo.InvariantCulture) + "d";
+            ManagedArtifactRetentionParser.TryParseAge(configuredAge, out TimeSpan age);
+            ManagedArtifactPruneResult result = ManagedArtifactStore.Create(snapshot).Prune(
+                new ManagedArtifactPruneFilter(
+                    nowUtc - age,
+                    statuses.Length == 0 ? null : new HashSet<string>(statuses, StringComparer.Ordinal),
+                    minimumSize,
+                    maximumSize),
+                apply,
+                snapshot.Workspace,
+                nowUtc);
+            if (apply && result.DeletedCount > 0)
+            {
+                IReadOnlyList<ManagedArtifactDiagnostic> correlationDiagnostics =
+                    UpdatePrunedProjectPackJobCorrelations(snapshot, result, nowUtc);
+                if (correlationDiagnostics.Count > 0)
+                {
+                    result = result with
+                    {
+                        Diagnostics = result.Diagnostics.Concat(correlationDiagnostics).ToArray()
+                    };
+                }
+            }
+
+            output.WriteLine(jsonOutput
+                ? ManagedArtifactRenderer.RenderPruneJson(result)
+                : ManagedArtifactRenderer.RenderPruneText(result));
+            return result.Diagnostics.Any(diagnostic => diagnostic.ErrorCode is
+                ManagedArtifactErrorCode.PruneFailed or
+                ManagedArtifactErrorCode.PruneRace or
+                ManagedArtifactErrorCode.ReparsePoint ||
+                diagnostic.ErrorCode.StartsWith("artifact-job-correlation-", StringComparison.Ordinal)) ? 1 : 0;
+        });
+        artifactsCommand.Subcommands.Add(artifactsPruneCommand);
 
         Command skillsCommand = new("skills", "List and run local skill workflow packs.");
         Command skillsListCommand = new("list", "List built-in and workspace-local skill packs.");
@@ -5267,6 +5931,7 @@ public static class CliCommandFactory
         rootCommand.Subcommands.Add(mcpCommand);
         rootCommand.Subcommands.Add(workflowCommand);
         rootCommand.Subcommands.Add(packsCommand);
+        rootCommand.Subcommands.Add(artifactsCommand);
         rootCommand.Subcommands.Add(skillsCommand);
         rootCommand.Subcommands.Add(toolsCommand);
         rootCommand.Subcommands.Add(logsCommand);
@@ -6681,6 +7346,250 @@ public static class CliCommandFactory
             return false;
         }
     }
+
+    private static bool TryUpdateProjectPackAcceptanceJob(
+        CliEnvironmentSnapshot snapshot,
+        ProjectPackRunRecord record,
+        DateTimeOffset nowUtc,
+        out string? error)
+    {
+        error = null;
+        if (record.Acceptance is null || record.Correlation.JobId is null)
+        {
+            error = "Project pack run does not contain a correlated human decision and job id.";
+            return false;
+        }
+
+        try
+        {
+            JobRecordStore store = JobRecordStore.Create(snapshot);
+            JobRecordReadResult read = store.Read(record.Correlation.JobId);
+            if (!read.Succeeded || read.Record is null)
+            {
+                error = "Correlated project pack job record was not found.";
+                return false;
+            }
+
+            ProjectPackAcceptanceDecision decision = record.Acceptance;
+            List<JobArtifact> artifacts = read.Record.Artifacts
+                .Where(artifact => artifact.Kind != JobArtifactKind.ProjectPackAcceptance)
+                .ToList();
+            artifacts.Add(new JobArtifact(
+                JobArtifactKind.ProjectPackAcceptance,
+                $"inline:acceptance/{record.RunId}",
+                Exists: true,
+                Summary: $"outcome={decision.Outcome}; actor={decision.Actor}; verificationArtifactId={decision.VerificationArtifactId}",
+                Sha256: decision.VerificationSha256,
+                CreatedAtUtc: decision.DecidedAtUtc));
+            bool accepted = decision.Outcome == ProjectPackRunState.Accepted;
+            JobRecord updated = read.Record.WithStatus(
+                accepted ? JobStatus.Succeeded : JobStatus.Failed,
+                nowUtc,
+                exitCode: accepted ? 0 : 1,
+                stopReason: accepted ? "human-accepted" : "human-rejected",
+                errorCode: accepted ? null : ProjectPackRunErrorCode.HumanRejected,
+                summary: accepted
+                    ? "TIFF hard verification evidence was explicitly accepted by a human reviewer."
+                    : "TIFF hard verification evidence was explicitly rejected by a human reviewer.",
+                taskReport: null,
+                artifacts: artifacts,
+                warnings: read.Record.Warnings.Concat(
+                [
+                    $"packRunId={record.RunId}; acceptance={decision.Outcome}; verificationArtifactId={decision.VerificationArtifactId}",
+                    "Human acceptance is explicit evidence and was not produced by a model or tool.",
+                    "Project pack run state remains the operational checkpoint; taskReport was not duplicated."
+                ]).Distinct(StringComparer.Ordinal).ToArray());
+            store.Update(updated);
+            return true;
+        }
+        catch (Exception exception) when (IsJobStoreException(exception))
+        {
+            error = "Correlated project pack human decision job evidence could not be updated safely.";
+            return false;
+        }
+    }
+
+    private static bool TryUpdateRecoveredProjectPackCorrelations(
+        CliEnvironmentSnapshot snapshot,
+        ProjectPackRunRecord record,
+        DateTimeOffset nowUtc,
+        out string? error)
+    {
+        error = null;
+        try
+        {
+            if (record.Correlation.JobId is not null)
+            {
+                JobRecordStore jobStore = JobRecordStore.Create(snapshot);
+                JobRecordReadResult jobRead = jobStore.Read(record.Correlation.JobId);
+                if (jobRead.Succeeded && jobRead.Record is not null && jobRead.Record.Status == JobStatus.Running)
+                {
+                    jobStore.Update(jobRead.Record.WithStatus(
+                        JobStatus.Failed,
+                        nowUtc,
+                        exitCode: 1,
+                        stopReason: "manual-interrupted-recovery",
+                        errorCode: ProjectPackRunErrorCode.RestartRequired,
+                        summary: "A human explicitly marked the stale local execute state interrupted; no process was replayed or terminated.",
+                        taskReport: null,
+                        warnings: jobRead.Record.Warnings.Concat(
+                        [
+                            $"packRunId={record.RunId}; state=interrupted; restartRequired=true",
+                            "Manual recovery does not prove process cleanup; the operator confirmed the execute process was no longer active."
+                        ]).Distinct(StringComparer.Ordinal).ToArray()));
+                }
+                else if (!jobRead.Succeeded && jobRead.Diagnostic?.ErrorCode != "job-not-found")
+                {
+                    error = "Correlated stale job record could not be read safely.";
+                    return false;
+                }
+            }
+
+            if (record.Correlation.QueueId is not null)
+            {
+                TaskQueueStore queueStore = TaskQueueStore.Create(snapshot);
+                TaskQueueReadResult queueRead = queueStore.Read(record.Correlation.QueueId);
+                if (queueRead.Succeeded && queueRead.Item is not null &&
+                    queueRead.Item.Status == TaskQueueStatus.Running && queueRead.Item.Attempts.Count > 0)
+                {
+                    TaskQueueTransitionResult queueResult = queueStore.Complete(
+                        record.Correlation.QueueId,
+                        queueRead.Item.Attempts[^1].Attempt,
+                        nowUtc,
+                        exitCode: 1,
+                        record.Correlation.JobId,
+                        ProjectPackRunErrorCode.RestartRequired,
+                        "Correlated queue attempt was explicitly marked failed after stale running recovery.");
+                    if (!queueResult.Succeeded)
+                    {
+                        error = queueResult.Diagnostic?.Summary ?? "Correlated stale queue attempt could not be completed.";
+                        return false;
+                    }
+                }
+                else if (!queueRead.Succeeded && queueRead.Diagnostic?.ErrorCode != TaskQueueErrorCode.NotFound)
+                {
+                    error = "Correlated stale queue record could not be read safely.";
+                    return false;
+                }
+            }
+
+            return true;
+        }
+        catch (Exception exception) when (IsJobStoreException(exception) || IsQueueStoreException(exception))
+        {
+            error = "Stale run correlation metadata could not be updated safely.";
+            return false;
+        }
+    }
+
+    private static IReadOnlyList<ManagedArtifactDiagnostic> UpdatePrunedProjectPackJobCorrelations(
+        CliEnvironmentSnapshot snapshot,
+        ManagedArtifactPruneResult result,
+        DateTimeOffset nowUtc)
+    {
+        List<ManagedArtifactDiagnostic> diagnostics = [];
+        ManagedArtifactStore artifactStore = ManagedArtifactStore.Create(snapshot);
+        ManagedProjectPackRunStore runStore = ManagedProjectPackRunStore.Create(snapshot);
+        JobRecordStore jobStore = JobRecordStore.Create(snapshot);
+        foreach (IGrouping<string, ManagedArtifactPruneItem> runGroup in result.Items
+            .Where(item => item.Deleted)
+            .GroupBy(item => item.RunId, StringComparer.Ordinal))
+        {
+            ManagedArtifactReadResult manifestRead = artifactStore.ReadManifest(runGroup.Key);
+            if (!manifestRead.Succeeded || manifestRead.Manifest?.Owner.JobId is null)
+            {
+                diagnostics.Add(new ManagedArtifactDiagnostic(
+                    "artifact-job-correlation-missing",
+                    "Pruned artifact tombstone was retained, but no correlated job could be updated.",
+                    RunId: runGroup.Key));
+                continue;
+            }
+
+            JobRecordReadResult jobRead = jobStore.Read(manifestRead.Manifest.Owner.JobId);
+            if (!jobRead.Succeeded || jobRead.Record is null)
+            {
+                diagnostics.Add(new ManagedArtifactDiagnostic(
+                    "artifact-job-correlation-missing",
+                    "Pruned artifact tombstone was retained, but the correlated job was missing or corrupt.",
+                    RunId: runGroup.Key));
+                continue;
+            }
+
+            try
+            {
+                ManagedProjectPackRunLayout layout = runStore.GetLayout(runGroup.Key);
+                Dictionary<string, ManagedArtifactPruneItem> prunedPaths = runGroup.ToDictionary(
+                    item => Path.GetFullPath(Path.Combine(
+                        layout.RunRoot,
+                        item.Path.Replace('/', Path.DirectorySeparatorChar))),
+                    PathComparer);
+                List<JobArtifact> artifacts = jobRead.Record.Artifacts.Select(artifact =>
+                {
+                    string fullPath;
+                    try
+                    {
+                        fullPath = Path.GetFullPath(artifact.Path);
+                    }
+                    catch (Exception exception) when (exception is ArgumentException or NotSupportedException)
+                    {
+                        return artifact;
+                    }
+
+                    return prunedPaths.TryGetValue(fullPath, out ManagedArtifactPruneItem? pruned)
+                        ? new JobArtifact(
+                            artifact.Kind,
+                            artifact.Path,
+                            Exists: false,
+                            Summary: $"Pruned managed artifact; tombstone={ManagedArtifactId.Create(runGroup.Key, manifestRead.Manifest.Artifacts.Single(entry => entry.Path == pruned.Path).PointerId)}",
+                            artifact.Sha256,
+                            artifact.CreatedAtUtc)
+                        : artifact;
+                }).ToList();
+                foreach (ManagedArtifactPruneItem item in runGroup)
+                {
+                    ManagedArtifactEntry tombstone = manifestRead.Manifest.Artifacts.Single(entry => entry.ArtifactId == item.ArtifactId);
+                    artifacts.Add(new JobArtifact(
+                        JobArtifactKind.ProjectPackArtifactTombstone,
+                        $"inline:artifact-tombstone/{item.ArtifactId}",
+                        Exists: true,
+                        Summary: $"runId={item.RunId}; path={tombstone.Path}; removedAtUtc={tombstone.Tombstone?.RemovedAtUtc:O}; reason={tombstone.Tombstone?.Reason}",
+                        tombstone.Sha256,
+                        tombstone.Tombstone?.RemovedAtUtc));
+                }
+
+                JobRecord updated = jobRead.Record.WithStatus(
+                    jobRead.Record.Status,
+                    nowUtc,
+                    jobRead.Record.ExitCode,
+                    jobRead.Record.StopReason,
+                    jobRead.Record.ErrorCode,
+                    jobRead.Record.Summary,
+                    taskReport: null,
+                    artifacts: artifacts
+                        .GroupBy(artifact => artifact.Kind + "\n" + artifact.Path, StringComparer.Ordinal)
+                        .Select(group => group.Last())
+                        .ToArray(),
+                    warnings: jobRead.Record.Warnings.Concat(
+                    [
+                        $"Managed artifact prune retained {runGroup.Count()} tombstone(s); source, workspace output, run, and job metadata were preserved."
+                    ]).Distinct(StringComparer.Ordinal).ToArray());
+                jobStore.Update(updated);
+            }
+            catch (Exception exception) when (IsJobStoreException(exception) || exception is ProjectPackContractException)
+            {
+                diagnostics.Add(new ManagedArtifactDiagnostic(
+                    "artifact-job-correlation-failed",
+                    "Pruned artifact tombstone was retained, but the correlated job could not be updated safely.",
+                    RunId: runGroup.Key));
+            }
+        }
+
+        return diagnostics;
+    }
+
+    private static StringComparer PathComparer => OperatingSystem.IsWindows()
+        ? StringComparer.OrdinalIgnoreCase
+        : StringComparer.Ordinal;
 
     private static bool IsJobStoreException(Exception exception)
     {

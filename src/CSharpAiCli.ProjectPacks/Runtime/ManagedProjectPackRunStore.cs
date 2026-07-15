@@ -10,6 +10,7 @@ public sealed record ManagedProjectPackRunLayout(
     string RunRoot,
     string RunRecordPath,
     string CheckpointPath,
+    string ArtifactManifestPath,
     string InputManifestPath,
     string PlanPath,
     string StagingPath,
@@ -30,11 +31,21 @@ public sealed class ManagedProjectPackRunStore
     };
 
     private readonly string runsRoot;
+    private readonly int defaultArtifactMinimumAgeDays;
 
-    public ManagedProjectPackRunStore(string runsRoot)
+    public ManagedProjectPackRunStore(
+        string runsRoot,
+        int defaultArtifactMinimumAgeDays = ArtifactRetentionConfiguration.DefaultDays)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(runsRoot);
+        if (defaultArtifactMinimumAgeDays < ArtifactRetentionConfiguration.MinimumDays ||
+            defaultArtifactMinimumAgeDays > ArtifactRetentionConfiguration.MaximumDays)
+        {
+            throw new ArgumentOutOfRangeException(nameof(defaultArtifactMinimumAgeDays));
+        }
+
         this.runsRoot = Path.GetFullPath(runsRoot);
+        this.defaultArtifactMinimumAgeDays = defaultArtifactMinimumAgeDays;
     }
 
     public string RunsRoot => runsRoot;
@@ -46,7 +57,9 @@ public sealed class ManagedProjectPackRunStore
         stateRoot = string.IsNullOrWhiteSpace(stateRoot)
             ? Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), ".caicli")
             : stateRoot;
-        return new ManagedProjectPackRunStore(Path.Combine(stateRoot, "runs"));
+        return new ManagedProjectPackRunStore(
+            Path.Combine(stateRoot, "runs"),
+            snapshot.Configuration.ArtifactRetention.DefaultMinimumAgeDays);
     }
 
     public ManagedProjectPackRunLayout GetLayout(string runId)
@@ -64,6 +77,7 @@ public sealed class ManagedProjectPackRunStore
             runRoot,
             Path.Combine(runRoot, "run.json"),
             Path.Combine(runRoot, "checkpoint.json"),
+            Path.Combine(runRoot, "artifact-manifest.json"),
             Path.Combine(runRoot, "input-manifest.json"),
             Path.Combine(runRoot, "plan.json"),
             Path.Combine(runRoot, "staging"),
@@ -138,6 +152,7 @@ public sealed class ManagedProjectPackRunStore
             WriteTextAtomically(layout.InputManifestPath, inputManifestJson, overwrite: false);
             WriteJsonAtomically(layout.CheckpointPath, checkpoint, overwrite: false);
             WriteJsonAtomically(layout.RunRecordPath, record, overwrite: false);
+            ManagedArtifactStore.WriteManifest(layout, record, defaultArtifactMinimumAgeDays);
             return ProjectPackRunMutationResult.Success(record, checkpoint);
         }
         catch (ProjectPackContractException exception)
@@ -275,6 +290,7 @@ public sealed class ManagedProjectPackRunStore
 
             WriteJsonAtomically(layout.CheckpointPath, checkpoint, overwrite: true);
             WriteJsonAtomically(layout.RunRecordPath, record, overwrite: true);
+            ManagedArtifactStore.WriteManifest(layout, record, defaultArtifactMinimumAgeDays);
             return ProjectPackRunMutationResult.Success(record, checkpoint);
         }
         catch (ProjectPackContractException exception)

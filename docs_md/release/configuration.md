@@ -143,6 +143,29 @@ When `CAICLI_GERBER_TIFF_TOOL_SMOKE` is unset, default smoke does not require or
 real-tool branch as skipped. When it is `1`, both explicit paths are mandatory and a missing path fails the smoke.
 `CAICLI_USER_PROFILE` may still redirect managed runs and jobs for isolated validation; it does not select tools.
 
+## Managed Artifact Retention (0.5.0 Source Preview)
+
+Artifact lifecycle state is stored under the same user-level managed root as Project Pack runs. The optional
+user config value below changes only the default age used when `artifacts prune` omits `--older-than`:
+
+```json
+{
+  "artifactRetention": {
+    "defaultMinimumAgeDays": 30
+  }
+}
+```
+
+The accepted range is 1 through 3650 days and the default is 30. Workspace `artifactRetention` is ignored:
+repository content cannot lower the user-level managed-store retention default. This setting does not schedule
+cleanup and does not authorize deletion. `artifacts prune` remains dry-run by default; `--apply` is required for
+each mutation. Explicit `--older-than`, `--status`, `--min-size`, and `--max-size` filters are invocation-local.
+
+The setting applies only to artifact-manifest entries marked `managed`, `owned`, and `terminal-prunable`.
+Source, baseline, explicit workspace output, external pointers, run/checkpoint/job metadata, and tombstones are
+not made prunable by configuration. Running, interrupted, corrupt, outside-root, or reparse paths remain
+ineligible regardless of age or size.
+
 ## User Config Example
 
 ```json

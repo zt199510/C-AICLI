@@ -1,6 +1,6 @@
 # 第 63 周 Artifact Lifecycle、Human Acceptance 与 Safe Resume Implementation Plan
 
-状态：计划中
+状态：已完成；0.5.0 source-only Preview，real-tool smoke 未配置并转入 Week 64 hardening 重验
 
 **Goal:** 将 0.5.0 垂直运行形成的 managed artifacts 变成可查看、校验、导出和安全清理的交付物，并补齐人工 accept/reject、失败恢复和 interrupted execute 的显式 restart 语义。
 
@@ -78,19 +78,19 @@ Prune 必须：
 
 ## 任务清单
 
-- [ ] Step 1: 定义 artifact identity/ownership/retention/tombstone schema。
-- [ ] Step 2: 实现 managed artifact store/index 和 corrupt diagnostics。
-- [ ] Step 3: 实现 `artifacts list/show/verify/export` renderers/CLI。
-- [ ] Step 4: 实现 accept/reject human gate 和 terminal state transition。
-- [ ] Step 5: 实现 safe resume eligibility/revalidation。
-- [ ] Step 6: 实现 interrupted execute 的 new-attempt restart plan。
-- [ ] Step 7: 实现 prune dry-run/apply、root/reparse/race protections。
-- [ ] Step 8: 接入 job/queue/run correlation 和 retained tombstone。
-- [ ] Step 9: 增加 lifecycle/acceptance/resume/prune/security tests。
-- [ ] Step 10: 扩展 smoke：accept/reject、resume plan、prune dry-run 和受控 apply。
-- [ ] Step 11: 更新 configuration/security/known limitations/troubleshooting 草稿。
-- [ ] Step 12: 运行 build/test/default smoke/real-tool smoke。
-- [ ] Step 13: 创建 `63_week_review.md`，列出 Week 64 hardening 输入。
+- [x] Step 1: 定义 artifact identity/ownership/retention/tombstone schema。
+- [x] Step 2: 实现 managed artifact store/index 和 corrupt diagnostics。
+- [x] Step 3: 实现 `artifacts list/show/verify/export` renderers/CLI。
+- [x] Step 4: 实现 accept/reject human gate 和 terminal state transition。
+- [x] Step 5: 实现 safe resume eligibility/revalidation。
+- [x] Step 6: 实现 interrupted execute 的 new-attempt restart plan。
+- [x] Step 7: 实现 prune dry-run/apply、root/reparse/race protections。
+- [x] Step 8: 接入 job/queue/run correlation 和 retained tombstone。
+- [x] Step 9: 增加 lifecycle/acceptance/resume/prune/security tests。
+- [x] Step 10: 扩展 smoke：accept/reject、resume plan、prune dry-run 和受控 apply。
+- [x] Step 11: 更新 configuration/security/known limitations/troubleshooting 草稿。
+- [x] Step 12: 运行 build/test/default smoke/real-tool smoke（real-tool 未配置，按 opt-in 边界明确 skipped）。
+- [x] Step 13: 创建 `63_week_review.md`，列出 Week 64 hardening 输入。
 
 ## 验收标准
 

@@ -837,8 +837,18 @@ public sealed class ProjectPackRunService
             return Ineligible(record.State, ProjectPackRunErrorCode.RecordCorrupt, "Run plan or input manifest is corrupt.");
         }
 
+        bool postExecution = record.State is ProjectPackRunState.Running
+            or ProjectPackRunState.Interrupted
+            or ProjectPackRunState.Verifying
+            or ProjectPackRunState.AwaitingAcceptance;
         ProjectPackRunValidationResult validation = revalidator.Revalidate(
-            plan, workspace, toolPaths, record.PolicyFingerprint, currentPolicyFingerprint, cancellationToken);
+            plan,
+            workspace,
+            toolPaths,
+            record.PolicyFingerprint,
+            currentPolicyFingerprint,
+            cancellationToken,
+            allowExistingOutputDirectory: postExecution);
         if (!validation.Succeeded)
         {
             return Ineligible(record.State,
@@ -873,22 +883,35 @@ public sealed class ProjectPackRunService
 
         if (record.State == ProjectPackRunState.Verifying)
         {
-            ProjectPackRunDiagnostic? artifactDiagnostic = VerifyManagedArtifacts(record, layout);
+            ProjectPackRunDiagnostic? artifactDiagnostic = VerifyDeclaredArtifacts(record, workspace);
             if (artifactDiagnostic is not null)
             {
                 return Ineligible(record.State, artifactDiagnostic.ErrorCode, artifactDiagnostic.Summary);
             }
 
             return new ProjectPackResumeEligibility(
-                true, record.State, "rerun-read-only-verifier", true, false,
-                Summary: "Artifact hashes are complete; a current approval is still required for the configured inspect tool.");
+                true, record.State, "rerun-read-only-verifier", false, false,
+                Summary: "Tool, input, policy, staging, and declared output identities are current; the bounded in-process verifier may be rerun.");
         }
 
         if (record.State == ProjectPackRunState.AwaitingAcceptance)
         {
+            ProjectPackRunDiagnostic? artifactDiagnostic = VerifyDeclaredArtifacts(record, workspace);
+            if (artifactDiagnostic is not null)
+            {
+                return Ineligible(record.State, artifactDiagnostic.ErrorCode, artifactDiagnostic.Summary);
+            }
+
+            ProjectPackRunDiagnostic? verificationDiagnostic = new ProjectPackAcceptanceService(store)
+                .ValidateHardVerification(runId);
+            if (verificationDiagnostic is not null)
+            {
+                return Ineligible(record.State, verificationDiagnostic.ErrorCode, verificationDiagnostic.Summary);
+            }
+
             return new ProjectPackResumeEligibility(
                 true, record.State, "continue-human-decision", false, false,
-                Summary: "Run may continue only at the human decision gate.");
+                Summary: "Current hard verification evidence was revalidated; the run may continue only at the explicit human decision gate.");
         }
 
         return Ineligible(record.State, ProjectPackRunErrorCode.ResumeNotEligible,
@@ -1000,69 +1023,34 @@ public sealed class ProjectPackRunService
     private static ProjectPackResumeEligibility Ineligible(string state, string errorCode, string summary) =>
         new(false, state, "none", false, false, errorCode, summary);
 
-    private static ProjectPackRunDiagnostic? VerifyManagedArtifacts(
+    private ProjectPackRunDiagnostic? VerifyDeclaredArtifacts(
         ProjectPackRunRecord record,
-        ManagedProjectPackRunLayout layout)
+        WorkspaceContext workspace)
     {
         ProjectPackRunArtifactPointer[] outputs = record.Artifacts
-            .Where(artifact => artifact.Scope == "managed-run" && artifact.Path.StartsWith("artifacts/", StringComparison.Ordinal))
+            .Where(artifact => artifact.Scope is "managed-run" or "workspace-output" or "source")
             .ToArray();
         if (outputs.Length == 0 || outputs.Any(output => output.Sha256 is null || output.Size is null))
         {
             return new ProjectPackRunDiagnostic(
                 ProjectPackRunErrorCode.ResumeNotEligible,
-                "Verifying state does not have complete managed artifact hashes.",
-                layout.ArtifactsPath,
-                record.RunId);
+                "Resumable run does not have complete declared artifact hashes.",
+                store.GetLayout(record.RunId).RunRoot,
+                RunId: record.RunId);
         }
 
+        ManagedArtifactStore artifacts = new(store);
         foreach (ProjectPackRunArtifactPointer output in outputs)
         {
-            try
-            {
-                string relativePath = output.Path.Replace('/', Path.DirectorySeparatorChar);
-                const string artifactPrefix = "artifacts/";
-                if (!output.Path.StartsWith(artifactPrefix, StringComparison.Ordinal) ||
-                    output.Path.Contains("..", StringComparison.Ordinal))
-                {
-                    throw new IOException();
-                }
-
-                string path = Path.GetFullPath(Path.Combine(layout.RunRoot, relativePath));
-                string artifactRoot = Path.TrimEndingDirectorySeparator(Path.GetFullPath(layout.ArtifactsPath)) +
-                    Path.DirectorySeparatorChar;
-                if (!path.StartsWith(
-                    artifactRoot,
-                    OperatingSystem.IsWindows() ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal))
-                {
-                    throw new IOException();
-                }
-
-                ManagedProjectPackRunStore.EnsureNoReparseInExistingChain(path);
-                FileInfo info = new(path);
-                if (!info.Exists)
-                {
-                    throw new IOException();
-                }
-
-                string sha256;
-                using (FileStream stream = new(path, FileMode.Open, FileAccess.Read, FileShare.Read, 128 * 1024, FileOptions.SequentialScan))
-                {
-                    sha256 = Convert.ToHexString(SHA256.HashData(stream));
-                }
-
-                if (!info.Exists || info.Length != output.Size ||
-                    !sha256.Equals(output.Sha256, StringComparison.OrdinalIgnoreCase))
-                {
-                    throw new IOException();
-                }
-            }
-            catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or NotSupportedException)
+            ManagedArtifactVerificationResult verification = artifacts.Verify(
+                ManagedArtifactId.Create(record.RunId, output.Id),
+                workspace);
+            if (!verification.Succeeded || verification.Availability != ManagedArtifactAvailability.Available)
             {
                 return new ProjectPackRunDiagnostic(
-                    ProjectPackRunErrorCode.ResumeNotEligible,
-                    "Managed artifact identity is incomplete or changed.",
-                    layout.ArtifactsPath,
+                    verification.Diagnostic?.ErrorCode ?? ProjectPackRunErrorCode.ResumeNotEligible,
+                    verification.Diagnostic?.Summary ?? "Declared artifact identity is incomplete or changed.",
+                    output.Path,
                     record.RunId);
             }
         }

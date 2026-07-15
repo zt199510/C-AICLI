@@ -2,7 +2,7 @@
 
 ## 0.5.0 Development Draft
 
-Week 58 source changes are not part of the accepted `0.4.0` package. The status below is a development boundary for the future `0.5.0` line, not a release acceptance decision.
+Week 58-63 source changes are not part of the accepted `0.4.0` package. The status below is a development boundary for the future `0.5.0` line, not a release acceptance decision.
 
 | Capability | Status | Notes |
 |---|---|---|
@@ -10,7 +10,11 @@ Week 58 source changes are not part of the accepted `0.4.0` package. The status 
 | `packs list` and static `packs doctor` | Preview (source only) | Text/JSON list and doctor paths are model-free and network-free. Static doctor checks explicit tool bindings, canonical regular-file identity, reparse points, size, SHA256, and trust status without starting a process. |
 | Explicit `packs doctor --probe` | Preview (source only) | Fixed typed version probes run only after static identity checks and current `shell`-risk approval. Probe cwd/env/output/time are bounded, cancellation/timeout clean the process tree, and approval/trust are not persisted. |
 | Gerber/TIFF bounded inventory and `packs plan` | Preview (source only) | One explicit workspace directory is classified and streaming-hashed under frozen depth/count/byte/path/time limits. Text/JSON plans use relative paths, deterministic fingerprints, fixed stages/artifact slots, static tool identity, and no-overwrite `--output-dir`; they do not run conversion or create job/run/output state. |
-| Gerber/TIFF real workflow execution | Deferred | Gerbv/ImageMagick/LibTIFF and a CC0 fixture passed the Week 58 technical/license spike, but C-AICLI does not implement real run, staging, TIFF verification, resume, artifact lifecycle, accept/reject, or real-tool smoke yet. |
+| Managed staging/checkpoint and controlled Gerber/TIFF execution | Preview (source only) | Isolated run/staging, source hash preservation, fixed Gerbv/ImageMagick typed `ArgumentList`, current approval, bounded cwd/env/output/time/cancel/process cleanup, no-overwrite explicit workspace TIFF, redacted log, and run/job correlation are implemented. Approval is never persisted. |
+| Bounded TIFF verification and managed preview | Preview (source only) | Magick.NET/ImageMagick performs bounded classic TIFF metadata/decode, strict optional baseline exact/pixel comparison, stable JSON/markdown, and managed PNG/contact-sheet evidence. Hard levels remain independent; preview and metadata validity are not correctness proof. |
+| Human acceptance and safe resume/restart | Preview (source only) | `packs accept/reject` is an explicit human-only terminal gate and revalidates current hard-report identity; fake/failed/changed evidence and double decisions fail closed. Resume is a read-only revalidation plan. Interrupted execute restart creates a new child run/job/attempt/output and reuses current typed approval-gated execution without overwriting parent evidence. |
+| Managed artifact lifecycle | Preview (source only) | Strict artifact manifest/index, deterministic ids, run/job/queue/attempt ownership, list/show/verify/export, user-level retention default, dry-run/apply terminal-owned prune, quarantine race/reparse protection, and retained manifest/job tombstones are implemented. Source, baseline, explicit workspace output, external, running/interrupted/corrupt, and metadata files are not prunable. |
+| Week 63 real-tool lifecycle smoke | Not run | The Week 63 validation host had no `CAICLI_GERBER_TIFF_TOOL_SMOKE`, Gerbv path, or ImageMagick path and neither executable was on PATH or retained in validation artifacts. Default packaged smoke passed and the opt-in branch was extended, but actual Week 63 real-tool accept/reject/prune evidence remains a Week 64 hardening input. |
 
 ## 0.4.0 Release Capabilities
 
@@ -69,7 +73,7 @@ Status meaning:
 |---|---|---|
 | Microsoft Agent Framework real backend | Deferred | Adapter project and tool bridge exist; real framework package/runtime is not enabled. |
 | MCP remote/http transport | Deferred | Stdio MCP v1 is available for user-configured stdio servers in registry/tool paths and for explicit `mcp doctor` diagnostics; remote/http transport is not enabled. |
-| Gerber/TIFF real workflow execution | Deferred | The accepted 0.4.0 package contains only the earlier project pack status/profile MVP. Week 58-59 source-only contract/doctor/inventory/plan work does not enable conversion in this release. |
+| Gerber/TIFF real workflow execution | Deferred | The accepted 0.4.0 package contains only the earlier project pack status/profile MVP. Week 58-63 source-only vertical workflow work does not enable these commands in the accepted release. |
 | Dotnet tool package | Deferred | Windows self-contained package is the current release artifact. |
 | Remote skill marketplace and user-level skill distribution | Deferred | Only built-in packs and workspace-local `.caicli/skills` JSON manifests are supported. Remote marketplaces, automatic updates, signing/trust chains, YAML manifests, user-level skill directories, and team knowledge distribution are not enabled. |
 | Background automation, CI providers, API control/SSE | Deferred | Local automation validation/dry-run/manual trigger, provider-neutral CI artifacts, and a read-only localhost API Preview are available. Automatic schedule execution, Windows Task Scheduler registration, GitHub/GitLab/Azure DevOps API integration, PR comments, uploads, API control routes, SSE, authentication/TLS, service installation, concurrent workers, webhooks, remote binds/runners, and remote control are not enabled. |

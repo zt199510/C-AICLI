@@ -32,6 +32,8 @@ public static class JobArtifactKind
     public const string ProjectPackExecutionLog = "project-pack-execution-log";
     public const string ProjectPackVerificationReport = "project-pack-verification-report";
     public const string ProjectPackPreview = "project-pack-preview";
+    public const string ProjectPackAcceptance = "project-pack-acceptance";
+    public const string ProjectPackArtifactTombstone = "project-pack-artifact-tombstone";
 }
 
 public sealed record JobSkillSummary

@@ -524,6 +524,7 @@ Write-Output 'bugfix verification passed'
     foreach ($requiredRunPath in @(
         (Join-Path $packRunRoot "run.json"),
         (Join-Path $packRunRoot "checkpoint.json"),
+        (Join-Path $packRunRoot "artifact-manifest.json"),
         (Join-Path $packRunRoot "plan.json"),
         $packInputManifest,
         $packStaging,
@@ -564,12 +565,37 @@ Write-Output 'bugfix verification passed'
     Assert-Contains $packJobText '"kind": "project-pack-run"' "packs run job artifact pointer"
     Assert-Contains $packJobText '"taskReport": null' "packs run no duplicate task report"
 
+    $artifactList = Invoke-CaiCli -Arguments @("artifacts", "list", "--run", $packRunId, "--output", "json", "--workspace", $workspace)
+    Assert-ExitCode $artifactList 0 "artifacts list dry-run evidence"
+    Assert-Contains $artifactList.Output '"type":"artifacts.list"' "artifacts list dry-run evidence"
+    $artifactListJson = $artifactList.Output | ConvertFrom-Json
+    if (@($artifactListJson.artifacts).Count -ne 2) {
+        throw "dry-run artifact index did not contain exactly plan and input-manifest metadata."
+    }
+    $planArtifactId = [string](@($artifactListJson.artifacts | Where-Object { $_.kind -eq "project-pack-plan" })[0].artifactId)
+    $artifactShow = Invoke-CaiCli -Arguments @("artifacts", "show", $planArtifactId, "--output", "json", "--workspace", $workspace)
+    Assert-ExitCode $artifactShow 0 "artifacts show dry-run evidence"
+    Assert-Contains $artifactShow.Output '"ownership":"managed"' "artifacts show ownership"
+    $artifactVerify = Invoke-CaiCli -Arguments @("artifacts", "verify", $planArtifactId, "--output", "json", "--workspace", $workspace)
+    Assert-ExitCode $artifactVerify 0 "artifacts verify dry-run evidence"
+    Assert-Contains $artifactVerify.Output '"status":"verified"' "artifacts verify dry-run evidence"
+    $artifactExport = Invoke-CaiCli -Arguments @("artifacts", "export", $planArtifactId, "--format", "markdown", "--workspace", $workspace)
+    Assert-ExitCode $artifactExport 0 "artifacts export markdown"
+    Assert-Contains $artifactExport.Output "# C# AI CLI Managed Artifact" "artifacts export markdown"
+
+    $packsAcceptReady = Invoke-CaiCli -Arguments @("packs", "accept", $packRunId, "--actor", "smoke-reviewer", "--output", "json", "--workspace", $workspace)
+    Assert-ExitCode $packsAcceptReady 1 "packs accept rejects ready run"
+    Assert-Contains $packsAcceptReady.Output "pack-acceptance-not-eligible" "packs accept hard gate"
+    $packsRejectReady = Invoke-CaiCli -Arguments @("packs", "reject", $packRunId, "--actor", "smoke-reviewer", "--reason", "not verified", "--output", "json", "--workspace", $workspace)
+    Assert-ExitCode $packsRejectReady 1 "packs reject rejects ready run"
+    Assert-Contains $packsRejectReady.Output "pack-acceptance-not-eligible" "packs reject hard gate"
+
     $packsRunShow = Invoke-CaiCli -Arguments @("packs", "runs", "show", $packRunId, "--output", "json", "--workspace", $workspace)
     Assert-ExitCode $packsRunShow 0 "packs runs show"
     Assert-Contains $packsRunShow.Output '"state":"ready"' "packs runs show"
-    $packsResume = Invoke-CaiCli -Arguments @("packs", "resume", $packRunId, "--dry-run", "--output", "json", "--workspace", $workspace)
-    Assert-ExitCode $packsResume 0 "packs resume dry-run"
-    Assert-Contains $packsResume.Output '"eligible":true' "packs resume dry-run"
+    $packsResume = Invoke-CaiCli -Arguments @("packs", "resume", $packRunId, "--output", "json", "--workspace", $workspace)
+    Assert-ExitCode $packsResume 0 "packs resume plan"
+    Assert-Contains $packsResume.Output '"eligible":true' "packs resume plan"
     Assert-Contains $packsResume.Output '"requiresApproval":true' "packs resume reapproval"
     $packsVerifyReady = Invoke-CaiCli -Arguments @("packs", "verify", $packRunId, "--output", "json", "--workspace", $workspace)
     Assert-ExitCode $packsVerifyReady 1 "packs verify rejects dry-run ready state"
@@ -585,6 +611,17 @@ Write-Output 'bugfix verification passed'
     $packsResumeCanceled = Invoke-CaiCli -Arguments @("packs", "resume", $packRunId, "--dry-run", "--output", "json", "--workspace", $workspace)
     Assert-ExitCode $packsResumeCanceled 1 "packs resume canceled"
     Assert-Contains $packsResumeCanceled.Output '"eligible":false' "packs resume canceled"
+    $artifactPruneDry = Invoke-CaiCli -Arguments @("artifacts", "prune", "--older-than", "0.000001m", "--dry-run", "--output", "json", "--workspace", $workspace)
+    Assert-ExitCode $artifactPruneDry 0 "artifacts prune dry-run metadata-only run"
+    Assert-Contains $artifactPruneDry.Output '"mode":"dry-run"' "artifacts prune dry-run"
+    Assert-Contains $artifactPruneDry.Output '"candidates":0' "artifacts prune retained metadata"
+    $artifactPruneApply = Invoke-CaiCli -Arguments @("artifacts", "prune", "--older-than", "0.000001m", "--apply", "--output", "json", "--workspace", $workspace)
+    Assert-ExitCode $artifactPruneApply 0 "artifacts prune controlled zero-candidate apply"
+    Assert-Contains $artifactPruneApply.Output '"mode":"apply"' "artifacts prune controlled apply"
+    Assert-Contains $artifactPruneApply.Output '"deleted":0' "artifacts prune controlled apply"
+    if (-not (Test-Path -LiteralPath $packInputManifest) -or -not (Test-Path -LiteralPath (Join-Path $packRunRoot "artifact-manifest.json"))) {
+        throw "artifact prune removed retained run/input metadata."
+    }
     $packProcessesAfter = @(Get-Process -Name "caicli", "gerbv", "magick" -ErrorAction SilentlyContinue | Select-Object -ExpandProperty Id | Sort-Object)
     if (@(Compare-Object -ReferenceObject $packProcessesBefore -DifferenceObject $packProcessesAfter).Count -ne 0) {
         throw "packs run dry-run changed the caicli/gerbv/magick process set."
@@ -707,6 +744,9 @@ Write-Output 'bugfix verification passed'
         Assert-ExitCode $realRunAfterVerification 0 "real Gerber/TIFF verified run"
         Assert-Contains $realRunAfterVerification.Output '"state":"awaiting-acceptance"' "real Gerber/TIFF verified run"
         Assert-Contains $realRunAfterVerification.Output '"approvalPersisted":false' "real Gerber/TIFF verified run approval boundary"
+        $realResume = Invoke-CaiCli -Arguments @("packs", "resume", $realRunId, "--output", "json", "--workspace", $workspace)
+        Assert-ExitCode $realResume 0 "real Gerber/TIFF awaiting acceptance resume plan"
+        Assert-Contains $realResume.Output '"nextAction":"continue-human-decision"' "real Gerber/TIFF awaiting acceptance resume plan"
         $realVerificationReports = @(Get-ChildItem -LiteralPath (Join-Path $realRunRoot "reports") -File)
         if (@($realVerificationReports | Where-Object { $_.Name -like "verification-r*.json" }).Count -ne 1 -or
             @($realVerificationReports | Where-Object { $_.Name -like "verification-r*.md" }).Count -ne 1 -or
@@ -725,6 +765,80 @@ Write-Output 'bugfix verification passed'
         Assert-Contains $realJobText '"kind": "project-pack-verification-report"' "real Gerber/TIFF job verification pointer"
         Assert-Contains $realJobText '"kind": "project-pack-preview"' "real Gerber/TIFF job preview pointer"
         Assert-Contains $realJobText '"taskReport": null' "real Gerber/TIFF no duplicate task report"
+
+        $realArtifacts = Invoke-CaiCli -Arguments @("artifacts", "list", "--run", $realRunId, "--output", "json", "--workspace", $workspace)
+        Assert-ExitCode $realArtifacts 0 "real Gerber/TIFF artifacts list"
+        $realArtifactsJson = $realArtifacts.Output | ConvertFrom-Json
+        $realTiffArtifactId = [string](@($realArtifactsJson.artifacts | Where-Object { $_.kind -eq "tiff-output" })[0].artifactId)
+        $realVerificationArtifactId = [string](@($realArtifactsJson.artifacts | Where-Object { $_.kind -eq "tiff-verification-json" })[0].artifactId)
+        $realArtifactVerify = Invoke-CaiCli -Arguments @("artifacts", "verify", $realTiffArtifactId, "--output", "json", "--workspace", $workspace)
+        Assert-ExitCode $realArtifactVerify 0 "real Gerber/TIFF workspace TIFF artifact verify"
+        Assert-Contains $realArtifactVerify.Output $realOutputHash "real Gerber/TIFF workspace TIFF artifact verify"
+        $realArtifactExport = Invoke-CaiCli -Arguments @("artifacts", "export", $realVerificationArtifactId, "--format", "markdown", "--workspace", $workspace)
+        Assert-ExitCode $realArtifactExport 0 "real Gerber/TIFF verification artifact export"
+        Assert-Contains $realArtifactExport.Output "# C# AI CLI Managed Artifact" "real Gerber/TIFF verification artifact export"
+
+        $realAccept = Invoke-CaiCli -Arguments @("packs", "accept", $realRunId, "--actor", "smoke-reviewer", "--note", "controlled smoke acceptance", "--output", "json", "--workspace", $workspace)
+        Assert-ExitCode $realAccept 0 "real Gerber/TIFF human accept"
+        Assert-Contains $realAccept.Output '"state":"accepted"' "real Gerber/TIFF human accept"
+        Assert-Contains $realAccept.Output '"outcome":"accepted"' "real Gerber/TIFF human accept evidence"
+        $realDoubleDecision = Invoke-CaiCli -Arguments @("packs", "reject", $realRunId, "--actor", "smoke-reviewer", "--reason", "double decision must fail", "--output", "json", "--workspace", $workspace)
+        Assert-ExitCode $realDoubleDecision 1 "real Gerber/TIFF double decision rejection"
+        Assert-Contains $realDoubleDecision.Output "pack-acceptance-decision-conflict" "real Gerber/TIFF double decision rejection"
+
+        $realRejectOutput = Join-Path $workspace "gerber-real-output-reject"
+        $realRejectPlan = Invoke-CaiCli -Arguments @(
+            "packs", "plan", "gerber-tiff",
+            "--input", "gerber-real-input", "--output-dir", "gerber-real-output-reject",
+            "--tool-path", $realToolBindings[0], $realToolBindings[1],
+            "--output", "json", "--workspace", $workspace
+        )
+        Assert-ExitCode $realRejectPlan 0 "real Gerber/TIFF reject plan"
+        $realRejectPlanPath = Join-Path $workspace "gerber-tiff-real-reject-plan.json"
+        [System.IO.File]::WriteAllText($realRejectPlanPath, $realRejectPlan.Output, [System.Text.UTF8Encoding]::new($false))
+        $realRejectRun = Invoke-CaiCli -Arguments @(
+            "packs", "run", "gerber-tiff",
+            "--plan", "gerber-tiff-real-reject-plan.json",
+            "--tool-path", $realToolBindings[0], $realToolBindings[1],
+            "--approval", "always",
+            "--output", "json", "--workspace", $workspace
+        )
+        Assert-ExitCode $realRejectRun 0 "real Gerber/TIFF reject conversion"
+        $realRejectRunJson = $realRejectRun.Output | ConvertFrom-Json
+        $realRejectRunId = [string]$realRejectRunJson.run.runId
+        $realRejectVerify = Invoke-CaiCli -Arguments @("packs", "verify", $realRejectRunId, "--output", "json", "--workspace", $workspace)
+        Assert-ExitCode $realRejectVerify 0 "real Gerber/TIFF reject verification"
+        $realReject = Invoke-CaiCli -Arguments @("packs", "reject", $realRejectRunId, "--actor", "smoke-reviewer", "--reason", "controlled smoke rejection", "--output", "json", "--workspace", $workspace)
+        Assert-ExitCode $realReject 0 "real Gerber/TIFF human reject"
+        Assert-Contains $realReject.Output '"state":"rejected"' "real Gerber/TIFF human reject"
+        Assert-Contains $realReject.Output '"outcome":"rejected"' "real Gerber/TIFF human reject evidence"
+
+        $realPruneDry = Invoke-CaiCli -Arguments @("artifacts", "prune", "--older-than", "0.000001m", "--status", "accepted", "rejected", "--dry-run", "--output", "json", "--workspace", $workspace)
+        Assert-ExitCode $realPruneDry 0 "real Gerber/TIFF artifact prune dry-run"
+        $realPruneDryJson = $realPruneDry.Output | ConvertFrom-Json
+        if ([int]$realPruneDryJson.candidates -le 0 -or [int64]$realPruneDryJson.totalBytes -le 0) {
+            throw "real Gerber/TIFF artifact prune dry-run did not report managed terminal evidence."
+        }
+        $realPruneApply = Invoke-CaiCli -Arguments @("artifacts", "prune", "--older-than", "0.000001m", "--status", "accepted", "rejected", "--apply", "--output", "json", "--workspace", $workspace)
+        Assert-ExitCode $realPruneApply 0 "real Gerber/TIFF artifact prune apply"
+        $realPruneApplyJson = $realPruneApply.Output | ConvertFrom-Json
+        if ([int]$realPruneApplyJson.deleted -le 0) {
+            throw "real Gerber/TIFF artifact prune apply did not delete controlled managed evidence."
+        }
+        if (-not (Test-Path -LiteralPath $realFixturePath) -or
+            -not (Test-Path -LiteralPath $realTiffFiles[0].FullName) -or
+            @(Get-ChildItem -LiteralPath $realRejectOutput -File -Filter "*.tiff").Count -ne 1 -or
+            -not (Test-Path -LiteralPath (Join-Path $realRunRoot "run.json")) -or
+            -not (Test-Path -LiteralPath (Join-Path $realRunRoot "artifact-manifest.json")) -or
+            -not (Test-Path -LiteralPath $realJobPath)) {
+            throw "real Gerber/TIFF artifact prune removed source, explicit TIFF output, run metadata, manifest, or job metadata."
+        }
+        $realPostPruneArtifacts = Invoke-CaiCli -Arguments @("artifacts", "list", "--run", $realRunId, "--output", "json", "--workspace", $workspace)
+        Assert-ExitCode $realPostPruneArtifacts 0 "real Gerber/TIFF post-prune artifact list"
+        Assert-Contains $realPostPruneArtifacts.Output '"availability":"pruned"' "real Gerber/TIFF retained tombstone"
+        $realJobAfterPrune = [System.IO.File]::ReadAllText($realJobPath)
+        Assert-Contains $realJobAfterPrune '"kind": "project-pack-artifact-tombstone"' "real Gerber/TIFF job tombstone"
+        Assert-Contains $realJobAfterPrune '"taskReport": null' "real Gerber/TIFF post-prune no duplicate task report"
         if (@(Get-ChildItem -LiteralPath $realRunRoot -Recurse -File -Filter "*.tmp").Count -ne 0) {
             throw "real Gerber/TIFF controlled conversion left atomic temporary files behind."
         }
@@ -733,7 +847,7 @@ Write-Output 'bugfix verification passed'
             throw "real Gerber/TIFF controlled conversion left a gerbv or magick process behind."
         }
 
-        Write-Host "real Gerber/TIFF conversion, TIFF metadata verification, and managed preview passed; human acceptance remains pending"
+        Write-Host "real Gerber/TIFF conversion, hard verification, explicit human accept/reject, and controlled managed prune passed"
         Write-Host "gerbv: $($realGerbvOperation.tool.version) SHA256=$realGerbvHash"
         Write-Host "imagemagick: $($realImageMagickOperation.tool.version) SHA256=$realImageMagickHash"
         Write-Host "input: SHA256=$realInputHashAfter"

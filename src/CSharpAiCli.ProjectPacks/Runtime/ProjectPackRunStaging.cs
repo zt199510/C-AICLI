@@ -73,7 +73,8 @@ public sealed class GerberTiffRunRevalidator
         IReadOnlyDictionary<string, string>? toolPaths,
         string expectedPolicyFingerprint,
         string currentPolicyFingerprint,
-        CancellationToken cancellationToken = default)
+        CancellationToken cancellationToken = default,
+        bool allowExistingOutputDirectory = false)
     {
         ArgumentNullException.ThrowIfNull(snapshot);
         ArgumentNullException.ThrowIfNull(workspace);
@@ -90,7 +91,8 @@ public sealed class GerberTiffRunRevalidator
             snapshot.OutputDirectory,
             toolPaths,
             trustedHashes: null,
-            cancellationToken);
+            cancellationToken,
+            allowExistingOutputDirectory);
         if (!current.ReadyForStaging || current.Fingerprint is null || current.PlanId is null)
         {
             string code = current.Diagnostics.Any(diagnostic => diagnostic.Code == GerberTiffDiagnosticCode.OutputAlreadyExists)

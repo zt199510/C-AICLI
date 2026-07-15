@@ -171,7 +171,8 @@ internal sealed class GerberTiffWorkspacePathPolicy
         WorkspaceContext workspace,
         string? requestedPath,
         string inputFullPath,
-        ICollection<ProjectPackDiagnostic> diagnostics)
+        ICollection<ProjectPackDiagnostic> diagnostics,
+        bool allowExistingDirectory = false)
     {
         ArgumentNullException.ThrowIfNull(workspace);
         ArgumentException.ThrowIfNullOrWhiteSpace(inputFullPath);
@@ -233,7 +234,7 @@ internal sealed class GerberTiffWorkspacePathPolicy
             return null;
         }
 
-        if (Directory.Exists(guarded.FullPath) || File.Exists(guarded.FullPath))
+        if (File.Exists(guarded.FullPath) || Directory.Exists(guarded.FullPath) && !allowExistingDirectory)
         {
             diagnostics.Add(Error(
                 GerberTiffDiagnosticCode.OutputAlreadyExists,

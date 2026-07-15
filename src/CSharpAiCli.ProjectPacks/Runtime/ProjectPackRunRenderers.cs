@@ -21,8 +21,17 @@ public static class ProjectPackRunRenderer
         builder.AppendLine($"revision: {record.Revision}");
         builder.AppendLine($"jobId: {record.Correlation.JobId ?? "none"}");
         builder.AppendLine($"queueId: {record.Correlation.QueueId ?? "none"}");
+        builder.AppendLine($"attempt: {record.Correlation.Attempt}");
         builder.AppendLine($"approvalPersisted: {checkpoint.ApprovalPersisted.ToString().ToLowerInvariant()}");
         builder.AppendLine($"restartRequired: {record.RestartRequired.ToString().ToLowerInvariant()}");
+        if (record.Acceptance is not null)
+        {
+            builder.AppendLine($"acceptance: {record.Acceptance.Outcome}");
+            builder.AppendLine($"acceptanceActor: {Safe(record.Acceptance.Actor)}");
+            builder.AppendLine($"acceptanceReason: {Safe(record.Acceptance.Reason ?? "none")}");
+            builder.AppendLine($"acceptanceVerificationArtifactId: {record.Acceptance.VerificationArtifactId}");
+            builder.AppendLine($"acceptanceDecidedAtUtc: {record.Acceptance.DecidedAtUtc:O}");
+        }
         if (record.ErrorCode is not null)
         {
             builder.AppendLine($"errorCode: {Safe(record.ErrorCode)}");
@@ -101,6 +110,36 @@ public static class ProjectPackRunRenderer
             errorCode = eligibility.ErrorCode is null ? null : Safe(eligibility.ErrorCode),
             summary = eligibility.Summary is null ? null : Safe(eligibility.Summary),
             approvalPersisted = false
+        }, JsonOptions);
+
+    public static string RenderRestartText(ProjectPackRestartPreparation preparation)
+    {
+        StringBuilder builder = new();
+        builder.AppendLine($"{ProductInfo.DisplayName} project pack restart plan");
+        builder.AppendLine($"parentRunId: {preparation.ParentRecord?.RunId ?? "none"}");
+        builder.AppendLine($"newRunId: {preparation.NewRunId ?? "none"}");
+        builder.AppendLine($"attempt: {preparation.Attempt?.ToString() ?? "none"}");
+        builder.AppendLine($"outputDirectory: {Safe(preparation.OutputDirectory ?? "none")}");
+        builder.AppendLine("from: execute");
+        builder.AppendLine("approvalPersisted: false");
+        builder.AppendLine("partialEvidencePreserved: true");
+        return builder.ToString().TrimEnd();
+    }
+
+    public static string RenderRestartJson(ProjectPackRestartPreparation preparation) =>
+        JsonSerializer.Serialize(new
+        {
+            type = "packs.restart",
+            schemaVersion = ProjectPackRunRecord.CurrentSchemaVersion,
+            status = preparation.Succeeded ? "planned" : "failed",
+            parentRunId = preparation.ParentRecord?.RunId,
+            newRunId = preparation.NewRunId,
+            attempt = preparation.Attempt,
+            outputDirectory = preparation.OutputDirectory is null ? null : Safe(preparation.OutputDirectory),
+            from = "execute",
+            approvalPersisted = false,
+            partialEvidencePreserved = true,
+            diagnostic = preparation.Diagnostic
         }, JsonOptions);
 
     public static string RenderFailure(string type, string errorCode, string summary, bool jsonOutput, string? runId = null) =>

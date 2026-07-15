@@ -2,7 +2,7 @@
 
 更新时间：2026-07-15
 
-状态：执行中；Week 58-62 已完成，Week 63-65 待执行
+状态：执行中；Week 58-63 已完成，Week 64-65 待执行
 
 逐周执行提示统一维护在 `docs_md/weekly/58_65_week_execution_prompts.md`，用于把本排期和各周 plan 直接交给执行 Agent。
 
@@ -84,7 +84,7 @@ pack/tool doctor
 | 60 | `60_week_isolated_run_staging_checkpoint.plan.md` | 已完成 | 建立 managed run directory、staging、run state machine、checkpoint/cancel/resume 基础。 | fake driver 可完成阶段流转；源输入不变；execute 中断进入明确状态且不自动重跑。 |
 | 61 | `61_week_gerber_tiff_controlled_conversion.plan.md` | 已完成 | 接入真实外部工具，完成审批式结构化执行、日志、timeout 和 output capture。 | Gate Passed；Gerbv/ImageMagick typed adapter、授权 fixture 真实 conversion、run/job/artifact evidence 与 opt-in smoke 见 `61_week_review.md`；TIFF verification 仍 Deferred。 |
 | 62 | `62_week_tiff_artifact_inspection_verification.plan.md` | 已完成 | TIFF metadata、preview/contact sheet、baseline verification 与报告。 | bounded Magick.NET decoder、strict baseline、exact/pixel comparison、stable JSON/markdown、managed preview、awaiting-acceptance gate 与 real-tool smoke 见 `62_week_review.md`。 |
-| 63 | `63_week_artifact_lifecycle_acceptance_resume.plan.md` | 计划中 | artifact list/show/verify/export/prune、accept/reject 和 safe resume/restart。 | managed artifacts 可安全清理；人工结论可追踪；resume 不复用旧 approval。 |
+| 63 | `63_week_artifact_lifecycle_acceptance_resume.plan.md` | 已完成 | artifact list/show/verify/export/prune、accept/reject 和 safe resume/restart。 | strict artifact manifest/index、human hard gate、new-attempt restart、managed prune/tombstone 与 local-only smoke 见 `63_week_review.md`；本机 real-tool smoke 未配置并明确留给 Week 64 重验。 |
 | 64 | `64_week_vertical_workflow_security_smoke_docs_hardening.plan.md` | 计划中 | 对 Week 58-63 做安全、corrupt-state、smoke、文档和 release-process 收口。 | adversarial paths/redaction/crash/cleanup 回归；default/real-tool smoke 边界准确。 |
 | 65 | `65_week_cli_0_5_release_acceptance.plan.md` | 计划中 | 0.5.0 最终验收、版本、双构建、source revision、发布包和 final acceptance。 | build/test/smoke 通过；干净 source ref、zip size/SHA256、manifest revision 和 Deferred 清单完整。 |
 

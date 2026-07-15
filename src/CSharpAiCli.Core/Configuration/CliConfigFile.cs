@@ -18,6 +18,8 @@ public sealed class CliConfigFile
 
     public AgentRunLimitsConfig? AgentRunLimits { get; init; }
 
+    public ArtifactRetentionConfig? ArtifactRetention { get; init; }
+
     public Dictionary<string, McpServerConfig>? McpServers { get; init; }
 
     public Dictionary<string, WorkflowProfileConfig>? WorkflowProfiles { get; init; }

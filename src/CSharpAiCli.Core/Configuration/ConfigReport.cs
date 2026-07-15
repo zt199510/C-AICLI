@@ -30,6 +30,8 @@ public sealed record ConfigReport(IReadOnlyList<string> Lines)
             $"agentBackendSource: {configuration.AgentBackendSource}",
             $"approvalMode: {FormatApprovalMode(configuration.ApprovalMode)}",
             $"approvalModeSource: {configuration.ApprovalModeSource}",
+            $"artifactRetentionDefaultMinimumAgeDays: {configuration.ArtifactRetention.DefaultMinimumAgeDays.ToString(System.Globalization.CultureInfo.InvariantCulture)}",
+            $"artifactRetentionSource: {configuration.ArtifactRetention.Source}",
             $"agentRunMaxSteps: {configuration.AgentRunLimits.MaxSteps.ToString(System.Globalization.CultureInfo.InvariantCulture)}",
             $"agentRunMaxStepsSource: {configuration.AgentRunMaxStepsSource}",
             $"agentRunMaxToolCalls: {configuration.AgentRunLimits.MaxToolCalls.ToString(System.Globalization.CultureInfo.InvariantCulture)}",
