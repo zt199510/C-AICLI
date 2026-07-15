@@ -1,5 +1,23 @@
 # Changelog
 
+## 0.5.0 - Candidate (unreleased)
+
+Added:
+- Project Pack v1 deterministic domain-tool runtime with `packs list/doctor/plan/run/verify/preview/resume/recover/restart/accept/reject`, strict schema-v1 managed run/checkpoint/artifact state, and `artifacts list/show/verify/export/prune`.
+- Workspace-only bounded Gerber/Excellon discovery and deterministic planning. ZIP, network/UNC/device paths, reparse trees, arbitrary hooks, model-generated executable/arguments, and overwrite are rejected or Deferred.
+- Approval-gated Gerbv 2.13.0 and ImageMagick 7.1.2-27 typed adapters with fixed `ArgumentList`, managed cwd/temp, cleared allowlisted environment, bounded output/time/cancel, process-tree cleanup, tool identity rechecks, and stable partial-output/error evidence.
+- Bounded Magick.NET TIFF verification for the frozen classic TIFF/LZW/RGB8 contract, strict exact/pixel baselines, independent verification levels, managed JSON/markdown reports and preview/contact-sheet evidence, and an explicit human-only acceptance gate.
+- Managed artifact ownership, identity, retention, dry-run/apply prune, quarantine/race/reparse protection, and retained run/job tombstones. Source, baseline, explicit workspace TIFF, external, running/interrupted/corrupt state, and metadata are never prune candidates.
+
+Changed:
+- Week 64 hardening adds input/staging/tool/output/TIFF/state/resume/prune threat modeling, TOCTOU-safe Windows run-root creation, failed-staging cleanup, disk-write versus lock-conflict classification, decoder-bomb/process-leak/corrupt-state regression, and explicit JSON diagnostic redaction.
+- Default packaged smoke remains model-free, network-free, and real-tool-free. It covers vertical dry-run staging, missing tool, approval denial without process start, controlled partial-output fixture, corrupt state, negative verify/accept/reject gates, artifact operations, and prune.
+- Real Gerber/TIFF smoke is a separate `CAICLI_GERBER_TIFF_TOOL_SMOKE=1` opt-in requiring explicit frozen Gerbv/ImageMagick paths, authorized fixture, and strict verification baseline. It must pass conversion, baseline verification, preview, accept/reject, artifact checks, prune preservation, and process/temp cleanup before 0.5.0 acceptance.
+- `Build-Release.ps1` now rejects dirty source by default, records source revision/cleanliness/SDK/configuration/PDB policy and SHA256 inventory, emits an independent package checksum artifact, excludes PDBs by policy, and supports explicit `-AllowDirtySource` only for non-acceptance validation packages.
+
+Release boundary:
+- This is a source candidate, not an Accepted release. Version metadata and the existing accepted artifact remain 0.4.0 until Week 65 completes clean-source final acceptance. Fake driver success, file existence, metadata validity, preview generation, or a dirty validation package is not release acceptance.
+
 ## 0.4.0 - 2026-07-14
 
 Added:

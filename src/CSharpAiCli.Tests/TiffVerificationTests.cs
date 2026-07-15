@@ -81,6 +81,29 @@ public sealed class TiffVerificationTests
     }
 
     [Fact]
+    public void Decoder_rejects_dimension_and_frame_bombs_with_stable_limit_codes()
+    {
+        using TestRun test = TestRun.Create(createRun: false);
+        string dimensionBomb = Path.Combine(test.Workspace, "dimension-bomb.tiff");
+        string frameBomb = Path.Combine(test.Workspace, "frame-bomb.tiff");
+        WriteTiff(dimensionBomb, 2, 1, frameCount: 1);
+        PatchFirstClassicTiffDimension(dimensionBomb, tag: 256, TiffVerificationLimits.MaxDimension + 1);
+        WriteTiff(frameBomb, 1, 1, frameCount: TiffVerificationLimits.MaxFrameCount + 1);
+        MagickTiffArtifactDecoder decoder = new();
+
+        TiffDecodeResult dimension = decoder.Decode(
+            Item("tiff-dimension-bomb", dimensionBomb), test.Temp, includePixels: false);
+        TiffDecodeResult frames = decoder.Decode(
+            Item("tiff-frame-bomb", frameBomb), test.Temp, includePixels: false);
+
+        Assert.False(dimension.Succeeded);
+        Assert.Equal(TiffVerificationErrorCode.DimensionLimit, dimension.Diagnostic?.Code);
+        Assert.False(frames.Succeeded);
+        Assert.Equal(TiffVerificationErrorCode.FrameLimit, frames.Diagnostic?.Code);
+        Assert.Empty(Directory.EnumerateFileSystemEntries(test.Temp));
+    }
+
+    [Fact]
     public void Baseline_schema_rejects_unknown_fields_and_unproven_exact_hash()
     {
         using TestRun test = TestRun.Create(createRun: false);
@@ -107,6 +130,18 @@ public sealed class TiffVerificationTests
         TiffBaselineLoadResult exact = TiffVerificationBaselineLoader.Load(baseline);
         Assert.False(exact.Succeeded);
         Assert.Equal(TiffVerificationErrorCode.ExactHashNotAllowed, exact.Diagnostic?.Code);
+
+        string frozenBaseline = Path.Combine(
+            AppContext.BaseDirectory,
+            "Fixtures",
+            "GerberTiff",
+            "real",
+            "verification-baseline.json");
+        TiffBaselineLoadResult frozen = TiffVerificationBaselineLoader.Load(frozenBaseline);
+        Assert.True(frozen.Succeeded, frozen.Diagnostic?.Summary);
+        Assert.Equal("1FBA765C24534A0707BFA5A28709A8FBC6915407BA3880B8C203D0863A66609E",
+            frozen.Baseline?.InputFingerprint);
+        Assert.True(Assert.Single(frozen.Baseline!.Outputs).ByteDeterministic);
     }
 
     [Fact]
@@ -168,6 +203,22 @@ public sealed class TiffVerificationTests
         Assert.Contains("| `file-valid` | `passed` |", markdown, StringComparison.Ordinal);
         Assert.Contains("| `metadata-valid` | `failed` |", markdown, StringComparison.Ordinal);
         Assert.Contains("Correctness proof: `false`", markdown, StringComparison.Ordinal);
+
+        TiffPreviewResult preview = new(
+            "run_20260715T040000000Z_abcdef12",
+            false,
+            [new TiffPreviewArtifact(
+                "preview-1", "tiff-preview", "apiKey=preview-path-secret", 1, new string('A', 64), 1, 1, 1)],
+            [new TiffVerificationDiagnostic(
+                TiffVerificationErrorCode.PreviewFailed,
+                "error",
+                "token=preview-diagnostic-secret")],
+            "password=preview-summary-secret");
+        string previewJson = TiffVerificationRenderer.RenderPreviewJson(preview);
+        Assert.DoesNotContain("preview-path-secret", previewJson, StringComparison.Ordinal);
+        Assert.DoesNotContain("preview-diagnostic-secret", previewJson, StringComparison.Ordinal);
+        Assert.DoesNotContain("preview-summary-secret", previewJson, StringComparison.Ordinal);
+        Assert.Contains("[redacted]", previewJson, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -324,6 +375,74 @@ public sealed class TiffVerificationTests
     {
         using FileStream stream = File.OpenRead(path);
         return Convert.ToHexString(SHA256.HashData(stream));
+    }
+
+    private static void PatchFirstClassicTiffDimension(string path, ushort tag, int value)
+    {
+        byte[] bytes = File.ReadAllBytes(path);
+        bool littleEndian = bytes[0] == 0x49 && bytes[1] == 0x49;
+        Assert.True(littleEndian || (bytes[0] == 0x4D && bytes[1] == 0x4D));
+        int ifdOffset = ReadInt32(bytes, 4, littleEndian);
+        ushort entryCount = ReadUInt16(bytes, ifdOffset, littleEndian);
+        for (int index = 0; index < entryCount; index++)
+        {
+            int entryOffset = checked(ifdOffset + 2 + (index * 12));
+            if (ReadUInt16(bytes, entryOffset, littleEndian) != tag)
+            {
+                continue;
+            }
+
+            ushort type = ReadUInt16(bytes, entryOffset + 2, littleEndian);
+            if (type == 3)
+            {
+                Assert.InRange(value, ushort.MinValue, ushort.MaxValue);
+                WriteUInt16(bytes, entryOffset + 8, checked((ushort)value), littleEndian);
+                bytes[entryOffset + 10] = 0;
+                bytes[entryOffset + 11] = 0;
+            }
+            else
+            {
+                Assert.Equal((ushort)4, type);
+                WriteInt32(bytes, entryOffset + 8, value, littleEndian);
+            }
+
+            File.WriteAllBytes(path, bytes);
+            return;
+        }
+
+        throw new InvalidOperationException($"TIFF fixture does not contain tag {tag}.");
+    }
+
+    private static ushort ReadUInt16(byte[] bytes, int offset, bool littleEndian) => littleEndian
+        ? System.Buffers.Binary.BinaryPrimitives.ReadUInt16LittleEndian(bytes.AsSpan(offset, 2))
+        : System.Buffers.Binary.BinaryPrimitives.ReadUInt16BigEndian(bytes.AsSpan(offset, 2));
+
+    private static int ReadInt32(byte[] bytes, int offset, bool littleEndian) => littleEndian
+        ? System.Buffers.Binary.BinaryPrimitives.ReadInt32LittleEndian(bytes.AsSpan(offset, 4))
+        : System.Buffers.Binary.BinaryPrimitives.ReadInt32BigEndian(bytes.AsSpan(offset, 4));
+
+    private static void WriteUInt16(byte[] bytes, int offset, ushort value, bool littleEndian)
+    {
+        if (littleEndian)
+        {
+            System.Buffers.Binary.BinaryPrimitives.WriteUInt16LittleEndian(bytes.AsSpan(offset, 2), value);
+        }
+        else
+        {
+            System.Buffers.Binary.BinaryPrimitives.WriteUInt16BigEndian(bytes.AsSpan(offset, 2), value);
+        }
+    }
+
+    private static void WriteInt32(byte[] bytes, int offset, int value, bool littleEndian)
+    {
+        if (littleEndian)
+        {
+            System.Buffers.Binary.BinaryPrimitives.WriteInt32LittleEndian(bytes.AsSpan(offset, 4), value);
+        }
+        else
+        {
+            System.Buffers.Binary.BinaryPrimitives.WriteInt32BigEndian(bytes.AsSpan(offset, 4), value);
+        }
     }
 
     private static void WriteTiff(

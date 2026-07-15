@@ -117,6 +117,75 @@ public sealed class ManagedArtifactLifecycleTests
     }
 
     [Fact]
+    public void Artifact_json_renderers_redact_tombstone_prune_path_reason_and_summary()
+    {
+        string runId = "run_20260715T080000000Z_abcdef12";
+        string artifactId = ManagedArtifactId.Create(runId, "secret-report");
+        ManagedArtifactTombstone tombstone = new(
+            DateTimeOffset.Parse("2026-07-15T08:00:00Z"),
+            "token=tombstone-super-secret",
+            1,
+            new string('A', 64),
+            ProjectPackRunState.Failed,
+            null,
+            null);
+        ManagedArtifactEntry entry = new(
+            artifactId,
+            "secret-report",
+            "report",
+            ManagedArtifactOwnership.Managed,
+            "reports/apiKey=artifact-path-secret.txt",
+            1,
+            new string('A', 64),
+            ManagedArtifactVerificationStatus.Failed,
+            ManagedArtifactAvailability.Pruned,
+            new ManagedArtifactRetention(ManagedArtifactRetentionClass.TerminalPrunable, true, true, 30),
+            DateTimeOffset.Parse("2026-06-01T00:00:00Z"),
+            tombstone);
+        ManagedArtifactManifest manifest = new(
+            1,
+            ManagedArtifactManifest.ManifestType,
+            runId,
+            1,
+            ProjectPackRunState.Failed,
+            new ManagedArtifactOwner(runId, null, null, null, null, 1),
+            DateTimeOffset.Parse("2026-06-01T00:00:00Z"),
+            DateTimeOffset.Parse("2026-07-15T08:00:00Z"),
+            [entry]);
+        ManagedArtifactPruneResult prune = new(
+            true,
+            [new ManagedArtifactPruneItem(
+                artifactId,
+                runId,
+                ProjectPackRunState.Failed,
+                "reports/password=prune-path-secret.txt",
+                1,
+                DateTimeOffset.Parse("2026-06-01T00:00:00Z"),
+                "token=prune-reason-secret",
+                false,
+                ManagedArtifactErrorCode.PruneFailed,
+                "apiKey=prune-summary-secret")],
+            []);
+
+        string showJson = ManagedArtifactRenderer.RenderShowJson(manifest, entry);
+        string pruneJson = ManagedArtifactRenderer.RenderPruneJson(prune);
+
+        foreach (string secret in new[]
+        {
+            "tombstone-super-secret",
+            "artifact-path-secret",
+            "prune-path-secret",
+            "prune-reason-secret",
+            "prune-summary-secret"
+        })
+        {
+            Assert.DoesNotContain(secret, showJson + pruneJson, StringComparison.Ordinal);
+        }
+        Assert.Contains("[redacted]", showJson, StringComparison.Ordinal);
+        Assert.Contains("[redacted]", pruneJson, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void Artifact_store_reports_missing_corrupt_and_unsupported_manifests_without_repair()
     {
         using LifecycleFixture missing = LifecycleFixture.Create();

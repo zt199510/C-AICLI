@@ -1,0 +1,31 @@
+{
+  "schemaVersion": 1,
+  "type": "gerber-tiff.verification-baseline",
+  "packId": "gerber-tiff",
+  "packVersion": "1.0.0-preview.1",
+  "toolName": "magick.exe",
+  "toolVersion": "Version: ImageMagick 7.1.2-27 Q8 x64 b661ac9:20260705 https://imagemagick.org",
+  "inputFingerprint": "1FBA765C24534A0707BFA5A28709A8FBC6915407BA3880B8C203D0863A66609E",
+  "outputs": [
+    {
+      "artifactId": "tiff-0001",
+      "byteDeterministic": true,
+      "exactSha256": "FDDFA21D29EF870D94EC953ADF757BD61585957E1519D79BB2480AFF81C89823",
+      "metadata": {
+        "frameCount": 1,
+        "width": 126,
+        "height": 126,
+        "dpiX": 300,
+        "dpiY": 300,
+        "dpiTolerance": 0.01,
+        "bitsPerSample": 8,
+        "samplesPerPixel": 3,
+        "pixelFormat": "rgb8",
+        "compression": "lzw",
+        "orientation": "top-left",
+        "hasAlpha": false
+      },
+      "pixelComparison": null
+    }
+  ]
+}

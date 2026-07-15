@@ -389,6 +389,31 @@ and a manifest/job tombstone with the original path/size/SHA256/reason/time. Sou
 TIFF, external, pending/running/interrupted/corrupt, and metadata files are never candidates. There is no
 background retention worker, scheduler, shared/remote store, cascading session/trace deletion, or API control.
 
+Week 64 hardens this source Preview without adding a new pack, tool, input type, worker, remote/API surface, or
+tool argument. Windows run roots use atomic create-new semantics. Staging tracks only files it created and removes
+them when TOCTOU mutation, cancellation, copy, or post-copy identity checks fail. Store write failures distinguish
+sharing/lock contention from disk/permission write failure instead of reporting every `IOException` as a concurrent
+writer. Corrupt split run/checkpoint/manifest state, unsupported schema, unknown state, stale running state, and
+invalid transitions continue to fail closed and are never guessed or repaired.
+
+JSON renderers project diagnostics field by field. Artifact paths, prune reasons/summaries, tombstones, restart
+diagnostics, preview paths, and decoder diagnostics pass through secret redaction before serialization; raw
+exceptions are mapped to stable error codes and fixed summaries. Schema-v1 run/artifact/TIFF error families and
+the `0` success / `1` domain-policy-runtime failure / `2` usage policy are frozen in
+`docs_md/spec/vertical_workflow_hardening.md`.
+
+Default packaged smoke is model-free, network-free, and real-tool-free. It covers safe planning/staging, missing
+tool, approval denial before process start, controlled fake partial-output contract, corrupt state, negative
+verification/human gates, artifact reads, and dry-run/apply prune without presenting fake evidence as business
+validation. Real-tool smoke is independent and requires the opt-in plus explicit frozen tool, fixture, and strict
+baseline paths; it must pass conversion, baseline content verification, preview, human decisions, prune
+preservation, and process/temp cleanup.
+
+Release builds are also source-bound. `Build-Release.ps1` rejects dirty source by default and in
+`-ReleaseAcceptance` mode, records the Git revision, clean flag, locked SDK, configuration/runtime, excluded-PDB
+policy, and payload SHA256 inventory, then emits a separate full publish/ZIP checksum JSON to avoid a circular
+manifest hash. `-AllowDirtySource` can create a clearly marked non-acceptance validation package only.
+
 ## Changes View
 
 `caicli changes` is a read-only local review entry point. It combines git status/diff stat, changed files, and optional latest session `taskReport` data.
@@ -439,8 +464,8 @@ Users can disable tools through `disabledTools` in user or workspace config. Dis
 - MCP startup policy failures surface safe diagnostics in `tools call mcp.*` when configured server/tool discovery is blocked, instead of only returning `unknown-tool`.
 - Remote/http MCP transport remains Deferred.
 - Gerber/TIFF controlled conversion, bounded TIFF verification/preview, human acceptance, safe resume/restart,
-  and managed artifact lifecycle exist only in the 0.5.0 source Preview described above. Week 64 hardening and
-  Week 65 release acceptance remain incomplete, and all vertical workflow source changes stay outside the
+  and managed artifact lifecycle exist only in the 0.5.0 source Preview described above. Week 64 source hardening
+  is implemented but final verification evidence and Week 65 release acceptance remain incomplete; all vertical workflow source changes stay outside the
   accepted 0.4.0 artifact.
 
 These deferred capabilities remain outside the accepted `0.4.0` release boundary.

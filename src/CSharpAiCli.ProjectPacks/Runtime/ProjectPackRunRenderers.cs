@@ -139,7 +139,13 @@ public static class ProjectPackRunRenderer
             from = "execute",
             approvalPersisted = false,
             partialEvidencePreserved = true,
-            diagnostic = preparation.Diagnostic
+            diagnostic = preparation.Diagnostic is null ? null : new
+            {
+                errorCode = Safe(preparation.Diagnostic.ErrorCode),
+                summary = Safe(preparation.Diagnostic.Summary),
+                path = preparation.Diagnostic.Path is null ? null : Safe(preparation.Diagnostic.Path),
+                runId = preparation.Diagnostic.RunId is null ? null : Safe(preparation.Diagnostic.RunId)
+            }
         }, JsonOptions);
 
     public static string RenderFailure(string type, string errorCode, string summary, bool jsonOutput, string? runId = null) =>

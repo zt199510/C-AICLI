@@ -201,10 +201,30 @@ public static class TiffVerificationRenderer
             result.CorrectnessProof,
             result.AutomaticallyOpened,
             result.AutomaticallyUploaded,
-            previews = result.Previews.OrderBy(preview => preview.ArtifactId, StringComparer.Ordinal),
+            previews = result.Previews
+                .OrderBy(preview => preview.ArtifactId, StringComparer.Ordinal)
+                .Select(preview => new
+                {
+                    artifactId = Safe(preview.ArtifactId),
+                    kind = Safe(preview.Kind),
+                    path = Safe(preview.Path),
+                    preview.Size,
+                    preview.Sha256,
+                    preview.Width,
+                    preview.Height,
+                    preview.SourceFrameCount
+                }),
             diagnostics = result.Diagnostics
                 .OrderBy(diagnostic => diagnostic.Code, StringComparer.Ordinal)
-                .ThenBy(diagnostic => diagnostic.ArtifactId, StringComparer.Ordinal),
+                .ThenBy(diagnostic => diagnostic.ArtifactId, StringComparer.Ordinal)
+                .Select(diagnostic => new
+                {
+                    code = Safe(diagnostic.Code),
+                    severity = Safe(diagnostic.Severity),
+                    summary = Safe(diagnostic.Summary),
+                    artifactId = diagnostic.ArtifactId is null ? null : Safe(diagnostic.ArtifactId),
+                    diagnostic.FrameIndex
+                }),
             summary = Safe(result.Summary)
         }, JsonOptions);
     }

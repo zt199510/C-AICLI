@@ -253,6 +253,31 @@ Week 61-62 add controlled conversion and TIFF verification diagnostics:
 - Default smoke proves a dry-run/fake-ready checkpoint cannot be verified. Real conversion + verification +
   preview smoke remains independent and runs only with `CAICLI_GERBER_TIFF_TOOL_SMOKE=1` and explicit tool paths.
 
+Week 63-64 add lifecycle and hardening diagnostics without adding a second truth:
+
+- `artifact-manifest.json` is a strict schema-v1 lifecycle index synchronized with the operational
+  run/checkpoint revision. `artifacts list/show/verify/export/prune` emit `artifacts.*` schema-v1 JSON; corrupt runs
+  remain diagnostics and are not repaired. Human acceptance and prune tombstones stay correlated to the same
+  run/job while job `taskReport` remains null.
+- `packs accept/reject` records a bounded redacted actor/reason, based-on revision, and hard verification artifact
+  id/SHA256. `packs resume` emits read-only eligibility. `packs recover --mark-interrupted` records operator-confirmed
+  stale state without process discovery/replay. `packs restart --from execute` records parent/child/attempt/output
+  lineage and never records approval bypass.
+- JSON renderers project artifact path, tombstone/prune reason, restart diagnostic, preview path, diagnostic
+  summary, and optional error fields explicitly through redaction. Raw exceptions are mapped to stable
+  `ProjectPackRunErrorCode`, `TiffVerificationErrorCode`, or `ManagedArtifactErrorCode` values and fixed summaries;
+  exception objects are not serialized into stdout, trace, report, run, job, or manifest JSON.
+- Run/tool/TIFF/artifact schema versions remain `1`. Top-level shapes, 12 run states, 46 run/process/human error
+  codes, 27 TIFF codes, and 14 artifact codes are frozen by contract tests. Vertical commands return `0` for the
+  requested success, `1` for domain/policy/runtime failure, and `2` for usage/configuration error.
+- Default packaged smoke is local/fake-only and covers missing tool, approval denial before process creation,
+  controlled partial-output fixture, corrupt state, negative human/verification gates, artifact operations, and
+  prune. The real-tool branch additionally requires explicit authorized fixture and strict baseline paths and
+  records content comparison plus process/probe/managed-temp cleanup.
+- `release-manifest.json` now records source revision/dirty flag, release-acceptance flag, SDK, configuration,
+  runtime, PDB policy, and payload SHA256 inventory. An adjacent checksums JSON records the full publish inventory
+  and ZIP identity. Dirty validation builds are explicit and cannot claim release acceptance.
+
 Trace and verbose diagnostics must redact secrets before writing output. Redaction covers API keys, access/refresh tokens, passwords, `Authorization` headers and common variants, `secretKey`, `privateKey`, nested or escaped `argumentsJson`, OpenAI `sk-...` keys, and GitHub token formats such as `ghp_...` and `github_pat_...`. Diagnostics may record key presence and source, but never raw key values.
 
 `logs path` prints the resolved CLI log directory. It must not create the directory just to print the path.

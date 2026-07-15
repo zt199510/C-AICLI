@@ -13,4 +13,7 @@ Expected real-spike properties are recorded in
 `docs_md/spec/gerber_tiff_toolchain_gate.md`. Generated PNG/TIFF files are
 evidence, not source fixtures, and are not committed during Week 58.
 
+`verification-baseline.json` is the strict Week 64 exact-hash and metadata
+baseline for this path and the frozen Week 58 toolchain.
+
 License: CC0-1.0 (`https://creativecommons.org/publicdomain/zero/1.0/`).

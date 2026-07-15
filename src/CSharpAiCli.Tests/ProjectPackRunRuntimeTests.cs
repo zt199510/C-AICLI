@@ -314,6 +314,110 @@ public sealed class ProjectPackRunRuntimeTests
         Assert.Empty(Directory.EnumerateFileSystemEntries(outside));
     }
 
+    [Fact]
+    public void Staging_toctou_mutation_fails_closed_and_removes_untrusted_copy()
+    {
+        using TestRunWorkspace test = TestRunWorkspace.Create();
+        ProjectPackStagingService staging = new((source, _) =>
+        {
+            int length = checked((int)new FileInfo(source).Length);
+            File.WriteAllText(source, new string('X', length), System.Text.Encoding.ASCII);
+        });
+        ProjectPackRunService service = new(test.Store, staging: staging);
+
+        ProjectPackRunMutationResult result = service.CreateAndStage(
+            test.Plan,
+            test.Context,
+            test.ToolPaths,
+            test.PolicyFingerprint,
+            test.Now,
+            runId: ProjectPackRunId.Create(test.Now));
+
+        Assert.True(result.Succeeded, result.Diagnostic?.Summary);
+        Assert.Equal(ProjectPackRunState.Failed, result.Record?.State);
+        Assert.Contains(result.Record?.ErrorCode, new[]
+        {
+            ProjectPackRunErrorCode.InputChanged,
+            ProjectPackRunErrorCode.StagingHashMismatch
+        });
+        ManagedProjectPackRunLayout layout = test.Store.GetLayout(result.Record!.RunId);
+        Assert.Empty(Directory.EnumerateFiles(layout.StagingPath));
+        Assert.Empty(Directory.EnumerateFiles(layout.RunRoot, "*.tmp", SearchOption.AllDirectories));
+    }
+
+    [Fact]
+    public void Store_distinguishes_disk_full_from_lock_contention_and_atomic_write_cleans_temp()
+    {
+        IOException diskFull = new("controlled disk full", unchecked((int)0x80070070));
+        IOException sharingViolation = new("controlled sharing violation", unchecked((int)0x80070020));
+
+        Assert.Equal(ProjectPackRunErrorCode.RecordWriteFailed,
+            ManagedProjectPackRunStore.ClassifyWriteIOException(diskFull));
+        Assert.Equal(ProjectPackRunErrorCode.ConcurrentConflict,
+            ManagedProjectPackRunStore.ClassifyWriteIOException(sharingViolation));
+
+        string root = Path.Combine(Path.GetTempPath(), "caicli-atomic-write-tests-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+        string directoryAsDestination = Path.Combine(root, "run.json");
+        Directory.CreateDirectory(directoryAsDestination);
+        try
+        {
+            Exception writeFailure = Assert.ThrowsAny<Exception>(() =>
+                ManagedProjectPackRunStore.WriteTextAtomically(directoryAsDestination, "{}", overwrite: true));
+            Assert.True(writeFailure is IOException or UnauthorizedAccessException);
+            Assert.Empty(Directory.EnumerateFiles(root, "*.tmp", SearchOption.TopDirectoryOnly));
+        }
+        finally
+        {
+            Directory.Delete(root, recursive: true);
+        }
+    }
+
+    [Fact]
+    public void Store_rejects_split_write_and_unknown_state_as_corrupt_without_guessing()
+    {
+        using TestRunWorkspace split = TestRunWorkspace.Create();
+        ProjectPackRunMutationResult splitReady = split.CreateAndStage();
+        ManagedProjectPackRunLayout splitLayout = split.Store.GetLayout(splitReady.Record!.RunId);
+        JsonObject checkpoint = Assert.IsType<JsonObject>(JsonNode.Parse(File.ReadAllText(splitLayout.CheckpointPath)));
+        checkpoint["revision"] = splitReady.Record.Revision + 1;
+        File.WriteAllText(splitLayout.CheckpointPath, checkpoint.ToJsonString());
+        Assert.Equal(ProjectPackRunErrorCode.RecordCorrupt,
+            split.Store.Read(splitReady.Record.RunId).Diagnostic?.ErrorCode);
+
+        using TestRunWorkspace state = TestRunWorkspace.Create();
+        ProjectPackRunMutationResult stateReady = state.CreateAndStage();
+        ManagedProjectPackRunLayout stateLayout = state.Store.GetLayout(stateReady.Record!.RunId);
+        JsonObject record = Assert.IsType<JsonObject>(JsonNode.Parse(File.ReadAllText(stateLayout.RunRecordPath)));
+        record["state"] = "unknown-state";
+        File.WriteAllText(stateLayout.RunRecordPath, record.ToJsonString());
+        Assert.Equal(ProjectPackRunErrorCode.RecordCorrupt,
+            state.Store.Read(stateReady.Record.RunId).Diagnostic?.ErrorCode);
+    }
+
+    [Fact]
+    public void Restart_json_projects_redacted_diagnostic_instead_of_raw_exception_text()
+    {
+        ProjectPackRestartPreparation failure = new(
+            false,
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            new ProjectPackRunDiagnostic(
+                ProjectPackRunErrorCode.RecordCorrupt,
+                "token=restart-super-secret",
+                "apiKey=restart-path-secret"));
+
+        string json = ProjectPackRunRenderer.RenderRestartJson(failure);
+
+        Assert.DoesNotContain("restart-super-secret", json, StringComparison.Ordinal);
+        Assert.DoesNotContain("restart-path-secret", json, StringComparison.Ordinal);
+        Assert.Contains("[redacted]", json, StringComparison.Ordinal);
+    }
+
     private static string Hash(string path)
     {
         using FileStream stream = File.OpenRead(path);

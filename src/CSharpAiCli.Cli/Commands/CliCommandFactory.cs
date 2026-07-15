@@ -2109,7 +2109,7 @@ public static class CliCommandFactory
                         "Controlled conversion requires current approved probes for every mandatory external tool." +
                             (probeCodes.Length == 0 ? string.Empty : $" Probe diagnostics: {probeCodes}."),
                         jsonOutput));
-                    return errorCode == ProjectPackRunErrorCode.ApprovalRequired ? 2 : 1;
+                    return 1;
                 }
 
                 probedIdentities = probeReport.Tools
@@ -2581,7 +2581,7 @@ public static class CliCommandFactory
                     "Restart requires current approved probes for every mandatory external tool.",
                     jsonOutput,
                     parentRunId));
-                return errorCode == ProjectPackRunErrorCode.ApprovalRequired ? 2 : 1;
+                return 1;
             }
 
             IReadOnlyDictionary<string, ExternalToolIdentity> identities = probe.Tools

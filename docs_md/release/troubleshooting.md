@@ -212,6 +212,8 @@ Common controlled conversion failures:
 - `pack-execution-failed`: process startup, non-zero exit, stderr, or evidence persistence failed.
 - `pack-execution-timeout` / `pack-execution-canceled`: the process tree was terminated and the run recorded a failed/canceled terminal state.
 - `pack-process-cleanup-failed` / `pack-residual-process-detected`: cleanup or descendant checks found an unsafe process condition. The run is interrupted and must not be auto-replayed.
+- `pack-run-record-write-failed`: the managed store could not persist durable state, including disk-full, quota, permission, or rename failure. This is distinct from `pack-run-concurrent-conflict`, which is reserved for a sharing/lock conflict. Do not retry execute until free space/permissions and the run/checkpoint/manifest relationship are inspected.
+- `pack-run-record-corrupt` / `pack-run-schema-unsupported`: run/checkpoint fields, revision/state/fingerprint, or schema are invalid or split. The CLI does not pick the newer file or repair it automatically.
 
 Inspect `packs runs show <run-id> --output json`, the correlated job, and the managed
 `logs/conversion-execution.json`. A `verifying` state means conversion ran and declared hashes exist, but TIFF
@@ -220,7 +222,8 @@ and inspect its independent file/metadata/content/human-review levels. Preview r
 
 ### Human decision is refused
 
-Run `packs resume <run-id> --output json`. A decision is allowed only from the current `awaiting-acceptance`
+Run `packs resume <run-id> --tool-path "gerbv=C:\Tools\gerbv.exe" "imagemagick=C:\Tools\magick.exe" --output json`.
+Resume revalidates the current explicit tool bindings and does not reuse persisted approval. A decision is allowed only from the current `awaiting-acceptance`
 revision. Accept additionally reopens and verifies the indexed hard-verification JSON path, size/SHA256, schema,
 run id, levels, and absence of error diagnostics. Ready/verifying/failed/canceled/interrupted, fake-driver
 awaiting state, preview-only evidence, a changed report, or an existing decision is refused.
@@ -258,18 +261,33 @@ viewers and rerun dry-run. A race fails quarantine identity recheck and changed 
 prune keeps run/job metadata and tombstones; there is no restore command. The default age comes from user-level
 `artifactRetention.defaultMinimumAgeDays`; workspace overrides are ignored.
 
-Default smoke intentionally skips real tools. To run the independent opt-in branch, set all three values:
+Default smoke intentionally skips real tools. To run the independent opt-in branch, set all five values:
 
 ```powershell
 $env:CAICLI_GERBER_TIFF_TOOL_SMOKE = "1"
 $env:CAICLI_GERBV_PATH = "C:\Tools\gerbv\gerbv.exe"
 $env:CAICLI_IMAGEMAGICK_PATH = "C:\Tools\ImageMagick\magick.exe"
-tools\Invoke-SmokeTests.ps1
+$env:CAICLI_GERBER_TIFF_FIXTURE = "$PWD\src\CSharpAiCli.Tests\Fixtures\GerberTiff\real\minimal-square.gbr"
+$env:CAICLI_GERBER_TIFF_BASELINE = "$PWD\src\CSharpAiCli.Tests\Fixtures\GerberTiff\real\verification-baseline.json"
+tools\Invoke-SmokeTests.ps1 -ExecutablePath <validation-caicli.exe>
 ```
 
-The opt-in smoke records tool versions/SHA256, input/output hashes, hard verification, explicit human accept and
-reject, and controlled managed prune. It does not claim complete PCB manufacturing correctness. Source and
-explicit workspace TIFF outputs must remain after prune.
+The preflight requires the reviewed executable filenames/SHA256, a non-reparse authorized fixture, and a strict
+baseline. The opt-in smoke records tool versions/SHA256, input/plan/baseline/output hashes, content comparison,
+explicit human accept and reject, controlled managed prune, process set, and temp cleanup. It does not claim
+complete PCB manufacturing correctness. Source and explicit workspace TIFF outputs must remain after prune.
+
+### Release build refuses source or leaves no package
+
+`Build-Release.ps1` rejects a dirty Git tree before publish. Commit the intended source and use
+`-ReleaseAcceptance` only from that clean revision. Do not use `-AllowDirtySource` for a published package; it is
+an explicit Week 64/local validation mode and records `sourceDirty=true`, `releaseAcceptance=false`.
+
+An SDK mismatch means the active `dotnet --version` differs from `global.json`; install/use the locked SDK rather
+than editing the manifest. A PDB-policy failure means publish emitted `*.pdb` despite the frozen exclusion flags.
+On success, verify `release-manifest.json` and the adjacent `*.checksums.json` agree on source revision, SDK,
+configuration/runtime, `pdbPolicy=excluded`, file sizes/SHA256, and the ZIP hash. Old ZIP/checksum files are removed
+before publish so a failed build cannot report a stale artifact as newly produced.
 
 ## Verification
 

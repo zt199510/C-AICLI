@@ -105,7 +105,7 @@ public sealed class ManagedProjectPackRunStore
             EnsureNoReparseInExistingChain(layout.RunsRoot);
             Directory.CreateDirectory(layout.RunsRoot);
             EnsureNoReparseInExistingChain(layout.RunsRoot);
-            if (Directory.Exists(layout.RunRoot) || File.Exists(layout.RunRoot))
+            if (!AtomicDirectoryCreator.TryCreateNew(layout.RunRoot))
             {
                 return ProjectPackRunMutationResult.Failure(
                     ProjectPackRunErrorCode.AlreadyExists,
@@ -114,7 +114,6 @@ public sealed class ManagedProjectPackRunStore
                     record.RunId);
             }
 
-            Directory.CreateDirectory(layout.RunRoot);
             EnsureNoReparseInExistingChain(layout.RunRoot);
             foreach (string directory in Subdirectories(layout))
             {
@@ -129,9 +128,7 @@ public sealed class ManagedProjectPackRunStore
         catch (Exception exception) when (IsStoreException(exception))
         {
             return ProjectPackRunMutationResult.Failure(
-                Directory.Exists(Path.Combine(runsRoot, record.RunId))
-                    ? ProjectPackRunErrorCode.AlreadyExists
-                    : ProjectPackRunErrorCode.RecordWriteFailed,
+                ProjectPackRunErrorCode.RecordWriteFailed,
                 "Managed project pack run directory could not be created.",
                 runId: record.RunId);
         }
@@ -159,11 +156,14 @@ public sealed class ManagedProjectPackRunStore
         {
             return ProjectPackRunMutationResult.Failure(exception.ErrorCode, exception.Message, layout.RunRoot, record.RunId);
         }
-        catch (IOException)
+        catch (IOException exception)
         {
+            string errorCode = ClassifyWriteIOException(exception);
             return ProjectPackRunMutationResult.Failure(
-                ProjectPackRunErrorCode.ConcurrentConflict,
-                "Project pack run is already being modified.",
+                errorCode,
+                errorCode == ProjectPackRunErrorCode.ConcurrentConflict
+                    ? "Project pack run is already being modified."
+                    : "Project pack run record could not be written.",
                 layout.RunRoot,
                 record.RunId);
         }
@@ -297,11 +297,14 @@ public sealed class ManagedProjectPackRunStore
         {
             return ProjectPackRunMutationResult.Failure(exception.ErrorCode, exception.Message, runId: record.RunId);
         }
-        catch (IOException)
+        catch (IOException exception)
         {
+            string errorCode = ClassifyWriteIOException(exception);
             return ProjectPackRunMutationResult.Failure(
-                ProjectPackRunErrorCode.ConcurrentConflict,
-                "Project pack run is already being modified.",
+                errorCode,
+                errorCode == ProjectPackRunErrorCode.ConcurrentConflict
+                    ? "Project pack run is already being modified."
+                    : "Project pack run record could not be updated.",
                 runId: record.RunId);
         }
         catch (Exception exception) when (IsStoreException(exception))
@@ -391,6 +394,15 @@ public sealed class ManagedProjectPackRunStore
             {
             }
         }
+    }
+
+    internal static string ClassifyWriteIOException(IOException exception)
+    {
+        ArgumentNullException.ThrowIfNull(exception);
+        int nativeError = exception.HResult & 0xFFFF;
+        return nativeError is 32 or 33
+            ? ProjectPackRunErrorCode.ConcurrentConflict
+            : ProjectPackRunErrorCode.RecordWriteFailed;
     }
 
     public static string ReadTextBounded(string path, int maxBytes)

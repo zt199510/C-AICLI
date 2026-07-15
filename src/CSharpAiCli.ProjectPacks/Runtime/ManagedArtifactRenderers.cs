@@ -160,7 +160,7 @@ public static class ManagedArtifactRenderer
             candidates = result.Items.Count,
             totalBytes = result.TotalBytes,
             deleted = result.DeletedCount,
-            artifacts = result.Items,
+            artifacts = result.Items.Select(ToJson),
             diagnostics = result.Diagnostics.Select(ToJson)
         }, JsonOptions);
 
@@ -215,7 +215,30 @@ public static class ManagedArtifactRenderer
         availability = artifact.Availability,
         retention = artifact.Retention,
         declaredAtUtc = artifact.DeclaredAtUtc,
-        tombstone = artifact.Tombstone
+        tombstone = artifact.Tombstone is null ? null : new
+        {
+            artifact.Tombstone.RemovedAtUtc,
+            reason = Safe(artifact.Tombstone.Reason),
+            artifact.Tombstone.OriginalSize,
+            artifact.Tombstone.OriginalSha256,
+            artifact.Tombstone.RunState,
+            artifact.Tombstone.JobId,
+            artifact.Tombstone.QueueId
+        }
+    };
+
+    private static object ToJson(ManagedArtifactPruneItem item) => new
+    {
+        item.ArtifactId,
+        item.RunId,
+        item.RunState,
+        path = Safe(item.Path),
+        item.Size,
+        item.DeclaredAtUtc,
+        reason = Safe(item.Reason),
+        item.Deleted,
+        item.ErrorCode,
+        summary = item.Summary is null ? null : Safe(item.Summary)
     };
 
     private static object ToJson(ManagedArtifactDiagnostic diagnostic) => new

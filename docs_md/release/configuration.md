@@ -136,12 +136,30 @@ configuration:
 $env:CAICLI_GERBER_TIFF_TOOL_SMOKE = "1"
 $env:CAICLI_GERBV_PATH = "C:\Tools\gerbv\gerbv.exe"
 $env:CAICLI_IMAGEMAGICK_PATH = "C:\Tools\ImageMagick\magick.exe"
-tools\Invoke-SmokeTests.ps1
+$env:CAICLI_GERBER_TIFF_FIXTURE = "$PWD\src\CSharpAiCli.Tests\Fixtures\GerberTiff\real\minimal-square.gbr"
+$env:CAICLI_GERBER_TIFF_BASELINE = "$PWD\src\CSharpAiCli.Tests\Fixtures\GerberTiff\real\verification-baseline.json"
+tools\Invoke-SmokeTests.ps1 -ExecutablePath <validation-caicli.exe>
 ```
 
 When `CAICLI_GERBER_TIFF_TOOL_SMOKE` is unset, default smoke does not require or start either tool and reports the
-real-tool branch as skipped. When it is `1`, both explicit paths are mandatory and a missing path fails the smoke.
+real-tool branch as skipped. When it is `1`, all four explicit paths are mandatory and a missing, reparse, renamed,
+unreviewed-hash, corrupt-baseline, or wrong-fixture input fails the smoke before trusted evidence is claimed.
 `CAICLI_USER_PROFILE` may still redirect managed runs and jobs for isolated validation; it does not select tools.
+
+These variables configure only the repository smoke harness. Ordinary `packs plan/run` continues to accept tools
+only through invocation-local `--tool-path`; there is no environment extra-argument, approval, or runtime tool-path
+configuration channel.
+
+## Release Build Source Policy
+
+`tools\Build-Release.ps1` requires a clean Git source tree by default and records the 40-character
+`sourceRevision`, `sourceDirty=false`, locked SDK version, configuration/runtime, `pdbPolicy=excluded`, and payload
+SHA256 inventory in `release-manifest.json`. The adjacent `*.checksums.json` also hashes the full publish inventory
+and ZIP without creating a self-referential manifest hash.
+
+`-ReleaseAcceptance` is the Week 65 release mode and cannot be combined with `-AllowDirtySource`.
+`-AllowDirtySource` is explicit and only for Week 64/local validation packages; those manifests record
+`sourceDirty=true` and `releaseAcceptance=false` and cannot be promoted to Accepted artifacts.
 
 ## Managed Artifact Retention (0.5.0 Source Preview)
 

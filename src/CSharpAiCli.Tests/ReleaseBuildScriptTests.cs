@@ -17,6 +17,12 @@ public sealed class ReleaseBuildScriptTests
         Assert.Contains("dotnet publish failed with exit code $LASTEXITCODE", script, StringComparison.Ordinal);
         Assert.Contains("caicli.exe", script, StringComparison.Ordinal);
         Assert.Contains("release-manifest.json", script, StringComparison.Ordinal);
+        Assert.Contains("sourceRevision = $sourceRevision", script, StringComparison.Ordinal);
+        Assert.Contains("sourceDirty = $sourceDirty", script, StringComparison.Ordinal);
+        Assert.Contains("sdkVersion = $sdkVersion", script, StringComparison.Ordinal);
+        Assert.Contains("artifactInventory = $payloadInventory", script, StringComparison.Ordinal);
+        Assert.Contains("publishInventory = $publishInventory", script, StringComparison.Ordinal);
+        Assert.Contains("$releaseName.checksums.json", script, StringComparison.Ordinal);
         Assert.Contains("THIRD-PARTY-NOTICES-MAGICK.NET.txt", script, StringComparison.Ordinal);
         Assert.Contains("magick.net-q8-x64\\$magickNetVersion\\Notice.txt", script, StringComparison.Ordinal);
     }
@@ -39,6 +45,12 @@ public sealed class ReleaseBuildScriptTests
         Assert.DoesNotContain("Get-Date", script, StringComparison.Ordinal);
         Assert.DoesNotContain("createdAtUtc", script, StringComparison.Ordinal);
         Assert.Contains("builtFromVersion = $version", script, StringComparison.Ordinal);
+        Assert.Contains("git -C $repoRoot rev-parse --verify HEAD", script, StringComparison.Ordinal);
+        Assert.Contains("git -C $repoRoot status --porcelain=v1 --untracked-files=all", script, StringComparison.Ordinal);
+        Assert.Contains("Release build requires a clean Git source tree", script, StringComparison.Ordinal);
+        Assert.Contains("ReleaseAcceptance cannot be combined with AllowDirtySource", script, StringComparison.Ordinal);
+        Assert.Contains("-AllowDirtySource only for non-acceptance validation artifacts", script, StringComparison.Ordinal);
+        Assert.Contains("does not match global.json version", script, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -50,6 +62,22 @@ public sealed class ReleaseBuildScriptTests
         Assert.Contains("[System.IO.Compression.ZipArchive]", script, StringComparison.Ordinal);
         Assert.Contains("OrderBy", script, StringComparison.Ordinal);
         Assert.Contains("LastWriteTime", script, StringComparison.Ordinal);
+        Assert.Contains("Get-FileHash -LiteralPath $resolvedZipPath -Algorithm SHA256", script, StringComparison.Ordinal);
+        Assert.Contains("Get-ArtifactInventory -Root $resolvedPublishDir", script, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Build_release_script_has_explicit_pdb_and_dirty_validation_policies()
+    {
+        string script = ReadRepositoryFile("tools", "Build-Release.ps1");
+
+        Assert.Contains("[switch]$ReleaseAcceptance", script, StringComparison.Ordinal);
+        Assert.Contains("[switch]$AllowDirtySource", script, StringComparison.Ordinal);
+        Assert.Contains("-p:DebugType=None", script, StringComparison.Ordinal);
+        Assert.Contains("-p:DebugSymbols=false", script, StringComparison.Ordinal);
+        Assert.Contains("pdbPolicy = \"excluded\"", script, StringComparison.Ordinal);
+        Assert.Contains("publish produced PDB files", script, StringComparison.Ordinal);
+        Assert.Contains("foreach ($staleArtifact in @($resolvedZipPath, $checksumPath))", script, StringComparison.Ordinal);
     }
 
     [Fact]

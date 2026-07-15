@@ -226,8 +226,29 @@ unsupported formats, and mismatches fail closed.
 The verifier writes stable JSON and markdown only under the managed run `reports` directory. A hard pass moves
 the run from `verifying` to `awaiting-acceptance`; it never auto-accepts. `packs preview` is then allowed to create
 stable no-overwrite PNG/contact-sheet evidence under managed artifacts. Preview is not a correctness proof and
-the CLI never opens or uploads it. Baseline creation/update and human accept/reject are separate explicit future
-operations; a failed verification never replaces its baseline.
+the CLI never opens or uploads it. Baseline creation/update remains manual; a failed verification never replaces
+its baseline.
+
+Week 63 source Preview adds the explicit human and artifact lifecycle commands:
+
+```powershell
+caicli packs resume <run-id> --tool-path "gerbv=C:\Tools\gerbv.exe" "imagemagick=C:\Tools\magick.exe" --output json --workspace .
+caicli packs accept <run-id> --actor <name> --note "review note" --output json --workspace .
+caicli packs reject <run-id> --actor <name> --reason "review reason" --output json --workspace .
+caicli artifacts list --run <run-id> --output json --workspace .
+caicli artifacts verify <artifact-id> --output json --workspace .
+caicli artifacts prune --older-than 30d --dry-run --output json --workspace .
+```
+
+Accept/reject is human-only and requires the current `awaiting-acceptance` revision. Accept reopens the unique
+hard verification JSON and rechecks its managed path, schema, run id, size/SHA256, levels, hard-pass flag, and
+diagnostics. Fake state, preview-only evidence, metadata alone, a changed report, failed state, and double decision
+are refused. Resume is read-only and never replays `running/interrupted` execute or reuses approval. Explicit
+`packs restart <run-id> --from execute` creates a new attempt/job/output after current probe and approval.
+
+Artifact prune is synchronous and defaults to dry-run. Apply deletes only terminal, owned, managed, prunable
+content after revision/path/reparse/hash/quarantine checks. Source, baseline, explicit workspace TIFF, external
+pointers, run/checkpoint/manifest/job metadata, and running/interrupted/corrupt state remain preserved.
 
 Local job history is opt-in for execution commands. `jobs list/show/export` reads job records from the user-level store under `%USERPROFILE%\.caicli\jobs`; these read commands do not call a model, run shell/patch tools, start MCP, write command logs, or write workspace files.
 
@@ -481,6 +502,21 @@ tools\Invoke-SmokeTests.ps1
 ```
 
 When `CAICLI_REAL_MODEL_SMOKE` is unset, the smoke script prints that real model smoke is skipped. When it is set but either `OPENAI_API_KEY` or `OPENAI_MODEL` is missing, the real model portion is also skipped. These skip paths are intentional so normal smoke runs do not require network access or credentials.
+
+The real Gerber/TIFF smoke is an independent opt-in and requires the four explicit reviewed paths documented in
+`configuration.md`: Gerbv, ImageMagick, the authorized fixture, and the strict baseline. It performs real
+conversion, baseline verification, preview, human accept/reject, artifact verify/export/prune, preservation, and
+process/temp cleanup. A skipped branch is not a passed real-tool smoke.
+
+Release packages are source-bound. From a clean commit, Week 65 uses:
+
+```powershell
+tools\Build-Release.ps1 -ReleaseAcceptance
+```
+
+The script rejects dirty source, excludes PDBs by the frozen policy, and writes revision/SDK/inventory metadata
+plus an adjacent checksum JSON. `-AllowDirtySource` is only for explicit local validation and produces
+`sourceDirty=true`, `releaseAcceptance=false`; do not publish or accept that package.
 
 ## 12. Inspect And Call Tools
 

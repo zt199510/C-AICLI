@@ -1,6 +1,6 @@
 # 第 64 周 Vertical Workflow Security、Smoke、Docs 与 Release Process Hardening Implementation Plan
 
-状态：计划中
+状态：已完成
 
 **Goal:** 对 Week 58-63 的 Project Pack、Gerber/TIFF、external tool、staging、checkpoint、TIFF verifier、artifact lifecycle 和 human gate 做系统性收口，使 Week 65 只承担发布验收，不继续补功能。
 
@@ -70,18 +70,18 @@
 
 ## 任务清单
 
-- [ ] Step 1: 汇总 Week 58-63 review、未完成项和 release blockers。
-- [ ] Step 2: 完成 vertical workflow threat model 和命令读写/执行边界表。
-- [ ] Step 3: 增加 input/tool/output/TIFF/state/prune adversarial tests。
-- [ ] Step 4: 增加 redaction、corrupt diagnostics 和 process/temp cleanup tests。
-- [ ] Step 5: 固化 pack/run/artifact/verification JSON schema、error code 和 exit policy。
-- [ ] Step 6: 扩展 default fake-tool packaged smoke。
-- [ ] Step 7: 固化 real-tool opt-in smoke 和环境前置诊断。
-- [ ] Step 8: 加固 Build-Release clean source/sourceRevision/checksum 流程和测试。
-- [ ] Step 9: 更新全部 release/runtime docs，准确区分 Accepted/Preview/Deferred。
-- [ ] Step 10: 运行 targeted security tests、full build/test/default smoke/real-tool smoke。
-- [ ] Step 11: 执行 `git diff --check` 和 docs link/scope consistency 检查。
-- [ ] Step 12: 创建 `64_week_review.md`，列出 Week 65 唯一剩余发布动作。
+- [x] Step 1: 汇总 Week 58-63 review、未完成项和 release blockers。
+- [x] Step 2: 完成 vertical workflow threat model 和命令读写/执行边界表。
+- [x] Step 3: 增加 input/tool/output/TIFF/state/prune adversarial tests。
+- [x] Step 4: 增加 redaction、corrupt diagnostics 和 process/temp cleanup tests。
+- [x] Step 5: 固化 pack/run/artifact/verification JSON schema、error code 和 exit policy。
+- [x] Step 6: 扩展 default fake-tool packaged smoke。
+- [x] Step 7: 固化 real-tool opt-in smoke 和环境前置诊断。
+- [x] Step 8: 加固 Build-Release clean source/sourceRevision/checksum 流程和测试。
+- [x] Step 9: 更新全部 release/runtime docs，准确区分 Accepted/Preview/Deferred。
+- [x] Step 10: 运行 targeted security tests、full build/test/default smoke/real-tool smoke。
+- [x] Step 11: 执行 `git diff --check` 和 docs link/scope consistency 检查。
+- [x] Step 12: 创建 `64_week_review.md`，列出 Week 65 唯一剩余发布动作。
 
 ## 验收标准
 

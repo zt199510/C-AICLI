@@ -130,6 +130,7 @@ public sealed class GerberTiffControlledConversionTests
         Assert.True(timeout.ProcessCleanedUp);
         Assert.Equal(ProjectPackRunErrorCode.ExecutionTimeout, timeout.ErrorCode);
         AssertProcessExited(timeoutPid);
+        Assert.False(Directory.Exists(timeoutInvocation.TemporaryDirectory));
 
         using ProcessTestDirectory cancelTest = ProcessTestDirectory.Create("cancel");
         string cancelPid = Path.Combine(cancelTest.WorkingPath, "cancel.pid");
@@ -154,6 +155,7 @@ public sealed class GerberTiffControlledConversionTests
         Assert.True(canceled.ProcessCleanedUp);
         Assert.Equal(ProjectPackRunErrorCode.ExecutionCanceled, canceled.ErrorCode);
         AssertProcessExited(cancelPid);
+        Assert.False(Directory.Exists(cancelInvocation.TemporaryDirectory));
     }
 
     [Fact]
@@ -175,6 +177,7 @@ public sealed class GerberTiffControlledConversionTests
         Assert.Equal(ProjectPackStageStatus.Interrupted, result.Status);
         Assert.Equal(ProjectPackRunErrorCode.ResidualProcessDetected, result.ErrorCode);
         AssertProcessExited(childPid);
+        Assert.False(Directory.Exists(invocation.TemporaryDirectory));
     }
 
     [Fact]

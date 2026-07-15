@@ -1,7 +1,36 @@
+using System.Text.Json;
+
 namespace CSharpAiCli.Tests;
 
 public sealed class SmokeTestScriptTests
 {
+    [Fact]
+    public void Real_tool_baseline_matches_frozen_toolchain_evidence()
+    {
+        using JsonDocument document = JsonDocument.Parse(ReadRepositoryFile(
+            "src", "CSharpAiCli.Tests", "Fixtures", "GerberTiff", "real", "verification-baseline.json"));
+
+        JsonElement root = document.RootElement;
+        Assert.Equal(1, root.GetProperty("schemaVersion").GetInt32());
+        Assert.Equal("gerber-tiff.verification-baseline", root.GetProperty("type").GetString());
+        Assert.Equal("1FBA765C24534A0707BFA5A28709A8FBC6915407BA3880B8C203D0863A66609E", root.GetProperty("inputFingerprint").GetString());
+
+        JsonElement output = Assert.Single(root.GetProperty("outputs").EnumerateArray());
+        Assert.True(output.GetProperty("byteDeterministic").GetBoolean());
+        Assert.Equal("FDDFA21D29EF870D94EC953ADF757BD61585957E1519D79BB2480AFF81C89823", output.GetProperty("exactSha256").GetString());
+
+        JsonElement metadata = output.GetProperty("metadata");
+        Assert.Equal(1, metadata.GetProperty("frameCount").GetInt32());
+        Assert.Equal(126, metadata.GetProperty("width").GetInt32());
+        Assert.Equal(126, metadata.GetProperty("height").GetInt32());
+        Assert.Equal(300, metadata.GetProperty("dpiX").GetDouble());
+        Assert.Equal(300, metadata.GetProperty("dpiY").GetDouble());
+        Assert.Equal("rgb8", metadata.GetProperty("pixelFormat").GetString());
+        Assert.Equal("lzw", metadata.GetProperty("compression").GetString());
+        Assert.Equal("top-left", metadata.GetProperty("orientation").GetString());
+        Assert.False(metadata.GetProperty("hasAlpha").GetBoolean());
+    }
+
     [Fact]
     public void Invoke_smoke_tests_covers_release_acceptance_paths()
     {
@@ -73,6 +102,9 @@ public sealed class SmokeTestScriptTests
         Assert.Contains("CAICLI_GERBER_TIFF_TOOL_SMOKE", script, StringComparison.Ordinal);
         Assert.Contains("CAICLI_GERBV_PATH", script, StringComparison.Ordinal);
         Assert.Contains("CAICLI_IMAGEMAGICK_PATH", script, StringComparison.Ordinal);
+        Assert.Contains("CAICLI_GERBER_TIFF_FIXTURE", script, StringComparison.Ordinal);
+        Assert.Contains("CAICLI_GERBER_TIFF_BASELINE", script, StringComparison.Ordinal);
+        Assert.Contains("executable identity differs from the Week 58 reviewed toolchain", script, StringComparison.Ordinal);
         Assert.Contains("\"packs\", \"list\", \"--workspace\", $workspace", script, StringComparison.Ordinal);
         Assert.Contains("\"packs\", \"doctor\", \"gerber-tiff\"", script, StringComparison.Ordinal);
         Assert.Contains("\"packs\", \"plan\", \"gerber-tiff\"", script, StringComparison.Ordinal);
@@ -85,6 +117,13 @@ public sealed class SmokeTestScriptTests
         Assert.Contains("packs list/doctor/plan created persistent job state", script, StringComparison.Ordinal);
         Assert.Contains("\"packs\", \"run\", \"gerber-tiff\"", script, StringComparison.Ordinal);
         Assert.Contains("\"--plan\", \"gerber-tiff-plan.json\", \"--dry-run\"", script, StringComparison.Ordinal);
+        Assert.Contains("controlled fake partial-output fixture does not preserve explicit failure evidence", script, StringComparison.Ordinal);
+        Assert.Contains("packs run missing tool", script, StringComparison.Ordinal);
+        Assert.Contains("pack-tool-not-found", script, StringComparison.Ordinal);
+        Assert.Contains("controlled-fake-tool-identities", script, StringComparison.Ordinal);
+        Assert.Contains("packs run approval denied", script, StringComparison.Ordinal);
+        Assert.Contains("pack-approval-required", script, StringComparison.Ordinal);
+        Assert.Contains("packs missing-tool or approval denial created run state before execution authorization", script, StringComparison.Ordinal);
         Assert.Contains("\"packs\", \"runs\", \"show\", $packRunId", script, StringComparison.Ordinal);
         Assert.Contains("\"packs\", \"resume\", $packRunId, \"--output\"", script, StringComparison.Ordinal);
         Assert.Contains("\"packs\", \"verify\", $packRunId", script, StringComparison.Ordinal);
@@ -94,6 +133,8 @@ public sealed class SmokeTestScriptTests
         Assert.Contains("packs run dry-run produced fake or real conversion artifacts", script, StringComparison.Ordinal);
         Assert.Contains("packs run left atomic temporary files behind", script, StringComparison.Ordinal);
         Assert.Contains("packs run dry-run changed the caicli/gerbv/magick process set", script, StringComparison.Ordinal);
+        Assert.Contains("packs corrupt state", script, StringComparison.Ordinal);
+        Assert.Contains("pack-run-record-corrupt", script, StringComparison.Ordinal);
         Assert.Contains("real Gerber/TIFF tool smoke skipped", script, StringComparison.Ordinal);
         Assert.Contains("\"packs\", \"verify\", $realRunId", script, StringComparison.Ordinal);
         Assert.Contains("\"packs\", \"preview\", $realRunId", script, StringComparison.Ordinal);
@@ -101,6 +142,9 @@ public sealed class SmokeTestScriptTests
         Assert.Contains("\"packs\", \"reject\", $realRejectRunId", script, StringComparison.Ordinal);
         Assert.Contains("\"artifacts\", \"prune\"", script, StringComparison.Ordinal);
         Assert.Contains("\"hardVerificationPassed\":true", script, StringComparison.Ordinal);
+        Assert.Contains("contentCompared=passed", script, StringComparison.Ordinal);
+        Assert.Contains("left probe temporary directories behind", script, StringComparison.Ordinal);
+        Assert.Contains("left managed process temporary content behind", script, StringComparison.Ordinal);
         Assert.Contains("\"state\":\"awaiting-acceptance\"", script, StringComparison.Ordinal);
         Assert.Contains("real Gerber/TIFF conversion, hard verification, explicit human accept/reject, and controlled managed prune passed", script, StringComparison.Ordinal);
         Assert.Contains("\"--approval\", \"always\"", script, StringComparison.Ordinal);

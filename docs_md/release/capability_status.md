@@ -2,7 +2,7 @@
 
 ## 0.5.0 Development Draft
 
-Week 58-63 source changes are not part of the accepted `0.4.0` package. The status below is a development boundary for the future `0.5.0` line, not a release acceptance decision.
+Week 58-64 source changes are not part of the accepted `0.4.0` package. The status below is a development boundary for the future `0.5.0` line, not a release acceptance decision.
 
 | Capability | Status | Notes |
 |---|---|---|
@@ -14,7 +14,9 @@ Week 58-63 source changes are not part of the accepted `0.4.0` package. The stat
 | Bounded TIFF verification and managed preview | Preview (source only) | Magick.NET/ImageMagick performs bounded classic TIFF metadata/decode, strict optional baseline exact/pixel comparison, stable JSON/markdown, and managed PNG/contact-sheet evidence. Hard levels remain independent; preview and metadata validity are not correctness proof. |
 | Human acceptance and safe resume/restart | Preview (source only) | `packs accept/reject` is an explicit human-only terminal gate and revalidates current hard-report identity; fake/failed/changed evidence and double decisions fail closed. Resume is a read-only revalidation plan. Interrupted execute restart creates a new child run/job/attempt/output and reuses current typed approval-gated execution without overwriting parent evidence. |
 | Managed artifact lifecycle | Preview (source only) | Strict artifact manifest/index, deterministic ids, run/job/queue/attempt ownership, list/show/verify/export, user-level retention default, dry-run/apply terminal-owned prune, quarantine race/reparse protection, and retained manifest/job tombstones are implemented. Source, baseline, explicit workspace output, external, running/interrupted/corrupt, and metadata files are not prunable. |
-| Week 63 real-tool lifecycle smoke | Not run | The Week 63 validation host had no `CAICLI_GERBER_TIFF_TOOL_SMOKE`, Gerbv path, or ImageMagick path and neither executable was on PATH or retained in validation artifacts. Default packaged smoke passed and the opt-in branch was extended, but actual Week 63 real-tool accept/reject/prune evidence remains a Week 64 hardening input. |
+| Week 64 security/schema/smoke hardening | Preview (source only) | Threat model and command boundary, TOCTOU/staging/store/decoder/process/prune regression, strict JSON diagnostic projection, frozen schema/error/exit contracts, expanded default smoke, and explicit real-tool fixture/baseline prerequisites are implemented. Validation evidence is recorded in the Week 64 review; source presence alone is not acceptance. |
+| Source-bound release process | Preview (source only) | Release build rejects dirty source by default, records revision/clean flag/SDK/configuration/runtime/PDB policy and payload inventory, emits independent publish/ZIP checksums, and produces deterministic ZIP entries. `-AllowDirtySource` is validation-only and records a non-acceptance package. |
+| Week 64 real-tool lifecycle smoke | Passed (source validation) | The packaged opt-in command passed with the exact Week 58 Gerbv/ImageMagick identities, authorized fixture, strict exact-hash/metadata baseline, `content-compared=passed`, preview, explicit accept/reject, managed prune, and zero residual process/temp checks. This is Week 64 validation evidence for the 0.5.0 source Preview, not acceptance of these commands in 0.4.0. |
 
 ## 0.4.0 Release Capabilities
 
@@ -73,7 +75,7 @@ Status meaning:
 |---|---|---|
 | Microsoft Agent Framework real backend | Deferred | Adapter project and tool bridge exist; real framework package/runtime is not enabled. |
 | MCP remote/http transport | Deferred | Stdio MCP v1 is available for user-configured stdio servers in registry/tool paths and for explicit `mcp doctor` diagnostics; remote/http transport is not enabled. |
-| Gerber/TIFF real workflow execution | Deferred | The accepted 0.4.0 package contains only the earlier project pack status/profile MVP. Week 58-63 source-only vertical workflow work does not enable these commands in the accepted release. |
+| Gerber/TIFF real workflow execution | Deferred | The accepted 0.4.0 package contains only the earlier project pack status/profile MVP. Week 58-64 source-only vertical workflow work does not enable these commands in the accepted release. |
 | Dotnet tool package | Deferred | Windows self-contained package is the current release artifact. |
 | Remote skill marketplace and user-level skill distribution | Deferred | Only built-in packs and workspace-local `.caicli/skills` JSON manifests are supported. Remote marketplaces, automatic updates, signing/trust chains, YAML manifests, user-level skill directories, and team knowledge distribution are not enabled. |
 | Background automation, CI providers, API control/SSE | Deferred | Local automation validation/dry-run/manual trigger, provider-neutral CI artifacts, and a read-only localhost API Preview are available. Automatic schedule execution, Windows Task Scheduler registration, GitHub/GitLab/Azure DevOps API integration, PR comments, uploads, API control routes, SSE, authentication/TLS, service installation, concurrent workers, webhooks, remote binds/runners, and remote control are not enabled. |

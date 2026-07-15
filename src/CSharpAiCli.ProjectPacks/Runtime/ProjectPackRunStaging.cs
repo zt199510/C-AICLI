@@ -176,6 +176,17 @@ public sealed record ProjectPackStagingResult(
 public sealed class ProjectPackStagingService
 {
     private const int BufferBytes = 128 * 1024;
+    private readonly Action<string, string>? beforeCopy;
+
+    public ProjectPackStagingService()
+        : this(null)
+    {
+    }
+
+    internal ProjectPackStagingService(Action<string, string>? beforeCopy)
+    {
+        this.beforeCopy = beforeCopy;
+    }
 
     public ProjectPackInputManifest CreateManifest(GerberTiffRunPlanSnapshot plan, string runId)
     {
@@ -215,6 +226,7 @@ public sealed class ProjectPackStagingService
             return Failure(ProjectPackRunErrorCode.StagingLimitExceeded, "Staging input exceeds the frozen v1 bounds.", manifest);
         }
 
+        List<string> createdDestinations = [];
         try
         {
             ManagedProjectPackRunStore.EnsureNoReparseInExistingChain(layout.RunRoot);
@@ -225,7 +237,9 @@ public sealed class ProjectPackStagingService
                 string source = ResolveSource(workspace, input);
                 string destination = ResolveStaging(layout, input.StagedRelativePath);
                 VerifyFile(source, input.Size, input.Sha256, ProjectPackRunErrorCode.InputChanged);
+                beforeCopy?.Invoke(source, destination);
                 CopyBounded(source, destination, input.Size, cancellationToken);
+                createdDestinations.Add(destination);
                 VerifyFile(destination, input.Size, input.Sha256, ProjectPackRunErrorCode.StagingHashMismatch);
                 VerifyFile(source, input.Size, input.Sha256, ProjectPackRunErrorCode.InputChanged);
             }
@@ -234,14 +248,17 @@ public sealed class ProjectPackStagingService
         }
         catch (ProjectPackContractException exception)
         {
+            CleanupCreatedDestinations(createdDestinations);
             return Failure(exception.ErrorCode, exception.Message, manifest);
         }
         catch (OperationCanceledException)
         {
+            CleanupCreatedDestinations(createdDestinations);
             return Failure(ProjectPackRunErrorCode.DriverCanceled, "Staging was canceled.", manifest);
         }
         catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or NotSupportedException)
         {
+            CleanupCreatedDestinations(createdDestinations);
             return Failure(ProjectPackRunErrorCode.StagingCopyFailed, "A bounded staging copy could not be completed.", manifest);
         }
     }
@@ -359,25 +376,59 @@ public sealed class ProjectPackStagingService
     {
         byte[] buffer = new byte[BufferBytes];
         long copied = 0;
-        using FileStream input = new(source, FileMode.Open, FileAccess.Read, FileShare.Read, BufferBytes, FileOptions.SequentialScan);
-        using FileStream output = new(destination, FileMode.CreateNew, FileAccess.Write, FileShare.None, BufferBytes, FileOptions.WriteThrough);
-        int read;
-        while ((read = input.Read(buffer, 0, buffer.Length)) > 0)
+        bool destinationCreated = false;
+        bool completed = false;
+        try
         {
-            cancellationToken.ThrowIfCancellationRequested();
-            copied = checked(copied + read);
-            if (copied > expectedSize)
+            using FileStream input = new(source, FileMode.Open, FileAccess.Read, FileShare.Read, BufferBytes, FileOptions.SequentialScan);
+            using FileStream output = new(destination, FileMode.CreateNew, FileAccess.Write, FileShare.None, BufferBytes, FileOptions.WriteThrough);
+            destinationCreated = true;
+            int read;
+            while ((read = input.Read(buffer, 0, buffer.Length)) > 0)
             {
-                throw new ProjectPackContractException(ProjectPackRunErrorCode.InputChanged, "Input grew during staging.");
+                cancellationToken.ThrowIfCancellationRequested();
+                copied = checked(copied + read);
+                if (copied > expectedSize)
+                {
+                    throw new ProjectPackContractException(ProjectPackRunErrorCode.InputChanged, "Input grew during staging.");
+                }
+
+                output.Write(buffer, 0, read);
             }
 
-            output.Write(buffer, 0, read);
-        }
+            output.Flush(flushToDisk: true);
+            if (copied != expectedSize)
+            {
+                throw new ProjectPackContractException(ProjectPackRunErrorCode.InputChanged, "Input size changed during staging.");
+            }
 
-        output.Flush(flushToDisk: true);
-        if (copied != expectedSize)
+            completed = true;
+        }
+        finally
         {
-            throw new ProjectPackContractException(ProjectPackRunErrorCode.InputChanged, "Input size changed during staging.");
+            if (destinationCreated && !completed)
+            {
+                TryDelete(destination);
+            }
+        }
+    }
+
+    private static void CleanupCreatedDestinations(IEnumerable<string> paths)
+    {
+        foreach (string path in paths)
+        {
+            TryDelete(path);
+        }
+    }
+
+    private static void TryDelete(string path)
+    {
+        try
+        {
+            File.Delete(path);
+        }
+        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or NotSupportedException)
+        {
         }
     }
 
