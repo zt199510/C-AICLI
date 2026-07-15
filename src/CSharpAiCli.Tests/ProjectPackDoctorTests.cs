@@ -189,7 +189,7 @@ public sealed class ProjectPackDoctorTests
 
         using TempDirectory temp = TempDirectory.Create();
         string pidPath = Path.Combine(temp.Path, "driver.pid");
-        ExternalToolRequirement requirement = CreateFakeDriverRequirement("timeout", 1_500, pidPath);
+        ExternalToolRequirement requirement = CreateFakeDriverRequirement("timeout", 5_000, pidPath);
         string powershell = GetPowerShellExecutable();
         ExternalToolInspectionResult inspection = new ExternalToolPathInspector().Inspect(requirement, powershell, "test fixture");
 
@@ -205,7 +205,7 @@ public sealed class ProjectPackDoctorTests
     }
 
     [Fact]
-    public void Fake_driver_cancellation_kills_process_and_leaves_no_live_pid()
+    public async Task Fake_driver_cancellation_kills_process_and_leaves_no_live_pid()
     {
         if (!OperatingSystem.IsWindows())
         {
@@ -217,13 +217,21 @@ public sealed class ProjectPackDoctorTests
         ExternalToolRequirement requirement = CreateFakeDriverRequirement("timeout", 5_000, pidPath);
         string powershell = GetPowerShellExecutable();
         ExternalToolInspectionResult inspection = new ExternalToolPathInspector().Inspect(requirement, powershell, "test fixture");
-        using CancellationTokenSource cancellation = new(1_500);
-
-        ExternalToolProbeResult result = new ExternalToolProbeRunner().Run(
+        using CancellationTokenSource cancellation = new();
+        Task<ExternalToolProbeResult> probeTask = Task.Run(() => new ExternalToolProbeRunner().Run(
             requirement,
             inspection,
             new AlwaysApproveApprovalPolicy(),
-            cancellation.Token);
+            cancellation.Token));
+        Stopwatch wait = Stopwatch.StartNew();
+        while (!File.Exists(pidPath) && wait.Elapsed < TimeSpan.FromSeconds(5))
+        {
+            await Task.Delay(25);
+        }
+
+        Assert.True(File.Exists(pidPath), "The fake probe process must start before cancellation is requested.");
+        cancellation.Cancel();
+        ExternalToolProbeResult result = await probeTask;
 
         Assert.True(result.Canceled);
         Assert.False(result.Succeeded);

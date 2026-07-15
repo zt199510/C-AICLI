@@ -28,6 +28,8 @@ public static class JobArtifactKind
     public const string Automation = "automation";
     public const string ProjectPackRun = "project-pack-run";
     public const string ProjectPackInputManifest = "project-pack-input-manifest";
+    public const string ProjectPackConversionOutput = "project-pack-conversion-output";
+    public const string ProjectPackExecutionLog = "project-pack-execution-log";
 }
 
 public sealed record JobSkillSummary

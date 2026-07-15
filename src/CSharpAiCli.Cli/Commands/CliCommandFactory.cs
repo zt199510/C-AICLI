@@ -1954,7 +1954,7 @@ public static class CliCommandFactory
         });
         packsCommand.Subcommands.Add(packsPlanCommand);
 
-        Command packsRunCommand = new("run", "Create an isolated managed run and stage frozen inputs; Week 60 requires --dry-run.");
+        Command packsRunCommand = new("run", "Create an isolated run and optionally execute the controlled Gerber/TIFF conversion.");
         Argument<string> packsRunPackArgument = new("pack")
         {
             Description = "Registered project pack id."
@@ -1982,6 +1982,14 @@ public static class CliCommandFactory
         {
             Description = "Persist isolated staging evidence without executing fake or real conversion tools."
         };
+        Option<bool> packsRunApproveOption = new("--approve")
+        {
+            Description = "Approve this invocation's fixed tool probes and conversion stages."
+        };
+        Option<string> packsRunApprovalOption = new("--approval")
+        {
+            Description = "Override approval mode for this invocation only."
+        };
         Option<string[]> packsRunToolPathOption = new("--tool-path")
         {
             Description = "Revalidate [dependency=]absolute-path without starting the tool.",
@@ -1997,10 +2005,13 @@ public static class CliCommandFactory
             Description = "Select text or json output."
         };
         packsRunOutputOption.DefaultValueFactory = _ => "text";
+        AddApprovalModeValidator(packsRunApprovalOption);
         AddTextJsonOutputValidator(packsRunOutputOption);
         packsRunCommand.Arguments.Add(packsRunPackArgument);
         packsRunCommand.Options.Add(packsRunPlanOption);
         packsRunCommand.Options.Add(packsRunDryRunOption);
+        packsRunCommand.Options.Add(packsRunApproveOption);
+        packsRunCommand.Options.Add(packsRunApprovalOption);
         packsRunCommand.Options.Add(packsRunToolPathOption);
         packsRunCommand.Options.Add(packsRunJsonOption);
         packsRunCommand.Options.Add(packsRunOutputOption);
@@ -2010,27 +2021,20 @@ public static class CliCommandFactory
             string packId = parseResult.GetValue(packsRunPackArgument) ?? string.Empty;
             string? planPath = parseResult.GetValue(packsRunPlanOption);
             bool dryRun = parseResult.GetValue(packsRunDryRunOption);
+            bool approve = parseResult.GetValue(packsRunApproveOption);
+            string? approvalModeValue = parseResult.GetValue(packsRunApprovalOption);
             string[] toolPathValues = parseResult.GetValue(packsRunToolPathOption) ?? [];
             bool jsonOutput = IsJsonOutputRequested(
                 parseResult.GetValue(packsRunJsonOption),
                 parseResult.GetValue(packsRunOutputOption) ?? "text");
             CliEnvironmentSnapshot snapshot = workspaceSnapshotProvider(workspacePath);
             WriteVerboseDiagnostics(parseResult, "packs run", snapshot, humanReadableOutput: !jsonOutput);
-            if (!dryRun)
-            {
-                output.WriteLine(ProjectPackRunRenderer.RenderFailure(
-                    "packs.run",
-                    "pack-real-execution-deferred",
-                    "Week 60 only supports --dry-run staging; fake and real tool execution are not exposed by this command.",
-                    jsonOutput));
-                return 2;
-            }
 
             if (!projectPackRegistry.TryGet(packId, out IProjectPack? registeredPack) ||
                 registeredPack is not GerberTiffWorkflowPack gerberTiffPack)
             {
                 output.WriteLine(ProjectPackRunRenderer.RenderFailure(
-                    "packs.run", "pack-run-not-supported", "Project pack does not support Week 60 isolated staging.", jsonOutput));
+                    "packs.run", "pack-run-not-supported", "Project pack does not support controlled v1 conversion.", jsonOutput));
                 return 1;
             }
 
@@ -2073,6 +2077,46 @@ public static class CliCommandFactory
                 return 1;
             }
 
+            ApprovalMode? cliApprovalMode = GetApprovalOverride(
+                approvalModeValue,
+                parseResult.GetResult(packsRunApprovalOption),
+                approve);
+            IApprovalPolicy approvalPolicy = ApprovalPolicyResolver.Resolve(
+                snapshot.Configuration.ApprovalMode,
+                cliApprovalMode);
+            IReadOnlyDictionary<string, ExternalToolIdentity> probedIdentities =
+                new Dictionary<string, ExternalToolIdentity>(StringComparer.Ordinal);
+            if (!dryRun)
+            {
+                ProjectPackDoctorReport probeReport = new ProjectPackDoctorService().Diagnose(
+                    gerberTiffPack,
+                    toolPaths,
+                    trustedHashes: null,
+                    probe: true,
+                    approvalPolicy,
+                    CancellationToken.None);
+                if (!probeReport.Succeeded || probeReport.Tools.Any(tool => tool.Required && tool.Identity?.Version is null))
+                {
+                    string errorCode = MapProjectPackExecutionProbeError(probeReport);
+                    string probeCodes = string.Join(", ", probeReport.Diagnostics
+                        .Where(diagnostic => diagnostic.Severity == ProjectPackDiagnosticSeverity.Error)
+                        .Select(diagnostic => diagnostic.Code)
+                        .Distinct(StringComparer.Ordinal)
+                        .OrderBy(code => code, StringComparer.Ordinal));
+                    output.WriteLine(ProjectPackRunRenderer.RenderFailure(
+                        "packs.run",
+                        errorCode,
+                        "Controlled conversion requires current approved probes for every mandatory external tool." +
+                            (probeCodes.Length == 0 ? string.Empty : $" Probe diagnostics: {probeCodes}."),
+                        jsonOutput));
+                    return errorCode == ProjectPackRunErrorCode.ApprovalRequired ? 2 : 1;
+                }
+
+                probedIdentities = probeReport.Tools
+                    .Where(tool => tool.Identity is not null)
+                    .ToDictionary(tool => tool.DependencyId, tool => tool.Identity!, StringComparer.Ordinal);
+            }
+
             DateTimeOffset nowUtc = utcNowProvider();
             string runId = ProjectPackRunId.Create(nowUtc);
             string jobId = JobIdGenerator.Create(nowUtc);
@@ -2085,7 +2129,7 @@ public static class CliCommandFactory
                     Task: plan.PlanId,
                     WorkspaceRoot: snapshot.Workspace.RootPath,
                     OutputMode: jsonOutput ? "json" : "text",
-                    DryRun: true),
+                    DryRun: dryRun),
                 runId);
             try
             {
@@ -2106,10 +2150,13 @@ public static class CliCommandFactory
                 "command.start",
                 sequence: 1,
                 "started",
-                summary: "Project pack isolated dry-run staging requested.",
+                summary: dryRun
+                    ? "Project pack isolated dry-run staging requested."
+                    : "Project pack controlled real conversion requested after current tool probes.",
                 timestampUtc: nowUtc);
             ManagedProjectPackRunStore runStore = ManagedProjectPackRunStore.Create(snapshot);
-            ProjectPackRunMutationResult result = new ProjectPackRunService(runStore).CreateAndStage(
+            ProjectPackRunService runService = new(runStore);
+            ProjectPackRunMutationResult result = runService.CreateAndStage(
                 plan,
                 snapshot.Workspace,
                 toolPaths,
@@ -2118,6 +2165,25 @@ public static class CliCommandFactory
                 new ProjectPackRunCorrelation(jobId: jobId),
                 runId,
                 CancellationToken.None);
+            if (!dryRun && result.Record?.State == ProjectPackRunState.Ready)
+            {
+                GerberTiffControlledConversionDriver driver = new(
+                    plan,
+                    snapshot.Workspace,
+                    toolPaths,
+                    probedIdentities,
+                    approvalPolicy);
+                result = runService.ExecuteControlled(
+                    runId,
+                    plan,
+                    snapshot.Workspace,
+                    toolPaths,
+                    GetProjectPackPolicyFingerprint(snapshot, packId),
+                    driver,
+                    utcNowProvider(),
+                    CancellationToken.None);
+            }
+
             List<JobArtifact> artifacts = [];
             ManagedProjectPackRunLayout layout = runStore.GetLayout(runId);
             if (File.Exists(layout.RunRecordPath))
@@ -2136,23 +2202,75 @@ public static class CliCommandFactory
                     "Immutable staged-input identity manifest."));
             }
 
+            if (result.Record is not null)
+            {
+                foreach (ProjectPackRunArtifactPointer pointer in result.Record.Artifacts)
+                {
+                    if (pointer.Kind is not "conversion-execution-log" and
+                        not "tiff-output" and
+                        not "render-intermediate")
+                    {
+                        continue;
+                    }
+
+                    string? artifactPath = ResolveProjectPackArtifactPath(
+                        pointer,
+                        layout,
+                        snapshot.Workspace);
+                    if (artifactPath is null || !File.Exists(artifactPath))
+                    {
+                        continue;
+                    }
+
+                    string kind = pointer.Kind == "conversion-execution-log"
+                        ? JobArtifactKind.ProjectPackExecutionLog
+                        : pointer.Kind == "tiff-output"
+                            ? JobArtifactKind.ProjectPackConversionOutput
+                            : pointer.Kind;
+                    artifacts.Add(JobArtifact.FromPath(
+                        kind,
+                        artifactPath,
+                        pointer.Kind == "tiff-output"
+                            ? "Controlled conversion output; TIFF engineering verification is pending."
+                            : "Project pack managed artifact pointer."));
+                }
+            }
+
+            bool commandSucceeded = result.Record?.State == (dryRun
+                ? ProjectPackRunState.Ready
+                : ProjectPackRunState.Verifying);
+            string jobStatus = commandSucceeded
+                ? dryRun ? JobStatus.DryRun : JobStatus.Succeeded
+                : result.Record?.State == ProjectPackRunState.Canceled
+                    ? JobStatus.Canceled
+                    : result.Record?.ErrorCode == ProjectPackRunErrorCode.ApprovalRequired
+                        ? JobStatus.ApprovalRequired
+                        : JobStatus.Failed;
+
             try
             {
                 JobRecord completedJob = job.WithStatus(
-                    result.Succeeded ? JobStatus.DryRun : JobStatus.Failed,
+                    jobStatus,
                     utcNowProvider(),
-                    exitCode: result.Succeeded ? 0 : 1,
-                    stopReason: result.Succeeded ? "dry-run-staged" : "staging-failed",
-                    errorCode: result.Diagnostic?.ErrorCode,
-                    summary: result.Succeeded
-                        ? "Project pack inputs were staged; no conversion or business verification was executed."
-                        : result.Diagnostic?.Summary,
+                    exitCode: commandSucceeded ? 0 : 1,
+                    stopReason: commandSucceeded
+                        ? dryRun ? "dry-run-staged" : "conversion-executed-verification-pending"
+                        : result.Record?.State ?? "project-pack-run-failed",
+                    errorCode: commandSucceeded ? null : result.Record?.ErrorCode ?? result.Diagnostic?.ErrorCode,
+                    summary: commandSucceeded
+                        ? dryRun
+                            ? "Project pack inputs were staged; no conversion or business verification was executed."
+                            : "Gerber to TIFF conversion executed; declared hashes were recorded and TIFF engineering verification remains pending."
+                        : result.Record?.Summary ?? result.Diagnostic?.Summary,
                     taskReport: null,
                     artifacts: artifacts,
                     warnings:
                     [
                         $"packRunId={runId}",
-                        "Project pack run state remains the operational checkpoint; taskReport was not duplicated."
+                        "Project pack run state remains the operational checkpoint; taskReport was not duplicated.",
+                        dryRun
+                            ? "No real conversion was executed."
+                            : "Conversion execution does not establish TIFF engineering verification or business correctness."
                     ]);
                 jobStore.Update(completedJob);
             }
@@ -2163,12 +2281,22 @@ public static class CliCommandFactory
                 return 1;
             }
 
-            if (!result.Succeeded || result.Record is null || result.Checkpoint is null)
+            if (!commandSucceeded || result.Record is null || result.Checkpoint is null)
             {
+                TryWriteTraceCommandEvent(
+                    "packs run",
+                    snapshot,
+                    traceContext,
+                    "command.complete",
+                    sequence: 2,
+                    "failure",
+                    summary: result.Record?.Summary ?? result.Diagnostic?.Summary ?? "Project pack run failed.",
+                    errorCode: result.Record?.ErrorCode ?? result.Diagnostic?.ErrorCode,
+                    timestampUtc: utcNowProvider());
                 output.WriteLine(ProjectPackRunRenderer.RenderFailure(
                     "packs.run",
-                    result.Diagnostic?.ErrorCode ?? ProjectPackRunErrorCode.RecordWriteFailed,
-                    result.Diagnostic?.Summary ?? "Project pack run could not be staged.",
+                    result.Record?.ErrorCode ?? result.Diagnostic?.ErrorCode ?? ProjectPackRunErrorCode.ExecutionFailed,
+                    result.Record?.Summary ?? result.Diagnostic?.Summary ?? "Project pack run did not reach its declared checkpoint.",
                     jsonOutput,
                     runId));
                 return 1;
@@ -2184,7 +2312,9 @@ public static class CliCommandFactory
                 "command.complete",
                 sequence: 2,
                 "success",
-                summary: "Project pack isolated dry-run staging completed without tool execution.",
+                summary: dryRun
+                    ? "Project pack isolated dry-run staging completed without tool execution."
+                    : "Gerber to TIFF conversion executed; TIFF engineering verification remains pending.",
                 timestampUtc: utcNowProvider());
             return 0;
         });
@@ -6207,6 +6337,77 @@ public static class CliCommandFactory
     private static string GetProjectPackPolicyFingerprint(CliEnvironmentSnapshot snapshot, string packId) =>
         ProjectPackRunPolicyFingerprint.Compute(
             $"pack={packId};schema={ProjectPackSchema.CurrentVersion};approval={snapshot.Configuration.ApprovalMode}");
+
+    private static string MapProjectPackExecutionProbeError(ProjectPackDoctorReport report)
+    {
+        if (report.Status == ProjectPackDoctorStatus.ApprovalRequired ||
+            report.Diagnostics.Any(diagnostic => diagnostic.Code == ExternalToolDiagnosticCode.ApprovalDenied))
+        {
+            return ProjectPackRunErrorCode.ApprovalRequired;
+        }
+
+        if (report.Diagnostics.Any(diagnostic => diagnostic.Code == ExternalToolDiagnosticCode.VersionUnsupported))
+        {
+            return ProjectPackRunErrorCode.ToolVersionUnsupported;
+        }
+
+        if (report.Diagnostics.Any(diagnostic => diagnostic.Code is ExternalToolDiagnosticCode.PathMissing
+            or ExternalToolDiagnosticCode.PathNotFound
+            or ExternalToolDiagnosticCode.PathDirectory))
+        {
+            return ProjectPackRunErrorCode.ToolNotFound;
+        }
+
+        if (report.Diagnostics.Any(diagnostic => diagnostic.Code is ExternalToolDiagnosticCode.FileChanged
+            or ExternalToolDiagnosticCode.HashChanged
+            or ExternalToolDiagnosticCode.PathReparsePoint))
+        {
+            return ProjectPackRunErrorCode.ToolIdentityChanged;
+        }
+
+        return ProjectPackRunErrorCode.ExecutionFailed;
+    }
+
+    private static string? ResolveProjectPackArtifactPath(
+        ProjectPackRunArtifactPointer pointer,
+        ManagedProjectPackRunLayout layout,
+        WorkspaceContext workspace)
+    {
+        try
+        {
+            string root = pointer.Scope switch
+            {
+                "managed-run" => layout.RunRoot,
+                "workspace-output" => workspace.RootPath,
+                _ => string.Empty
+            };
+            if (root.Length == 0 || Path.IsPathRooted(pointer.Path) || pointer.Path.Contains("..", StringComparison.Ordinal))
+            {
+                return null;
+            }
+
+            string path = Path.GetFullPath(Path.Combine(
+                root,
+                pointer.Path.Replace('/', Path.DirectorySeparatorChar)));
+            string normalizedRoot = Path.TrimEndingDirectorySeparator(Path.GetFullPath(root)) + Path.DirectorySeparatorChar;
+            if (!path.StartsWith(
+                normalizedRoot,
+                OperatingSystem.IsWindows() ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal))
+            {
+                return null;
+            }
+
+            ManagedProjectPackRunStore.EnsureNoReparseInExistingChain(path);
+            return path;
+        }
+        catch (Exception exception) when (exception is IOException
+            or UnauthorizedAccessException
+            or NotSupportedException
+            or ProjectPackContractException)
+        {
+            return null;
+        }
+    }
 
     private static bool IsJobStoreException(Exception exception)
     {

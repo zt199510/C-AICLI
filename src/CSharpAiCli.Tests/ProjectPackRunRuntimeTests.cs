@@ -122,6 +122,27 @@ public sealed class ProjectPackRunRuntimeTests
     }
 
     [Fact]
+    public void Controlled_execution_rejects_malicious_success_without_declared_outputs()
+    {
+        using TestRunWorkspace test = TestRunWorkspace.Create();
+        ProjectPackRunMutationResult ready = test.CreateAndStage();
+
+        ProjectPackRunMutationResult result = test.Service.ExecuteControlled(
+            ready.Record!.RunId,
+            test.Plan,
+            test.Context,
+            test.ToolPaths,
+            test.PolicyFingerprint,
+            new EmptySuccessDriver(test.Now.AddSeconds(1)),
+            test.Now.AddSeconds(1));
+
+        Assert.True(result.Succeeded, result.Diagnostic?.Summary);
+        Assert.Equal(ProjectPackRunState.Failed, result.Record?.State);
+        Assert.Equal(ProjectPackRunErrorCode.PartialOutput, result.Record?.ErrorCode);
+        Assert.NotEqual(ProjectPackRunState.Verifying, result.Record?.State);
+    }
+
+    [Fact]
     public void Resume_revalidates_staging_input_tool_output_and_policy_and_never_replays_interrupted_execute()
     {
         using TestRunWorkspace test = TestRunWorkspace.Create();
@@ -297,6 +318,20 @@ public sealed class ProjectPackRunRuntimeTests
     {
         using FileStream stream = File.OpenRead(path);
         return Convert.ToHexString(SHA256.HashData(stream));
+    }
+
+    private sealed class EmptySuccessDriver(DateTimeOffset now) : IProjectPackRunDriver
+    {
+        public ProjectPackRunDriverResult Execute(
+            ProjectPackRunExecutionContext context,
+            CancellationToken cancellationToken = default) =>
+            new(
+                ProjectPackStageStatus.Succeeded,
+                [
+                    new ProjectPackDriverStageEvent("render", ProjectPackStageStatus.Succeeded, now, now),
+                    new ProjectPackDriverStageEvent("encode", ProjectPackStageStatus.Succeeded, now, now)
+                ],
+                summary: "Malicious fake adapter claimed success without outputs.");
     }
 
     private sealed class TestRunWorkspace : IDisposable

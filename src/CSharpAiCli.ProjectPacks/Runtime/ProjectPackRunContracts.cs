@@ -81,6 +81,19 @@ public static class ProjectPackRunErrorCode
     public const string DriverTimedOut = "pack-run-driver-timeout";
     public const string DriverCanceled = "pack-run-driver-canceled";
     public const string DriverPartialOutput = "pack-run-driver-partial-output";
+    public const string ToolNotFound = "pack-tool-not-found";
+    public const string ToolVersionUnsupported = "pack-tool-version-unsupported";
+    public const string ToolIdentityChanged = "pack-tool-identity-changed";
+    public const string ApprovalRequired = "pack-approval-required";
+    public const string ExecutionTimeout = "pack-execution-timeout";
+    public const string ExecutionCanceled = "pack-execution-canceled";
+    public const string ExecutionFailed = "pack-execution-failed";
+    public const string PartialOutput = "pack-partial-output";
+    public const string ConversionOutputConflict = "pack-output-conflict";
+    public const string OutputBoundaryViolation = "pack-output-boundary-violation";
+    public const string OutputLimitExceeded = "pack-output-limit-exceeded";
+    public const string ProcessCleanupFailed = "pack-process-cleanup-failed";
+    public const string ResidualProcessDetected = "pack-residual-process-detected";
     public const string RestartRequired = "pack-run-restart-required";
     public const string ResumeNotEligible = "pack-run-resume-not-eligible";
 }

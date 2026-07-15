@@ -189,6 +189,48 @@ Set-Content -Path shell-args.json -Value '{"command":"dotnet --version","timeout
 artifacts\release\caicli-0.4.0-win-x64\caicli.exe tools call --workspace . --approval always workspace.run_shell --arguments-file shell-args.json
 ```
 
+## Gerber/TIFF Controlled Conversion Preview
+
+Start with static planning and explicit fixed probes. Both tools are mandatory for a real run:
+
+```powershell
+caicli packs doctor gerber-tiff `
+  --tool-path "gerbv=C:\Tools\gerbv\gerbv.exe" "imagemagick=C:\Tools\ImageMagick\magick.exe" `
+  --probe --approval always --output json --workspace .
+```
+
+Common controlled conversion failures:
+
+- `pack-tool-not-found`: one explicit dependency path is missing, a directory, or unavailable. The CLI does not search, install, or download it.
+- `pack-tool-version-unsupported`: the fixed version probe failed or reported a version below the manifest minimum.
+- `pack-tool-identity-changed`: filename/path metadata/SHA256 changed before approval, after approval, or during execution. Generate a new plan only after reviewing the new tool identity.
+- `pack-approval-required`: current non-interactive approval mode did not authorize a probe or external stage. This is not a resume token; make a new invocation-local decision.
+- `pack-output-conflict`: the explicit output directory or a declared output already exists. Choose a new empty path; there is no force-overwrite option.
+- `pack-output-boundary-violation`: a path escaped its frozen root, contained a reparse point, or the process created an undeclared output.
+- `pack-output-limit-exceeded`: a declared output exceeded the frozen per-file size limit.
+- `pack-partial-output`: exit `0` did not produce every declared output, or output was empty/changed; retained files are failure evidence.
+- `pack-execution-failed`: process startup, non-zero exit, stderr, or evidence persistence failed.
+- `pack-execution-timeout` / `pack-execution-canceled`: the process tree was terminated and the run recorded a failed/canceled terminal state.
+- `pack-process-cleanup-failed` / `pack-residual-process-detected`: cleanup or descendant checks found an unsafe process condition. The run is interrupted and must not be auto-replayed.
+
+Inspect `packs runs show <run-id> --output json`, the correlated job, and the managed
+`logs/conversion-execution.json`. A `verifying` state is the expected Week 61 success boundary: conversion ran and
+declared hashes exist, but TIFF verification has not run. Do not manually change it to `awaiting-acceptance`.
+`running`/`interrupted` runs are never automatically resumed; inspect partial outputs and wait for the explicit
+restart workflow planned for a later week.
+
+Default smoke intentionally skips real tools. To run the independent opt-in branch, set all three values:
+
+```powershell
+$env:CAICLI_GERBER_TIFF_TOOL_SMOKE = "1"
+$env:CAICLI_GERBV_PATH = "C:\Tools\gerbv\gerbv.exe"
+$env:CAICLI_IMAGEMAGICK_PATH = "C:\Tools\ImageMagick\magick.exe"
+tools\Invoke-SmokeTests.ps1
+```
+
+The opt-in smoke records tool versions/SHA256 and input/output hashes. Its success message says conversion
+executed; it does not claim TIFF engineering verification or business correctness.
+
 ## Verification
 
 Agentic `exec` runs verification only when an explicit command is configured. Add one of these to project instructions when appropriate:

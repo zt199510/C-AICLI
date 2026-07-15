@@ -283,13 +283,12 @@ public sealed class GerberTiffConversionPlanBuilder
         foreach (GerberTiffInputFile input in inventory.Files.Where(file => file.PassedToExternalTool))
         {
             sequence++;
-            string slug = Slug(Path.GetFileNameWithoutExtension(input.RelativePath));
             artifacts.Add(new GerberTiffExpectedArtifact(
                 $"render-{sequence:D4}",
                 "render-intermediate",
                 "image/png",
                 "managed-run",
-                $"render/{sequence:D4}-{slug}.png",
+                GerberTiffArtifactNaming.RenderRelativePath(sequence, input.RelativePath),
                 true,
                 "no-overwrite"));
             artifacts.Add(new GerberTiffExpectedArtifact(
@@ -297,7 +296,7 @@ public sealed class GerberTiffConversionPlanBuilder
                 "tiff-output",
                 "image/tiff",
                 "workspace-output",
-                $"{sequence:D4}-{slug}.tiff",
+                GerberTiffArtifactNaming.TiffFileName(sequence, input.RelativePath),
                 true,
                 "no-overwrite"));
         }
@@ -376,6 +375,16 @@ public sealed class GerberTiffConversionPlanBuilder
         byte[] bytes = JsonSerializer.SerializeToUtf8Bytes(canonical);
         return Convert.ToHexString(SHA256.HashData(bytes));
     }
+
+}
+
+internal static class GerberTiffArtifactNaming
+{
+    public static string RenderRelativePath(int sequence, string sourceRelativePath) =>
+        $"render/{sequence:D4}-{Slug(Path.GetFileNameWithoutExtension(sourceRelativePath))}.png";
+
+    public static string TiffFileName(int sequence, string sourceRelativePath) =>
+        $"{sequence:D4}-{Slug(Path.GetFileNameWithoutExtension(sourceRelativePath))}.tiff";
 
     private static string Slug(string value)
     {

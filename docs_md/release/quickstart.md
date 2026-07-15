@@ -158,7 +158,7 @@ artifacts\release\caicli-0.4.0-win-x64\caicli.exe pipeline plan security-review 
 
 MCP config/list/doctor are available. User-configured stdio MCP servers can be discovered and called through ordinary registry/tool paths, while workspace-configured MCP servers are not auto-started by `tools list`, `tools call`, `exec`, or `run`. `mcp doctor` can explicitly diagnose configured stdio servers.
 
-Local skills are lightweight workflow packs. `skills list` shows built-in packs plus workspace-local JSON manifests under `.caicli/skills`. `skills run <name> --dry-run -- <task>` expands the selected pack into expert/report/reference/safety/validation metadata without calling a model, writing files, running shell, or starting MCP. Non-dry-run `skills run` uses the same agentic safety path as `exec`; pack validation commands are hints and do not execute directly. Remote skill marketplaces, automatic updates, YAML manifests, user-level skill directories, and Gerber/TIFF real workflow execution remain enhanced Deferred capabilities.
+Local skills are lightweight workflow packs. `skills list` shows built-in packs plus workspace-local JSON manifests under `.caicli/skills`. `skills run <name> --dry-run -- <task>` expands the selected pack into expert/report/reference/safety/validation metadata without calling a model, writing files, running shell, or starting MCP. Non-dry-run `skills run` uses the same agentic safety path as `exec`; pack validation commands are hints and do not execute directly. Remote skill marketplaces, automatic updates, YAML manifests, and user-level skill directories remain enhanced Deferred capabilities. Project Packs are a separate deterministic domain-tool surface and are not model-guided skills.
 
 The future 0.5.0 source tree also contains a Project Pack Preview. These commands are not part of the accepted
 0.4.0 package:
@@ -176,6 +176,36 @@ caicli packs plan gerber-tiff --input .\samples\board-a --output-dir .\out\board
 bindings only inspects regular-file identity and SHA256; it does not start the tools. Only explicit
 `packs doctor --probe` may start a fixed version probe, and it still requires current approval. Plan output uses
 workspace-relative paths and does not store raw Gerber, drill, sidecar, or unknown file content.
+
+Week 61 source Preview adds controlled Gerber -> TIFF execution. Save the JSON plan without changing it, then
+choose dry-run staging or an explicit real conversion:
+
+```powershell
+$gerbv = "C:\Tools\gerbv\gerbv.exe"
+$magick = "C:\Tools\ImageMagick\magick.exe"
+
+caicli packs plan gerber-tiff `
+  --input .\samples\board-a --output-dir .\out\board-a `
+  --tool-path "gerbv=$gerbv" "imagemagick=$magick" `
+  --output json --workspace . | Set-Content .\gerber-tiff-plan.json -Encoding utf8
+
+caicli packs run gerber-tiff `
+  --plan .\gerber-tiff-plan.json --dry-run `
+  --tool-path "gerbv=$gerbv" "imagemagick=$magick" `
+  --output json --workspace .
+
+caicli packs run gerber-tiff `
+  --plan .\gerber-tiff-plan.json `
+  --tool-path "gerbv=$gerbv" "imagemagick=$magick" `
+  --approval always --output json --workspace .
+```
+
+The real run performs fixed Gerbv PNG render and ImageMagick TIFF encode templates with no free-form arguments.
+It re-probes both tools, requests current approval for every external invocation, uses the managed run cwd/temp
+area, refuses existing outputs, captures bounded/redacted process evidence, and records job/run/artifact pointers.
+A successful Week 61 run stops in `verifying`; this means conversion executed and declared output hashes were
+recorded. It does not mean TIFF metadata/content/baseline verification passed, and it cannot enter
+`awaiting-acceptance` until the Week 62 verifier exists.
 
 Local job history is opt-in for execution commands. `jobs list/show/export` reads job records from the user-level store under `%USERPROFILE%\.caicli\jobs`; these read commands do not call a model, run shell/patch tools, start MCP, write command logs, or write workspace files.
 

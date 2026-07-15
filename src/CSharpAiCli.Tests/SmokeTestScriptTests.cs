@@ -71,6 +71,8 @@ public sealed class SmokeTestScriptTests
         Assert.Contains("skill: review-only", script, StringComparison.Ordinal);
         Assert.Contains("allowWrites=false", script, StringComparison.Ordinal);
         Assert.Contains("CAICLI_GERBER_TIFF_TOOL_SMOKE", script, StringComparison.Ordinal);
+        Assert.Contains("CAICLI_GERBV_PATH", script, StringComparison.Ordinal);
+        Assert.Contains("CAICLI_IMAGEMAGICK_PATH", script, StringComparison.Ordinal);
         Assert.Contains("\"packs\", \"list\", \"--workspace\", $workspace", script, StringComparison.Ordinal);
         Assert.Contains("\"packs\", \"doctor\", \"gerber-tiff\"", script, StringComparison.Ordinal);
         Assert.Contains("\"packs\", \"plan\", \"gerber-tiff\"", script, StringComparison.Ordinal);
@@ -90,6 +92,12 @@ public sealed class SmokeTestScriptTests
         Assert.Contains("packs run dry-run produced fake or real conversion artifacts", script, StringComparison.Ordinal);
         Assert.Contains("packs run left atomic temporary files behind", script, StringComparison.Ordinal);
         Assert.Contains("packs run dry-run changed the caicli/gerbv/magick process set", script, StringComparison.Ordinal);
+        Assert.Contains("real Gerber/TIFF tool smoke skipped", script, StringComparison.Ordinal);
+        Assert.Contains("real Gerber/TIFF conversion executed; TIFF engineering verification remains pending", script, StringComparison.Ordinal);
+        Assert.Contains("\"--approval\", \"always\"", script, StringComparison.Ordinal);
+        Assert.Contains("\"state\":\"verifying\"", script, StringComparison.Ordinal);
+        Assert.Contains("\"tiffVerificationPassed\": false", script, StringComparison.Ordinal);
+        Assert.Contains("real Gerber/TIFF controlled conversion left a gerbv or magick process behind", script, StringComparison.Ordinal);
         Assert.Contains("\"taskReport\": null", script, StringComparison.Ordinal);
         Assert.Contains("\"jobs\", \"list\", \"--output\", \"json\", \"--workspace\", $workspace", script, StringComparison.Ordinal);
         Assert.Contains("\"exec\", \"--record-job\", \"--job-name\", \"smoke-missing-model\"", script, StringComparison.Ordinal);

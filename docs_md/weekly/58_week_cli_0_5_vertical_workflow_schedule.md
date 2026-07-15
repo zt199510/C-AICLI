@@ -1,8 +1,8 @@
 # C# AI CLI 0.5.0 Vertical Workflow Runtime 与 Gerber/TIFF v1 排期
 
-更新时间：2026-07-14
+更新时间：2026-07-15
 
-状态：执行中；Week 58-60 已完成，Week 61-65 待执行
+状态：执行中；Week 58-61 已完成，Week 62-65 待执行
 
 逐周执行提示统一维护在 `docs_md/weekly/58_65_week_execution_prompts.md`，用于把本排期和各周 plan 直接交给执行 Agent。
 
@@ -82,7 +82,7 @@ pack/tool doctor
 | 58 | `58_week_project_pack_contract_toolchain_spike.plan.md` | 已完成 | 定义 Project Pack v1，并完成真实工具、fixture、TIFF metadata 库的技术/许可 Gate。 | Gate Passed；Gerbv/ImageMagick/LibTIFF、CC0 fixture、契约和 Deferred 边界见 `58_week_review.md`。 |
 | 59 | `59_week_gerber_tiff_discovery_preflight.plan.md` | 已完成 | 实现 bounded input inventory、tool doctor/preflight 和 deterministic conversion plan。 | list/doctor/plan text+JSON 可用；不执行转换；路径、reparse、文件数/大小边界有测试。 |
 | 60 | `60_week_isolated_run_staging_checkpoint.plan.md` | 已完成 | 建立 managed run directory、staging、run state machine、checkpoint/cancel/resume 基础。 | fake driver 可完成阶段流转；源输入不变；execute 中断进入明确状态且不自动重跑。 |
-| 61 | `61_week_gerber_tiff_controlled_conversion.plan.md` | 计划中 | 接入真实外部工具，完成审批式结构化执行、日志、timeout 和 output capture。 | 授权 fixture 可真实转换；工具身份/参数/输出可审计；真实工具 smoke 保持 opt-in。 |
+| 61 | `61_week_gerber_tiff_controlled_conversion.plan.md` | 已完成 | 接入真实外部工具，完成审批式结构化执行、日志、timeout 和 output capture。 | Gate Passed；Gerbv/ImageMagick typed adapter、授权 fixture 真实 conversion、run/job/artifact evidence 与 opt-in smoke 见 `61_week_review.md`；TIFF verification 仍 Deferred。 |
 | 62 | `62_week_tiff_artifact_inspection_verification.plan.md` | 计划中 | TIFF metadata、preview/contact sheet、baseline verification 与报告。 | 无效/缺失/部分 TIFF 被拒绝；JSON/markdown verification 稳定；预览不作为正确性证明。 |
 | 63 | `63_week_artifact_lifecycle_acceptance_resume.plan.md` | 计划中 | artifact list/show/verify/export/prune、accept/reject 和 safe resume/restart。 | managed artifacts 可安全清理；人工结论可追踪；resume 不复用旧 approval。 |
 | 64 | `64_week_vertical_workflow_security_smoke_docs_hardening.plan.md` | 计划中 | 对 Week 58-63 做安全、corrupt-state、smoke、文档和 release-process 收口。 | adversarial paths/redaction/crash/cleanup 回归；default/real-tool smoke 边界准确。 |

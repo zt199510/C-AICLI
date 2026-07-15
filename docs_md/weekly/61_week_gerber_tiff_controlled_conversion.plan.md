@@ -1,6 +1,6 @@
 # 第 61 周 Gerber/TIFF Controlled Real Conversion Implementation Plan
 
-状态：计划中
+状态：已完成
 
 **Goal:** 将 Week 58 选定的真实 Gerber/TIFF 工具接入 Week 60 隔离运行状态机，通过结构化参数、显式审批和有界进程控制完成第一条真实 Gerber -> TIFF 转换路径。
 
@@ -80,19 +80,19 @@ caicli packs runs show <run-id> --output json
 
 ## 任务清单
 
-- [ ] Step 1: 将 Week 58 参数模板编码为 typed adapter，不暴露自由参数拼接。
-- [ ] Step 2: 定义 tool execution risk summary 和 approval request。
-- [ ] Step 3: 实现 structured process start、bounded env、cwd 和 output capture。
-- [ ] Step 4: 实现 timeout/cancel/process-tree cleanup。
-- [ ] Step 5: 实现 declared output inventory、boundary、size 和 partial-output checks。
-- [ ] Step 6: 将 real adapter 接入 run state machine/job/artifacts/trace。
-- [ ] Step 7: 增加稳定 error code 和 text/JSON execution result。
-- [ ] Step 8: 增加 fake malicious/failure adapter tests。
-- [ ] Step 9: 使用授权 fixture 执行真实转换并记录工具版本/hash。
-- [ ] Step 10: 增加独立 real-tool opt-in smoke 和 smoke contract tests。
-- [ ] Step 11: 更新 configuration/quickstart/security/troubleshooting 草稿。
-- [ ] Step 12: 运行 build/test/default smoke/real-tool smoke。
-- [ ] Step 13: 创建 `61_week_review.md`，记录真实输出和 Week 62 verifier 输入。
+- [x] Step 1: 将 Week 58 参数模板编码为 typed adapter，不暴露自由参数拼接。
+- [x] Step 2: 定义 tool execution risk summary 和 approval request。
+- [x] Step 3: 实现 structured process start、bounded env、cwd 和 output capture。
+- [x] Step 4: 实现 timeout/cancel/process-tree cleanup。
+- [x] Step 5: 实现 declared output inventory、boundary、size 和 partial-output checks。
+- [x] Step 6: 将 real adapter 接入 run state machine/job/artifacts/trace。
+- [x] Step 7: 增加稳定 error code 和 text/JSON execution result。
+- [x] Step 8: 增加 fake malicious/failure adapter tests。
+- [x] Step 9: 使用授权 fixture 执行真实转换并记录工具版本/hash。
+- [x] Step 10: 增加独立 real-tool opt-in smoke 和 smoke contract tests。
+- [x] Step 11: 更新 configuration/quickstart/security/troubleshooting 草稿。
+- [x] Step 12: 运行 build/test/default smoke/real-tool smoke。
+- [x] Step 13: 创建 `61_week_review.md`，记录真实输出和 Week 62 verifier 输入。
 
 ## 验收标准
 

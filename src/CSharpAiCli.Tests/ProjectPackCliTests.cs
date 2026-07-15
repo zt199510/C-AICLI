@@ -355,7 +355,7 @@ public sealed class ProjectPackCliTests
     }
 
     [Fact]
-    public void Packs_run_without_dry_run_fails_without_creating_run_or_job_state()
+    public void Packs_run_without_tools_fails_stably_without_creating_run_or_job_state()
     {
         using TempDirectory temp = TempDirectory.Create();
         CliEnvironmentSnapshot snapshot = CreateSnapshot(temp.Path, temp.Path);
@@ -366,8 +366,8 @@ public sealed class ProjectPackCliTests
             .Parse(["packs", "run", "gerber-tiff", "--plan", Path.GetFileName(planPath), "--output", "json", "--workspace", temp.Path])
             .Invoke();
 
-        Assert.Equal(2, exitCode);
-        Assert.Contains("pack-real-execution-deferred", output.ToString(), StringComparison.Ordinal);
+        Assert.Equal(1, exitCode);
+        Assert.Contains(ProjectPackRunErrorCode.ToolNotFound, output.ToString(), StringComparison.Ordinal);
         Assert.False(Directory.Exists(ManagedProjectPackRunStore.Create(snapshot).RunsRoot));
         Assert.False(Directory.Exists(JobRecordStore.Create(snapshot).JobDirectory));
     }

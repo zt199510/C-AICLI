@@ -295,6 +295,8 @@ $oldOpenAiModel = $env:OPENAI_MODEL
 $realModelSmokeOptIn = [System.String]::Equals($env:CAICLI_REAL_MODEL_SMOKE, "1", [System.StringComparison]::Ordinal)
 $daemonSmokeOptIn = [System.String]::Equals($env:CAICLI_DAEMON_SMOKE, "1", [System.StringComparison]::Ordinal)
 $gerberTiffToolSmokeOptIn = [System.String]::Equals($env:CAICLI_GERBER_TIFF_TOOL_SMOKE, "1", [System.StringComparison]::Ordinal)
+$gerbvSmokePath = [string]$env:CAICLI_GERBV_PATH
+$imageMagickSmokePath = [string]$env:CAICLI_IMAGEMAGICK_PATH
 
 try {
     New-Item -ItemType Directory -Path $workspace, $userProfile | Out-Null
@@ -580,9 +582,113 @@ Write-Output 'bugfix verification passed'
         throw "packs run dry-run changed the caicli/gerbv/magick process set."
     }
     if ($gerberTiffToolSmokeOptIn) {
-        Write-Host "real Gerber/TIFF tool smoke remains Deferred until the Week 61 adapter is available; no conversion was executed."
+        if ([string]::IsNullOrWhiteSpace($gerbvSmokePath) -or -not (Test-Path -LiteralPath $gerbvSmokePath -PathType Leaf)) {
+            throw "real Gerber/TIFF tool smoke requires CAICLI_GERBV_PATH to identify an installed gerbv.exe."
+        }
+        if ([string]::IsNullOrWhiteSpace($imageMagickSmokePath) -or -not (Test-Path -LiteralPath $imageMagickSmokePath -PathType Leaf)) {
+            throw "real Gerber/TIFF tool smoke requires CAICLI_IMAGEMAGICK_PATH to identify an installed magick.exe."
+        }
+
+        $realFixtureSource = Join-Path $repoRoot "src\CSharpAiCli.Tests\Fixtures\GerberTiff\real\minimal-square.gbr"
+        $realInput = Join-Path $workspace "gerber-real-input"
+        $realOutput = Join-Path $workspace "gerber-real-output"
+        New-Item -ItemType Directory -Path $realInput | Out-Null
+        $realFixturePath = Join-Path $realInput "minimal-square.gbr"
+        Copy-Item -LiteralPath $realFixtureSource -Destination $realFixturePath
+        $realInputHashBefore = (Get-FileHash -LiteralPath $realFixturePath -Algorithm SHA256).Hash
+        if ($realInputHashBefore -ne "D2FBD6E2393EFC0513915C3B5B2E7C24C80AE90A2102BB75E9CA873B31010D54") {
+            throw "real Gerber/TIFF fixture identity does not match the authorized CC0 fixture."
+        }
+
+        $realGerbvHash = (Get-FileHash -LiteralPath $gerbvSmokePath -Algorithm SHA256).Hash
+        $realImageMagickHash = (Get-FileHash -LiteralPath $imageMagickSmokePath -Algorithm SHA256).Hash
+        $realToolBindings = @(
+            "gerbv=$([System.IO.Path]::GetFullPath($gerbvSmokePath))",
+            "imagemagick=$([System.IO.Path]::GetFullPath($imageMagickSmokePath))"
+        )
+        $realPlan = Invoke-CaiCli -Arguments @(
+            "packs", "plan", "gerber-tiff",
+            "--input", "gerber-real-input", "--output-dir", "gerber-real-output",
+            "--tool-path", $realToolBindings[0], $realToolBindings[1],
+            "--output", "json", "--workspace", $workspace
+        )
+        Assert-ExitCode $realPlan 0 "real Gerber/TIFF plan"
+        Assert-Contains $realPlan.Output '"status":"runnable"' "real Gerber/TIFF plan"
+        Assert-Contains $realPlan.Output $realGerbvHash "real Gerber/TIFF Gerbv plan identity"
+        Assert-Contains $realPlan.Output $realImageMagickHash "real Gerber/TIFF ImageMagick plan identity"
+        $realPlanPath = Join-Path $workspace "gerber-tiff-real-plan.json"
+        [System.IO.File]::WriteAllText($realPlanPath, $realPlan.Output, [System.Text.UTF8Encoding]::new($false))
+
+        $realProcessesBefore = @(Get-Process -Name "gerbv", "magick" -ErrorAction SilentlyContinue | Select-Object -ExpandProperty Id | Sort-Object)
+        $realRun = Invoke-CaiCli -Arguments @(
+            "packs", "run", "gerber-tiff",
+            "--plan", "gerber-tiff-real-plan.json",
+            "--tool-path", $realToolBindings[0], $realToolBindings[1],
+            "--approval", "always",
+            "--output", "json", "--workspace", $workspace
+        )
+        Assert-ExitCode $realRun 0 "real Gerber/TIFF controlled conversion"
+        Assert-Contains $realRun.Output '"state":"verifying"' "real Gerber/TIFF controlled conversion"
+        Assert-Contains $realRun.Output '"approvalPersisted":false' "real Gerber/TIFF approval persistence"
+        Assert-Contains $realRun.Output "TIFF engineering verification is pending Week 62" "real Gerber/TIFF verification boundary"
+        Assert-NotContains $realRun.Output '"state":"awaiting-acceptance"' "real Gerber/TIFF premature acceptance"
+        $realRunJson = $realRun.Output | ConvertFrom-Json
+        $realRunId = [string]$realRunJson.run.runId
+        $realJobId = [string]$realRunJson.run.correlation.jobId
+        $realRunRoot = Join-Path $userProfile ".caicli\runs\$realRunId"
+        $realExecutionLogPath = Join-Path $realRunRoot "logs\conversion-execution.json"
+        if (-not (Test-Path -LiteralPath $realExecutionLogPath -PathType Leaf)) {
+            throw "real Gerber/TIFF controlled conversion did not write redacted execution evidence."
+        }
+
+        $realExecutionLogText = [System.IO.File]::ReadAllText($realExecutionLogPath)
+        Assert-Contains $realExecutionLogText '"conversionExecuted": true' "real Gerber/TIFF conversion evidence"
+        Assert-Contains $realExecutionLogText '"tiffVerificationPassed": false' "real Gerber/TIFF verification evidence"
+        Assert-Contains $realExecutionLogText $realGerbvHash "real Gerber/TIFF Gerbv execution identity"
+        Assert-Contains $realExecutionLogText $realImageMagickHash "real Gerber/TIFF ImageMagick execution identity"
+        Assert-NotContains $realExecutionLogText ([System.IO.Path]::GetFullPath($gerbvSmokePath)) "real Gerber/TIFF log tool path redaction"
+        Assert-NotContains $realExecutionLogText ([System.IO.Path]::GetFullPath($imageMagickSmokePath)) "real Gerber/TIFF log tool path redaction"
+        $realExecutionLog = $realExecutionLogText | ConvertFrom-Json
+        $realGerbvOperation = @($realExecutionLog.operations | Where-Object { $_.operation -eq "gerber.render" })[0]
+        $realImageMagickOperation = @($realExecutionLog.operations | Where-Object { $_.operation -eq "tiff.encode" })[0]
+        if ([string]::IsNullOrWhiteSpace([string]$realGerbvOperation.tool.version) -or
+            [string]::IsNullOrWhiteSpace([string]$realImageMagickOperation.tool.version)) {
+            throw "real Gerber/TIFF execution evidence is missing probed tool versions."
+        }
+
+        $realTiffFiles = @(Get-ChildItem -LiteralPath $realOutput -File -Filter "*.tiff")
+        if ($realTiffFiles.Count -ne 1 -or $realTiffFiles[0].Length -le 0) {
+            throw "real Gerber/TIFF controlled conversion did not produce exactly one non-empty declared TIFF output."
+        }
+        $realOutputHash = (Get-FileHash -LiteralPath $realTiffFiles[0].FullName -Algorithm SHA256).Hash
+        $realTiffPointer = @($realRunJson.run.artifacts | Where-Object { $_.kind -eq "tiff-output" })[0]
+        if ($realTiffPointer.sha256 -ne $realOutputHash -or [int64]$realTiffPointer.size -ne $realTiffFiles[0].Length) {
+            throw "real Gerber/TIFF TIFF artifact pointer does not match the declared output identity."
+        }
+        $realInputHashAfter = (Get-FileHash -LiteralPath $realFixturePath -Algorithm SHA256).Hash
+        if ($realInputHashBefore -ne $realInputHashAfter) {
+            throw "real Gerber/TIFF controlled conversion changed the authorized source fixture."
+        }
+        $realJobPath = Join-Path $userProfile ".caicli\jobs\$realJobId.job.json"
+        $realJobText = [System.IO.File]::ReadAllText($realJobPath)
+        Assert-Contains $realJobText '"kind": "project-pack-conversion-output"' "real Gerber/TIFF job output pointer"
+        Assert-Contains $realJobText '"kind": "project-pack-execution-log"' "real Gerber/TIFF job log pointer"
+        Assert-Contains $realJobText '"taskReport": null' "real Gerber/TIFF no duplicate task report"
+        if (@(Get-ChildItem -LiteralPath $realRunRoot -Recurse -File -Filter "*.tmp").Count -ne 0) {
+            throw "real Gerber/TIFF controlled conversion left atomic temporary files behind."
+        }
+        $realProcessesAfter = @(Get-Process -Name "gerbv", "magick" -ErrorAction SilentlyContinue | Select-Object -ExpandProperty Id | Sort-Object)
+        if (@(Compare-Object -ReferenceObject $realProcessesBefore -DifferenceObject $realProcessesAfter).Count -ne 0) {
+            throw "real Gerber/TIFF controlled conversion left a gerbv or magick process behind."
+        }
+
+        Write-Host "real Gerber/TIFF conversion executed; TIFF engineering verification remains pending"
+        Write-Host "gerbv: $($realGerbvOperation.tool.version) SHA256=$realGerbvHash"
+        Write-Host "imagemagick: $($realImageMagickOperation.tool.version) SHA256=$realImageMagickHash"
+        Write-Host "input: SHA256=$realInputHashAfter"
+        Write-Host "output: $($realTiffFiles[0].Length) bytes SHA256=$realOutputHash"
     } else {
-        Write-Host "real Gerber/TIFF tool smoke skipped: set CAICLI_GERBER_TIFF_TOOL_SMOKE=1 after the Week 61 adapter is available."
+        Write-Host "real Gerber/TIFF tool smoke skipped: set CAICLI_GERBER_TIFF_TOOL_SMOKE=1 with CAICLI_GERBV_PATH and CAICLI_IMAGEMAGICK_PATH."
     }
 
     $skillsList = Invoke-CaiCli -Arguments @("skills", "list", "--workspace", $workspace)

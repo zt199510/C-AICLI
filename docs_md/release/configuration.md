@@ -104,6 +104,45 @@ Shell execution policy can be constrained from user or workspace config:
 
 `deniedCommands` take precedence over `allowedCommands`. An empty configured allowlist denies all shell commands. Prefix allowlist entries permit ordinary arguments but reject shell control and metacharacter syntax after the prefix. The policy applies before approval and before execution for `workspace.run_shell` and MCP stdio startup commands.
 
+## Gerber/TIFF External Tools (0.5.0 Source Preview)
+
+Controlled Gerber/TIFF conversion does not discover, install, download, or update external tools. Both mandatory
+executables must be bound explicitly for `packs plan` and `packs run`:
+
+```powershell
+$gerbv = "C:\Tools\gerbv\gerbv.exe"
+$magick = "C:\Tools\ImageMagick\magick.exe"
+
+caicli packs plan gerber-tiff `
+  --input .\samples\board-a `
+  --output-dir .\out\board-a `
+  --tool-path "gerbv=$gerbv" "imagemagick=$magick" `
+  --output json --workspace .
+```
+
+Tool bindings are invocation-local absolute paths. Workspace config, Project Pack plans, skills, prompts, models,
+input filenames, and environment variables cannot add executable names or flags. Plans persist only tool filename,
+size, SHA256, and dependency id; they do not persist the absolute executable path or an approval grant.
+
+`packs run` rechecks the plan, input hashes, output no-overwrite boundary, policy fingerprint, and static tool
+identity. A non-dry run also executes each fixed version probe and each external stage through the current approval
+policy. Use `--approval always` or legacy `--approve` only as an explicit invocation-local decision. Approval is
+never written as a resume/restart bypass.
+
+The release smoke script uses separate environment variables. They are smoke inputs, not ordinary runtime tool
+configuration:
+
+```powershell
+$env:CAICLI_GERBER_TIFF_TOOL_SMOKE = "1"
+$env:CAICLI_GERBV_PATH = "C:\Tools\gerbv\gerbv.exe"
+$env:CAICLI_IMAGEMAGICK_PATH = "C:\Tools\ImageMagick\magick.exe"
+tools\Invoke-SmokeTests.ps1
+```
+
+When `CAICLI_GERBER_TIFF_TOOL_SMOKE` is unset, default smoke does not require or start either tool and reports the
+real-tool branch as skipped. When it is `1`, both explicit paths are mandatory and a missing path fails the smoke.
+`CAICLI_USER_PROFILE` may still redirect managed runs and jobs for isolated validation; it does not select tools.
+
 ## User Config Example
 
 ```json

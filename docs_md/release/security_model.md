@@ -279,9 +279,43 @@ introduced.
 The protocol-v1/in-process fake driver is a known test fixture only. It validates state events for success,
 failure, timeout, cancellation, partial output, and interruption, but the CLI dry-run does not execute it.
 `succeeded`, file existence, metadata validity, artifact hashes, or preview availability does not establish
-real-tool or business correctness; `partial-output` is always failure evidence. Real Gerbv/ImageMagick execution,
-TIFF verification, human accept/reject commands, managed artifact prune, and automatic execute restart remain
-Deferred.
+real-tool or business correctness; `partial-output` is always failure evidence. At the Week 60 boundary,
+Gerbv/ImageMagick execution, TIFF verification, human accept/reject commands, managed artifact prune, and
+automatic execute restart were Deferred.
+
+Week 61 adds controlled Gerbv/ImageMagick execution as a 0.5.0 source-only Preview. The CLI accepts executable
+paths only through explicit dependency bindings. The adapter owns the exact Gerbv render and ImageMagick TIFF
+encode templates and builds `ProcessStartInfo.ArgumentList`; model output, prompts, skills, workspace manifests,
+filenames, plan JSON, and environment variables cannot add or reorder flags. It does not invoke a shell.
+
+Before a run is created, every mandatory tool executes its fixed version probe through current `shell`-risk
+approval. Before each conversion process starts, the adapter rechecks canonical executable path, regular-file and
+reparse status, filename allowlist, size, SHA256, probed version, staged input SHA256, declared output boundary,
+no-overwrite state, timeout, and policy. The approval request contains the exact canonical tool path, SHA256,
+version, input path/hash, output path, timeout, operation, fixed template id, and overwrite policy. Identity is
+checked again after approval and after process exit. Approval status may be retained as audit evidence, but no
+grant, token, override, or bypass is persisted in run/checkpoint/job/session/report state.
+
+External processes use an absolute executable, typed argument list, `UseShellExecute=false`, managed run cwd,
+unique managed temp directory, redirected stdin/stdout/stderr, and a cleared environment rebuilt from a small
+system allowlist. ImageMagick receives only its trusted install directory as `MAGICK_CONFIGURE_PATH` and the
+current managed temp directory as `MAGICK_TEMPORARY_PATH`; inherited delegate/module/policy variables are not
+accepted. Output, stdout/stderr characters, elapsed time, and process cleanup are bounded. Timeout/cancellation
+uses process-tree kill with structured `taskkill` fallback on Windows, records descendant/residual checks, and
+treats incomplete cleanup as interrupted terminal evidence.
+
+Gerbv intermediates stay under the managed run artifact root. TIFF files are written only to the explicit
+workspace output directory frozen by the deterministic plan. The directory and every output use create-new/
+no-overwrite semantics, reparse/containment checks, maximum size, SHA256 inventory, and an allowlist of declared
+filenames. Missing, empty, changed, oversized, unexpected, non-zero-exit, or stderr-producing output cannot be
+reported as successful conversion. Partial files remain failure evidence rather than accepted artifacts.
+
+A successful controlled conversion transitions `ready -> running -> verifying`; `inspect` and `review` remain
+pending. The redacted managed execution log records tool filename/version/SHA256, fixed template id, approval
+status, exit/duration, bounded stdout/stderr, cleanup status, and input/output hashes, but not absolute tool paths,
+raw argv, raw input, or approval material. `verifying` proves only that conversion executed and declared hashes
+were recorded. TIFF metadata/content/baseline verification, preview, human accept/reject, execute restart,
+artifact prune, scheduler, concurrent worker, remote runner, and API control remain Deferred.
 
 ## Changes View
 
@@ -332,7 +366,8 @@ Users can disable tools through `disabledTools` in user or workspace config. Dis
 - MCP stdio startup commands run dangerous command detection and shell policy checks before process start.
 - MCP startup policy failures surface safe diagnostics in `tools call mcp.*` when configured server/tool discovery is blocked, instead of only returning `unknown-tool`.
 - Remote/http MCP transport remains Deferred.
-- Gerber/TIFF project pack status/profile support exists, but real Gerber execution is Deferred.
+- Gerber/TIFF controlled conversion exists only in the 0.5.0 source Preview described above; TIFF verification,
+  human acceptance, and the complete workflow remain Deferred and outside the accepted 0.4.0 artifact.
 
 These deferred capabilities remain outside the accepted `0.4.0` release boundary.
 

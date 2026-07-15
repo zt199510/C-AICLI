@@ -426,6 +426,211 @@ public sealed class ProjectPackRunService
             result.ErrorCode ?? errorCode, result.Summary, artifacts: artifacts, stages: resultStages);
     }
 
+    public ProjectPackRunMutationResult ExecuteControlled(
+        string runId,
+        GerberTiffRunPlanSnapshot plan,
+        WorkspaceContext workspace,
+        IReadOnlyDictionary<string, string>? toolPaths,
+        string currentPolicyFingerprint,
+        IProjectPackRunDriver driver,
+        DateTimeOffset nowUtc,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(plan);
+        ArgumentNullException.ThrowIfNull(workspace);
+        ArgumentNullException.ThrowIfNull(driver);
+        ProjectPackRunReadResult read = store.Read(runId);
+        if (!read.Succeeded || read.Record is null || read.Checkpoint is null)
+        {
+            return FromReadFailure(read, runId);
+        }
+
+        ProjectPackRunRecord record = read.Record;
+        ProjectPackRunCheckpoint checkpoint = read.Checkpoint;
+        if (record.State != ProjectPackRunState.Ready ||
+            !string.Equals(record.PlanId, plan.PlanId, StringComparison.Ordinal) ||
+            !string.Equals(record.PlanFingerprint, plan.Fingerprint, StringComparison.OrdinalIgnoreCase))
+        {
+            return ProjectPackRunMutationResult.Failure(
+                ProjectPackRunErrorCode.TransitionInvalid,
+                "Controlled conversion only starts from the matching ready run state.",
+                runId: runId);
+        }
+
+        ProjectPackRunValidationResult validation = revalidator.Revalidate(
+            plan,
+            workspace,
+            toolPaths,
+            record.PolicyFingerprint,
+            currentPolicyFingerprint,
+            cancellationToken);
+        if (!validation.Succeeded)
+        {
+            return Fail(
+                record,
+                checkpoint,
+                validation.Diagnostic?.ErrorCode ?? ProjectPackRunErrorCode.PlanInvalid,
+                validation.Diagnostic?.Summary ?? "Controlled conversion pre-run validation failed.",
+                nowUtc);
+        }
+
+        ManagedProjectPackRunLayout layout = store.GetLayout(runId);
+        ProjectPackInputManifest manifest;
+        try
+        {
+            manifest = ProjectPackStagingService.LoadManifest(
+                ManagedProjectPackRunStore.ReadTextBounded(layout.InputManifestPath, 2 * 1024 * 1024));
+        }
+        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or ProjectPackContractException)
+        {
+            return Fail(record, checkpoint, ProjectPackRunErrorCode.RecordCorrupt,
+                "Controlled conversion input manifest could not be read safely.", nowUtc);
+        }
+
+        ProjectPackRunDiagnostic? stagedDiagnostic = staging.VerifyStaged(manifest, layout);
+        if (stagedDiagnostic is not null)
+        {
+            return Fail(record, checkpoint, stagedDiagnostic.ErrorCode, stagedDiagnostic.Summary, nowUtc);
+        }
+
+        if (cancellationToken.IsCancellationRequested)
+        {
+            return Cancel(runId, nowUtc);
+        }
+
+        ProjectPackStageCheckpoint[] runningStages = ReplaceStage(
+            checkpoint.Stages,
+            "render",
+            new ProjectPackStageCheckpoint("render", ProjectPackStageStatus.Running, 1, nowUtc));
+        ProjectPackRunMutationResult running = Advance(
+            record,
+            checkpoint,
+            ProjectPackRunState.Running,
+            nowUtc,
+            summary: "Controlled Gerber/TIFF conversion started after current revalidation; approvals are invocation-local.",
+            stages: runningStages);
+        if (!running.Succeeded || running.Record is null || running.Checkpoint is null)
+        {
+            return running;
+        }
+
+        record = running.Record;
+        checkpoint = running.Checkpoint;
+        ProjectPackRunDriverResult result;
+        try
+        {
+            result = driver.Execute(new ProjectPackRunExecutionContext(record, checkpoint, layout), cancellationToken);
+        }
+        catch (Exception exception) when (exception is IOException
+            or UnauthorizedAccessException
+            or InvalidOperationException
+            or ProjectPackContractException)
+        {
+            return Advance(
+                record,
+                checkpoint,
+                ProjectPackRunState.Interrupted,
+                nowUtc,
+                ProjectPackRunErrorCode.ExecutionFailed,
+                "Controlled conversion terminated without a trusted result; inspect partial outputs before restart.",
+                restartRequired: true,
+                stages: ReplaceRunningStages(checkpoint.Stages, nowUtc, ProjectPackRunErrorCode.ExecutionFailed));
+        }
+
+        ProjectPackStageCheckpoint[] resultStages;
+        try
+        {
+            resultStages = ApplyEvents(checkpoint.Stages, result.Events);
+        }
+        catch (ProjectPackContractException exception)
+        {
+            return Advance(
+                record,
+                checkpoint,
+                ProjectPackRunState.Interrupted,
+                nowUtc,
+                exception.ErrorCode,
+                "Controlled conversion returned invalid stage evidence; inspect outputs before restart.",
+                restartRequired: true,
+                stages: ReplaceRunningStages(checkpoint.Stages, nowUtc, exception.ErrorCode));
+        }
+
+        IReadOnlyList<ProjectPackRunArtifactPointer> artifacts = record.Artifacts.Concat(result.Outputs).ToArray();
+        if (result.Status == ProjectPackStageStatus.Succeeded)
+        {
+            int expected = manifest.Inputs.Count(input => input.PassedToExternalTool);
+            int renderCount = result.Outputs.Count(output => output.Kind == "render-intermediate" && output.Exists);
+            int tiffCount = result.Outputs.Count(output => output.Kind == "tiff-output" && output.Exists);
+            bool stagesComplete = resultStages.Any(stage => stage.StageId == "render" && stage.Status == ProjectPackStageStatus.Succeeded) &&
+                resultStages.Any(stage => stage.StageId == "encode" && stage.Status == ProjectPackStageStatus.Succeeded);
+            if (!stagesComplete || expected == 0 || renderCount != expected || tiffCount != expected)
+            {
+                return Advance(
+                    record,
+                    checkpoint,
+                    ProjectPackRunState.Failed,
+                    nowUtc,
+                    ProjectPackRunErrorCode.PartialOutput,
+                    "Controlled conversion did not produce the complete declared output inventory.",
+                    artifacts: artifacts,
+                    stages: resultStages);
+            }
+
+            return Advance(
+                record,
+                checkpoint,
+                ProjectPackRunState.Verifying,
+                nowUtc,
+                summary: "Gerber to TIFF conversion executed and declared output hashes were recorded; TIFF engineering verification is pending Week 62.",
+                artifacts: artifacts,
+                stages: resultStages);
+        }
+
+        if (result.Status == ProjectPackStageStatus.Canceled)
+        {
+            return Advance(
+                record,
+                checkpoint,
+                ProjectPackRunState.Canceled,
+                nowUtc,
+                result.ErrorCode ?? ProjectPackRunErrorCode.ExecutionCanceled,
+                result.Summary,
+                cancellationRequested: true,
+                artifacts: artifacts,
+                stages: resultStages);
+        }
+
+        if (result.Status == ProjectPackStageStatus.Interrupted)
+        {
+            return Advance(
+                record,
+                checkpoint,
+                ProjectPackRunState.Interrupted,
+                nowUtc,
+                result.ErrorCode ?? ProjectPackRunErrorCode.ProcessCleanupFailed,
+                result.Summary,
+                restartRequired: true,
+                artifacts: artifacts,
+                stages: resultStages);
+        }
+
+        string errorCode = result.ErrorCode ?? result.Status switch
+        {
+            ProjectPackStageStatus.TimedOut => ProjectPackRunErrorCode.ExecutionTimeout,
+            ProjectPackStageStatus.PartialOutput => ProjectPackRunErrorCode.PartialOutput,
+            _ => ProjectPackRunErrorCode.ExecutionFailed
+        };
+        return Advance(
+            record,
+            checkpoint,
+            ProjectPackRunState.Failed,
+            nowUtc,
+            errorCode,
+            result.Summary,
+            artifacts: artifacts,
+            stages: resultStages);
+    }
+
     public ProjectPackRunMutationResult Cancel(string runId, DateTimeOffset nowUtc)
     {
         ProjectPackRunReadResult read = store.Read(runId);
@@ -652,6 +857,22 @@ public sealed class ProjectPackRunService
         ProjectPackStageCheckpoint replacement) =>
         stages.Select(stage => stage.StageId == stageId ? replacement : stage).ToArray();
 
+    private static ProjectPackStageCheckpoint[] ReplaceRunningStages(
+        IReadOnlyList<ProjectPackStageCheckpoint> stages,
+        DateTimeOffset completedAtUtc,
+        string errorCode) =>
+        stages.Select(stage => stage.Status == ProjectPackStageStatus.Running
+            ? new ProjectPackStageCheckpoint(
+                stage.StageId,
+                ProjectPackStageStatus.Interrupted,
+                Math.Max(1, stage.Attempt),
+                stage.StartedAtUtc,
+                completedAtUtc,
+                errorCode,
+                "Controlled conversion stage ended without trusted terminal evidence.",
+                stage.Outputs)
+            : stage).ToArray();
+
     private static ProjectPackRunMutationResult FromReadFailure(ProjectPackRunReadResult read, string runId) =>
         ProjectPackRunMutationResult.Failure(
             read.Diagnostic?.ErrorCode ?? ProjectPackRunErrorCode.NotFound,
@@ -690,15 +911,31 @@ public sealed class ProjectPackRunService
         {
             try
             {
-                string fileName = Path.GetFileName(output.Path);
-                if (!string.Equals(output.Path, "artifacts/" + fileName, StringComparison.Ordinal))
+                string relativePath = output.Path.Replace('/', Path.DirectorySeparatorChar);
+                const string artifactPrefix = "artifacts/";
+                if (!output.Path.StartsWith(artifactPrefix, StringComparison.Ordinal) ||
+                    output.Path.Contains("..", StringComparison.Ordinal))
                 {
                     throw new IOException();
                 }
 
-                string path = Path.Combine(layout.ArtifactsPath, fileName);
+                string path = Path.GetFullPath(Path.Combine(layout.RunRoot, relativePath));
+                string artifactRoot = Path.TrimEndingDirectorySeparator(Path.GetFullPath(layout.ArtifactsPath)) +
+                    Path.DirectorySeparatorChar;
+                if (!path.StartsWith(
+                    artifactRoot,
+                    OperatingSystem.IsWindows() ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal))
+                {
+                    throw new IOException();
+                }
+
                 ManagedProjectPackRunStore.EnsureNoReparseInExistingChain(path);
                 FileInfo info = new(path);
+                if (!info.Exists)
+                {
+                    throw new IOException();
+                }
+
                 string sha256;
                 using (FileStream stream = new(path, FileMode.Open, FileAccess.Read, FileShare.Read, 128 * 1024, FileOptions.SequentialScan))
                 {
