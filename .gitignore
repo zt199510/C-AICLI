@@ -6,6 +6,14 @@ TestResults/
 artifacts/
 .worktrees/
 
+# Desktop / Node outputs
+node_modules/
+apps/desktop/dist/
+apps/desktop/out/
+apps/desktop/.vite/
+apps/desktop/.electron-cache/
+apps/desktop/resources/apphost/
+
 # User-specific IDE files
 .vs/
 .vscode/

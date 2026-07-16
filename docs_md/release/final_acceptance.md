@@ -2,19 +2,20 @@
 
 Current release acceptance is recorded in:
 
+- `docs_md/release/final_acceptance_0.5.0.md`
+- `docs_md/release/final_acceptance_0.4.0.md`
+- `docs_md/release/final_acceptance_0.3.3.md`
 - `docs_md/release/final_acceptance_0.3.0.md`
-- `docs_md/release/final_acceptance_0.2.1.md`
-- `docs_md/release/final_acceptance_0.2.0.md`
 
 ## Current Release
 
-- Version: `0.3.0`
+- Version: `0.5.0`
 - Runtime: `win-x64`
 - Target framework: `net9.0`
-- Release zip: `artifacts/release/caicli-0.3.0-win-x64.zip`
-- Release zip size: `32312392` bytes
-- Release zip SHA256: `030BF5AFCAB3365A15D296A73DA8967ED87D8ECF816F3B61ED990F97CB3FDFDA`
+- Release zip: `artifacts/release/caicli-0.5.0-win-x64.zip`
+- Release zip size: `55,966,314` bytes
+- Release zip SHA256: `CAFF04CB1CA7B028F6A4D0CB1A357BA4FCBD190B7C2D61679EB883E054C5E3AD`
 
 ## Decision
 
-Release `0.3.0` is accepted on 2026-07-12 as the real-agent development-loop release. Build, full tests, deterministic package verification, packaged smoke tests, version metadata, and release manifest checks passed. See `final_acceptance_0.3.0.md` for the current checklist, `final_acceptance_0.2.1.md` for the direct-agent readiness patch, and `final_acceptance_0.2.0.md` for the Week 27-38 baseline archive.
+Release `0.5.0` is accepted on 2026-07-15 as the Vertical Workflow Runtime and Gerber/TIFF v1 release. The controlled full test run, deterministic package verification, default packaged smoke, version/manifest/checksum diagnostics, and cleanup checks passed. Current-source Gerbv/ImageMagick opt-in smoke was not run and is an optional environment validation rather than a release Gate. See `final_acceptance_0.5.0.md` for the complete decision and bounded Accepted/Preview/Deferred scope.

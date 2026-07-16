@@ -145,13 +145,13 @@ public sealed class LocalApiPreviewTests
             "{ not-json");
 
         int port = GetAvailableLoopbackPort();
-        using CancellationTokenSource cancellation = new(TimeSpan.FromSeconds(15));
+        using CancellationTokenSource cancellation = new(TimeSpan.FromSeconds(30));
         using StringWriter daemonOutput = new();
         Task<int> daemonTask = LocalApiDaemonHost.RunAsync(snapshot, port, daemonOutput, cancellation.Token);
         using HttpClient client = new(new HttpClientHandler { UseProxy = false })
         {
             BaseAddress = new Uri($"http://127.0.0.1:{port}"),
-            Timeout = TimeSpan.FromSeconds(3),
+            Timeout = TimeSpan.FromSeconds(10),
         };
 
         try

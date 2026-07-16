@@ -161,7 +161,7 @@ and ZIP without creating a self-referential manifest hash.
 `-AllowDirtySource` is explicit and only for Week 64/local validation packages; those manifests record
 `sourceDirty=true` and `releaseAcceptance=false` and cannot be promoted to Accepted artifacts.
 
-## Managed Artifact Retention (0.5.0 Source Preview)
+## Managed Artifact Retention (0.5.0)
 
 Artifact lifecycle state is stored under the same user-level managed root as Project Pack runs. The optional
 user config value below changes only the default age used when `artifacts prune` omits `--older-than`:

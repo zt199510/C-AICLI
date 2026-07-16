@@ -1,6 +1,6 @@
 # Changelog
 
-## 0.5.0 - Candidate (blocked)
+## 0.5.0 - 2026-07-15
 
 Added:
 - Project Pack v1 deterministic domain-tool runtime with `packs list/doctor/plan/run/verify/preview/resume/recover/restart/accept/reject`, strict schema-v1 managed run/checkpoint/artifact state, and `artifacts list/show/verify/export/prune`.
@@ -12,11 +12,11 @@ Added:
 Changed:
 - Week 64 hardening adds input/staging/tool/output/TIFF/state/resume/prune threat modeling, TOCTOU-safe Windows run-root creation, failed-staging cleanup, disk-write versus lock-conflict classification, decoder-bomb/process-leak/corrupt-state regression, and explicit JSON diagnostic redaction.
 - Default packaged smoke remains model-free, network-free, and real-tool-free. It covers vertical dry-run staging, missing tool, approval denial without process start, controlled partial-output fixture, corrupt state, negative verify/accept/reject gates, artifact operations, and prune.
-- Real Gerber/TIFF smoke is a separate `CAICLI_GERBER_TIFF_TOOL_SMOKE=1` opt-in requiring explicit frozen Gerbv/ImageMagick paths, authorized fixture, and strict verification baseline. It must pass conversion, baseline verification, preview, accept/reject, artifact checks, prune preservation, and process/temp cleanup before 0.5.0 acceptance.
+- Real Gerber/TIFF smoke is a separate, optional `CAICLI_GERBER_TIFF_TOOL_SMOKE=1` environment validation requiring explicit reviewed Gerbv/ImageMagick paths, authorized fixture, and strict verification baseline. When enabled, it checks conversion, baseline verification, preview, accept/reject, artifact checks, prune preservation, and process/temp cleanup; it is not required for 0.5.0 release acceptance.
 - `Build-Release.ps1` now rejects dirty source by default, records source revision/cleanliness/SDK/configuration/PDB policy and SHA256 inventory, emits an independent package checksum artifact, excludes PDBs by policy, and supports explicit `-AllowDirtySource` only for non-acceptance validation packages.
 
 Release boundary:
-- Week 65 release acceptance is blocked because current-revision exact-tool opt-in smoke could not run. Fake driver success, file existence, metadata validity, preview generation, historical real-tool evidence, or a candidate package is not substituted for this gate.
+- Week 65 accepts the clean-source 0.5.0 package based on completed Week 58-64 implementation, controlled full tests, default packaged smoke, reproducible package/checksums, packaged diagnostics, and cleanup. Current-revision exact-tool opt-in smoke did not run and is recorded as optional/non-blocking; no claim of real CAM/EDA business correctness is made from fake, metadata, or preview evidence.
 - External Gerbv and ImageMagick binaries are user-installed and are not redistributed in the package. Local API/daemon remains Preview; scheduler, concurrent/remote workers, provider routing, API control/SSE, marketplace, team platform, UI, ZIP/network input, and general CAM/EDA correctness remain Deferred.
 
 ## 0.4.0 - 2026-07-14

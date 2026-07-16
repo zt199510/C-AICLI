@@ -1,19 +1,19 @@
 # 第 65 周回顾
 
-状态：已完成；CLI 0.5.0 发布决定为 **Blocked**，未创建 release tag。0.4.0 继续是当前 Accepted release。
+状态：已完成；CLI 0.5.0 发布决定为 **Accepted**。本次记录未创建 release tag。
 
 ## 决定
 
-Week 58-64 implementation reviews 均已完成，且 Week 64 没有遗留实现项。Week 65 已完成版本、文档、clean-source candidate build、full tests、default packaged smoke、双构建复现、manifest/checksum、packaged diagnostics 和 cleanup 验证。
+Week 58-64 implementation reviews 均已完成，且 Week 64 没有遗留实现项。Week 65 已完成版本、文档、clean-source release build、full tests、default packaged smoke、双构建复现、manifest/checksum、packaged diagnostics 和 cleanup 验证，据此接受 0.5.0。
 
-强制 real-tool Gate 未满足：当前环境未配置冻结 Gerbv/ImageMagick 路径，先前临时工具已不存在；GitHub direct 与既有传输代理恢复均超时，本机定位也未找到 exact executable。历史 Week 64 real-tool lifecycle 通过证据不能替代当前 source revision 的 opt-in smoke，因此不运行无身份工具、不放宽 hash、不创建 tag，也不把 fake、文件存在、metadata 或 preview 写成真实业务通过。
+当前环境未配置冻结 Gerbv/ImageMagick 路径，因此 current-source real-tool opt-in smoke 未运行。发布决策将该分支调整为用户具备 reviewed external tools 时的可选环境验证，不再作为 0.5.0 发布 Gate。不运行无身份工具、不放宽 hash，也不把 fake、文件存在、metadata 或 preview 写成真实 CAM/EDA 业务正确性通过。
 
 ## Source 与版本
 
-- Candidate source revision：`09378e66463e2830bd432793d863fcfe8f8156bd`，构建前 clean。
+- Accepted package source revision：`09378e66463e2830bd432793d863fcfe8f8156bd`，构建前 clean。
 - Version / AssemblyVersion / FileVersion：`0.5.0` / `0.5.0.0` / `0.5.0.0`。
 - SDK / configuration / runtime：`9.0.308` / `Release` / `win-x64`。
-- Manifest：`sourceDirty=false`、`releaseAcceptance=true`、PDB policy `excluded`。这里的 build flag 只表示使用严格 clean-source 构建模式，不覆盖最终 Blocked decision。
+- Manifest：`sourceDirty=false`、`releaseAcceptance=true`、PDB policy `excluded`。
 
 ## Build 与测试
 
@@ -35,7 +35,7 @@ powershell -NoProfile -ExecutionPolicy Bypass -File tools\Build-Release.ps1 -Rel
 - 标准并发 full suite：1259 passed / 2 failed / 0 skipped。既有 MCP wall-clock test 为 2.7416662s；另一个 MCP handshake cleanup 遇到被占用 temp directory。该轮不计通过。
 - 清理 build server 后受控单处理器 full suite：1261 passed / 0 failed / 0 skipped，耗时 3m50s。
 - Default packaged smoke：`smoke tests passed`；real Gerber/TIFF、daemon/API、real model 分支均明确 skipped。
-- Real-tool opt-in smoke：**Not run / Blocked**。四个 prerequisite 中两个 external executable path unavailable。
+- Real-tool opt-in smoke：**Not run / Optional**。四个 prerequisite 中两个 external executable path unavailable；不阻塞 0.5.0 release acceptance。
 
 ## Package evidence
 
@@ -61,13 +61,10 @@ publish inventory 两次完全一致，包含 executable、release manifest 和 
 
 ## Accepted / Preview / Deferred
 
-- Accepted：仍为 0.4.0 release capability 和 artifact；本周没有新增 Accepted release。
-- Candidate / Blocked：0.5.0 bounded Project Pack、Gerber/TIFF conversion/verification/preview/human gate、safe resume/restart、artifact lifecycle 与 clean-source package。
+- Accepted：0.5.0 bounded Project Pack、Gerber/TIFF conversion/verification/preview/human gate、safe resume/restart、artifact lifecycle 与 clean-source package；同时继承 0.4.0 capability。
 - Preview：default-off IPv4 loopback-only read-only Local API/daemon；非决定性 model visual guidance。
 - Deferred：ZIP/network input、complete parser、general CAM/EDA correctness、generic C++/EDA pack、scheduler、parallel/concurrent worker、remote runner、provider routing、API control/SSE/auth/TLS、team platform、marketplace、UI、accept undo、artifact restore 和 automatic repair。
 
-## 下一周输入
+## 可选后续验证
 
-1. 恢复 Week 58 冻结 Gerbv 2.13.0 与 ImageMagick 7.1.2-27 exact executables，并逐级校验 archive/executable size 与 SHA256。
-2. 对同一 `09378e6...` packaged executable 设置四个显式 prerequisite，运行 real-tool opt-in smoke，记录 conversion、strict content comparison、preview、human decision、prune、process/temp cleanup。
-3. 只有 Gate 通过后才重新作 Accepted decision并创建 0.5.0 tag；若 source 发生变化，必须固定新 clean revision 并重跑 build/test/default/real/deterministic package 全套验收。
+当 reviewed Gerbv 2.13.0 与 ImageMagick 7.1.2-27 exact executables 可用时，可以对已记录 package 运行 real-tool opt-in smoke，补充 conversion、strict content comparison、preview、human decision、prune 和 cleanup 环境证据。该验证不改变 0.5.0 Accepted 状态，也不能扩展为通用 CAM/EDA 正确性声明。

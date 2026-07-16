@@ -1,0 +1,87 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "protocolVersion": "desktop-v1",
+  "limits": {
+    "maxHeaderBytes": 8192,
+    "maxBodyBytes": 1048576,
+    "maxDiagnosticBytes": 16384
+  },
+  "methods": [
+    {
+      "constant": "InitializeMethod",
+      "name": "app.initialize",
+      "params": "InitializeParams",
+      "result": "InitializeResult"
+    },
+    {
+      "constant": "WorkspaceOpenMethod",
+      "name": "workspace.open",
+      "params": "WorkspaceOpenParams",
+      "result": "WorkspaceOpenResult"
+    },
+    {
+      "constant": "ShutdownMethod",
+      "name": "app.shutdown",
+      "params": "ShutdownParams",
+      "result": "ShutdownResult",
+      "internal": true
+    }
+  ],
+  "types": [
+    {
+      "name": "InitializeParams",
+      "properties": [
+        { "jsonName": "protocolVersion", "type": "string" },
+        { "jsonName": "clientName", "type": "string" },
+        { "jsonName": "clientVersion", "type": "string" }
+      ]
+    },
+    {
+      "name": "SecuritySummary",
+      "properties": [
+        { "jsonName": "rendererNodeAccess", "type": "boolean" },
+        { "jsonName": "arbitraryFileAccess", "type": "boolean" },
+        { "jsonName": "arbitraryProcessAccess", "type": "boolean" },
+        { "jsonName": "transport", "type": "string" }
+      ]
+    },
+    {
+      "name": "InitializeResult",
+      "properties": [
+        { "jsonName": "protocolVersion", "type": "string" },
+        { "jsonName": "serverVersion", "type": "string" },
+        { "jsonName": "capabilities", "type": "string[]" },
+        { "jsonName": "security", "type": "SecuritySummary" }
+      ]
+    },
+    {
+      "name": "WorkspaceOpenParams",
+      "properties": [
+        { "jsonName": "path", "type": "string" }
+      ]
+    },
+    {
+      "name": "WorkspaceOpenResult",
+      "properties": [
+        { "jsonName": "success", "type": "boolean" },
+        { "jsonName": "workspaceId", "type": "string?" },
+        { "jsonName": "rootPath", "type": "string?" },
+        { "jsonName": "status", "type": "string" },
+        { "jsonName": "errorCode", "type": "string?" },
+        { "jsonName": "safeMessage", "type": "string" }
+      ]
+    },
+    {
+      "name": "ShutdownParams",
+      "properties": [
+        { "jsonName": "reason", "type": "string?" }
+      ]
+    },
+    {
+      "name": "ShutdownResult",
+      "properties": [
+        { "jsonName": "accepted", "type": "boolean" }
+      ]
+    }
+  ]
+}

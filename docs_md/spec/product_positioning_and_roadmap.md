@@ -1,10 +1,10 @@
 # C-AICLI 产品定位与路线护栏
 
-更新时间：2026-07-14
+更新时间：2026-07-15
 
 ## 一句话定位
 
-C-AICLI 是一个 Windows-first、C#/.NET-first、私有模型友好、可审计的本地工程 Agent CLI。
+C-AICLI 是一个 Windows-first、C#/.NET-first、私有模型友好、可审计的本地工程 Agent Runtime；CLI 是稳定底座，0.6.0 起提供可选 Desktop App 产品界面。
 
 它不是 Codex CLI、Claude Code、Cursor、Lovable、Replit Agent 或 WorkBuddy 的替代品。它的目标是成为一个开发者和团队可以完全掌控的工程 Agent 底座：模型调用可配置，工具执行可审计，安全策略可验证，执行过程可追踪，并能逐步承载垂直工程工作流。
 
@@ -59,7 +59,7 @@ C-AICLI 的价值在于可控性和工程化：
 - 不做通用聊天工具。
 - 不做 Codex CLI 或 Claude Code 的完整克隆。
 - 不优先做 IDE 或编辑器。
-- 不优先做桌面 WorkBuddy 式工作台。
+- 不做以办公套件、IM 控制或团队平台为核心的 WorkBuddy 式桌面工作台。
 - 不进入 Lovable、Replit、Bolt、v0 的一句话生成 App 赛道。
 - 不在 0.2.x 或 0.3.x 早期做企业 IM 远程控制、团队知识库或复杂权限平台。
 - 不为了演示效果绕过安全审批、workspace 边界、secret redaction 或 release smoke。
@@ -171,7 +171,7 @@ C-AICLI 的价值在于可控性和工程化：
 
 ### 0.5.0：垂直工程工作流与 Gerber/TIFF v1
 
-状态：candidate/blocked；Week 58-64 垂直工作流与安全加固已收口，但 Week 65 无法取得当前 source revision 的冻结 Gerbv/ImageMagick opt-in smoke 证据，因此未作 Accepted 决定。历史真实工具证据、fake smoke、metadata 或 preview 均不替代该 Gate。
+状态：已完成，已在 2026-07-15 验收为当前 release。Week 58-64 垂直工作流与安全加固已收口，Week 65 的 clean-source build、full tests、default packaged smoke、可复现 package、manifest/checksum、packaged diagnostics 和 cleanup 均已通过。冻结 Gerbv/ImageMagick opt-in smoke 调整为用户具备对应外部工具时的可选环境验证，不再作为 0.5.0 发布 Gate；本次未运行该分支，不代表真实 CAM/EDA 业务正确性已被验证。
 
 目标：第一次用真实 Gerber/TIFF 工程场景验证 0.4.0 的 queue、job、pipeline、artifact、安全和报告底座，形成“发现输入 -> 诊断工具 -> 计划 -> 审批执行 -> TIFF 验证 -> 人工验收 -> artifact 清理”的本地可审计闭环。
 
@@ -188,14 +188,34 @@ C-AICLI 的价值在于可控性和工程化：
 
 0.5.0 不同时扩展为通用 C++、EDA 或团队平台。Background scheduler、并行写 worker、自动 provider routing、API control/SSE、远程执行、团队权限、插件市场、桌面/Web UI 和自研完整 Gerber parser 继续 Deferred。
 
-### 0.6.0+：后续垂直能力和团队化
+### 0.6.0：本地工程 Agent Desktop App Preview
+
+状态：方向已确认，进入排期与实现准备。
+
+目标：在 0.5.0 已验收的本地 Agent Runtime、任务编排、审批、报告、artifact 和 Gerber/TIFF 工作流之上，提供 Windows-first 的任务聊天与结果复核界面。
+
+产品策略采用 **80% Codex App + 20% WorkBuddy**：
+
+- 主界面使用 Codex App 式 task thread、聊天时间线、审批和结果复核。
+- 左侧吸收 WorkBuddy 的多任务和历史任务管理。
+- 输入区吸收 Skills、Experts 和 Automation 入口。
+- 右侧展示 Changes、Terminal、Reports、Artifacts 和 Gerber/TIFF Preview。
+- 后续任务量和 Automation 增多后，再评估独立 WorkBuddy 式任务中心。
+
+技术方向：Electron + React + TypeScript Desktop shell，连接新的 .NET Application/AppHost 层。App 不解析 CLI 文本，不通过无认证 localhost API 增加控制路由，并继续复用 approval、workspace guard、secret redaction、trace/session/report/job/artifact 和 release smoke 边界。
+
+详细开发框架统一维护在 `docs_md/spec/desktop_app_development_framework_0_6_0.md`。
+
+0.6.0 不扩展到浏览器 Web UI、远程控制、团队权限、后台 scheduler、并发写 worker、插件市场、IDE 或办公套件。
+
+### 0.7.0+：后续垂直能力和团队化
 
 候选方向：
 
 - 通用 C++ 验证工作流和 EDA 辅助流程。
 - 企业内部 MCP server、受控插件分发和团队审计。
 - 在本地垂直工作流稳定后评估 scheduler、并发只读 worker 和 provider integration。
-- 远程入口、团队知识库、权限平台以及可选桌面/Web 工作台必须作为独立产品线评估。
+- 远程入口、团队知识库、权限平台以及浏览器 Web 工作台必须作为独立产品线评估。
 
 ## 目标偏离检查清单
 
@@ -204,7 +224,7 @@ C-AICLI 的价值在于可控性和工程化：
 1. 这个功能是否强化 Windows-first、C#/.NET-first 或私有模型友好的定位？
 2. 这个功能是否提升可审计性、安全性、可诊断性或工程工作流交付质量？
 3. 这个功能是否服务本地工程 agent，而不是变成通用聊天、办公助手或 App builder？
-4. 这个功能是否可以通过 CLI 清晰表达，而不需要过早引入桌面 UI？
+4. 这个功能是否建立在稳定 CLI/Runtime contract 上，而不是在 Desktop 中复制执行或安全逻辑？
 5. 这个功能是否能被 build/test/smoke/release docs 验证？
 6. 这个功能是否会绕过审批、安全边界、secret redaction 或 workspace guard？
 7. 这个功能是否比当前版本主线更重要？如果不是，应进入后续小版本或 backlog。

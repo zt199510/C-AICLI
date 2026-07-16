@@ -160,8 +160,7 @@ MCP config/list/doctor are available. User-configured stdio MCP servers can be d
 
 Local skills are lightweight workflow packs. `skills list` shows built-in packs plus workspace-local JSON manifests under `.caicli/skills`. `skills run <name> --dry-run -- <task>` expands the selected pack into expert/report/reference/safety/validation metadata without calling a model, writing files, running shell, or starting MCP. Non-dry-run `skills run` uses the same agentic safety path as `exec`; pack validation commands are hints and do not execute directly. Remote skill marketplaces, automatic updates, YAML manifests, and user-level skill directories remain enhanced Deferred capabilities. Project Packs are a separate deterministic domain-tool surface and are not model-guided skills.
 
-The future 0.5.0 source tree also contains a Project Pack Preview. These commands are not part of the accepted
-0.4.0 package:
+The accepted 0.5.0 package includes the bounded Project Pack v1 command surface:
 
 ```powershell
 caicli packs list --output json --workspace .
@@ -177,7 +176,7 @@ bindings only inspects regular-file identity and SHA256; it does not start the t
 `packs doctor --probe` may start a fixed version probe, and it still requires current approval. Plan output uses
 workspace-relative paths and does not store raw Gerber, drill, sidecar, or unknown file content.
 
-Week 61 source Preview adds controlled Gerber -> TIFF execution. Save the JSON plan without changing it, then
+The accepted 0.5.0 workflow includes controlled Gerber -> TIFF execution. Save the JSON plan without changing it, then
 choose dry-run staging or an explicit real conversion:
 
 ```powershell
@@ -206,7 +205,7 @@ area, refuses existing outputs, captures bounded/redacted process evidence, and 
 A successful Week 61 run stops in `verifying`; this means conversion executed and declared output hashes were
 recorded. It does not mean TIFF metadata/content/baseline verification passed.
 
-Week 62 source Preview adds bounded TIFF verification and managed human-review previews. Use the `runId` returned
+The accepted 0.5.0 workflow includes bounded TIFF verification and managed human-review previews. Use the `runId` returned
 by `packs run`:
 
 ```powershell
@@ -229,7 +228,7 @@ stable no-overwrite PNG/contact-sheet evidence under managed artifacts. Preview 
 the CLI never opens or uploads it. Baseline creation/update remains manual; a failed verification never replaces
 its baseline.
 
-Week 63 source Preview adds the explicit human and artifact lifecycle commands:
+The accepted 0.5.0 workflow includes the explicit human and artifact lifecycle commands:
 
 ```powershell
 caicli packs resume <run-id> --tool-path "gerbv=C:\Tools\gerbv.exe" "imagemagick=C:\Tools\magick.exe" --output json --workspace .

@@ -2,7 +2,7 @@
 
 ## Release Scope
 
-- Version `0.4.0` remains the current accepted local Windows release. Version `0.5.0` is a blocked candidate because current-revision exact-tool opt-in smoke evidence is unavailable.
+- Version `0.5.0` is the current accepted local Windows release. Its current-revision exact-tool opt-in smoke was not run and is not a release Gate; users who configure reviewed Gerbv/ImageMagick executables can run it as an optional environment validation.
 - The primary supported artifact is the `win-x64` self-contained single-file package.
 - Dotnet tool packaging is not part of the `0.5.0` release package.
 - Project Pack is a deterministic domain-tool flow, not a skill. The model cannot generate or extend real Gerbv/ImageMagick arguments. Only the frozen single-layer authorized fixture/toolchain path has real conversion and strict verification evidence; this is not general CAM/EDA manufacturing correctness.

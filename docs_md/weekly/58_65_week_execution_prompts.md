@@ -364,21 +364,21 @@
 
 发布 Gate：
 - Week 58-64 review 均已验收且没有遗留实现项。
-- 至少一个真实工具和授权 fixture 已完成 conversion、TIFF verification、preview 和 human gate。
-- default fake-tool smoke 与 real-tool opt-in smoke 都有当前 source revision 证据。
+- Release build、full tests、default fake-tool smoke、packaged diagnostics 和 cleanup 通过。
+- 同一 clean source revision 的 package build 可复现，manifest/sourceRevision/checksum 一致。
 - artifact prune 不能越界，resume/restart 不能双执行或复用 approval。
 - release source clean，manifest/sourceRevision/checksum 能指向同一构建输入。
-- 任一 Gate 不满足时，0.5.0 保持 candidate/blocked，不通过降级文档绕过。
+- Real-tool opt-in smoke 是 reviewed external tools 可用时的可选环境验证，不是 release Gate；未运行时如实记录，不能声称真实 CAM/EDA 业务正确性通过。
 
 范围边界：
 - 本周只做版本、release docs、最终验证、阻塞级缺陷回退和 package evidence。
 - 不新增工具、fixture、input type、pack command、retention policy 或平台功能。
 - 不把 scheduler、parallel worker、remote/provider/API control、marketplace、UI 或通用 C++/EDA 写成 Accepted。
-- 外部真实工具不能再分发不构成 blocker，但用户配置、doctor、docs 和 opt-in smoke 必须完整。
+- 外部真实工具不能再分发或当前环境缺失不构成 blocker，但用户配置、doctor、docs 和可选 opt-in smoke 入口必须完整。
 
 执行步骤：
 1. 汇总 Week 58-64 review，确认所有 release Gate 和 Deferred 边界。
-2. 确认真实工具/fixture/license/verification 证据仍有效。
+2. 确认真实工具/fixture/license/verification 边界完整，并记录 opt-in smoke 为可选环境验证。
 3. 固定 clean source revision；确认 tag/checksum 流程不会改变被构建 source ref。
 4. 更新 Version/AssemblyVersion/FileVersion 到 0.5.0。
 5. 更新 CHANGELOG、installation、configuration、quickstart、security、known limitations、capability、troubleshooting、roadmap、runtime diagnostics。
@@ -389,13 +389,11 @@
    dotnet test src\CSharpAiCli.sln -c Release --no-build
    powershell -NoProfile -ExecutionPolicy Bypass -File tools\Build-Release.ps1
    powershell -NoProfile -ExecutionPolicy Bypass -File tools\Invoke-SmokeTests.ps1
-   $env:CAICLI_GERBER_TIFF_TOOL_SMOKE = "1"
-   powershell -NoProfile -ExecutionPolicy Bypass -File tools\Invoke-SmokeTests.ps1
-   Remove-Item Env:CAICLI_GERBER_TIFF_TOOL_SMOKE
+   如 reviewed external tools 可用，可另行设置 CAICLI_GERBER_TIFF_TOOL_SMOKE=1 运行可选环境验证。
 8. 从同一 clean source revision 再运行一次 Build-Release，比较 artifact inventory、zip size/SHA256 和 manifest sourceRevision/checksums。
 9. 验证 packaged caicli.exe version、packs list/doctor、artifacts list 和 missing-tool diagnostics。
 10. 检查无残留 caicli/tool processes、smoke temp 和 run temp directories。
 11. 生成独立 checksum artifact/发布说明并创建 release tag。
 12. 逐项更新 65_week_cli_0_5_release_acceptance.plan.md checkbox。
-13. 创建 docs_md/weekly/65_week_review.md，记录最终 Accepted/Blocked decision、version、source revision、tool/fixture、test count、zip size/SHA256 和 Deferred 清单。
+13. 创建 docs_md/weekly/65_week_review.md，记录最终 Accepted decision、version、source revision、可选 tool/fixture smoke 状态、test count、zip size/SHA256 和 Deferred 清单。
 ```

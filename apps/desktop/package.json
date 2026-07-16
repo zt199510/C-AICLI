@@ -1,0 +1,50 @@
+{
+  "name": "@caicli/desktop",
+  "version": "0.6.0",
+  "private": true,
+  "type": "module",
+  "main": "dist/main/index.js",
+  "scripts": {
+    "generate:contracts": "node scripts/generate-contracts.mjs",
+    "check:contracts": "node scripts/generate-contracts.mjs --check",
+    "generate:notices": "node scripts/generate-notices.mjs",
+    "check:notices": "node scripts/generate-notices.mjs --check",
+    "typecheck": "tsc --noEmit",
+    "lint": "eslint .",
+    "test": "vitest run",
+    "build:main": "node scripts/build-main.mjs",
+    "build:renderer": "vite build",
+    "check:production-security": "node scripts/check-production-security.mjs",
+    "build": "npm run generate:contracts && npm run generate:notices && npm run typecheck && npm run build:main && npm run build:renderer && npm run check:production-security",
+    "verify": "npm run check:contracts && npm run check:notices && npm run typecheck && npm run lint && npm test && npm run build",
+    "dev:renderer": "vite --host 127.0.0.1",
+    "start": "electron .",
+    "package:apphost": "powershell -NoProfile -ExecutionPolicy Bypass -File ../../tools/Publish-AppHost.ps1",
+    "package:dir": "npm run build && npm run package:apphost && node scripts/package-desktop.mjs"
+  },
+  "dependencies": {
+    "lucide-react": "1.24.0",
+    "react": "19.2.7",
+    "react-dom": "19.2.7"
+  },
+  "devDependencies": {
+    "@electron/packager": "20.0.2",
+    "@eslint/js": "10.0.1",
+    "@types/node": "26.1.1",
+    "@types/react": "19.2.17",
+    "@types/react-dom": "19.2.3",
+    "@vitejs/plugin-react": "6.0.3",
+    "electron": "41.1.0",
+    "esbuild": "0.28.1",
+    "eslint": "10.7.0",
+    "globals": "17.7.0",
+    "typescript": "6.0.3",
+    "typescript-eslint": "8.64.0",
+    "vite": "8.1.4",
+    "vitest": "4.1.10"
+  },
+  "engines": {
+    "node": ">=22.13.0",
+    "npm": ">=11.7.0"
+  }
+}

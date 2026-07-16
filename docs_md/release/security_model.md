@@ -216,7 +216,7 @@ API control routes, queue workers, automation/pipeline execution, SSE, browser U
 
 ## Project Pack v1 Release Boundary
 
-Project Pack v1 is the deterministic domain-tool contract in the blocked 0.5.0 candidate and is not a model-guided skill. Models, prompts, skills, pipeline roles, automation manifests, and workspace files cannot create or extend real executable names, arguments, cwd, environment, or output paths.
+Project Pack v1 is the deterministic domain-tool contract in the accepted 0.5.0 release and is not a model-guided skill. Models, prompts, skills, pipeline roles, automation manifests, and workspace files cannot create or extend real executable names, arguments, cwd, environment, or output paths.
 
 `packs list` and default `packs doctor` are model-free, network-free static paths. Static doctor accepts only explicit tool bindings, checks a canonical regular file, executable filename allowlist, reparse-point chain, size, SHA256, and optional trusted hash, and does not start a process or request approval. Generic manifest/identity/plan/stage/artifact/diagnostic DTOs do not contain user-machine absolute tool paths or Gerber/TIFF-specific fields.
 
@@ -243,7 +243,7 @@ requires every mandatory static tool identity to be available, but it is not exe
 Week 60/61 must revalidate the fingerprint, tool/input/output/policy state and obtain new approval before any
 process starts.
 
-Week 60 adds managed run staging and checkpoint foundations as 0.5.0 source-only Preview. `packs run` requires an
+Week 60 introduced managed run staging and checkpoint foundations, now included in the accepted 0.5.0 release. `packs run` requires an
 existing workspace-local `packs.plan` JSON file and `--dry-run`; omitting `--dry-run` fails before job or run state
 is created. The plan is bounded, schema checked, and projected into a sanitized managed copy so unknown fields,
 raw input content, approval material, and arbitrary tool arguments are not persisted.
@@ -283,7 +283,7 @@ real-tool or business correctness; `partial-output` is always failure evidence. 
 Gerbv/ImageMagick execution, TIFF verification, human accept/reject commands, managed artifact prune, and
 automatic execute restart were Deferred.
 
-Week 61 adds controlled Gerbv/ImageMagick execution as a 0.5.0 source-only Preview. The CLI accepts executable
+Week 61 introduced controlled Gerbv/ImageMagick execution, now included in the accepted 0.5.0 release. The CLI accepts executable
 paths only through explicit dependency bindings. The adapter owns the exact Gerbv render and ImageMagick TIFF
 encode templates and builds `ProcessStartInfo.ArgumentList`; model output, prompts, skills, workspace manifests,
 filenames, plan JSON, and environment variables cannot add or reorder flags. It does not invoke a shell.
@@ -316,7 +316,7 @@ status, exit/duration, bounded stdout/stderr, cleanup status, and input/output h
 raw argv, raw input, or approval material. `verifying` proves only that conversion executed and declared hashes
 were recorded.
 
-Week 62 adds bounded TIFF inspection and preview as a 0.5.0 source-only Preview. It uses the managed
+Week 62 introduced bounded TIFF inspection and preview, now included in the accepted 0.5.0 release. It uses the managed
 `Magick.NET-Q8-x64 14.15.0` binding for the Week 58-validated ImageMagick 7.1.2-27 codec. This is an in-process
 library call, not execution of a user-selected executable: it cannot add argv/env/cwd, does not invoke a shell,
 and does not reuse or persist conversion approval. The external Gerbv/`magick.exe` conversion path retains every
@@ -348,8 +348,8 @@ Preview generation is permitted only after hard verification, is not a correctne
 viewer, uploads data, or uses model vision. Human accept/reject, execute restart, artifact prune, scheduler,
 concurrent worker, remote runner, and API control remain Deferred.
 
-Week 63 adds managed artifact lifecycle, human acceptance, safe resume, and explicit execute restart as a 0.5.0
-source-only Preview. Every run update maintains a strict `artifact-manifest.json` index with deterministic
+Week 63 introduced managed artifact lifecycle, human acceptance, safe resume, and explicit execute restart, now
+included in the accepted 0.5.0 release. Every run update maintains a strict `artifact-manifest.json` index with deterministic
 artifact id, run/job/queue/attempt owner, ownership boundary, relative path, size/SHA256, verification label,
 retention class, availability, and optional retained tombstone. Missing, unknown-field, unsupported-schema,
 revision/state/owner mismatch, pointer mismatch, corrupt, or reparse manifests fail closed and are not repaired.
@@ -389,7 +389,7 @@ and a manifest/job tombstone with the original path/size/SHA256/reason/time. Sou
 TIFF, external, pending/running/interrupted/corrupt, and metadata files are never candidates. There is no
 background retention worker, scheduler, shared/remote store, cascading session/trace deletion, or API control.
 
-Week 64 hardens this source Preview without adding a new pack, tool, input type, worker, remote/API surface, or
+Week 64 hardened this workflow without adding a new pack, tool, input type, worker, remote/API surface, or
 tool argument. Windows run roots use atomic create-new semantics. Staging tracks only files it created and removes
 them when TOCTOU mutation, cancellation, copy, or post-copy identity checks fail. Store write failures distinguish
 sharing/lock contention from disk/permission write failure instead of reporting every `IOException` as a concurrent
@@ -464,11 +464,10 @@ Users can disable tools through `disabledTools` in user or workspace config. Dis
 - MCP startup policy failures surface safe diagnostics in `tools call mcp.*` when configured server/tool discovery is blocked, instead of only returning `unknown-tool`.
 - Remote/http MCP transport remains Deferred.
 - Gerber/TIFF controlled conversion, bounded TIFF verification/preview, human acceptance, safe resume/restart,
-  and managed artifact lifecycle exist only in the 0.5.0 source Preview described above. Week 64 source hardening
-  is implemented but final verification evidence and Week 65 release acceptance remain incomplete; all vertical workflow source changes stay outside the
-  accepted 0.4.0 artifact.
+  and managed artifact lifecycle are accepted 0.5.0 capabilities. Current-source exact-tool smoke is an optional
+  environment validation and was not run for the release decision; this does not establish general CAM/EDA correctness.
 
-These deferred capabilities remain outside the accepted `0.4.0` release boundary.
+The remaining deferred capabilities stay outside the accepted `0.5.0` release boundary.
 
 ## Current Limitations
 

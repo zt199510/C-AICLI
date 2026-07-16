@@ -290,7 +290,7 @@ Known residual risk: parse-time `System.CommandLine` validation errors can retur
 
 ## 0.5.0 Release Diagnostics
 
-The Week 58-64 Project Pack, controlled Gerber/TIFF execution, TIFF verification/preview, human decision, safe resume/restart, and managed artifact lifecycle diagnostics are implemented in the blocked 0.5.0 candidate. Approval material remains invocation-local; resume/restart revalidate current tool, input, output, and policy identity. Default smoke remains fake/local/model-free/network-free, while release acceptance still requires explicit current-revision `CAICLI_GERBER_TIFF_TOOL_SMOKE=1` evidence with frozen executable/fixture/baseline hashes.
+The Week 58-64 Project Pack, controlled Gerber/TIFF execution, TIFF verification/preview, human decision, safe resume/restart, and managed artifact lifecycle diagnostics are included in the accepted 0.5.0 release. Approval material remains invocation-local; resume/restart revalidate current tool, input, output, and policy identity. Default smoke remains fake/local/model-free/network-free. Explicit `CAICLI_GERBER_TIFF_TOOL_SMOKE=1` with reviewed executable/fixture/baseline identities is an optional environment validation and is not a release Gate.
 
 ## Chat 边界
 

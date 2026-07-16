@@ -2,7 +2,7 @@
 
 ## Supported Package
 
-The `0.5.0` Windows `win-x64` self-contained package remains a blocked candidate. Candidate packaging from a recorded clean source revision uses:
+The `0.5.0` Windows `win-x64` self-contained package is the current accepted release. Reproducible packaging from a recorded clean source revision uses:
 
 ```powershell
 powershell -NoProfile -ExecutionPolicy Bypass -File tools/Build-Release.ps1 -ReleaseAcceptance

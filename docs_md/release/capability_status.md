@@ -1,8 +1,17 @@
 # C# AI CLI Capability Status
 
-## 0.5.0 Candidate Capabilities (Blocked)
+## 0.5.0 Accepted Capabilities
 
-The bounded Week 58-64 vertical workflow remains a 0.5.0 candidate. Project Pack v1 list/doctor/plan, bounded Gerber/TIFF inventory, approval-gated typed conversion, isolated staging/checkpoint, TIFF verification/preview, explicit human accept/reject, safe resume/new-attempt restart, and managed artifact list/show/verify/export/prune are implemented, but current-revision exact-tool opt-in smoke is unavailable. They are not promoted to Accepted. External Gerbv/ImageMagick binaries remain user-configured and are not redistributed.
+The bounded Week 58-64 vertical workflow is accepted in 0.5.0. Project Pack v1 list/doctor/plan, bounded Gerber/TIFF inventory, approval-gated typed conversion, isolated staging/checkpoint, TIFF verification/preview, explicit human accept/reject, safe resume/new-attempt restart, and managed artifact list/show/verify/export/prune are current release behavior. External Gerbv/ImageMagick binaries remain user-configured and are not redistributed. Current-source exact-tool smoke was not run; it is an optional environment validation rather than a release Gate.
+
+| Capability | Status | Notes |
+|---|---|---|
+| Project Pack v1 contract, registry, doctor, and plan | Accepted | Deterministic compiled-in pack contract with bounded dependency and tool identity diagnostics. |
+| Gerber/TIFF bounded inventory and controlled conversion | Accepted | Reviewed typed adapters, approval, workspace/run isolation, fixed arguments, bounded process execution, and fail-closed tool identity checks. |
+| TIFF verification and managed preview | Accepted | Bounded metadata/decode, optional strict baseline comparison, stable reports, and managed preview evidence; preview and metadata alone are not manufacturing correctness proof. |
+| Human decision and safe recovery | Accepted | Explicit accept/reject, current-evidence revalidation, safe resume, and new-attempt restart without reusing approval. |
+| Managed artifact lifecycle | Accepted | List/show/verify/export/prune with ownership, retention, race/reparse, source/output preservation, and tombstone guards. |
+| Source-bound Windows package | Accepted | Clean-source reproducible `win-x64` package with manifest, checksums, default packaged smoke, diagnostics, and cleanup evidence. |
 
 Local API/daemon remains Preview. ZIP/network input, full Gerber/Excellon/TIFF parsing, generic C++/EDA packs, scheduler, parallel/concurrent writers, remote runner, provider routing, API control/SSE/auth/TLS, team platform, marketplace, and UI remain Deferred.
 
@@ -22,14 +31,14 @@ The table below preserves the source-only status at the end of Week 64. It is hi
 | Managed artifact lifecycle | Preview (source only) | Strict artifact manifest/index, deterministic ids, run/job/queue/attempt ownership, list/show/verify/export, user-level retention default, dry-run/apply terminal-owned prune, quarantine race/reparse protection, and retained manifest/job tombstones are implemented. Source, baseline, explicit workspace output, external, running/interrupted/corrupt, and metadata files are not prunable. |
 | Week 64 security/schema/smoke hardening | Preview (source only) | Threat model and command boundary, TOCTOU/staging/store/decoder/process/prune regression, strict JSON diagnostic projection, frozen schema/error/exit contracts, expanded default smoke, and explicit real-tool fixture/baseline prerequisites are implemented. Validation evidence is recorded in the Week 64 review; source presence alone is not acceptance. |
 | Source-bound release process | Preview (source only) | Release build rejects dirty source by default, records revision/clean flag/SDK/configuration/runtime/PDB policy and payload inventory, emits independent publish/ZIP checksums, and produces deterministic ZIP entries. `-AllowDirtySource` is validation-only and records a non-acceptance package. |
-| Week 64 real-tool lifecycle smoke | Passed (source validation) | The packaged opt-in command passed with the exact Week 58 Gerbv/ImageMagick identities, authorized fixture, strict exact-hash/metadata baseline, `content-compared=passed`, preview, explicit accept/reject, managed prune, and zero residual process/temp checks. This is Week 64 validation evidence for the 0.5.0 source Preview, not acceptance of these commands in 0.4.0. |
+| Week 64 real-tool lifecycle smoke | Passed (historical source validation) | The packaged opt-in command passed with the exact Week 58 Gerbv/ImageMagick identities, authorized fixture, strict exact-hash/metadata baseline, `content-compared=passed`, preview, explicit accept/reject, managed prune, and zero residual process/temp checks. Current-source exact-tool smoke is optional and was not rerun for the 0.5.0 release decision. |
 
-## 0.4.0 Release Capabilities
+## Inherited 0.4.0 Release Capabilities
 
 Status meaning:
 
-- `Accepted`: included in the accepted 0.4.0 release with local contract, tests, and credential-free packaged smoke coverage.
-- `Solidified`: an Accepted capability inherited from the previously accepted 0.3.x runtime baseline with broader regression history.
+- `Accepted`: included in the current 0.5.0 release with local contract, tests, and credential-free packaged smoke coverage.
+- `Solidified`: an Accepted capability inherited from the previously accepted 0.3.x or 0.4.0 runtime baseline with broader regression history.
 - `Preview`: implemented only behind an explicit opt-in boundary and not part of the default execution surface.
 - `Deferred`: not available as current behavior and must not be inferred from an Accepted or Preview entry.
 
@@ -81,7 +90,7 @@ Status meaning:
 |---|---|---|
 | Microsoft Agent Framework real backend | Deferred | Adapter project and tool bridge exist; real framework package/runtime is not enabled. |
 | MCP remote/http transport | Deferred | Stdio MCP v1 is available for user-configured stdio servers in registry/tool paths and for explicit `mcp doctor` diagnostics; remote/http transport is not enabled. |
-| Gerber/TIFF real workflow execution | Deferred | The accepted 0.4.0 package contains only the earlier project pack status/profile MVP. Week 58-64 source-only vertical workflow work does not enable these commands in the accepted release. |
+| Broader Gerber/Excellon/TIFF and CAM/EDA correctness | Deferred | 0.5.0 accepts the bounded Project Pack v1 workflow only. ZIP/network inputs, complete parsers, unrestricted formats, and general manufacturing correctness are not implied. |
 | Dotnet tool package | Deferred | Windows self-contained package is the current release artifact. |
 | Remote skill marketplace and user-level skill distribution | Deferred | Only built-in packs and workspace-local `.caicli/skills` JSON manifests are supported. Remote marketplaces, automatic updates, signing/trust chains, YAML manifests, user-level skill directories, and team knowledge distribution are not enabled. |
 | Background automation, CI providers, API control/SSE | Deferred | Local automation validation/dry-run/manual trigger, provider-neutral CI artifacts, and a read-only localhost API Preview are available. Automatic schedule execution, Windows Task Scheduler registration, GitHub/GitLab/Azure DevOps API integration, PR comments, uploads, API control routes, SSE, authentication/TLS, service installation, concurrent workers, webhooks, remote binds/runners, and remote control are not enabled. |
@@ -89,4 +98,4 @@ Status meaning:
 
 ## Release Decision
 
-Release `0.4.0` remains the current accepted package. The blocked 0.5.0 decision is documented by `final_acceptance_0.5.0.md`. The local API/daemon remains Preview and default-off. Deferred capabilities are not current behavior and must not be presented as implied by local automation, CI artifacts, Project Pack contracts, or the read-only Preview.
+Release `0.5.0` is the current accepted package, as documented by `final_acceptance_0.5.0.md`. The local API/daemon remains Preview and default-off. The exact-tool opt-in smoke remains optional and was not run for this release decision. Deferred capabilities are not current behavior and must not be presented as implied by local automation, CI artifacts, Project Pack contracts, or the read-only Preview.

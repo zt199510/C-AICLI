@@ -20,6 +20,8 @@
 
   <ItemGroup>
     <ProjectReference Include="..\CSharpAiCli.AgentFramework\CSharpAiCli.AgentFramework.csproj" />
+    <ProjectReference Include="..\CSharpAiCli.Application\CSharpAiCli.Application.csproj" />
+    <ProjectReference Include="..\CSharpAiCli.AppHost\CSharpAiCli.AppHost.csproj" />
     <ProjectReference Include="..\CSharpAiCli.Core\CSharpAiCli.Core.csproj" />
     <ProjectReference Include="..\CSharpAiCli.Cli\CSharpAiCli.Cli.csproj" />
     <ProjectReference Include="..\CSharpAiCli.ProjectPacks\CSharpAiCli.ProjectPacks.csproj" />
@@ -27,6 +29,9 @@
 
   <ItemGroup>
     <None Update="Fixtures\**\*" CopyToOutputDirectory="PreserveNewest" />
+    <None Include="..\..\protocol\desktop-v1\contract.json"
+          Link="Fixtures\DesktopProtocol\contract.json"
+          CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 
 </Project>

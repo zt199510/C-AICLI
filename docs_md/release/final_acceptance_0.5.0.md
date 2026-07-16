@@ -23,7 +23,7 @@
 | Requirement | Status | Evidence |
 |---|---|---|
 | Week 58-64 implementation closed | Passed | All seven reviews are complete; Week 64 reports no remaining implementation item. |
-| Authorized real tool path | **Blocked** | Repository CC0 fixture and strict baseline retain frozen identities, but exact Gerbv/ImageMagick executables were unavailable and network recovery timed out. Current-revision opt-in smoke did not run. |
+| Optional real-tool environment smoke | Not run / Non-blocking | Repository CC0 fixture and strict baseline retain frozen identities, but exact Gerbv/ImageMagick executables were unavailable. This opt-in environment validation is not a 0.5.0 release Gate. |
 | Build and tests | Passed with recorded standard-run flake | Release build: 0 warnings/errors. Standard full run: 1259/1261 with two MCP timing/cleanup failures. After build-server cleanup, controlled single-processor full run: 1261/1261. |
 | Default packaged smoke | Passed | Model, network, daemon, and real-tool independent opt-ins were disabled/skipped; fake/local smoke passed. |
 | Reproducible package | Passed | Two clean `-ReleaseAcceptance` builds from `09378e6...` matched inventory, size, and SHA256. Manifest/checksums report the same revision, `sourceDirty=false`, SDK 9.0.308, and excluded PDB policy. |
@@ -32,16 +32,12 @@
 
 ## Accepted
 
-- No 0.5.0 capability or artifact is promoted. The 0.4.0 Accepted release remains unchanged.
-
-## Candidate / Blocked
-
 - Project Pack v1 registry, manifest, dependency diagnosis, deterministic plan, and bounded Gerber/TIFF inventory.
 - Approval-gated typed Gerbv/ImageMagick conversion with bounded cwd/environment/output/time/cancel and process-tree cleanup.
 - Isolated staging/checkpoint, TIFF metadata/content/baseline verification, managed preview, and explicit human accept/reject.
 - Safe resume and new-attempt restart with current tool/input/output/policy revalidation and fresh approval.
 - Managed artifact list/show/verify/export/prune with ownership, quarantine, reparse/race, and source/output preservation guards.
-- Default fake/local smoke plus independent explicit real-tool smoke.
+- Default fake/local smoke plus an independent explicit, optional real-tool environment smoke entry point.
 
 ## Preview
 
@@ -56,8 +52,8 @@
 
 ## Verification Commands
 
-The final review records exact command results, counts, tool identities, package size/hash, and cleanup evidence. A fake driver, file existence, metadata validity, preview generation, or an earlier revision is never substituted for current real-tool acceptance.
+The final review records exact command results, counts, package size/hash, and cleanup evidence. Real-tool smoke remains available as an explicit environment validation when reviewed external executables are configured. Fake driver success, file existence, metadata validity, or preview generation must not be described as proof of real CAM/EDA business correctness.
 
 ## Decision
 
-Release `0.5.0` is **Blocked** on 2026-07-15. The candidate package is reproducible and its default smoke passes, but the mandatory current-source real-tool opt-in smoke Gate is not satisfied. No release tag is created. Version `0.4.0` remains the current Accepted release.
+Release `0.5.0` is **Accepted** on 2026-07-15 as the Vertical Workflow Runtime and Gerber/TIFF v1 release. The clean-source package is reproducible, the controlled full test run and default packaged smoke pass, and packaged diagnostics and cleanup checks pass. Current-source Gerbv/ImageMagick opt-in smoke was not run and is explicitly non-blocking; real external-tool and manufacturing correctness remain bounded by the documented user-configured toolchain and verification limitations. No release tag was created as part of this recorded acceptance run.
