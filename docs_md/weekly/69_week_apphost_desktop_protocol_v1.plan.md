@@ -1,6 +1,6 @@
 # 第 69 周执行计划：AppHost 与 Desktop Protocol v1
 
-状态：执行中；Step 1-15 已完成，待 Step 16 clean-source release acceptance
+状态：Passed；Step 1-16 已完成，clean-source release acceptance 通过
 
 更新时间：2026-07-16
 
@@ -447,7 +447,7 @@ initialize result 冻结包含：
 - [x] Step 13：加入无 Electron 的真实 AppHost process E2E、disconnect/crash/stdout/stderr/child/temp cleanup tests。
 - [x] Step 14：运行 generator check、定向 .NET/Node tests、Release build、标准并发 full suite 连续两次与 CLI smoke。
 - [x] Step 15：运行 Desktop verify、AppHost publish/package、双 packaged smoke、orphan 和同口径 package/process/memory 采样。
-- [ ] Step 16：执行 `git diff --check`、文档/contract link/drift 检查，创建 `69_week_review.md`；提交后运行 clean-source release acceptance。
+- [x] Step 16：执行 `git diff --check`、文档/contract link/drift 检查，创建 `69_week_review.md`；提交后运行 clean-source release acceptance。
 
 ## 建议日程
 

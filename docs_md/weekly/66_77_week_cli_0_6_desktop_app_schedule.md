@@ -2,7 +2,7 @@
 
 更新时间：2026-07-16
 
-状态：Week 66-68 已完成并通过技术 Gate；Week 69 实现与 dirty-source Gate 已完成，待 clean-source release acceptance
+状态：Week 66-69 已完成并通过技术 Gate；Week 70 待执行
 
 详细产品与技术边界统一以 `docs_md/spec/desktop_app_development_framework_0_6_0.md` 为准。本排期负责把该框架拆成 Week 66-77 的依赖顺序、周末验收和发布 Gate，不扩展产品范围。
 
@@ -144,7 +144,7 @@ open workspace
 
 详细计划：`69_week_apphost_desktop_protocol_v1.plan.md`
 
-执行状态：实现与 dirty-source Gate 已完成；clean-source release acceptance 通过后标记 Passed。
+执行结论：Passed；实现、回归、package/process 与 clean-source release acceptance Gate 全部通过，证据见 `69_week_review.md`。
 
 主要交付：
 
@@ -157,6 +157,8 @@ open workspace
 周末 Gate：无 Electron 参与的 AppHost contract/E2E 测试通过；stdout 只包含协议帧，退出后无子进程或临时目录残留。
 
 ### Week 70：Secure Electron Shell
+
+执行状态：待执行。
 
 主要交付：
 

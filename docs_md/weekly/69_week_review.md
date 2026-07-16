@@ -1,6 +1,6 @@
 # 第 69 周回顾：AppHost 与 Desktop Protocol v1
 
-状态：实现与 dirty-source Gate 已完成；待最终提交后的 clean-source release acceptance
+状态：Passed；实现、回归、package/process 与 clean-source release acceptance Gate 全部通过
 
 更新时间：2026-07-16
 
@@ -50,6 +50,7 @@
 - Week 69 扩展定向 .NET：`59 passed / 0 failed / 0 skipped`。
 - 标准并发 full suite 第 1 次：`1365 passed / 0 failed / 0 skipped`，约 88 秒。
 - 标准并发 full suite 第 2 次：`1365 passed / 0 failed / 0 skipped`，约 89 秒。
+- 实现提交前复验：`1365 passed / 0 failed / 0 skipped`，约 89 秒。
 - Desktop verify：6 files / `24/24`，contract/examples/notice drift、typecheck、ESLint、Main/Renderer build 与 production security 全部通过；真实 C# thread payload 通过 generated TS guard。
 - 无 Electron process E2E：6 tests，覆盖 happy/read-only/concurrent/cancel/fatal/disconnect/shutdown、ordered notification、stderr redaction 与 exit code。
 - owned process cleanup test 使用受控 PowerShell parent/child PID，证明 cancellation 后整个 process tree 退出。
@@ -83,7 +84,7 @@
 
 ## Clean acceptance
 
-最终提交后执行：
+实现提交 `8e613a80630b1d2acb4554952da966e98d98b0a5` 后从 clean HEAD 执行：
 
 ```powershell
 $env:PATH = "$env:USERPROFILE\.dotnet;$env:PATH"
@@ -91,7 +92,9 @@ powershell -NoProfile -ExecutionPolicy Bypass -File tools\Build-Release.ps1 -Rel
 powershell -NoProfile -ExecutionPolicy Bypass -File tools\Invoke-SmokeTests.ps1
 ```
 
-最终 Gate 需补记 clean revision、`sourceDirty=false`、`releaseAcceptance=true` 与 acceptance smoke 结果。
+- release manifest 与 checksums 均记录 `sourceRevision=8e613a80630b1d2acb4554952da966e98d98b0a5`、`sourceDirty=false`、`releaseAcceptance=true`、`sdkVersion=9.0.308`。
+- CLI acceptance smoke 通过；真实 Gerber/TIFF、daemon/API 与 real-model smoke 仍按脚本约定由显式环境变量启用，本次未启用。
+- acceptance 文档提交后，从最终 clean HEAD 再运行相同 release acceptance 与 CLI smoke，使最终 artifacts 绑定最终提交。
 
 ## Week 70 输入
 
