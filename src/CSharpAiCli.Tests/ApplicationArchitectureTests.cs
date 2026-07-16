@@ -42,8 +42,14 @@ public sealed class ApplicationArchitectureTests
         string[] prohibitedTypeNames =
         [
             "System.IO.TextWriter",
+            "System.IO.FileStream",
+            "System.Text.Json.JsonDocument",
             "CSharpAiCli.Core.IConversationStore",
             "CSharpAiCli.Core.JobRecordStore",
+            "CSharpAiCli.Core.ThreadStore",
+            "CSharpAiCli.Core.ThreadRecord",
+            "CSharpAiCli.Core.TurnRecord",
+            "CSharpAiCli.Core.TimelineItemRecord",
             "CSharpAiCli.ProjectPacks.Runtime.ManagedArtifactStore"
         ];
 
@@ -60,6 +66,24 @@ public sealed class ApplicationArchitectureTests
         Assert.DoesNotContain(exposedNames, name => prohibitedNamespaces.Any(prefix =>
             name.StartsWith(prefix, StringComparison.Ordinal)));
         Assert.DoesNotContain(exposedNames, name => prohibitedTypeNames.Contains(name, StringComparer.Ordinal));
+    }
+
+    [Fact]
+    public void Week_68_does_not_add_protocol_dispatch_or_cli_session_dual_write()
+    {
+        string root = FindRepositoryRoot();
+        string contract = File.ReadAllText(Path.Combine(root, "protocol", "desktop-v1", "contract.json"));
+        string appHost = string.Join('\n', Directory.EnumerateFiles(
+            Path.Combine(root, "src", "CSharpAiCli.AppHost"), "*.cs", SearchOption.AllDirectories)
+            .Select(File.ReadAllText));
+        string cliFactory = File.ReadAllText(Path.Combine(
+            root, "src", "CSharpAiCli.Cli", "Commands", "CliCommandFactory.cs"));
+
+        Assert.DoesNotContain("thread.list", contract, StringComparison.Ordinal);
+        Assert.DoesNotContain("ThreadStore", appHost, StringComparison.Ordinal);
+        Assert.DoesNotContain("ThreadApplicationService", appHost, StringComparison.Ordinal);
+        Assert.DoesNotContain("ThreadStore", cliFactory, StringComparison.Ordinal);
+        Assert.DoesNotContain("ThreadApplicationService", cliFactory, StringComparison.Ordinal);
     }
 
     [Fact]

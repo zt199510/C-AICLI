@@ -1,4 +1,7 @@
+using System.Security.Cryptography;
+using System.Text;
 using System.Text.Json;
+using System.Text.Json.Serialization;
 
 namespace CSharpAiCli.Core;
 
@@ -10,6 +13,12 @@ public sealed class FileConversationStore : IConversationStore
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web)
     {
         WriteIndented = true,
+    };
+
+    private static readonly JsonSerializerOptions StrictJsonOptions = new(JsonSerializerDefaults.Web)
+    {
+        UnmappedMemberHandling = JsonUnmappedMemberHandling.Disallow,
+        MaxDepth = 64
     };
 
     private readonly string sessionDirectory;
@@ -123,6 +132,128 @@ public sealed class FileConversationStore : IConversationStore
         return true;
     }
 
+    public ConversationTranscriptSnapshot ReadBounded(
+        ConversationSessionName sessionName,
+        int maxBytes = ThreadPersistenceLimits.MaxSessionImportBytes,
+        int maxRecords = ThreadPersistenceLimits.MaxSessionImportRecords)
+    {
+        ArgumentNullException.ThrowIfNull(sessionName);
+        if (maxBytes <= 0 || maxRecords <= 0)
+        {
+            throw new ArgumentOutOfRangeException(maxBytes <= 0 ? nameof(maxBytes) : nameof(maxRecords));
+        }
+
+        string path = GetPath(sessionName);
+        try
+        {
+            EnsureNoReparseInExistingChain(path);
+            if (!File.Exists(path))
+            {
+                throw new ConversationTranscriptReadException(
+                    ConversationTranscriptReadErrorCode.NotFound,
+                    "Conversation transcript was not found.");
+            }
+
+            FileInfo before = new(path);
+            long length = before.Length;
+            DateTimeOffset lastWriteAtUtc = before.LastWriteTimeUtc;
+            if (length <= 0 || length > maxBytes || length > int.MaxValue)
+            {
+                throw new ConversationTranscriptReadException(
+                    ConversationTranscriptReadErrorCode.LimitExceeded,
+                    "Conversation transcript exceeds its import byte limit.");
+            }
+
+            byte[] bytes = new byte[checked((int)length)];
+            using (FileStream stream = new(path, FileMode.Open, FileAccess.Read, FileShare.Read, 64 * 1024, FileOptions.SequentialScan))
+            {
+                stream.ReadExactly(bytes);
+                if (stream.Position != stream.Length || stream.Length != length)
+                {
+                    throw new ConversationTranscriptReadException(
+                        ConversationTranscriptReadErrorCode.SourceChanged,
+                        "Conversation transcript changed while it was being read.");
+                }
+            }
+
+            string json = new UTF8Encoding(false, true).GetString(bytes);
+            int schema = ReadSchemaVersionStrict(json);
+            if (schema != ConversationTranscript.CurrentSchemaVersion)
+            {
+                throw new ConversationTranscriptReadException(
+                    ConversationTranscriptReadErrorCode.SchemaUnsupported,
+                    "Conversation transcript uses an unsupported schema.");
+            }
+
+            ConversationTranscript transcript = JsonSerializer.Deserialize<ConversationTranscript>(json, StrictJsonOptions)
+                ?? throw new ConversationTranscriptReadException(
+                    ConversationTranscriptReadErrorCode.Corrupt,
+                    "Conversation transcript is corrupt.");
+            ConversationSessionName transcriptName = ValidateTranscriptShape(transcript);
+            ValidateTranscriptPathBinding(path, transcriptName);
+            int recordCount = checked(transcript.Messages.Count + transcript.ToolCalls.Count +
+                transcript.Errors.Count + transcript.AgentRuns.Count);
+            if (recordCount > maxRecords)
+            {
+                throw new ConversationTranscriptReadException(
+                    ConversationTranscriptReadErrorCode.LimitExceeded,
+                    "Conversation transcript exceeds its import record limit.");
+            }
+
+            FileInfo after = new(path);
+            if (after.Length != length || after.LastWriteTimeUtc != lastWriteAtUtc)
+            {
+                throw new ConversationTranscriptReadException(
+                    ConversationTranscriptReadErrorCode.SourceChanged,
+                    "Conversation transcript changed while it was being read.");
+            }
+
+            EnsureNoReparseInExistingChain(path);
+            string contentHash = Convert.ToHexString(SHA256.HashData(bytes)).ToLowerInvariant();
+            string fingerprintInput = $"session\0{sessionName.Value}\0{contentHash}";
+            string fingerprint = Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(fingerprintInput))).ToLowerInvariant();
+            return new ConversationTranscriptSnapshot(
+                transcript,
+                sessionName.Value,
+                fingerprint,
+                length,
+                recordCount,
+                lastWriteAtUtc);
+        }
+        catch (ConversationTranscriptReadException)
+        {
+            throw;
+        }
+        catch (JsonException exception)
+        {
+            throw new ConversationTranscriptReadException(
+                ConversationTranscriptReadErrorCode.Corrupt,
+                "Conversation transcript is corrupt.",
+                exception);
+        }
+        catch (DecoderFallbackException exception)
+        {
+            throw new ConversationTranscriptReadException(
+                ConversationTranscriptReadErrorCode.Corrupt,
+                "Conversation transcript is not valid UTF-8.",
+                exception);
+        }
+        catch (InvalidOperationException exception)
+        {
+            throw new ConversationTranscriptReadException(
+                ConversationTranscriptReadErrorCode.Corrupt,
+                "Conversation transcript is invalid.",
+                exception);
+        }
+        catch (Exception exception) when (IsConversationStoreIoException(exception) || exception is PathTooLongException)
+        {
+            throw new ConversationTranscriptReadException(
+                ConversationTranscriptReadErrorCode.Unavailable,
+                "Conversation transcript could not be read.",
+                exception);
+        }
+    }
+
     public bool Rename(ConversationSessionName sourceSessionName, ConversationSessionName destinationSessionName)
     {
         ArgumentNullException.ThrowIfNull(sourceSessionName);
@@ -215,6 +346,49 @@ public sealed class FileConversationStore : IConversationStore
             throw new InvalidOperationException(
                 InvalidTranscriptMessage,
                 exception);
+        }
+    }
+
+    private static int ReadSchemaVersionStrict(string json)
+    {
+        using JsonDocument document = JsonDocument.Parse(json, new JsonDocumentOptions { MaxDepth = 64 });
+        return document.RootElement.TryGetProperty("schemaVersion", out JsonElement schemaVersionElement) &&
+            schemaVersionElement.ValueKind == JsonValueKind.Number &&
+            schemaVersionElement.TryGetInt32(out int schemaVersion)
+                ? schemaVersion
+                : throw new ConversationTranscriptReadException(
+                    ConversationTranscriptReadErrorCode.Corrupt,
+                    "Conversation transcript schema is missing.");
+    }
+
+    private static void EnsureNoReparseInExistingChain(string path)
+    {
+        string fullPath = Path.GetFullPath(path);
+        string? root = Path.GetPathRoot(fullPath);
+        if (string.IsNullOrWhiteSpace(root))
+        {
+            throw new ConversationTranscriptReadException(
+                ConversationTranscriptReadErrorCode.ReparsePoint,
+                "Conversation transcript path is unsafe.");
+        }
+
+        string current = root;
+        foreach (string segment in Path.GetRelativePath(root, fullPath).Split(
+            [Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar],
+            StringSplitOptions.RemoveEmptyEntries))
+        {
+            current = Path.Combine(current, segment);
+            if (!Directory.Exists(current) && !File.Exists(current))
+            {
+                continue;
+            }
+
+            if (File.GetAttributes(current).HasFlag(FileAttributes.ReparsePoint))
+            {
+                throw new ConversationTranscriptReadException(
+                    ConversationTranscriptReadErrorCode.ReparsePoint,
+                    "Conversation transcript path contains a reparse point.");
+            }
         }
     }
 
