@@ -7,6 +7,10 @@ public interface IConversationStore
     IReadOnlyList<ConversationTranscriptSummary> ListSummaries() =>
         throw new NotSupportedException("This conversation store does not support listing session summaries.");
 
+    IReadOnlyList<ConversationTranscriptSummary> ListSummaries(int? limit) => limit is > 0
+        ? ListSummaries().Take(limit.Value).ToArray()
+        : ListSummaries();
+
     bool Exists(ConversationSessionName sessionName) => throw new NotSupportedException("This conversation store does not support checking session existence.");
 
     bool TryGetSummary(ConversationSessionName sessionName, out ConversationTranscriptSummary? summary)

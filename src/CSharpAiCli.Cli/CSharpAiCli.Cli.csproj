@@ -1,6 +1,7 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
 
   <ItemGroup>
+    <ProjectReference Include="..\CSharpAiCli.Application\CSharpAiCli.Application.csproj" />
     <ProjectReference Include="..\CSharpAiCli.Core\CSharpAiCli.Core.csproj" />
     <ProjectReference Include="..\CSharpAiCli.ProjectPacks\CSharpAiCli.ProjectPacks.csproj" />
   </ItemGroup>

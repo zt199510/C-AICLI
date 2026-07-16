@@ -45,14 +45,29 @@ public sealed class FileConversationStore : IConversationStore
             .ToArray();
     }
 
-    public IReadOnlyList<ConversationTranscriptSummary> ListSummaries()
+    public IReadOnlyList<ConversationTranscriptSummary> ListSummaries() => ListSummaries(null);
+
+    public IReadOnlyList<ConversationTranscriptSummary> ListSummaries(int? limit)
     {
+        if (limit is <= 0)
+        {
+            throw new ArgumentOutOfRangeException(nameof(limit));
+        }
+
         if (!Directory.Exists(sessionDirectory))
         {
             return [];
         }
 
-        return Directory.EnumerateFiles(sessionDirectory, "*.transcript.json", SearchOption.TopDirectoryOnly)
+        IEnumerable<string> paths = Directory
+            .EnumerateFiles(sessionDirectory, "*.transcript.json", SearchOption.TopDirectoryOnly)
+            .Order(StringComparer.Ordinal);
+        if (limit is > 0)
+        {
+            paths = paths.Take(limit.Value);
+        }
+
+        return paths
             .Select(path => ConversationTranscriptSummary.FromTranscript(LoadTranscript(path)))
             .OrderBy(summary => summary.Name, StringComparer.Ordinal)
             .ToArray();

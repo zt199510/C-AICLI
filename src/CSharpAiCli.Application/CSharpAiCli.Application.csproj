@@ -8,6 +8,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\CSharpAiCli.Core\CSharpAiCli.Core.csproj" />
+    <ProjectReference Include="..\CSharpAiCli.ProjectPacks\CSharpAiCli.ProjectPacks.csproj" />
   </ItemGroup>
 
 </Project>

@@ -23,9 +23,15 @@ public sealed class SkillPackCatalog
 
     public IReadOnlyList<SkillPackDiagnostic> Diagnostics { get; }
 
-    public static SkillPackCatalog Load(WorkspaceContext workspace)
+    public static SkillPackCatalog Load(WorkspaceContext workspace) => Load(workspace, null);
+
+    public static SkillPackCatalog Load(WorkspaceContext workspace, int? maxItems)
     {
         ArgumentNullException.ThrowIfNull(workspace);
+        if (maxItems is <= 0)
+        {
+            throw new ArgumentOutOfRangeException(nameof(maxItems));
+        }
 
         SkillPackValidator validator = new();
         List<SkillPackCatalogItem> packs = [];
@@ -34,6 +40,11 @@ public sealed class SkillPackCatalog
 
         foreach (SkillPackCatalogItem builtIn in SkillPackBuiltIns.Create())
         {
+            if (packs.Count >= maxItems)
+            {
+                break;
+            }
+
             SkillValidationResult validation = validator.Validate(builtIn.Manifest, builtIn.Source);
             if (!validation.Succeeded)
             {
@@ -44,7 +55,7 @@ public sealed class SkillPackCatalog
             AddPack(builtIn, packs, byName, diagnostics);
         }
 
-        LoadLocalPacks(workspace, validator, packs, byName, diagnostics);
+        LoadLocalPacks(workspace, validator, packs, byName, diagnostics, maxItems);
         return new SkillPackCatalog(
             packs.OrderBy(item => item.Manifest.Name, StringComparer.OrdinalIgnoreCase).ToArray(),
             diagnostics);
@@ -68,7 +79,8 @@ public sealed class SkillPackCatalog
         SkillPackValidator validator,
         List<SkillPackCatalogItem> packs,
         Dictionary<string, SkillPackCatalogItem> byName,
-        List<SkillPackDiagnostic> diagnostics)
+        List<SkillPackDiagnostic> diagnostics,
+        int? maxItems)
     {
         if (workspace.Status != WorkspaceStatus.Ready)
         {
@@ -93,6 +105,11 @@ public sealed class SkillPackCatalog
 
         foreach (string manifestPath in EnumerateLocalManifestFiles(skillsDirectory))
         {
+            if (packs.Count >= maxItems)
+            {
+                break;
+            }
+
             SkillPackSource source = SkillPackSource.Local(ToWorkspaceRelativePath(workspace, manifestPath));
             SkillPackManifest? manifest;
             try

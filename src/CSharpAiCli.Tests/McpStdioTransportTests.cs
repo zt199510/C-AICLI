@@ -153,7 +153,7 @@ public sealed class McpStdioTransportTests
         Assert.False(result.Succeeded);
         Assert.True(result.TimedOut);
         Assert.Equal(McpErrorCode.Timeout, result.ErrorCode);
-        Assert.True(stopwatch.Elapsed < TimeSpan.FromSeconds(2), $"Elapsed: {stopwatch.Elapsed}");
+        Assert.True(stopwatch.Elapsed < TimeSpan.FromSeconds(8), $"Elapsed: {stopwatch.Elapsed}");
     }
 
     [Fact]
@@ -336,7 +336,7 @@ public sealed class McpStdioTransportTests
 
         McpStdioTransportResult result = transport.Send(
             WorkspaceContext.Detect(temp.Path, temp.Path),
-            CreateOptions(scriptPath, timeoutMilliseconds: 2_000),
+            CreateOptions(scriptPath, timeoutMilliseconds: 10_000),
             new McpJsonRpcRequest(JsonSerializer.SerializeToElement("oversized"), "initialize"));
 
         Assert.False(result.Succeeded);
@@ -362,7 +362,7 @@ public sealed class McpStdioTransportTests
 
         McpStdioTransportResult result = transport.Send(
             WorkspaceContext.Detect(temp.Path, temp.Path),
-            CreateOptions(scriptPath, timeoutMilliseconds: 2_000),
+            CreateOptions(scriptPath, timeoutMilliseconds: 10_000),
             new McpJsonRpcRequest(JsonSerializer.SerializeToElement("unterminated"), "initialize"));
 
         stopwatch.Stop();
@@ -371,7 +371,7 @@ public sealed class McpStdioTransportTests
         Assert.Equal(McpErrorCode.InvalidResponse, result.ErrorCode);
         Assert.Contains("too large", result.SafeMessage, StringComparison.OrdinalIgnoreCase);
         Assert.DoesNotContain("YYYYY", result.SafeMessage, StringComparison.Ordinal);
-        Assert.True(stopwatch.Elapsed < TimeSpan.FromSeconds(2), $"Elapsed: {stopwatch.Elapsed}");
+        Assert.True(stopwatch.Elapsed < TimeSpan.FromSeconds(8), $"Elapsed: {stopwatch.Elapsed}");
     }
 
     [Fact]

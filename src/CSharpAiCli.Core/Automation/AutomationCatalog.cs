@@ -26,9 +26,16 @@ public sealed class AutomationCatalog
 
     public IReadOnlyList<AutomationDiagnostic> Diagnostics { get; }
 
-    public static AutomationCatalog Load(WorkspaceContext workspace)
+    public static AutomationCatalog Load(WorkspaceContext workspace) => Load(workspace, null);
+
+    public static AutomationCatalog Load(WorkspaceContext workspace, int? maxItems)
     {
         ArgumentNullException.ThrowIfNull(workspace);
+        if (maxItems is <= 0)
+        {
+            throw new ArgumentOutOfRangeException(nameof(maxItems));
+        }
+
         List<AutomationCatalogItem> items = [];
         List<AutomationDiagnostic> diagnostics = [];
         if (workspace.Status != WorkspaceStatus.Ready)
@@ -57,6 +64,11 @@ public sealed class AutomationCatalog
         Dictionary<string, AutomationCatalogItem> byName = new(StringComparer.OrdinalIgnoreCase);
         foreach (string path in EnumerateManifestFiles(directory))
         {
+            if (items.Count >= maxItems)
+            {
+                break;
+            }
+
             string relativePath = ToWorkspaceRelativePath(workspace, path);
             AutomationSource source = new(relativePath);
             WorkspaceGuardResult fileResult = guard.ResolvePath(workspace, relativePath);

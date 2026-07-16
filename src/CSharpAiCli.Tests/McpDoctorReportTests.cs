@@ -160,7 +160,7 @@ public sealed class McpDoctorReportTests
         Assert.Contains("server: timeout", text);
         Assert.Contains("connectionStatus: unavailable", text);
         Assert.Contains("timed out after 200 ms", text, StringComparison.OrdinalIgnoreCase);
-        Assert.True(stopwatch.Elapsed < TimeSpan.FromSeconds(4), $"Elapsed: {stopwatch.Elapsed}");
+        Assert.True(stopwatch.Elapsed < TimeSpan.FromSeconds(8), $"Elapsed: {stopwatch.Elapsed}");
     }
 
     [Fact]

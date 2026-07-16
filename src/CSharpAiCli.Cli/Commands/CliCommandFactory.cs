@@ -4,6 +4,7 @@ using System.Globalization;
 using System.Text;
 using System.Text.Json;
 using System.Text.Json.Nodes;
+using CSharpAiCli.Application;
 using CSharpAiCli.Core;
 using CSharpAiCli.ProjectPacks;
 using CSharpAiCli.ProjectPacks.GerberTiff;
@@ -279,6 +280,8 @@ public static class CliCommandFactory
         Func<string?, CliEnvironmentSnapshot> workspaceSnapshotProvider =
             workspacePath => snapshotProvider(workspacePath, null);
         ProjectPackRegistry projectPackRegistry = new([new GerberTiffWorkflowPack()]);
+        Func<CliEnvironmentSnapshot, ChangesApplicationService> changesServiceFactory =
+            _ => new ChangesApplicationService(conversationStoreFactory);
 
         RootCommand rootCommand = new($"{ProductInfo.CommandName} - {ProductInfo.Description}");
         Option<string> workspaceOption = new("--workspace")
@@ -510,52 +513,31 @@ public static class CliCommandFactory
                 snapshot,
                 humanReadableOutput: !IsJsonOutputRequested(jsonRequested, outputMode));
 
-            GitStatusTool gitStatusTool = new(new WorkspaceGuard());
-            ToolExecutionResult gitStatus = gitStatusTool.Execute(new ToolExecutionContext(
-                "changes_git_status",
-                snapshot.Workspace,
-                "{}",
-                ToolExecutionPhase.Planning));
-            GitDiffTool gitDiffTool = new(new WorkspaceGuard());
-            ToolExecutionResult gitDiffStat = gitDiffTool.Execute(new ToolExecutionContext(
-                "changes_git_diff_stat",
-                snapshot.Workspace,
-                """{"stat":true}""",
-                ToolExecutionPhase.Planning));
-
-            ConversationTranscript? transcript = null;
-            string? sessionPath = null;
-            string? sessionWarning = null;
+            ConversationSessionName? sessionName = null;
             if (!string.IsNullOrWhiteSpace(session))
             {
-                if (!TryParseSessionName(output, session, out ConversationSessionName sessionName))
+                if (!TryParseSessionName(output, session, out ConversationSessionName parsedSessionName))
                 {
                     return 1;
                 }
 
-                sessionPath = ResolveSessionPath(snapshot, sessionName);
-                try
-                {
-                    IConversationStore conversationStore = conversationStoreFactory(snapshot);
-                    if (!conversationStore.TryLoad(sessionName, out transcript) || transcript is null)
-                    {
-                        sessionWarning = "Session transcript was not found.";
-                    }
-                }
-                catch (Exception exception) when (IsConversationStoreException(exception))
-                {
-                    sessionWarning = "Conversation session store operation failed.";
-                }
+                sessionName = parsedSessionName;
             }
 
-            ChangesViewReport report = ChangesViewReport.Create(
-                snapshot.Workspace,
-                gitStatus,
-                gitDiffStat,
-                transcript,
-                session,
-                sessionPath,
-                sessionWarning);
+            ApplicationResult<ChangesViewReport> query = changesServiceFactory(snapshot).Query(
+                new ChangesQueryRequest(snapshot, sessionName));
+            if (!query.Succeeded || query.Data is null)
+            {
+                ApplicationError error = query.Error ?? new ApplicationError(
+                    "application-internal",
+                    ApplicationErrorCategory.Internal,
+                    "Changes query failed.",
+                    Retryable: false);
+                WriteSafeFailure(output, error.Code, error.SafeMessage);
+                return 1;
+            }
+
+            ChangesViewReport report = query.Data;
             TryWriteTraceCommandEvent(
                 "changes",
                 snapshot,

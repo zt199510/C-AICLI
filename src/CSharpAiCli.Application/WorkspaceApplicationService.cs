@@ -14,6 +14,28 @@ public sealed record WorkspaceOpenApplicationResult(
     string? ErrorCode,
     string SafeMessage);
 
+public sealed record WorkspaceCapabilityProjection(
+    bool ReadOnlyQueries,
+    bool GitQueries,
+    bool LocalCatalogs,
+    bool ManagedArtifacts);
+
+public sealed record WorkspaceConfigurationProjection(
+    bool HasApiKey,
+    string ApiKeySource,
+    string ModelSource,
+    string AgentBackendSource,
+    string ApprovalMode,
+    string ApprovalModeSource,
+    int LoadedSourceCount);
+
+public sealed record WorkspaceSnapshotProjection(
+    string WorkspaceId,
+    string RootPath,
+    string Status,
+    WorkspaceCapabilityProjection Capabilities,
+    WorkspaceConfigurationProjection Configuration);
+
 public sealed class WorkspaceApplicationService
 {
     private readonly IWorkspaceGuard workspaceGuard;
@@ -70,6 +92,57 @@ public sealed class WorkspaceApplicationService
             Status: ToStatus(workspace.Status),
             ErrorCode: null,
             SafeMessage: string.Empty);
+    }
+
+    public ApplicationResult<WorkspaceSnapshotProjection> Snapshot(
+        CliEnvironmentSnapshot snapshot,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(snapshot);
+        cancellationToken.ThrowIfCancellationRequested();
+
+        WorkspaceOpenApplicationResult opened = Open(new WorkspaceOpenRequest(snapshot.Workspace.RootPath));
+        cancellationToken.ThrowIfCancellationRequested();
+        if (!opened.Success || opened.WorkspaceId is null || opened.RootPath is null)
+        {
+            return ApplicationResult<WorkspaceSnapshotProjection>.Failure(new ApplicationError(
+                opened.ErrorCode ?? ToolErrorCode.WorkspaceUnavailable,
+                ApplicationErrorCategory.Workspace,
+                opened.SafeMessage,
+                Retryable: false));
+        }
+
+        EffectiveConfiguration configuration = snapshot.Configuration;
+        WorkspaceSnapshotProjection projection = new(
+            opened.WorkspaceId,
+            opened.RootPath,
+            opened.Status,
+            new WorkspaceCapabilityProjection(
+                ReadOnlyQueries: true,
+                GitQueries: true,
+                LocalCatalogs: true,
+                ManagedArtifacts: true),
+            new WorkspaceConfigurationProjection(
+                configuration.HasApiKey,
+                ApplicationProjection.Safe(configuration.ApiKeySource, 256),
+                ApplicationProjection.Safe(configuration.ModelSource, 256),
+                ApplicationProjection.Safe(configuration.AgentBackendSource, 256),
+                configuration.ApprovalMode.ToString(),
+                ApplicationProjection.Safe(configuration.ApprovalModeSource, 256),
+                configuration.LoadedConfigPaths.Count));
+
+        ApplicationDiagnostic[] diagnostics = configuration.Warnings
+            .Take(ApplicationLimits.MaxDiagnostics + 1)
+            .Select(warning => new ApplicationDiagnostic(
+                "configuration-warning",
+                ApplicationErrorCategory.Validation,
+                warning))
+            .ToArray();
+        cancellationToken.ThrowIfCancellationRequested();
+        return ApplicationResult<WorkspaceSnapshotProjection>.Success(
+            projection,
+            diagnostics,
+            diagnostics.Length > ApplicationLimits.MaxDiagnostics);
     }
 
     private static WorkspaceOpenApplicationResult Failure(

@@ -1,8 +1,8 @@
 # C-AICLI 0.6.0 Desktop App 12 周开发排期
 
-更新时间：2026-07-15
+更新时间：2026-07-16
 
-状态：基线评估已完成；Week 66 待进入技术 Gate
+状态：Week 66-67 已完成并通过技术 Gate；Week 68 待执行
 
 详细产品与技术边界统一以 `docs_md/spec/desktop_app_development_framework_0_6_0.md` 为准。本排期负责把该框架拆成 Week 66-77 的依赖顺序、周末验收和发布 Gate，不扩展产品范围。
 
@@ -109,6 +109,10 @@ open workspace
 周末 Gate：Critical Spike 必须全部得到 Passed/Blocked 结论；任何 Blocked 项不得被 fake UI 绕过。
 
 ### Week 67：Application Service Foundation
+
+详细计划：`67_week_application_service_foundation.plan.md`
+
+执行结论：Passed；证据见 `67_week_review.md`。
 
 主要交付：
 

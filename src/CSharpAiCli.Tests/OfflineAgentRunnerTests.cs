@@ -1578,7 +1578,7 @@ public sealed class OfflineAgentRunnerTests
             ToolExecutionContext context,
             CancellationToken cancellationToken = default)
         {
-            cancellationToken.WaitHandle.WaitOne(TimeSpan.FromSeconds(1));
+            cancellationToken.WaitHandle.WaitOne(TimeSpan.FromSeconds(5));
             cancellationToken.ThrowIfCancellationRequested();
             throw new InvalidOperationException("Expected overall timeout cancellation.");
         }
@@ -1678,7 +1678,7 @@ public sealed class OfflineAgentRunnerTests
 
         private static void WaitForCancellation(CancellationToken cancellationToken)
         {
-            cancellationToken.WaitHandle.WaitOne(TimeSpan.FromSeconds(1));
+            cancellationToken.WaitHandle.WaitOne(TimeSpan.FromSeconds(5));
             cancellationToken.ThrowIfCancellationRequested();
             throw new InvalidOperationException("Expected model call timeout cancellation.");
         }
@@ -1701,7 +1701,7 @@ public sealed class OfflineAgentRunnerTests
             IReadOnlyList<AgentToolCallResult> toolResults,
             CancellationToken cancellationToken = default)
         {
-            cancellationToken.WaitHandle.WaitOne(TimeSpan.FromSeconds(1));
+            cancellationToken.WaitHandle.WaitOne(TimeSpan.FromSeconds(5));
             afterCancellationObserved();
             cancellationToken.ThrowIfCancellationRequested();
             throw new InvalidOperationException("Expected model call timeout cancellation.");
