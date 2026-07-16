@@ -2,7 +2,7 @@
 
 更新时间：2026-07-16
 
-状态：Week 66-68 已完成并通过技术 Gate；Week 69 待执行
+状态：Week 66-68 已完成并通过技术 Gate；Week 69 实现与 dirty-source Gate 已完成，待 clean-source release acceptance
 
 详细产品与技术边界统一以 `docs_md/spec/desktop_app_development_framework_0_6_0.md` 为准。本排期负责把该框架拆成 Week 66-77 的依赖顺序、周末验收和发布 Gate，不扩展产品范围。
 
@@ -142,11 +142,15 @@ open workspace
 
 ### Week 69：AppHost 与 Desktop Protocol v1
 
+详细计划：`69_week_apphost_desktop_protocol_v1.plan.md`
+
+执行状态：实现与 dirty-source Gate 已完成；clean-source release acceptance 通过后标记 Passed。
+
 主要交付：
 
-- 新建 `CSharpAiCli.AppHost`，实现单父进程 stdio、framed JSON-RPC、initialize handshake 和 capability negotiation。
-- 建立 reviewed schema 作为 C#/TypeScript contract generation 或 validation 的唯一来源。
-- 接入 workspace/thread/catalog/changes/report/artifact 的 read-only 方法与有序 notification。
+- 扩展现有 `CSharpAiCli.AppHost` skeleton，完成单父进程 stdio、framed JSON-RPC、initialize handshake 和 capability negotiation。
+- 扩展 reviewed schema，继续作为 C#/TypeScript contract generation 与 runtime validation 的唯一来源。
+- 接入 workspace、thread create/list/get/rename/archive/delete，以及 catalog/changes/report/artifact read-only 方法与有序 notification。
 - 对 frame、payload、并发 request、输出频率、stderr、timeout、cancel 和 backpressure 设定边界。
 - 覆盖 malformed JSON、unknown method/version、oversize、partial frame、disconnect、child cleanup 和 secret redaction。
 

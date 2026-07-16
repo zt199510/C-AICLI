@@ -43,7 +43,7 @@ export function App() {
     <div className="app-shell">
       <header className="titlebar">
         <div className="brand">C-AICLI Desktop</div>
-        <div className="workspace-title">{workspace?.rootPath ?? "No workspace"}</div>
+        <div className="workspace-title">{workspace?.data?.rootPath ?? "No workspace"}</div>
         <div className={`runtime-status runtime-${runtime.state}`}>
           <span className="status-dot" aria-hidden="true" />
           {runtime.detail}
@@ -77,11 +77,11 @@ export function App() {
           </div>
 
           <section className="timeline" aria-label="Task timeline">
-            {workspace?.success ? (
+            {workspace?.succeeded && workspace.data ? (
               <div className="workspace-ready">
                 <FolderOpen size={28} aria-hidden="true" />
-                <h1>{workspace.rootPath}</h1>
-                <p>{workspace.workspaceId}</p>
+                <h1>{workspace.data.rootPath}</h1>
+                <p>{workspace.data.workspaceId}</p>
               </div>
             ) : (
               <div className="workspace-empty">

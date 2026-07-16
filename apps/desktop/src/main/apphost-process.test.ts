@@ -2,20 +2,32 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
-import { DESKTOP_METHODS, type WorkspaceOpenResult } from "../generated/desktop-contracts";
+import {
+  DESKTOP_METHODS,
+  SCHEMA_VERSION,
+  isThreadSummaryResult,
+  type ThreadSummaryResult,
+  type WorkspaceOpenResult,
+} from "../generated/desktop-contracts";
 import { AppHostClient } from "./apphost-client";
 import { resolveAppHostLaunch } from "./apphost-launch";
 
 describe("AppHost process bridge", () => {
   let client: AppHostClient | null = null;
+  const tempDirectories: string[] = [];
 
   afterEach(async () => {
     await client?.stop();
+    for (const directory of tempDirectories.splice(0)) {
+      fs.rmSync(directory, { force: true, recursive: true });
+    }
   });
 
   it("handshakes, validates a workspace and exits cleanly", async () => {
     const desktopRoot = process.cwd();
     const repoRoot = path.resolve(desktopRoot, "../..");
+    const workspaceRoot = fs.mkdtempSync(path.join(os.tmpdir(), "caicli-desktop-apphost-"));
+    tempDirectories.push(workspaceRoot);
     const dotnetCandidate = path.join(os.homedir(), ".dotnet", "dotnet.exe");
     const dotnetHost = fs.existsSync(dotnetCandidate) ? dotnetCandidate : "dotnet";
     const appHostDll = path.join(
@@ -45,13 +57,18 @@ describe("AppHost process bridge", () => {
     );
     const workspace = await client.request<WorkspaceOpenResult>(
       DESKTOP_METHODS.WorkspaceOpenMethod,
-      { path: repoRoot },
+      { schemaVersion: SCHEMA_VERSION, path: workspaceRoot },
+    );
+    const thread = await client.request<ThreadSummaryResult>(
+      DESKTOP_METHODS.ThreadCreateMethod,
+      { schemaVersion: SCHEMA_VERSION, title: "typescript guard" },
     );
 
     expect(initialized.protocolVersion).toBe("desktop-v1");
     expect(initialized.security.rendererNodeAccess).toBe(false);
-    expect(workspace.success).toBe(true);
-    expect(workspace.rootPath).toBe(repoRoot);
+    expect(workspace.succeeded).toBe(true);
+    expect(workspace.data?.rootPath).toBe(workspaceRoot);
+    expect(isThreadSummaryResult(thread)).toBe(true);
     await client.stop();
     expect(client.isRunning()).toBe(false);
   }, 15_000);

@@ -8,6 +8,29 @@ namespace CSharpAiCli.Tests;
 public sealed class GitToolsTests
 {
     [Fact]
+    public async Task Git_command_cancellation_kills_the_owned_process_tree()
+    {
+        if (!OperatingSystem.IsWindows()) return;
+        using TempDirectory temp = TempDirectory.Create();
+        string childPidPath = Path.Combine(temp.Path, "child.pid");
+        string escapedPidPath = childPidPath.Replace("'", "''", StringComparison.Ordinal);
+        string arguments = "-NoProfile -Command \"$child = Start-Process powershell.exe " +
+            "-ArgumentList '-NoProfile','-Command','Start-Sleep -Seconds 30' -PassThru; " +
+            $"Set-Content -LiteralPath '{escapedPidPath}' -Value $child.Id; $child.WaitForExit()\"";
+        GitCommandRunner runner = new("powershell.exe");
+        using CancellationTokenSource cancellation = new();
+        Task<GitCommandResult> running = Task.Run(() => runner.Run(temp.Path, arguments, cancellation.Token));
+        await WaitForConditionAsync(() => File.Exists(childPidPath), TimeSpan.FromSeconds(5));
+        int childPid = int.Parse(File.ReadAllText(childPidPath).Trim(), System.Globalization.CultureInfo.InvariantCulture);
+
+        cancellation.Cancel();
+
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => running);
+        await WaitForConditionAsync(() => !IsProcessRunning(childPid), TimeSpan.FromSeconds(5));
+        Assert.False(IsProcessRunning(childPid));
+    }
+
+    [Fact]
     public void Git_status_reports_clean_temporary_repo()
     {
         using TempDirectory temp = TempDirectory.Create();
@@ -1397,6 +1420,29 @@ public sealed class GitToolsTests
             Summary: "Git command completed with exit code 0.");
     }
 
+    private static async Task WaitForConditionAsync(Func<bool> condition, TimeSpan timeout)
+    {
+        Stopwatch stopwatch = Stopwatch.StartNew();
+        while (!condition())
+        {
+            Assert.True(stopwatch.Elapsed < timeout, "Timed out waiting for the process condition.");
+            await Task.Delay(20);
+        }
+    }
+
+    private static bool IsProcessRunning(int processId)
+    {
+        try
+        {
+            using Process process = Process.GetProcessById(processId);
+            return !process.HasExited;
+        }
+        catch (ArgumentException)
+        {
+            return false;
+        }
+    }
+
     private static GitCommandResult FailedGitResult(int exitCode, string stderr)
     {
         return new GitCommandResult(
@@ -1426,7 +1472,10 @@ public sealed class GitToolsTests
 
         public List<string[]> Commands { get; } = [];
 
-        public GitCommandResult Run(string workspaceRoot, string arguments)
+        public GitCommandResult Run(
+            string workspaceRoot,
+            string arguments,
+            CancellationToken cancellationToken = default)
         {
             return handle([arguments], null);
         }
@@ -1434,7 +1483,8 @@ public sealed class GitToolsTests
         public GitCommandResult RunArgumentList(
             string workspaceRoot,
             IEnumerable<string> arguments,
-            IReadOnlySet<int>? successfulExitCodes = null)
+            IReadOnlySet<int>? successfulExitCodes = null,
+            CancellationToken cancellationToken = default)
         {
             string[] args = arguments.ToArray();
             Commands.Add(args);
@@ -1445,7 +1495,8 @@ public sealed class GitToolsTests
             string workspaceRoot,
             IEnumerable<string> arguments,
             string stdoutPath,
-            IReadOnlySet<int>? successfulExitCodes = null)
+            IReadOnlySet<int>? successfulExitCodes = null,
+            CancellationToken cancellationToken = default)
         {
             string[] args = arguments.ToArray();
             Commands.Add(args);

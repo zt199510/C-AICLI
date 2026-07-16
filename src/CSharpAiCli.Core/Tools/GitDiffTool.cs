@@ -61,7 +61,7 @@ public sealed class GitDiffTool : ITool
                 structuredPayload: CreateGitDiffFailurePayload(stat, truncated: false, exitCode: null, errorCode: errorCode));
         }
 
-        GitDiffReadResult diffResult = ReadCurrentDiff(guardResult.FullPath, stat);
+        GitDiffReadResult diffResult = ReadCurrentDiff(guardResult.FullPath, stat, cancellationToken);
         if (diffResult.Failure is not null)
         {
             return diffResult.Failure;
@@ -80,7 +80,10 @@ public sealed class GitDiffTool : ITool
             structuredPayload: CreateGitDiffSuccessPayload(stat, diffResult.Truncated, output));
     }
 
-    private GitDiffReadResult ReadCurrentDiff(string workspaceRoot, bool stat)
+    private GitDiffReadResult ReadCurrentDiff(
+        string workspaceRoot,
+        bool stat,
+        CancellationToken cancellationToken)
     {
         DiffOutputBuilder outputs = new(MaxAggregateOutputBytes);
         bool truncated = false;
@@ -88,7 +91,8 @@ public sealed class GitDiffTool : ITool
 
         GitCommandResult head = gitCommandRunner.RunArgumentList(
             workspaceRoot,
-            ["rev-parse", "--verify", "HEAD"]);
+            ["rev-parse", "--verify", "HEAD"],
+            cancellationToken: cancellationToken);
         if (!head.Succeeded && !IsMissingHead(head))
         {
             return GitDiffReadResult.Failed(ToGitFailure(head, stat));
@@ -98,7 +102,8 @@ public sealed class GitDiffTool : ITool
         bool hasHead = head.Succeeded;
         GitCommandResult stagedDiff = gitCommandRunner.RunArgumentList(
             workspaceRoot,
-            CreateStagedDiffArguments(stat, hasHead));
+            CreateStagedDiffArguments(stat, hasHead),
+            cancellationToken: cancellationToken);
         if (!stagedDiff.Succeeded)
         {
             return GitDiffReadResult.Failed(ToGitFailure(stagedDiff, stat));
@@ -109,7 +114,8 @@ public sealed class GitDiffTool : ITool
 
         GitCommandResult trackedFiles = gitCommandRunner.RunArgumentList(
             workspaceRoot,
-            ["diff-files", "--raw", "--no-ext-diff", "--no-textconv", "-z", "--", CliCommandLogPathspec]);
+            ["diff-files", "--raw", "--no-ext-diff", "--no-textconv", "-z", "--", CliCommandLogPathspec],
+            cancellationToken: cancellationToken);
         if (!trackedFiles.Succeeded)
         {
             return GitDiffReadResult.Failed(ToGitFailure(trackedFiles, stat));
@@ -128,7 +134,8 @@ public sealed class GitDiffTool : ITool
                 workspaceRoot,
                 temporaryDiffDirectory.Path,
                 relativePath,
-                stat);
+                stat,
+                cancellationToken);
             if (!IsSuccessfulNoIndexDiff(unstagedDiff))
             {
                 return GitDiffReadResult.Failed(ToGitFailure(unstagedDiff, stat));
@@ -138,11 +145,14 @@ public sealed class GitDiffTool : ITool
             truncated |= !outputs.TryAdd(unstagedDiff.Stdout);
         }
 
-        StringComparison cliCommandLogPathComparison = GetCliCommandLogPathComparison(workspaceRoot);
+        StringComparison cliCommandLogPathComparison = GetCliCommandLogPathComparison(
+            workspaceRoot,
+            cancellationToken);
 
         GitCommandResult untrackedFiles = gitCommandRunner.RunArgumentList(
             workspaceRoot,
-            ["ls-files", "--others", "--exclude-standard", "-z"]);
+            ["ls-files", "--others", "--exclude-standard", "-z"],
+            cancellationToken: cancellationToken);
         if (!untrackedFiles.Succeeded)
         {
             return GitDiffReadResult.Failed(ToGitFailure(untrackedFiles, stat));
@@ -166,7 +176,8 @@ public sealed class GitDiffTool : ITool
                 workspaceRoot,
                 temporaryDiffDirectory.Path,
                 relativePath,
-                stat);
+                stat,
+                cancellationToken);
             if (!IsSuccessfulNoIndexDiff(untrackedDiff))
             {
                 return GitDiffReadResult.Failed(ToGitFailure(untrackedDiff, stat));
@@ -255,15 +266,19 @@ public sealed class GitDiffTool : ITool
         string workspaceRoot,
         string temporaryRoot,
         string relativePath,
-        bool stat)
+        bool stat,
+        CancellationToken cancellationToken)
     {
-        GitIndexEntryReadResult indexEntry = ReadIndexEntry(workspaceRoot, relativePath);
+        GitIndexEntryReadResult indexEntry = ReadIndexEntry(workspaceRoot, relativePath, cancellationToken);
         if (indexEntry.Failure is not null)
         {
             return indexEntry.Failure;
         }
 
-        GitCommandResult summaryDiff = ReadUnstagedSummaryDiff(workspaceRoot, relativePath);
+        GitCommandResult summaryDiff = ReadUnstagedSummaryDiff(
+            workspaceRoot,
+            relativePath,
+            cancellationToken);
         if (indexEntry.Entry is null || !indexEntry.Entry.IsRegularFile)
         {
             return CreateMetadataOnlyUnstagedDiffResult(summaryDiff, relativePath, indexEntry.Entry?.Mode);
@@ -282,7 +297,8 @@ public sealed class GitDiffTool : ITool
         GitCommandResult indexBlob = gitCommandRunner.RunArgumentListToFile(
             workspaceRoot,
             ["show", ":0:" + relativePath],
-            oldFullPath);
+            oldFullPath,
+            cancellationToken: cancellationToken);
         if (!indexBlob.Succeeded)
         {
             return indexBlob;
@@ -309,7 +325,8 @@ public sealed class GitDiffTool : ITool
         GitCommandResult diff = gitCommandRunner.RunArgumentList(
             temporaryRoot,
             arguments,
-            NoIndexDiffSuccessExitCodes);
+            NoIndexDiffSuccessExitCodes,
+            cancellationToken);
         GitCommandResult normalizedDiff = NormalizeNoIndexDiffPaths(diff, relativePath);
         if (!IsSuccessfulNoIndexDiff(normalizedDiff))
         {
@@ -319,11 +336,15 @@ public sealed class GitDiffTool : ITool
         return CombineSummaryAndContentDiff(summaryDiff, normalizedDiff);
     }
 
-    private GitIndexEntryReadResult ReadIndexEntry(string workspaceRoot, string relativePath)
+    private GitIndexEntryReadResult ReadIndexEntry(
+        string workspaceRoot,
+        string relativePath,
+        CancellationToken cancellationToken)
     {
         GitCommandResult result = gitCommandRunner.RunArgumentList(
             workspaceRoot,
-            ["ls-files", "-s", "-z", "--", relativePath]);
+            ["ls-files", "-s", "-z", "--", relativePath],
+            cancellationToken: cancellationToken);
         if (!result.Succeeded)
         {
             return GitIndexEntryReadResult.Failed(result);
@@ -344,11 +365,15 @@ public sealed class GitDiffTool : ITool
         return GitIndexEntryReadResult.Succeeded(new GitIndexEntry(entryText[..modeEnd]));
     }
 
-    private GitCommandResult ReadUnstagedSummaryDiff(string workspaceRoot, string relativePath)
+    private GitCommandResult ReadUnstagedSummaryDiff(
+        string workspaceRoot,
+        string relativePath,
+        CancellationToken cancellationToken)
     {
         return gitCommandRunner.RunArgumentList(
             workspaceRoot,
-            ["diff-files", "--summary", "--no-ext-diff", "--no-textconv", "--", relativePath]);
+            ["diff-files", "--summary", "--no-ext-diff", "--no-textconv", "--", relativePath],
+            cancellationToken: cancellationToken);
     }
 
     private static GitCommandResult CreateMetadataOnlyUnstagedDiffResult(
@@ -390,7 +415,8 @@ public sealed class GitDiffTool : ITool
         string workspaceRoot,
         string temporaryRoot,
         string relativePath,
-        bool stat)
+        bool stat,
+        CancellationToken cancellationToken)
     {
         string worktreeFullPath = Path.GetFullPath(
             relativePath.Replace('/', Path.DirectorySeparatorChar),
@@ -415,7 +441,8 @@ public sealed class GitDiffTool : ITool
         GitCommandResult diff = gitCommandRunner.RunArgumentList(
             temporaryRoot,
             CreateNoIndexDiffArguments(stat, "/dev/null", newRelativePath),
-            NoIndexDiffSuccessExitCodes);
+            NoIndexDiffSuccessExitCodes,
+            cancellationToken);
         return NormalizeNoIndexDiffPaths(diff, relativePath);
     }
 
@@ -572,11 +599,14 @@ public sealed class GitDiffTool : ITool
             temporaryRelativePath.Replace('/', Path.DirectorySeparatorChar));
     }
 
-    private StringComparison GetCliCommandLogPathComparison(string workspaceRoot)
+    private StringComparison GetCliCommandLogPathComparison(
+        string workspaceRoot,
+        CancellationToken cancellationToken)
     {
         GitCommandResult ignoreCase = gitCommandRunner.RunArgumentList(
             workspaceRoot,
-            ["config", "--bool", "core.ignorecase"]);
+            ["config", "--bool", "core.ignorecase"],
+            cancellationToken: cancellationToken);
         if (ignoreCase.Succeeded
             && bool.TryParse(ignoreCase.Stdout.Trim(), out bool parsedIgnoreCase))
         {

@@ -1,7 +1,7 @@
 import path from "node:path";
 import { app, BrowserWindow, dialog, ipcMain } from "electron";
 import type { InitializeResult, WorkspaceOpenResult } from "../generated/desktop-contracts";
-import { DESKTOP_METHODS } from "../generated/desktop-contracts";
+import { DESKTOP_METHODS, SCHEMA_VERSION } from "../generated/desktop-contracts";
 import { IPC_CHANNELS, type RuntimeStatus } from "../shared/bridge-contract";
 import { AppHostClient } from "./apphost-client";
 import { resolveAppHostLaunch } from "./apphost-launch";
@@ -60,6 +60,7 @@ function registerBridge(): void {
     });
     if (selection.canceled || selection.filePaths.length !== 1) return null;
     return appHost.request<WorkspaceOpenResult>(DESKTOP_METHODS.WorkspaceOpenMethod, {
+      schemaVersion: SCHEMA_VERSION,
       path: selection.filePaths[0],
     });
   });

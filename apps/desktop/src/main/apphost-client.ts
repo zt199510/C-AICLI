@@ -1,9 +1,13 @@
 import { spawn, type ChildProcessWithoutNullStreams } from "node:child_process";
+import { randomUUID } from "node:crypto";
 import { EventEmitter } from "node:events";
 import {
+  CONTRACT_SHA256,
+  DESKTOP_CAPABILITIES,
   DESKTOP_METHODS,
   PROTOCOL_LIMITS,
   PROTOCOL_VERSION,
+  SCHEMA_VERSION,
   type InitializeResult,
   type ShutdownResult,
 } from "../generated/desktop-contracts";
@@ -68,6 +72,7 @@ export class AppHostClient extends EventEmitter {
   private process: ChildProcessWithoutNullStreams | null = null;
   private nextId = 1;
   private diagnostics = "";
+  private readonly clientInstanceId = randomUUID();
 
   async start(spec: AppHostLaunchSpec): Promise<InitializeResult> {
     if (this.process) throw new Error("AppHost is already running.");
@@ -81,7 +86,7 @@ export class AppHostClient extends EventEmitter {
     child.stdout.on("data", (chunk: Buffer) => this.handleStdout(chunk));
     child.stderr.on("data", (chunk: Buffer) => {
       this.diagnostics = (this.diagnostics + chunk.toString("utf8")).slice(
-        -PROTOCOL_LIMITS.maxDiagnosticBytes,
+        -PROTOCOL_LIMITS.maxRetainedStderrBytes,
       );
     });
     child.on("error", (error) => this.failAll(error));
@@ -92,10 +97,18 @@ export class AppHostClient extends EventEmitter {
     });
 
     return this.request<InitializeResult>(DESKTOP_METHODS.InitializeMethod, {
+      schemaVersion: SCHEMA_VERSION,
       protocolVersion: PROTOCOL_VERSION,
+      contractSha256: CONTRACT_SHA256,
       clientName: "caicli-desktop",
       clientVersion: "0.6.0",
-    });
+      clientInstanceId: this.clientInstanceId,
+      requestedCapabilities: [
+        DESKTOP_CAPABILITIES.FramedJsonRpc,
+        DESKTOP_CAPABILITIES.WorkspaceSession,
+        DESKTOP_CAPABILITIES.ApplicationOutcome,
+      ],
+    }, PROTOCOL_LIMITS.initializeTimeoutMs);
   }
 
   request<T>(method: string, parameters: object, timeoutMs = 5000): Promise<T> {
@@ -137,13 +150,26 @@ export class AppHostClient extends EventEmitter {
   async stop(): Promise<void> {
     const child = this.process;
     if (!child) return;
+    const shutdownTimeoutMs = PROTOCOL_LIMITS.shutdownDrainMs + 500;
+    const shutdownDeadline = Date.now() + shutdownTimeoutMs;
     try {
       await this.request<ShutdownResult>(DESKTOP_METHODS.ShutdownMethod, {
+        schemaVersion: SCHEMA_VERSION,
         reason: "desktop-exit",
-      }, 1500);
-      await new Promise<void>((resolve) => {
-        if (child.exitCode !== null) resolve();
-        else child.once("exit", () => resolve());
+      }, shutdownTimeoutMs);
+      await new Promise<void>((resolve, reject) => {
+        if (child.exitCode !== null) {
+          resolve();
+          return;
+        }
+        const timeout = setTimeout(
+          () => reject(new Error("AppHost shutdown timed out.")),
+          Math.max(1, shutdownDeadline - Date.now()),
+        );
+        child.once("exit", () => {
+          clearTimeout(timeout);
+          resolve();
+        });
       });
     } catch {
       if (child.exitCode === null) child.kill();

@@ -39,7 +39,10 @@ public sealed class GitStatusTool : ITool
                     ("errorCode", guardResult.ErrorCode ?? ToolErrorCode.WorkspaceBoundaryDenied)));
         }
 
-        GitCommandResult result = gitCommandRunner.Run(guardResult.FullPath, "status --short");
+        GitCommandResult result = gitCommandRunner.Run(
+            guardResult.FullPath,
+            "status --short",
+            cancellationToken);
         if (!result.Succeeded)
         {
             string errorCode = NormalizeGitError(result);

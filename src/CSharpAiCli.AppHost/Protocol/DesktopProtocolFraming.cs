@@ -8,6 +8,10 @@ namespace CSharpAiCli.AppHost.Protocol;
 public static class DesktopProtocolFraming
 {
     private static readonly byte[] HeaderTerminator = "\r\n\r\n"u8.ToArray();
+    private static readonly UTF8Encoding StrictUtf8 = new(
+        encoderShouldEmitUTF8Identifier: false,
+        throwOnInvalidBytes: true);
+    private const string ReviewedContentType = "application/vscode-jsonrpc; charset=utf-8";
 
     public static async ValueTask<byte[]?> ReadFrameAsync(
         Stream input,
@@ -28,11 +32,15 @@ public static class DesktopProtocolFraming
             int read = await input.ReadAsync(body.AsMemory(offset), cancellationToken).ConfigureAwait(false);
             if (read == 0)
             {
-                throw new DesktopProtocolException("frame-body-incomplete", "Protocol frame body ended early.");
+                throw new DesktopProtocolException(
+                    DesktopProtocolDefinition.FrameBodyIncompleteError,
+                    "Protocol frame body ended early.");
             }
 
             offset += read;
         }
+
+        ValidateUtf8(body);
 
         return body;
     }
@@ -43,10 +51,21 @@ public static class DesktopProtocolFraming
         CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(output);
+        if (payload.IsEmpty)
+        {
+            throw new DesktopProtocolException(
+                DesktopProtocolDefinition.FrameBodyEmptyError,
+                "Protocol frame body must not be empty.");
+        }
+
         if (payload.Length > DesktopProtocolDefinition.MaxBodyBytes)
         {
-            throw new DesktopProtocolException("frame-body-too-large", "Protocol frame body exceeds the configured limit.");
+            throw new DesktopProtocolException(
+                DesktopProtocolDefinition.FrameBodyTooLargeError,
+                "Protocol frame body exceeds the configured limit.");
         }
+
+        ValidateUtf8(payload.Span);
 
         byte[] header = Encoding.ASCII.GetBytes(
             $"Content-Length: {payload.Length.ToString(CultureInfo.InvariantCulture)}\r\n\r\n");
@@ -57,11 +76,12 @@ public static class DesktopProtocolFraming
 
     private static async ValueTask<byte[]> ReadHeaderAsync(Stream input, CancellationToken cancellationToken)
     {
-        byte[] rented = ArrayPool<byte>.Shared.Rent(DesktopProtocolDefinition.MaxHeaderBytes);
+        byte[] rented = ArrayPool<byte>.Shared.Rent(
+            DesktopProtocolDefinition.MaxHeaderBytes + HeaderTerminator.Length);
         int length = 0;
         try
         {
-            while (length < DesktopProtocolDefinition.MaxHeaderBytes)
+            while (length < DesktopProtocolDefinition.MaxHeaderBytes + HeaderTerminator.Length)
             {
                 int read = await input.ReadAsync(rented.AsMemory(length, 1), cancellationToken).ConfigureAwait(false);
                 if (read == 0)
@@ -71,7 +91,32 @@ public static class DesktopProtocolFraming
                         return [];
                     }
 
-                    throw new DesktopProtocolException("frame-header-incomplete", "Protocol frame header ended early.");
+                    throw new DesktopProtocolException(
+                        DesktopProtocolDefinition.FrameHeaderIncompleteError,
+                        "Protocol frame header ended early.");
+                }
+
+                byte current = rented[length];
+                if (current > 0x7f || current == 0x7f ||
+                    (current < 0x20 && current is not (byte)'\r' and not (byte)'\n'))
+                {
+                    throw new DesktopProtocolException(
+                        DesktopProtocolDefinition.FrameHeaderInvalidError,
+                        "Protocol frame header is malformed.");
+                }
+
+                if (current == (byte)'\n' && (length == 0 || rented[length - 1] != (byte)'\r'))
+                {
+                    throw new DesktopProtocolException(
+                        DesktopProtocolDefinition.FrameHeaderInvalidError,
+                        "Protocol frame header is malformed.");
+                }
+
+                if (length > 0 && rented[length - 1] == (byte)'\r' && current != (byte)'\n')
+                {
+                    throw new DesktopProtocolException(
+                        DesktopProtocolDefinition.FrameHeaderInvalidError,
+                        "Protocol frame header is malformed.");
                 }
 
                 length += read;
@@ -79,11 +124,21 @@ public static class DesktopProtocolFraming
                     rented.AsSpan(length - HeaderTerminator.Length, HeaderTerminator.Length)
                         .SequenceEqual(HeaderTerminator))
                 {
-                    return rented.AsSpan(0, length - HeaderTerminator.Length).ToArray();
+                    int headerLength = length - HeaderTerminator.Length;
+                    if (headerLength > DesktopProtocolDefinition.MaxHeaderBytes)
+                    {
+                        throw new DesktopProtocolException(
+                            DesktopProtocolDefinition.FrameHeaderTooLargeError,
+                            "Protocol frame header exceeds the configured limit.");
+                    }
+
+                    return rented.AsSpan(0, headerLength).ToArray();
                 }
             }
 
-            throw new DesktopProtocolException("frame-header-too-large", "Protocol frame header exceeds the configured limit.");
+            throw new DesktopProtocolException(
+                DesktopProtocolDefinition.FrameHeaderTooLargeError,
+                "Protocol frame header exceeds the configured limit.");
         }
         finally
         {
@@ -95,25 +150,46 @@ public static class DesktopProtocolFraming
     {
         string header = Encoding.ASCII.GetString(headerBytes);
         int? contentLength = null;
-        foreach (string line in header.Split("\r\n", StringSplitOptions.RemoveEmptyEntries))
+        bool contentTypeSeen = false;
+        foreach (string line in header.Split("\r\n", StringSplitOptions.None))
         {
             int separator = line.IndexOf(':');
             if (separator <= 0)
             {
-                throw new DesktopProtocolException("frame-header-invalid", "Protocol frame header is malformed.");
+                throw new DesktopProtocolException(
+                    DesktopProtocolDefinition.FrameHeaderInvalidError,
+                    "Protocol frame header is malformed.");
             }
 
-            string name = line[..separator].Trim();
-            if (!string.Equals(name, "Content-Length", StringComparison.OrdinalIgnoreCase))
+            string name = line[..separator];
+            string value = line[(separator + 1)..].Trim(' ');
+            if (string.Equals(name, "Content-Type", StringComparison.OrdinalIgnoreCase))
             {
+                if (contentTypeSeen || !string.Equals(value, ReviewedContentType, StringComparison.OrdinalIgnoreCase))
+                {
+                    throw new DesktopProtocolException(
+                        DesktopProtocolDefinition.FrameHeaderInvalidError,
+                        "Protocol frame header is malformed.");
+                }
+
+                contentTypeSeen = true;
                 continue;
             }
 
+            if (!string.Equals(name, "Content-Length", StringComparison.OrdinalIgnoreCase))
+            {
+                throw new DesktopProtocolException(
+                    DesktopProtocolDefinition.FrameHeaderInvalidError,
+                    "Protocol frame header is malformed.");
+            }
+
             if (contentLength.HasValue ||
-                !int.TryParse(line[(separator + 1)..].Trim(), NumberStyles.None, CultureInfo.InvariantCulture, out int parsed) ||
+                !int.TryParse(value, NumberStyles.None, CultureInfo.InvariantCulture, out int parsed) ||
                 parsed < 0)
             {
-                throw new DesktopProtocolException("frame-content-length-invalid", "Protocol content length is invalid.");
+                throw new DesktopProtocolException(
+                    DesktopProtocolDefinition.FrameContentLengthInvalidError,
+                    "Protocol content length is invalid.");
             }
 
             contentLength = parsed;
@@ -121,14 +197,39 @@ public static class DesktopProtocolFraming
 
         if (!contentLength.HasValue)
         {
-            throw new DesktopProtocolException("frame-content-length-missing", "Protocol content length is required.");
+            throw new DesktopProtocolException(
+                DesktopProtocolDefinition.FrameContentLengthMissingError,
+                "Protocol content length is required.");
         }
 
         if (contentLength.Value > DesktopProtocolDefinition.MaxBodyBytes)
         {
-            throw new DesktopProtocolException("frame-body-too-large", "Protocol frame body exceeds the configured limit.");
+            throw new DesktopProtocolException(
+                DesktopProtocolDefinition.FrameBodyTooLargeError,
+                "Protocol frame body exceeds the configured limit.");
+        }
+
+        if (contentLength.Value == 0)
+        {
+            throw new DesktopProtocolException(
+                DesktopProtocolDefinition.FrameBodyEmptyError,
+                "Protocol frame body must not be empty.");
         }
 
         return contentLength.Value;
+    }
+
+    private static void ValidateUtf8(ReadOnlySpan<byte> payload)
+    {
+        try
+        {
+            _ = StrictUtf8.GetCharCount(payload);
+        }
+        catch (DecoderFallbackException)
+        {
+            throw new DesktopProtocolException(
+                DesktopProtocolDefinition.FrameUtf8InvalidError,
+                "Protocol frame body is not valid UTF-8.");
+        }
     }
 }

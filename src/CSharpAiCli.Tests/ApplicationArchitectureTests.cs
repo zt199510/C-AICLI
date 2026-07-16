@@ -69,21 +69,44 @@ public sealed class ApplicationArchitectureTests
     }
 
     [Fact]
-    public void Week_68_does_not_add_protocol_dispatch_or_cli_session_dual_write()
+    public void Week_69_protocol_dispatch_preserves_application_and_desktop_boundaries()
     {
         string root = FindRepositoryRoot();
         string contract = File.ReadAllText(Path.Combine(root, "protocol", "desktop-v1", "contract.json"));
-        string appHost = string.Join('\n', Directory.EnumerateFiles(
+        string[] appHostFiles = Directory.EnumerateFiles(
             Path.Combine(root, "src", "CSharpAiCli.AppHost"), "*.cs", SearchOption.AllDirectories)
-            .Select(File.ReadAllText));
+            .Where(path => !path.Contains($"{Path.DirectorySeparatorChar}Generated{Path.DirectorySeparatorChar}",
+                StringComparison.Ordinal))
+            .ToArray();
+        string appHost = string.Join('\n', appHostFiles.Select(File.ReadAllText));
         string cliFactory = File.ReadAllText(Path.Combine(
             root, "src", "CSharpAiCli.Cli", "Commands", "CliCommandFactory.cs"));
+        string desktopBusinessSurface = string.Join('\n', Directory.EnumerateFiles(
+                Path.Combine(root, "apps", "desktop", "src"), "*.ts*", SearchOption.AllDirectories)
+            .Where(path => !path.Contains($"{Path.DirectorySeparatorChar}generated{Path.DirectorySeparatorChar}",
+                StringComparison.OrdinalIgnoreCase))
+            .Select(File.ReadAllText));
 
-        Assert.DoesNotContain("thread.list", contract, StringComparison.Ordinal);
+        Assert.Contains("thread.list", contract, StringComparison.Ordinal);
+        Assert.Contains("thread.changed", contract, StringComparison.Ordinal);
         Assert.DoesNotContain("ThreadStore", appHost, StringComparison.Ordinal);
-        Assert.DoesNotContain("ThreadApplicationService", appHost, StringComparison.Ordinal);
+        Assert.DoesNotContain("CliEnvironmentSnapshot", appHost, StringComparison.Ordinal);
+        Assert.DoesNotContain("CSharpAiCli.Core", appHost, StringComparison.Ordinal);
+        Assert.DoesNotContain("CSharpAiCli.ProjectPacks", appHost, StringComparison.Ordinal);
+        Assert.DoesNotContain("CSharpAiCli.Cli", appHost, StringComparison.Ordinal);
+        Assert.DoesNotContain(".caicli/threads", appHost, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("Console.Write", appHost, StringComparison.Ordinal);
+        Assert.Contains("Console.Error.WriteLine", appHost, StringComparison.Ordinal);
         Assert.DoesNotContain("ThreadStore", cliFactory, StringComparison.Ordinal);
         Assert.DoesNotContain("ThreadApplicationService", cliFactory, StringComparison.Ordinal);
+        foreach (string method in new[]
+        {
+            "thread.list", "thread.get", "thread.create", "thread.rename", "thread.archive", "thread.delete",
+            "catalog.list", "changes.get", "report.list", "report.get", "artifact.list", "artifact.get"
+        })
+        {
+            Assert.DoesNotContain(method, desktopBusinessSurface, StringComparison.Ordinal);
+        }
     }
 
     [Fact]

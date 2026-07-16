@@ -5,18 +5,23 @@ namespace CSharpAiCli.Core;
 
 internal interface IGitCommandRunner
 {
-    GitCommandResult Run(string workspaceRoot, string arguments);
+    GitCommandResult Run(
+        string workspaceRoot,
+        string arguments,
+        CancellationToken cancellationToken = default);
 
     GitCommandResult RunArgumentList(
         string workspaceRoot,
         IEnumerable<string> arguments,
-        IReadOnlySet<int>? successfulExitCodes = null);
+        IReadOnlySet<int>? successfulExitCodes = null,
+        CancellationToken cancellationToken = default);
 
     GitCommandResult RunArgumentListToFile(
         string workspaceRoot,
         IEnumerable<string> arguments,
         string stdoutPath,
-        IReadOnlySet<int>? successfulExitCodes = null);
+        IReadOnlySet<int>? successfulExitCodes = null,
+        CancellationToken cancellationToken = default);
 }
 
 internal sealed class GitCommandRunner : IGitCommandRunner
@@ -24,13 +29,29 @@ internal sealed class GitCommandRunner : IGitCommandRunner
     private const int DefaultTimeoutMilliseconds = 5000;
     private const int DefaultMaxOutputBytes = 64 * 1024;
     private static readonly IReadOnlySet<int> DefaultSuccessfulExitCodes = new HashSet<int> { 0 };
+    private readonly string executable;
 
-    public GitCommandResult Run(string workspaceRoot, string arguments)
+    public GitCommandRunner()
+        : this("git")
     {
+    }
+
+    internal GitCommandRunner(string executable)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(executable);
+        this.executable = executable;
+    }
+
+    public GitCommandResult Run(
+        string workspaceRoot,
+        string arguments,
+        CancellationToken cancellationToken = default)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
         try
         {
             return RunProcess(
-                new ProcessStartInfo("git", arguments)
+                new ProcessStartInfo(executable, arguments)
                 {
                     WorkingDirectory = workspaceRoot,
                     RedirectStandardOutput = true,
@@ -38,7 +59,8 @@ internal sealed class GitCommandRunner : IGitCommandRunner
                     UseShellExecute = false,
                     CreateNoWindow = true,
                 },
-                DefaultSuccessfulExitCodes);
+                DefaultSuccessfulExitCodes,
+                cancellationToken);
         }
         catch (Exception exception) when (exception is InvalidOperationException
             or IOException
@@ -52,13 +74,15 @@ internal sealed class GitCommandRunner : IGitCommandRunner
     public GitCommandResult RunArgumentList(
         string workspaceRoot,
         IEnumerable<string> arguments,
-        IReadOnlySet<int>? successfulExitCodes = null)
+        IReadOnlySet<int>? successfulExitCodes = null,
+        CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(arguments);
+        cancellationToken.ThrowIfCancellationRequested();
 
         try
         {
-            ProcessStartInfo startInfo = new("git")
+            ProcessStartInfo startInfo = new(executable)
             {
                 WorkingDirectory = workspaceRoot,
                 RedirectStandardOutput = true,
@@ -72,7 +96,10 @@ internal sealed class GitCommandRunner : IGitCommandRunner
                 startInfo.ArgumentList.Add(argument);
             }
 
-            return RunProcess(startInfo, successfulExitCodes ?? DefaultSuccessfulExitCodes);
+            return RunProcess(
+                startInfo,
+                successfulExitCodes ?? DefaultSuccessfulExitCodes,
+                cancellationToken);
         }
         catch (Exception exception) when (exception is InvalidOperationException
             or IOException
@@ -87,13 +114,15 @@ internal sealed class GitCommandRunner : IGitCommandRunner
         string workspaceRoot,
         IEnumerable<string> arguments,
         string stdoutPath,
-        IReadOnlySet<int>? successfulExitCodes = null)
+        IReadOnlySet<int>? successfulExitCodes = null,
+        CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(arguments);
+        cancellationToken.ThrowIfCancellationRequested();
 
         try
         {
-            ProcessStartInfo startInfo = new("git")
+            ProcessStartInfo startInfo = new(executable)
             {
                 WorkingDirectory = workspaceRoot,
                 RedirectStandardOutput = true,
@@ -107,7 +136,11 @@ internal sealed class GitCommandRunner : IGitCommandRunner
                 startInfo.ArgumentList.Add(argument);
             }
 
-            return RunProcessToFile(startInfo, stdoutPath, successfulExitCodes ?? DefaultSuccessfulExitCodes);
+            return RunProcessToFile(
+                startInfo,
+                stdoutPath,
+                successfulExitCodes ?? DefaultSuccessfulExitCodes,
+                cancellationToken);
         }
         catch (Exception exception) when (exception is InvalidOperationException
             or IOException
@@ -120,7 +153,8 @@ internal sealed class GitCommandRunner : IGitCommandRunner
 
     private static GitCommandResult RunProcess(
         ProcessStartInfo startInfo,
-        IReadOnlySet<int> successfulExitCodes)
+        IReadOnlySet<int> successfulExitCodes,
+        CancellationToken cancellationToken)
     {
         using Process process = new()
         {
@@ -128,6 +162,8 @@ internal sealed class GitCommandRunner : IGitCommandRunner
         };
 
         process.Start();
+        using CancellationTokenRegistration cancellationRegistration =
+            cancellationToken.Register(() => TryKill(process));
         Task<string> stdoutTask = process.StandardOutput.ReadToEndAsync();
         Task<string> stderrTask = process.StandardError.ReadToEndAsync();
         if (!process.WaitForExit(DefaultTimeoutMilliseconds))
@@ -148,6 +184,8 @@ internal sealed class GitCommandRunner : IGitCommandRunner
                 Summary: "Git command timed out.");
         }
 
+        cancellationToken.ThrowIfCancellationRequested();
+
         TruncatedText stdout = Truncate(stdoutTask.GetAwaiter().GetResult(), DefaultMaxOutputBytes);
         TruncatedText stderr = Truncate(stderrTask.GetAwaiter().GetResult(), DefaultMaxOutputBytes);
         bool succeeded = successfulExitCodes.Contains(process.ExitCode);
@@ -167,7 +205,8 @@ internal sealed class GitCommandRunner : IGitCommandRunner
     private static GitCommandResult RunProcessToFile(
         ProcessStartInfo startInfo,
         string stdoutPath,
-        IReadOnlySet<int> successfulExitCodes)
+        IReadOnlySet<int> successfulExitCodes,
+        CancellationToken cancellationToken)
     {
         Directory.CreateDirectory(Path.GetDirectoryName(stdoutPath)!);
         using Process process = new()
@@ -177,6 +216,8 @@ internal sealed class GitCommandRunner : IGitCommandRunner
 
         using FileStream stdoutFile = File.Create(stdoutPath);
         process.Start();
+        using CancellationTokenRegistration cancellationRegistration =
+            cancellationToken.Register(() => TryKill(process));
         Task stdoutTask = process.StandardOutput.BaseStream.CopyToAsync(stdoutFile);
         Task<string> stderrTask = process.StandardError.ReadToEndAsync();
         if (!process.WaitForExit(DefaultTimeoutMilliseconds))
@@ -194,6 +235,8 @@ internal sealed class GitCommandRunner : IGitCommandRunner
                 ErrorCode: ToolErrorCode.GitTimeout,
                 Summary: "Git command timed out.");
         }
+
+        cancellationToken.ThrowIfCancellationRequested();
 
         stdoutTask.GetAwaiter().GetResult();
         TruncatedText stderr = Truncate(stderrTask.GetAwaiter().GetResult(), DefaultMaxOutputBytes);

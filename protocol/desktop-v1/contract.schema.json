@@ -1,0 +1,172 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://caicli.local/schemas/desktop-v1-contract.schema.json",
+  "title": "C-AICLI Desktop Protocol Contract DSL",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "protocolVersion",
+    "schemaVersion",
+    "capabilities",
+    "errors",
+    "frameErrors",
+    "limits",
+    "methods",
+    "notifications",
+    "types"
+  ],
+  "properties": {
+    "$schema": { "type": "string", "maxLength": 256 },
+    "protocolVersion": { "type": "string", "minLength": 1, "maxLength": 64 },
+    "schemaVersion": { "type": "integer", "minimum": 1, "maximum": 2147483647 },
+    "capabilities": {
+      "type": "array",
+      "maxItems": 64,
+      "items": { "$ref": "#/$defs/capabilityDefinition" }
+    },
+    "errors": {
+      "type": "array",
+      "maxItems": 128,
+      "items": { "$ref": "#/$defs/errorDefinition" }
+    },
+    "frameErrors": {
+      "type": "array",
+      "maxItems": 64,
+      "uniqueItems": true,
+      "items": {
+        "type": "string",
+        "pattern": "^frame-[a-z0-9]+(-[a-z0-9]+)*$",
+        "maxLength": 128
+      }
+    },
+    "limits": {
+      "type": "object",
+      "minProperties": 1,
+      "maxProperties": 128,
+      "propertyNames": { "$ref": "#/$defs/identifier" },
+      "additionalProperties": {
+        "type": "integer",
+        "minimum": 1,
+        "maximum": 9007199254740991
+      }
+    },
+    "methods": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 128,
+      "items": { "$ref": "#/$defs/methodDefinition" }
+    },
+    "notifications": {
+      "type": "array",
+      "maxItems": 128,
+      "items": { "$ref": "#/$defs/notificationDefinition" }
+    },
+    "types": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 512,
+      "items": { "$ref": "#/$defs/typeDefinition" }
+    }
+  },
+  "$defs": {
+    "identifier": {
+      "type": "string",
+      "pattern": "^[A-Za-z][A-Za-z0-9]*$",
+      "maxLength": 128
+    },
+    "protocolName": {
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9]*(\\.[a-z][a-z0-9]*)+$",
+      "maxLength": 128
+    },
+    "capabilityDefinition": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "required"],
+      "properties": {
+        "name": { "type": "string", "minLength": 1, "maxLength": 64 },
+        "required": { "type": "boolean" }
+      }
+    },
+    "errorDefinition": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["code", "rpcCode"],
+      "properties": {
+        "code": { "type": "string", "minLength": 1, "maxLength": 128 },
+        "rpcCode": { "type": "integer", "minimum": -32768, "maximum": -32000 }
+      }
+    },
+    "methodDefinition": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["constant", "name", "params", "result", "requiresWorkspace", "mutation", "timeout"],
+      "properties": {
+        "constant": { "$ref": "#/$defs/identifier" },
+        "name": { "$ref": "#/$defs/protocolName" },
+        "params": { "$ref": "#/$defs/identifier" },
+        "result": { "$ref": "#/$defs/identifier" },
+        "internal": { "type": "boolean" },
+        "requiresWorkspace": { "type": "boolean" },
+        "mutation": { "type": "boolean" },
+        "timeout": { "enum": ["initialize", "query", "mutation", "shutdown"] }
+      }
+    },
+    "notificationDefinition": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["constant", "name", "params", "capability"],
+      "properties": {
+        "constant": { "$ref": "#/$defs/identifier" },
+        "name": { "$ref": "#/$defs/protocolName" },
+        "params": { "$ref": "#/$defs/identifier" },
+        "capability": { "type": "string", "minLength": 1, "maxLength": 64 }
+      }
+    },
+    "typeDefinition": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "properties"],
+      "properties": {
+        "name": { "$ref": "#/$defs/identifier" },
+        "properties": {
+          "type": "array",
+          "maxItems": 256,
+          "items": { "$ref": "#/$defs/propertyDefinition" }
+        }
+      }
+    },
+    "propertyDefinition": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["jsonName", "type"],
+      "properties": {
+        "jsonName": { "$ref": "#/$defs/identifier" },
+        "type": {
+          "anyOf": [
+            { "enum": ["string", "boolean", "int32", "int64", "datetime", "array"] },
+            { "$ref": "#/$defs/identifier" }
+          ]
+        },
+        "items": {
+          "anyOf": [
+            { "enum": ["string", "boolean", "int32", "int64", "datetime"] },
+            { "$ref": "#/$defs/identifier" }
+          ]
+        },
+        "maxItems": { "type": "integer", "minimum": 1, "maximum": 1000000 },
+        "maxUtf8Bytes": { "type": "integer", "minimum": 1, "maximum": 1048576 },
+        "enum": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 256,
+          "items": { "type": "string", "maxLength": 4096 }
+        },
+        "min": { "type": "integer", "minimum": -9007199254740991, "maximum": 9007199254740991 },
+        "max": { "type": "integer", "minimum": -9007199254740991, "maximum": 9007199254740991 },
+        "nullable": { "type": "boolean" },
+        "optional": { "type": "boolean" }
+      }
+    }
+  }
+}

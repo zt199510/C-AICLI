@@ -1,0 +1,153 @@
+{
+  "methods": [
+    {
+      "method": "app.initialize",
+      "params": {
+        "schemaVersion": 1,
+        "protocolVersion": "desktop-v1",
+        "contractSha256": "0e89e542511ee9a1531db2bda55daa75ed4593257bdf5e9b80a99b065dcd33a4",
+        "clientName": "desktop-example",
+        "clientVersion": "0.6.0",
+        "clientInstanceId": "example-client-1",
+        "requestedCapabilities": ["framed-json-rpc", "workspace-session", "application-outcome"]
+      },
+      "result": {
+        "schemaVersion": 1,
+        "protocolVersion": "desktop-v1",
+        "contractSha256": "0e89e542511ee9a1531db2bda55daa75ed4593257bdf5e9b80a99b065dcd33a4",
+        "serverVersion": "0.6.0",
+        "serverInstanceId": "server_0123456789abcdef01234567",
+        "negotiatedCapabilities": ["framed-json-rpc", "workspace-session", "application-outcome"],
+        "methods": ["app.initialize", "app.cancel", "app.shutdown", "workspace.open", "thread.list", "thread.get", "thread.create", "thread.rename", "thread.archive", "thread.delete", "catalog.list", "changes.get", "report.list", "report.get", "artifact.list", "artifact.get"],
+        "notifications": [],
+        "limits": {
+          "maxHeaderBytes": 8192,
+          "maxBodyBytes": 1048576,
+          "maxJsonDepth": 64,
+          "maxMethodNameBytes": 128,
+          "maxRequestId": 9007199254740991,
+          "initializeTimeoutMs": 5000,
+          "defaultQueryTimeoutMs": 15000,
+          "mutationTimeoutMs": 30000,
+          "shutdownDrainMs": 2000,
+          "maxInFlight": 8,
+          "requestRateBurst": 64,
+          "requestRatePerSecond": 32,
+          "maxOutputQueueFrames": 64,
+          "maxOutputQueueBytes": 4194304,
+          "maxDiagnosticBytes": 4096,
+          "maxRetainedStderrBytes": 16384,
+          "applicationTargetBytes": 786432
+        },
+        "security": {
+          "rendererNodeAccess": false,
+          "arbitraryFileAccess": false,
+          "arbitraryProcessAccess": false,
+          "workspaceAuthority": "server",
+          "transport": "framed-json-rpc-stdio"
+        }
+      }
+    },
+    {
+      "method": "app.cancel",
+      "params": { "schemaVersion": 1, "targetRequestId": 1 },
+      "result": { "schemaVersion": 1, "accepted": false }
+    },
+    {
+      "method": "app.shutdown",
+      "params": { "schemaVersion": 1, "reason": "desktop-exit" },
+      "result": { "schemaVersion": 1, "accepted": true }
+    },
+    {
+      "method": "workspace.open",
+      "params": { "schemaVersion": 1, "path": "C:\\workspace" },
+      "result": { "schemaVersion": 1, "succeeded": false, "data": null, "error": { "code": "workspace-not-found", "category": "not-found", "safeMessage": "Workspace was not found.", "retryable": false }, "diagnostics": [], "truncated": false }
+    },
+    {
+      "method": "thread.list",
+      "params": { "schemaVersion": 1, "pageSize": 50 },
+      "result": { "schemaVersion": 1, "succeeded": false, "data": null, "error": { "code": "thread-not-found", "category": "not-found", "safeMessage": "Thread was not found.", "retryable": false }, "diagnostics": [], "truncated": false }
+    },
+    {
+      "method": "thread.get",
+      "params": { "schemaVersion": 1, "threadId": "thread_0123456789abcdef01234567", "afterSequence": 0, "timelinePageSize": 50 },
+      "result": { "schemaVersion": 1, "succeeded": false, "data": null, "error": { "code": "thread-not-found", "category": "not-found", "safeMessage": "Thread was not found.", "retryable": false }, "diagnostics": [], "truncated": false }
+    },
+    {
+      "method": "thread.create",
+      "params": { "schemaVersion": 1, "title": "Example thread" },
+      "result": { "schemaVersion": 1, "succeeded": false, "data": null, "error": { "code": "thread-create-denied", "category": "denied", "safeMessage": "Thread could not be created.", "retryable": false }, "diagnostics": [], "truncated": false }
+    },
+    {
+      "method": "thread.rename",
+      "params": { "schemaVersion": 1, "threadId": "thread_0123456789abcdef01234567", "expectedRevision": 0, "title": "Renamed thread" },
+      "result": { "schemaVersion": 1, "succeeded": false, "data": null, "error": { "code": "thread-conflict", "category": "conflict", "safeMessage": "Thread revision changed.", "retryable": false }, "diagnostics": [], "truncated": false }
+    },
+    {
+      "method": "thread.archive",
+      "params": { "schemaVersion": 1, "threadId": "thread_0123456789abcdef01234567", "expectedRevision": 0 },
+      "result": { "schemaVersion": 1, "succeeded": false, "data": null, "error": { "code": "thread-conflict", "category": "conflict", "safeMessage": "Thread revision changed.", "retryable": false }, "diagnostics": [], "truncated": false }
+    },
+    {
+      "method": "thread.delete",
+      "params": { "schemaVersion": 1, "threadId": "thread_0123456789abcdef01234567", "expectedRevision": 0, "confirmation": "thread_0123456789abcdef01234567" },
+      "result": { "schemaVersion": 1, "succeeded": false, "data": null, "error": { "code": "thread-conflict", "category": "conflict", "safeMessage": "Thread revision changed.", "retryable": false }, "diagnostics": [], "truncated": false }
+    },
+    {
+      "method": "catalog.list",
+      "params": { "schemaVersion": 1, "kind": "project-packs", "pageSize": 50 },
+      "result": { "schemaVersion": 1, "succeeded": false, "data": null, "error": { "code": "catalog-unavailable", "category": "unavailable", "safeMessage": "Catalog is unavailable.", "retryable": true }, "diagnostics": [], "truncated": false }
+    },
+    {
+      "method": "changes.get",
+      "params": { "schemaVersion": 1 },
+      "result": { "schemaVersion": 1, "succeeded": false, "data": null, "error": { "code": "changes-unavailable", "category": "unavailable", "safeMessage": "Changes are unavailable.", "retryable": true }, "diagnostics": [], "truncated": false }
+    },
+    {
+      "method": "report.list",
+      "params": { "schemaVersion": 1, "pageSize": 50 },
+      "result": { "schemaVersion": 1, "succeeded": false, "data": null, "error": { "code": "report-unavailable", "category": "unavailable", "safeMessage": "Reports are unavailable.", "retryable": true }, "diagnostics": [], "truncated": false }
+    },
+    {
+      "method": "report.get",
+      "params": { "schemaVersion": 1, "reportId": "job:job_0123456789abcdef" },
+      "result": { "schemaVersion": 1, "succeeded": false, "data": null, "error": { "code": "report-not-found", "category": "not-found", "safeMessage": "Report was not found.", "retryable": false }, "diagnostics": [], "truncated": false }
+    },
+    {
+      "method": "artifact.list",
+      "params": { "schemaVersion": 1, "pageSize": 50 },
+      "result": { "schemaVersion": 1, "succeeded": false, "data": null, "error": { "code": "artifact-unavailable", "category": "unavailable", "safeMessage": "Artifacts are unavailable.", "retryable": true }, "diagnostics": [], "truncated": false }
+    },
+    {
+      "method": "artifact.get",
+      "params": { "schemaVersion": 1, "artifactId": "artifact_0123456789abcdef" },
+      "result": { "schemaVersion": 1, "succeeded": false, "data": null, "error": { "code": "artifact-not-found", "category": "not-found", "safeMessage": "Artifact was not found.", "retryable": false }, "diagnostics": [], "truncated": false }
+    }
+  ],
+  "notifications": [
+    {
+      "method": "thread.changed",
+      "params": {
+        "schemaVersion": 1,
+        "eventSequence": 1,
+        "workspaceId": "ws_0123456789abcdef01234567",
+        "threadId": "thread_0123456789abcdef01234567",
+        "revision": 0,
+        "changeKind": "created",
+        "emittedAtUtc": "2026-07-16T12:00:00Z"
+      }
+    }
+  ],
+  "error": {
+    "jsonrpc": "2.0",
+    "id": 1,
+    "error": {
+      "code": -32602,
+      "message": "Request parameters are invalid.",
+      "data": {
+        "errorCode": "invalid-params",
+        "safeMessage": "Request parameters are invalid."
+      }
+    }
+  }
+}
