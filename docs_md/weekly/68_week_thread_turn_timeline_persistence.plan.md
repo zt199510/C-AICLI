@@ -1,6 +1,6 @@
 # 第 68 周执行计划：Thread、Turn、Timeline 与持久化投影
 
-状态：实现与技术验证已完成；clean-source release acceptance 待提交后补跑
+状态：已完成；Week 68 Gate Passed
 
 更新时间：2026-07-16
 
@@ -319,7 +319,7 @@ expected domain failure 返回结构化 error/diagnostic；unexpected exception 
 - [x] Step 11：为 `FileConversationStore` 增加 authoritative bounded read/fingerprint 入口，保持 CLI session behavior 不变。
 - [x] Step 12：实现 session migration preview/import/idempotency/source-changed/rollback-safe tests。
 - [x] Step 13：加入 architecture、crash/orphan、corrupt/oversize/reparse/concurrency 和 no-second-truth tests。
-- [ ] Step 14：定向测试、Release build、标准并发 full suite 两次与 CLI smoke 已完成；clean-source release validation 待提交后补跑。
+- [x] Step 14：运行定向测试、Release build、标准并发 full suite 两次、CLI smoke 和 clean-source release validation。
 - [x] Step 15：运行 Desktop verify、AppHost publish/package、双 packaged smoke、orphan 和同口径 package/process/memory 采样。
 - [x] Step 16：执行 `git diff --check`、文档链接检查，并创建 `68_week_review.md`，记录 Week 69 输入。
 

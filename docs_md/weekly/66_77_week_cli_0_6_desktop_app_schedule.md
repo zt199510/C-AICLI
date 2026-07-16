@@ -2,7 +2,7 @@
 
 更新时间：2026-07-16
 
-状态：Week 66-68 实现与技术验证已完成；Week 68 clean-source release acceptance 待提交后补跑
+状态：Week 66-68 已完成并通过技术 Gate；Week 69 待执行
 
 详细产品与技术边界统一以 `docs_md/spec/desktop_app_development_framework_0_6_0.md` 为准。本排期负责把该框架拆成 Week 66-77 的依赖顺序、周末验收和发布 Gate，不扩展产品范围。
 
@@ -128,7 +128,7 @@ open workspace
 
 详细计划：`68_week_thread_turn_timeline_persistence.plan.md`
 
-执行回顾：`68_week_review.md`（实现、测试、package 与性能 Gate 已通过；clean-source release acceptance 待提交后补跑）
+执行回顾：`68_week_review.md`（Week 68 Gate Passed）
 
 主要交付：
 

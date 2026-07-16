@@ -1,6 +1,6 @@
 # 第 68 周回顾：Thread、Turn、Timeline 与持久化投影
 
-状态：实现与技术验证已完成；Week 68 Gate 待提交后补跑 clean-source release acceptance
+状态：已完成；Week 68 Gate Passed
 
 更新时间：2026-07-16
 
@@ -23,7 +23,8 @@
 - 起点已有 3 个用户文档修改和未跟踪 Week 68 计划；实现保留这些改动，没有回退或覆盖。
 - .NET SDK：`9.0.308`；Node/npm：`22.13.0` / `11.7.0`。
 - Week 67 full suite 基线：`1288/1288`；Week 68 最终：`1321/1321`。
-- 未创建提交。标准 `Build-Release.ps1` 正确拒绝 dirty source；`-AllowDirtySource` 产物只用于 smoke，不是 clean-source acceptance artifact。
+- 实现提交：`ee36b803d040b065d3071eee82ab48afb915b1c8`（`完成第68周线程时间线持久化`）。
+- clean-source `Build-Release.ps1 -ReleaseAcceptance` 已通过；manifest/checksums 记录该 revision、`sourceDirty=false`、`releaseAcceptance=true` 与 SDK `9.0.308`。
 
 ## Persisted contract
 
@@ -79,8 +80,8 @@ dotnet test src\CSharpAiCli.sln -c Release --no-build
 
 ## CLI、Desktop 与 package
 
-- dirty-source 非验收 release publish：Passed，SDK `9.0.308`，`sourceDirty=true`。
-- CLI smoke：Passed；真实模型、daemon 与真实 Gerber/TIFF 外部工具路径按脚本环境开关跳过。
+- clean-source release acceptance：Passed，SDK `9.0.308`，`sourceDirty=false`，`releaseAcceptance=true`。
+- acceptance CLI smoke：Passed；真实模型、daemon 与真实 Gerber/TIFF 外部工具路径按脚本环境开关跳过。
 - Desktop verify：contract/notice drift、typecheck、ESLint、5 files / `11/11`、Main/Renderer build 与 production security 全部通过。
 - AppHost publish、Desktop package、headless smoke、window-close smoke 全部通过；两种 smoke 的 AppHost orphan delta 均为 0。
 
@@ -112,9 +113,9 @@ dotnet test src\CSharpAiCli.sln -c Release --no-build
 | .NET regression | Passed | 0 warning；full suite 连续两次 `1321/1321` |
 | CLI/Desktop regression | Passed | CLI smoke、Desktop verify/package、双 smoke、orphan 0 |
 | Performance | Passed | package/AppHost/working set 增长均低于 15% |
-| Clean-source release acceptance | Pending | 当前未提交工作树被标准 release script 正确拒绝；提交后需不带 `-AllowDirtySource` 重跑 |
+| Clean-source release acceptance | Passed | `Build-Release.ps1 -ReleaseAcceptance` 绑定 clean revision，manifest/checksums provenance 一致，产物 smoke 通过 |
 
-因此实现、测试、package 与性能 Gate 已通过，但 Week 68 总 Gate 在 clean-source release acceptance 补齐前不标记最终 Passed。
+Week 68 的实现、测试、architecture、migration、CLI/Desktop、package、performance 与 clean-source release acceptance Gate 已全部通过。
 
 ## Week 69 输入
 
@@ -124,4 +125,4 @@ dotnet test src\CSharpAiCli.sln -c Release --no-build
 - typed timeline envelope/payload、stable pointer hydration、redaction、aggregate bound 与 recovery-required diagnostic。
 - explicit session preview/import、deterministic projection 与 source fingerprint/idempotency/rollback 语义。
 - desktop-v1 当前无 thread method；Week 69 应从 reviewed Application DTO 新增协议，不得让 AppHost 直接读取 `.caicli/threads`。
-- clean-source release acceptance 是进入 Week 69 前唯一未关闭的验收项。
+- Week 68 无未关闭 Gate；Week 69 可从 Application DTO 开始协议接入。
