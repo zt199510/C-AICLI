@@ -2,7 +2,7 @@
 
 更新时间：2026-07-16
 
-状态：Week 66-69 已完成并通过技术 Gate；Week 70 待执行
+状态：Week 66-70 已完成并通过技术 Gate；Week 71 待执行
 
 详细产品与技术边界统一以 `docs_md/spec/desktop_app_development_framework_0_6_0.md` 为准。本排期负责把该框架拆成 Week 66-77 的依赖顺序、周末验收和发布 Gate，不扩展产品范围。
 
@@ -158,7 +158,9 @@ open workspace
 
 ### Week 70：Secure Electron Shell
 
-执行状态：待执行。
+执行结论：Passed；安全 Shell、回归、packaged smoke、视觉与 package/process Gate 全部通过，证据见 `70_week_review.md`。
+
+详细计划：`70_week_secure_electron_shell.plan.md`
 
 主要交付：
 
