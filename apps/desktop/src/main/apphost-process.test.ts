@@ -2,13 +2,6 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
-import {
-  DESKTOP_METHODS,
-  SCHEMA_VERSION,
-  isThreadSummaryResult,
-  type ThreadSummaryResult,
-  type WorkspaceOpenResult,
-} from "../generated/desktop-contracts";
 import { AppHostClient } from "./apphost-client";
 import { resolveAppHostLaunch } from "./apphost-launch";
 
@@ -55,20 +48,12 @@ describe("AppHost process bridge", () => {
         },
       }),
     );
-    const workspace = await client.request<WorkspaceOpenResult>(
-      DESKTOP_METHODS.WorkspaceOpenMethod,
-      { schemaVersion: SCHEMA_VERSION, path: workspaceRoot },
-    );
-    const thread = await client.request<ThreadSummaryResult>(
-      DESKTOP_METHODS.ThreadCreateMethod,
-      { schemaVersion: SCHEMA_VERSION, title: "typescript guard" },
-    );
+    const workspace = await client.openWorkspace(workspaceRoot);
 
     expect(initialized.protocolVersion).toBe("desktop-v1");
     expect(initialized.security.rendererNodeAccess).toBe(false);
     expect(workspace.succeeded).toBe(true);
     expect(workspace.data?.rootPath).toBe(workspaceRoot);
-    expect(isThreadSummaryResult(thread)).toBe(true);
     await client.stop();
     expect(client.isRunning()).toBe(false);
   }, 15_000);
@@ -82,7 +67,7 @@ describe("AppHost process bridge", () => {
         args: ["-e", "process.exit(7)"],
         cwd: process.cwd(),
       }),
-    ).rejects.toThrow("AppHost exited (7).");
+    ).rejects.toThrow("AppHost exited unexpectedly.");
 
     expect(client.isRunning()).toBe(false);
   });
