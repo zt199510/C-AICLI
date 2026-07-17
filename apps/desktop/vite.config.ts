@@ -25,7 +25,7 @@ export default defineConfig(({ command }) => ({
   base: "./",
   build: {
     outDir: "dist/renderer",
-    emptyOutDir: false,
+    emptyOutDir: true,
     sourcemap: true,
   },
   server: {
