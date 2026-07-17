@@ -3,7 +3,7 @@ import { createRuntimeStatus, IPC_CHANNELS } from "../shared/bridge-contract";
 import { registerDesktopIpc } from "./ipc-bridge";
 
 describe("desktop IPC registry", () => {
-  it("registers exactly three invoke handlers and disposes them", () => {
+  it("registers exactly fourteen invoke handlers and disposes them", () => {
     const handlers = new Map<string, (...args: unknown[]) => unknown>();
     const removeHandler = vi.fn((channel: string) => handlers.delete(channel));
     const ipcMain = {
@@ -14,6 +14,7 @@ describe("desktop IPC registry", () => {
       getStatus: vi.fn(() => createRuntimeStatus("runtime-ready")),
       restart: vi.fn(async () => createRuntimeStatus("runtime-ready")),
       openWorkspace: vi.fn(),
+      ...readOnlyRuntime(),
     };
     const dispose = registerDesktopIpc({
       ipcMain: ipcMain as never,
@@ -26,9 +27,20 @@ describe("desktop IPC registry", () => {
       IPC_CHANNELS.getRuntimeStatus,
       IPC_CHANNELS.restartRuntime,
       IPC_CHANNELS.openWorkspace,
+      IPC_CHANNELS.getWorkspaceSnapshot,
+      IPC_CHANNELS.listThreads,
+      IPC_CHANNELS.getThread,
+      IPC_CHANNELS.createThread,
+      IPC_CHANNELS.renameThread,
+      IPC_CHANNELS.archiveThread,
+      IPC_CHANNELS.getChanges,
+      IPC_CHANNELS.listReports,
+      IPC_CHANNELS.getReport,
+      IPC_CHANNELS.listArtifacts,
+      IPC_CHANNELS.getArtifact,
     ]);
     dispose();
-    expect(removeHandler).toHaveBeenCalledTimes(3);
+    expect(removeHandler).toHaveBeenCalledTimes(14);
   });
 
   it("rejects untrusted senders and unexpected arguments", async () => {
@@ -51,10 +63,28 @@ function captureHandlers(options: { allowed: boolean }) {
       getStatus: () => createRuntimeStatus("runtime-ready"),
       restart: async () => createRuntimeStatus("runtime-ready"),
       openWorkspace: async () => { throw new Error("unused"); },
+      ...readOnlyRuntime(),
     },
     dialog: { showOpenDialog: async () => ({ canceled: true, filePaths: [] }) },
     getWindow: () => null,
     isAllowedSender: () => options.allowed,
   });
   return handlers;
+}
+
+function readOnlyRuntime() {
+  const unused = async () => { throw new Error("unused"); };
+  return {
+    getWorkspaceSnapshot: () => null,
+    listThreads: unused,
+    getThread: unused,
+    createThread: unused,
+    renameThread: unused,
+    archiveThread: unused,
+    getChanges: unused,
+    listReports: unused,
+    getReport: unused,
+    listArtifacts: unused,
+    getArtifact: unused,
+  };
 }

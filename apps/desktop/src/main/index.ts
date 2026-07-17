@@ -32,6 +32,9 @@ app.on("second-instance", () => { focusDesktopWindow(mainWindow); });
 runtime.subscribe((status) => {
   sendRuntimeStatus(mainWindow, IPC_CHANNELS.runtimeStatus, status);
 });
+runtime.subscribeThreadChanged((event) => {
+  if (isRuntimeWindowAvailable(mainWindow)) mainWindow.webContents.send(IPC_CHANNELS.threadChanged, event);
+});
 
 if (hasInstanceLock) {
   void app.whenReady().then(async () => {

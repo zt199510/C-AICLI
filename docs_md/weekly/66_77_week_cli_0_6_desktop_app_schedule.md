@@ -1,8 +1,8 @@
 # C-AICLI 0.6.0 Desktop App 12 周开发排期
 
-更新时间：2026-07-16
+更新时间：2026-07-17
 
-状态：Week 66-70 已完成并通过技术 Gate；Week 71 待执行
+状态：Week 66-71 已完成并通过技术 Gate；Week 72 待执行
 
 详细产品与技术边界统一以 `docs_md/spec/desktop_app_development_framework_0_6_0.md` 为准。本排期负责把该框架拆成 Week 66-77 的依赖顺序、周末验收和发布 Gate，不扩展产品范围。
 
@@ -173,6 +173,10 @@ open workspace
 周末 Gate：安全配置自动测试通过；Renderer 无法获得 Node、通用 IPC、任意文件或进程能力；AppHost crash 有明确 UI 状态。
 
 ### Week 71：只读 Thread、Timeline 与复核面板
+
+详细计划：`71_week_read_only_thread_timeline_review.plan.md`
+
+执行结论：Passed；strict notification/resync、只读 Thread/Timeline/复核面板、unpacked/packaged E2E、四视口、package/process 与 CLI/.NET Gate 全部通过，证据见 `71_week_review.md`。
 
 主要交付：
 

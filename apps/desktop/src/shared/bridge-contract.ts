@@ -1,11 +1,51 @@
-import type { WorkspaceOpenResult } from "../generated/desktop-contracts";
+import {
+  SCHEMA_VERSION,
+  isArtifactGetParams,
+  isChangesGetParams,
+  isReportGetParams,
+  isThreadArchiveParams,
+  isThreadCreateParams,
+  isThreadGetParams,
+  isThreadRenameParams,
+  type ArtifactGetResult,
+  type ArtifactListResult,
+  type ChangesGetResult,
+  type ReportGetResult,
+  type ReportListResult,
+  type ThreadChangedParams,
+  type ThreadGetResult,
+  type ThreadListResult,
+  type ThreadSummaryResult,
+  type WorkspaceOpenResult,
+  type WorkspaceSnapshotData,
+} from "../generated/desktop-contracts";
 
 export const IPC_CHANNELS = Object.freeze({
   getRuntimeStatus: "runtime:get-status",
   restartRuntime: "runtime:restart",
   openWorkspace: "workspace:open",
+  getWorkspaceSnapshot: "workspace:get-snapshot",
+  listThreads: "thread:list",
+  getThread: "thread:get",
+  createThread: "thread:create",
+  renameThread: "thread:rename",
+  archiveThread: "thread:archive",
+  threadChanged: "thread:changed",
+  getChanges: "changes:get",
+  listReports: "report:list",
+  getReport: "report:get",
+  listArtifacts: "artifact:list",
+  getArtifact: "artifact:get",
   runtimeStatus: "runtime:status",
 });
+
+export interface GetThreadCommand { readonly threadId: string; readonly afterSequence: number; }
+export interface CreateThreadCommand { readonly title: string; }
+export interface RenameThreadCommand { readonly threadId: string; readonly expectedRevision: number; readonly title: string; }
+export interface ArchiveThreadCommand { readonly threadId: string; readonly expectedRevision: number; }
+export interface GetChangesCommand { readonly sessionName?: string; }
+export interface GetReportCommand { readonly reportId: string; }
+export interface GetArtifactCommand { readonly artifactId: string; }
 
 export type RuntimeState =
   | "starting"
@@ -39,7 +79,19 @@ export interface DesktopBridge {
   getRuntimeStatus(): Promise<RuntimeStatus>;
   restartRuntime(): Promise<RuntimeStatus>;
   openWorkspace(): Promise<WorkspaceOpenResult | null>;
+  getWorkspaceSnapshot(): Promise<WorkspaceSnapshotData | null>;
+  listThreads(): Promise<ThreadListResult>;
+  getThread(command: GetThreadCommand): Promise<ThreadGetResult>;
+  createThread(command: CreateThreadCommand): Promise<ThreadSummaryResult>;
+  renameThread(command: RenameThreadCommand): Promise<ThreadSummaryResult>;
+  archiveThread(command: ArchiveThreadCommand): Promise<ThreadSummaryResult>;
+  getChanges(command?: GetChangesCommand): Promise<ChangesGetResult>;
+  listReports(): Promise<ReportListResult>;
+  getReport(command: GetReportCommand): Promise<ReportGetResult>;
+  listArtifacts(): Promise<ArtifactListResult>;
+  getArtifact(command: GetArtifactCommand): Promise<ArtifactGetResult>;
   onRuntimeStatus(listener: (status: RuntimeStatus) => void): () => void;
+  onThreadChanged(listener: (event: ThreadChangedParams) => void): () => void;
 }
 
 const allowedCombinations = Object.freeze({
@@ -99,6 +151,47 @@ export function isRuntimeStatus(value: unknown): value is RuntimeStatus {
 export function assertRuntimeStatus(value: unknown): RuntimeStatus {
   if (!isRuntimeStatus(value)) throw new Error("Invalid runtime status.");
   return value;
+}
+
+export function isGetThreadCommand(value: unknown): value is GetThreadCommand {
+  return hasExactKeys(value, ["threadId", "afterSequence"]) && isThreadGetParams({
+    schemaVersion: SCHEMA_VERSION,
+    threadId: value.threadId,
+    afterSequence: value.afterSequence,
+    timelinePageSize: 100,
+  });
+}
+
+export function isCreateThreadCommand(value: unknown): value is CreateThreadCommand {
+  return hasExactKeys(value, ["title"]) && isThreadCreateParams({ schemaVersion: SCHEMA_VERSION, title: value.title });
+}
+
+export function isRenameThreadCommand(value: unknown): value is RenameThreadCommand {
+  return hasExactKeys(value, ["threadId", "expectedRevision", "title"]) &&
+    isThreadRenameParams({ schemaVersion: SCHEMA_VERSION, threadId: value.threadId, expectedRevision: value.expectedRevision, title: value.title });
+}
+
+export function isArchiveThreadCommand(value: unknown): value is ArchiveThreadCommand {
+  return hasExactKeys(value, ["threadId", "expectedRevision"]) &&
+    isThreadArchiveParams({ schemaVersion: SCHEMA_VERSION, threadId: value.threadId, expectedRevision: value.expectedRevision });
+}
+
+export function isGetChangesCommand(value: unknown): value is GetChangesCommand {
+  if (!isRecord(value)) return false;
+  const keys = Object.keys(value);
+  return keys.every((key) => key === "sessionName") && isChangesGetParams({ schemaVersion: SCHEMA_VERSION, ...value });
+}
+
+export function isGetReportCommand(value: unknown): value is GetReportCommand {
+  return hasExactKeys(value, ["reportId"]) && isReportGetParams({ schemaVersion: SCHEMA_VERSION, reportId: value.reportId });
+}
+
+export function isGetArtifactCommand(value: unknown): value is GetArtifactCommand {
+  return hasExactKeys(value, ["artifactId"]) && isArtifactGetParams({ schemaVersion: SCHEMA_VERSION, artifactId: value.artifactId });
+}
+
+function hasExactKeys(value: unknown, expected: readonly string[]): value is Record<string, unknown> {
+  return isRecord(value) && Object.keys(value).length === expected.length && expected.every((key) => Object.hasOwn(value, key));
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {

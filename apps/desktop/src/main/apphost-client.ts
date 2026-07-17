@@ -4,47 +4,26 @@ import { EventEmitter } from "node:events";
 import {
   CONTRACT_SHA256,
   DESKTOP_CAPABILITIES,
-  DESKTOP_METHOD_METADATA,
-  DESKTOP_METHODS,
+  DESKTOP_NOTIFICATIONS,
   PROTOCOL_LIMITS,
   PROTOCOL_VERSION,
   SCHEMA_VERSION,
-  isInitializeResult,
-  isShutdownResult,
-  isWorkspaceOpenResult,
   type InitializeResult,
-  type ShutdownResult,
+  type ThreadChangedParams,
   type WorkspaceOpenResult,
 } from "../generated/desktop-contracts";
 import type { AppHostLaunchSpec } from "./apphost-launch";
-
-type DesktopMethod = (typeof DESKTOP_METHODS)[keyof typeof DESKTOP_METHODS];
-type TimeoutClass = "initialize" | "query" | "mutation" | "shutdown";
-
-export interface DesktopRequestDescriptor<T> {
-  readonly method: DesktopMethod;
-  readonly timeoutClass: TimeoutClass;
-  readonly isResult: (value: unknown) => value is T;
-}
-
-export const INITIALIZE_REQUEST: DesktopRequestDescriptor<InitializeResult> = Object.freeze({
-  method: DESKTOP_METHODS.InitializeMethod,
-  timeoutClass: DESKTOP_METHOD_METADATA.InitializeMethod.timeout,
-  isResult: isInitializeResult,
-});
-export const WORKSPACE_OPEN_REQUEST: DesktopRequestDescriptor<WorkspaceOpenResult> = Object.freeze({
-  method: DESKTOP_METHODS.WorkspaceOpenMethod,
-  timeoutClass: DESKTOP_METHOD_METADATA.WorkspaceOpenMethod.timeout,
-  isResult: isWorkspaceOpenResult,
-});
-export const SHUTDOWN_REQUEST: DesktopRequestDescriptor<ShutdownResult> = Object.freeze({
-  method: DESKTOP_METHODS.ShutdownMethod,
-  timeoutClass: DESKTOP_METHOD_METADATA.ShutdownMethod.timeout,
-  isResult: isShutdownResult,
-});
+import {
+  INITIALIZE_REQUEST,
+  SHUTDOWN_REQUEST,
+  THREAD_CHANGED_NOTIFICATION,
+  WORKSPACE_OPEN_REQUEST,
+  type DesktopRequestDescriptor,
+  type TimeoutClass,
+} from "./desktop-requests";
 
 interface PendingRequest {
-  readonly descriptor: DesktopRequestDescriptor<unknown>;
+  readonly descriptor: DesktopRequestDescriptor<object, unknown>;
   resolve(value: unknown): void;
   reject(reason: Error): void;
   timeout: NodeJS.Timeout;
@@ -154,6 +133,7 @@ export class AppHostClient extends EventEmitter {
         DESKTOP_CAPABILITIES.FramedJsonRpc,
         DESKTOP_CAPABILITIES.WorkspaceSession,
         DESKTOP_CAPABILITIES.ApplicationOutcome,
+        DESKTOP_CAPABILITIES.ThreadChanged,
       ],
     });
     if (!isExactHandshake(initialized)) {
@@ -163,7 +143,10 @@ export class AppHostClient extends EventEmitter {
     return initialized;
   }
 
-  request<T>(descriptor: DesktopRequestDescriptor<T>, parameters: object): Promise<T> {
+  request<TParams extends object, TResult>(
+    descriptor: DesktopRequestDescriptor<TParams, TResult>,
+    parameters: TParams,
+  ): Promise<TResult> {
     const child = this.process;
     if (!child) return Promise.reject(new Error("AppHost is not running."));
     const id = this.nextId++;
@@ -183,13 +166,14 @@ export class AppHostClient extends EventEmitter {
     ]);
     const timeoutMs = timeoutFor(descriptor.timeoutClass);
 
-    return new Promise<T>((resolve, reject) => {
+    if (!descriptor.isParams(parameters)) return Promise.reject(protocolError("protocol-invalid"));
+    return new Promise<TResult>((resolve, reject) => {
       const timeout = setTimeout(() => {
         this.pending.delete(id);
         reject(new Error("AppHost request timed out."));
       }, timeoutMs);
       this.pending.set(id, {
-        descriptor: descriptor as DesktopRequestDescriptor<unknown>,
+        descriptor: descriptor as DesktopRequestDescriptor<object, unknown>,
         resolve,
         reject,
         timeout,
@@ -248,20 +232,25 @@ export class AppHostClient extends EventEmitter {
   }
 
   private handleFrame(frame: Buffer): void {
-    const response = decodeJsonRpcResponse(frame);
-    const pending = this.pending.get(response.id);
-    if (!pending) throw protocolError("protocol-invalid");
-    clearTimeout(pending.timeout);
-    this.pending.delete(response.id);
-    if ("error" in response) {
-      pending.reject(new Error(safeErrorMessage(response.error)));
+    const message = decodeJsonRpcMessage(frame);
+    if ("method" in message) {
+      this.emit("thread-changed", message.params);
       return;
     }
-    if (!pending.descriptor.isResult(response.result)) {
+    const pending = this.pending.get(message.id);
+    if (!pending) throw protocolError("protocol-invalid");
+    clearTimeout(pending.timeout);
+    this.pending.delete(message.id);
+    if ("error" in message) {
+      pending.reject(new Error(safeErrorMessage(message.error)));
+      return;
+    }
+    if (!pending.descriptor.isResult(message.result)) {
       pending.reject(protocolError("protocol-invalid"));
       throw protocolError("protocol-invalid");
     }
-    pending.resolve(response.result);
+    this.emit("response", pending.descriptor.method, message.result);
+    pending.resolve(message.result);
   }
 
   private fatalProtocolFailure(): void {
@@ -286,13 +275,40 @@ export type ParsedResponse =
   | { jsonrpc: "2.0"; id: number; result: unknown }
   | { jsonrpc: "2.0"; id: number; error: { code: number; message: string; data?: unknown } };
 
+export type ParsedNotification = {
+  jsonrpc: "2.0";
+  method: typeof DESKTOP_NOTIFICATIONS.ThreadChangedNotification;
+  params: ThreadChangedParams;
+};
+
+export type ParsedServerMessage = ParsedResponse | ParsedNotification;
+
 export function decodeJsonRpcResponse(frame: Buffer): ParsedResponse {
+  const message = decodeJsonRpcMessage(frame);
+  if ("method" in message) throw protocolError("protocol-invalid");
+  return message;
+}
+
+export function decodeJsonRpcMessage(frame: Buffer): ParsedServerMessage {
   let decoded: string;
   try { decoded = new TextDecoder("utf-8", { fatal: true }).decode(frame); }
   catch { throw protocolError("frame-utf8-invalid"); }
   let value: unknown;
   try { value = JSON.parse(decoded); }
   catch { throw protocolError("protocol-invalid"); }
+  return parseServerMessage(value);
+}
+
+export function parseServerMessage(value: unknown): ParsedServerMessage {
+  if (!isRecord(value) || value.jsonrpc !== "2.0") throw protocolError("protocol-invalid");
+  if (Object.hasOwn(value, "method")) {
+    if (!hasExactKeys(value, ["jsonrpc", "method", "params"]) ||
+        value.method !== THREAD_CHANGED_NOTIFICATION.method ||
+        !THREAD_CHANGED_NOTIFICATION.isParams(value.params)) {
+      throw protocolError("protocol-invalid");
+    }
+    return value as unknown as ParsedNotification;
+  }
   return parseResponse(value);
 }
 
@@ -326,12 +342,15 @@ function isExactHandshake(result: InitializeResult): boolean {
     DESKTOP_CAPABILITIES.FramedJsonRpc,
     DESKTOP_CAPABILITIES.WorkspaceSession,
     DESKTOP_CAPABILITIES.ApplicationOutcome,
+    DESKTOP_CAPABILITIES.ThreadChanged,
   ];
   return result.schemaVersion === SCHEMA_VERSION &&
     result.protocolVersion === PROTOCOL_VERSION &&
     result.contractSha256 === CONTRACT_SHA256 &&
     result.negotiatedCapabilities.length === requested.length &&
     requested.every((capability) => result.negotiatedCapabilities.includes(capability)) &&
+    result.notifications.length === 1 &&
+    result.notifications[0] === DESKTOP_NOTIFICATIONS.ThreadChangedNotification &&
     result.security.transport === "framed-json-rpc-stdio" &&
     result.security.workspaceAuthority === "server" &&
     result.security.rendererNodeAccess === false &&

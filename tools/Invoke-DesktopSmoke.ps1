@@ -56,9 +56,9 @@ function Start-OwnedDesktop([string]$capturePath, [int]$width, [int]$height) {
 
 try {
     if ($CaptureShell) {
-        $artifactRoot = Join-Path $repoRoot "artifacts\week70-desktop-shell"
+        $artifactRoot = Join-Path $repoRoot "artifacts\week71-read-only-review"
         [System.IO.Directory]::CreateDirectory($artifactRoot) | Out-Null
-        foreach ($size in @(@(1440, 900), @(1120, 720), @(760, 560))) {
+        foreach ($size in @(@(1920, 1080), @(1440, 900), @(1280, 720), @(760, 560))) {
             $capturePath = Join-Path $artifactRoot ("shell-{0}x{1}.png" -f $size[0], $size[1])
             Start-OwnedDesktop $capturePath $size[0] $size[1]
             if (-not (Test-Path -LiteralPath $capturePath -PathType Leaf)) { throw "Shell capture is missing: $capturePath" }

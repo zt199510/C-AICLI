@@ -23,6 +23,18 @@ describe("desktop security baseline", () => {
       "runtime:get-status",
       "runtime:restart",
       "workspace:open",
+      "workspace:get-snapshot",
+      "thread:list",
+      "thread:get",
+      "thread:create",
+      "thread:rename",
+      "thread:archive",
+      "thread:changed",
+      "changes:get",
+      "report:list",
+      "report:get",
+      "artifact:list",
+      "artifact:get",
       "runtime:status",
     ]);
     const ready = createRuntimeStatus("runtime-ready");

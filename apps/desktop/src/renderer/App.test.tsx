@@ -28,18 +28,18 @@ describe("desktop shell", () => {
     render(<App />);
     await userEvent.click(screen.getByRole("button", { name: "Collapse threads" }));
     expect(screen.getByRole("button", { name: "Show threads" })).toBeTruthy();
-    await userEvent.click(screen.getByRole("button", { name: "Close runtime inspector" }));
-    expect(screen.getByRole("button", { name: "Show runtime inspector" })).toBeTruthy();
+    await userEvent.click(screen.getByRole("button", { name: "Close review inspector" }));
+    expect(screen.getByRole("button", { name: "Show review inspector" })).toBeTruthy();
   });
 
   it("keeps narrow drawers closed and mutually exclusive", async () => {
     window.innerWidth = 760;
     render(<App />);
     expect(screen.getByRole("button", { name: "Show threads" })).toBeTruthy();
-    expect(screen.getByRole("button", { name: "Show runtime inspector" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Show review inspector" })).toBeTruthy();
     await userEvent.click(screen.getByRole("button", { name: "Show threads" }));
-    expect(screen.queryByRole("button", { name: "Show runtime inspector" })).toBeTruthy();
-    await userEvent.click(screen.getByRole("button", { name: "Show runtime inspector" }));
+    expect(screen.queryByRole("button", { name: "Show review inspector" })).toBeTruthy();
+    await userEvent.click(screen.getByRole("button", { name: "Show review inspector" }));
     expect(screen.getByRole("button", { name: "Show threads" })).toBeTruthy();
   });
 });
@@ -49,6 +49,18 @@ function bridge(status = createRuntimeStatus("runtime-ready")): DesktopBridge {
     getRuntimeStatus: vi.fn(async () => status),
     restartRuntime: vi.fn(async () => createRuntimeStatus("runtime-ready")),
     openWorkspace: vi.fn(async () => null),
+    getWorkspaceSnapshot: vi.fn(async () => null),
+    listThreads: vi.fn(async () => { throw new Error("unused"); }),
+    getThread: vi.fn(async () => { throw new Error("unused"); }),
+    createThread: vi.fn(async () => { throw new Error("unused"); }),
+    renameThread: vi.fn(async () => { throw new Error("unused"); }),
+    archiveThread: vi.fn(async () => { throw new Error("unused"); }),
+    getChanges: vi.fn(async () => { throw new Error("unused"); }),
+    listReports: vi.fn(async () => { throw new Error("unused"); }),
+    getReport: vi.fn(async () => { throw new Error("unused"); }),
+    listArtifacts: vi.fn(async () => { throw new Error("unused"); }),
+    getArtifact: vi.fn(async () => { throw new Error("unused"); }),
     onRuntimeStatus: vi.fn(() => () => undefined),
+    onThreadChanged: vi.fn(() => () => undefined),
   };
 }

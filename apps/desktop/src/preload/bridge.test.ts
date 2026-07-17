@@ -15,9 +15,21 @@ describe("preload bridge", () => {
     ]);
     expect(Object.isFrozen(bridge)).toBe(true);
     expect(Object.keys(bridge).sort()).toEqual([
+      "archiveThread",
+      "createThread",
+      "getArtifact",
+      "getChanges",
+      "getReport",
       "getRuntimeStatus",
+      "getThread",
+      "getWorkspaceSnapshot",
+      "listArtifacts",
+      "listReports",
+      "listThreads",
       "onRuntimeStatus",
+      "onThreadChanged",
       "openWorkspace",
+      "renameThread",
       "restartRuntime",
     ]);
   });

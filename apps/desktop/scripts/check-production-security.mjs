@@ -33,19 +33,30 @@ const rendererFiles = (await walk(rendererRoot)).filter((file) => file.endsWith(
 const rendererBundle = (await Promise.all(rendererFiles.map((file) => readFile(file, "utf8")))).join("\n");
 const forbiddenRenderer = [
   "ipcRenderer", "shell.openExternal", "child_process", "node:fs", "node:process",
-  "desktop:initialize", "thread.list", "thread.get", "catalog.list", "changes.get",
-  "report.list", "artifact.list", "turn.start",
+  "desktop:initialize", "desktop:request", "query(method", "shell:open", "file://", "localStorage", "indexedDB",
 ];
 for (const value of forbiddenRenderer) {
   if (rendererBundle.includes(value)) throw new Error(`Renderer bundle contains forbidden surface: ${value}`);
 }
 
+const productionSourceFiles = (await walk(path.join(desktopRoot, "src"))).filter((file) =>
+  /\.(ts|tsx)$/.test(file) && !file.includes(`${path.sep}generated${path.sep}`) && !file.endsWith(".test.ts") && !file.endsWith(".test.tsx"),
+);
+const productionSource = (await Promise.all(productionSourceFiles.map((file) => readFile(file, "utf8")))).join("\n");
+for (const value of ["catalog.list", "thread.delete", "app.cancel", "turn.start", "desktop:request", "query(method"]) {
+  if (productionSource.includes(value)) throw new Error(`Production source contains unreviewed surface: ${value}`);
+}
+
 const preload = await readFile(path.join(desktopRoot, "dist", "preload", "index.cjs"), "utf8");
-const reviewedChannels = ["runtime:get-status", "runtime:restart", "workspace:open", "runtime:status"];
+const reviewedChannels = [
+  "runtime:get-status", "runtime:restart", "runtime:status", "workspace:open", "workspace:get-snapshot",
+  "thread:list", "thread:get", "thread:create", "thread:rename", "thread:archive", "thread:changed",
+  "changes:get", "report:list", "report:get", "artifact:list", "artifact:get",
+];
 for (const channel of reviewedChannels) {
   if (!preload.includes(channel)) throw new Error(`Preload bundle is missing reviewed channel: ${channel}`);
 }
-for (const value of ["desktop:initialize", "shell.openExternal", "node:fs", "child_process"]) {
+for (const value of ["desktop:initialize", "desktop:request", "shell.openExternal", "node:fs", "child_process", "thread:delete", "catalog:list", "turn:start"]) {
   if (preload.includes(value)) throw new Error(`Preload bundle contains forbidden surface: ${value}`);
 }
 

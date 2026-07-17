@@ -1,13 +1,48 @@
-import type { InitializeResult, WorkspaceOpenResult } from "../generated/desktop-contracts";
+import {
+  SCHEMA_VERSION,
+  type ArtifactGetResult,
+  type ArtifactListResult,
+  type ChangesGetResult,
+  type InitializeResult,
+  type ReportGetResult,
+  type ReportListResult,
+  type ThreadChangedParams,
+  type ThreadGetResult,
+  type ThreadListResult,
+  type ThreadSummaryResult,
+  type WorkspaceOpenResult,
+  type WorkspaceSnapshotData,
+} from "../generated/desktop-contracts";
 import { createRuntimeStatus, type RuntimeCode, type RuntimeStatus } from "../shared/bridge-contract";
 import type { AppHostLaunchSpec } from "./apphost-launch";
+import {
+  ARTIFACT_GET_REQUEST,
+  ARTIFACT_LIST_REQUEST,
+  CHANGES_GET_REQUEST,
+  REPORT_GET_REQUEST,
+  REPORT_LIST_REQUEST,
+  REVIEW_LIST_PAGE_SIZE,
+  THREAD_ARCHIVE_REQUEST,
+  THREAD_CREATE_REQUEST,
+  THREAD_GET_REQUEST,
+  THREAD_LIST_PAGE_SIZE,
+  THREAD_LIST_REQUEST,
+  THREAD_RENAME_REQUEST,
+  TIMELINE_PAGE_SIZE,
+  type DesktopRequestDescriptor,
+} from "./desktop-requests";
 
 export interface RuntimeClient {
   start(spec: AppHostLaunchSpec): Promise<InitializeResult>;
   stop(): Promise<void>;
   openWorkspace(path: string): Promise<WorkspaceOpenResult>;
+  request<TParams extends object, TResult>(
+    descriptor: DesktopRequestDescriptor<TParams, TResult>,
+    parameters: TParams,
+  ): Promise<TResult>;
   forceTerminateForTest(): void;
   on(event: "exit" | "protocol-error", listener: () => void): this;
+  on(event: "thread-changed", listener: (event: ThreadChangedParams) => void): this;
 }
 
 export interface AppHostRuntimeOptions {
@@ -22,16 +57,24 @@ export class AppHostRuntime {
   private operation: Promise<RuntimeStatus> | null = null;
   private stopOperation: Promise<RuntimeStatus> | null = null;
   private stopping = false;
+  private workspace: WorkspaceSnapshotData | null = null;
   private readonly listeners = new Set<(status: RuntimeStatus) => void>();
+  private readonly threadListeners = new Set<(event: ThreadChangedParams) => void>();
 
   constructor(private readonly options: AppHostRuntimeOptions) {}
 
   getStatus(): RuntimeStatus { return this.status; }
+  getWorkspaceSnapshot(): WorkspaceSnapshotData | null { return this.workspace; }
 
   subscribe(listener: (status: RuntimeStatus) => void): () => void {
     this.listeners.add(listener);
     listener(this.status);
     return () => this.listeners.delete(listener);
+  }
+
+  subscribeThreadChanged(listener: (event: ThreadChangedParams) => void): () => void {
+    this.threadListeners.add(listener);
+    return () => this.threadListeners.delete(listener);
   }
 
   start(): Promise<RuntimeStatus> {
@@ -53,6 +96,7 @@ export class AppHostRuntime {
       const oldClient = this.client;
       this.client = null;
       this.generation++;
+      this.workspace = null;
       await oldClient?.stop().catch(() => undefined);
       if (this.stopping) return this.status;
       return this.startGeneration(undefined, "restart-failed");
@@ -70,6 +114,7 @@ export class AppHostRuntime {
       const current = this.client;
       this.client = null;
       this.generation++;
+      this.workspace = null;
       await current?.stop().catch(() => undefined);
       await this.operation?.catch(() => undefined);
       this.client = null;
@@ -84,7 +129,56 @@ export class AppHostRuntime {
     if (this.status.state !== "ready" || !this.client || this.stopping) {
       throw new Error("AppHost is not ready.");
     }
-    return this.client.openWorkspace(path);
+    const result = await this.client.openWorkspace(path);
+    if (result.succeeded && result.data) this.workspace = result.data;
+    return result;
+  }
+
+  listThreads(): Promise<ThreadListResult> {
+    return this.query(THREAD_LIST_REQUEST, { schemaVersion: SCHEMA_VERSION, pageSize: THREAD_LIST_PAGE_SIZE });
+  }
+
+  getThread(threadId: string, afterSequence: number): Promise<ThreadGetResult> {
+    return this.query(THREAD_GET_REQUEST, {
+      schemaVersion: SCHEMA_VERSION,
+      threadId,
+      afterSequence,
+      timelinePageSize: TIMELINE_PAGE_SIZE,
+    });
+  }
+
+  createThread(title: string): Promise<ThreadSummaryResult> {
+    return this.query(THREAD_CREATE_REQUEST, { schemaVersion: SCHEMA_VERSION, title });
+  }
+
+  renameThread(threadId: string, expectedRevision: number, title: string): Promise<ThreadSummaryResult> {
+    return this.query(THREAD_RENAME_REQUEST, { schemaVersion: SCHEMA_VERSION, threadId, expectedRevision, title });
+  }
+
+  archiveThread(threadId: string, expectedRevision: number): Promise<ThreadSummaryResult> {
+    return this.query(THREAD_ARCHIVE_REQUEST, { schemaVersion: SCHEMA_VERSION, threadId, expectedRevision });
+  }
+
+  getChanges(sessionName?: string): Promise<ChangesGetResult> {
+    return this.query(CHANGES_GET_REQUEST, sessionName === undefined
+      ? { schemaVersion: SCHEMA_VERSION }
+      : { schemaVersion: SCHEMA_VERSION, sessionName });
+  }
+
+  listReports(): Promise<ReportListResult> {
+    return this.query(REPORT_LIST_REQUEST, { schemaVersion: SCHEMA_VERSION, pageSize: REVIEW_LIST_PAGE_SIZE });
+  }
+
+  getReport(reportId: string): Promise<ReportGetResult> {
+    return this.query(REPORT_GET_REQUEST, { schemaVersion: SCHEMA_VERSION, reportId });
+  }
+
+  listArtifacts(): Promise<ArtifactListResult> {
+    return this.query(ARTIFACT_LIST_REQUEST, { schemaVersion: SCHEMA_VERSION, pageSize: REVIEW_LIST_PAGE_SIZE });
+  }
+
+  getArtifact(artifactId: string): Promise<ArtifactGetResult> {
+    return this.query(ARTIFACT_GET_REQUEST, { schemaVersion: SCHEMA_VERSION, artifactId });
   }
 
   forceTerminateForTest(): void {
@@ -106,13 +200,20 @@ export class AppHostRuntime {
     client.on("protocol-error", () => {
       if (generation !== this.generation || this.stopping) return;
       protocolInvalid = true;
+      this.workspace = null;
       this.publish("protocol-invalid");
     });
     client.on("exit", () => {
       if (generation !== this.generation || this.stopping || this.client !== client) return;
       this.client = null;
+      this.workspace = null;
       if (protocolInvalid) return;
       this.publish("apphost-exited");
+    });
+    client.on("thread-changed", (event) => {
+      if (generation !== this.generation || this.stopping || this.client !== client || !this.workspace) return;
+      if (event.workspaceId !== this.workspace.workspaceId) return;
+      for (const listener of this.threadListeners) listener(event);
     });
     try {
       await client.start(this.options.resolveLaunch());
@@ -134,5 +235,15 @@ export class AppHostRuntime {
   private publish(code: RuntimeCode): void {
     this.status = createRuntimeStatus(code);
     for (const listener of this.listeners) listener(this.status);
+  }
+
+  private query<TParams extends object, TResult>(
+    descriptor: DesktopRequestDescriptor<TParams, TResult>,
+    params: TParams,
+  ): Promise<TResult> {
+    if (this.status.state !== "ready" || !this.client || this.stopping || !this.workspace) {
+      return Promise.reject(new Error("Workspace is not ready."));
+    }
+    return this.client.request(descriptor, params);
   }
 }

@@ -2,9 +2,9 @@
 
 Generated from `package-lock.json`. Do not edit manually.
 
-- Packages: 347
+- Packages: 353
 - Registry sources outside npmjs.org: 0
-- License summary: (MIT OR CC0-1.0) (1), 0BSD (1), Apache-2.0 (19), BlueOak-1.0.0 (5), BSD-2-Clause (14), BSD-3-Clause (6), ISC (16), MIT (272), MIT-0 (1), MPL-2.0 (12)
+- License summary: (MIT OR CC0-1.0) (1), 0BSD (1), Apache-2.0 (22), BlueOak-1.0.0 (5), BSD-2-Clause (14), BSD-3-Clause (6), ISC (16), MIT (275), MIT-0 (1), MPL-2.0 (12)
 
 The packaged Electron runtime also carries Electron's `LICENSE` and Chromium's `LICENSES.chromium.html` files next to the executable.
 
@@ -74,6 +74,7 @@ The packaged Electron runtime also carries Electron's `LICENSE` and Chromium's `
 | @malept/cross-spawn-promise | 2.0.0 | Apache-2.0 |
 | @napi-rs/wasm-runtime | 1.1.6 | MIT |
 | @oxc-project/types | 0.139.0 | MIT |
+| @playwright/test | 1.61.1 | Apache-2.0 |
 | @rolldown/binding-android-arm64 | 1.1.5 | MIT |
 | @rolldown/binding-darwin-arm64 | 1.1.5 | MIT |
 | @rolldown/binding-darwin-x64 | 1.1.5 | MIT |
@@ -93,6 +94,8 @@ The packaged Electron runtime also carries Electron's `LICENSE` and Chromium's `
 | @sindresorhus/is | 4.6.0 | MIT |
 | @standard-schema/spec | 1.1.0 | MIT |
 | @szmarczak/http-timer | 4.0.6 | MIT |
+| @tanstack/react-virtual | 3.14.6 | MIT |
+| @tanstack/virtual-core | 3.17.4 | MIT |
 | @testing-library/dom | 10.4.1 | MIT |
 | @testing-library/react | 16.3.0 | MIT |
 | @testing-library/user-event | 14.6.1 | MIT |
@@ -203,6 +206,7 @@ The packaged Electron runtime also carries Electron's `LICENSE` and Chromium's `
 | flatted | 3.4.2 | ISC |
 | flora-colossus | 3.0.2 | MIT |
 | fs-extra | 8.1.0 | MIT |
+| fsevents | 2.3.2 | MIT |
 | fsevents | 2.3.3 | MIT |
 | galactus | 2.0.2 | MIT |
 | get-stream | 5.2.0 | MIT |
@@ -284,6 +288,8 @@ The packaged Electron runtime also carries Electron's `LICENSE` and Chromium's `
 | pend | 1.2.0 | MIT |
 | picocolors | 1.1.1 | ISC |
 | picomatch | 4.0.5 | MIT |
+| playwright | 1.61.1 | Apache-2.0 |
+| playwright-core | 1.61.1 | Apache-2.0 |
 | plist | 3.1.1 | MIT |
 | postcss | 8.5.19 | MIT |
 | postject | 1.0.0-alpha.6 | MIT |

@@ -1,0 +1,42 @@
+import { _electron as electron, expect, test } from "@playwright/test";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
+import { assertFixtureProjection } from "./fixtures";
+
+const desktopRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
+
+test("read-only thread timeline review survives renderer reload", async ({ browserName }, testInfo) => {
+  if (browserName !== "chromium") throw new Error("Electron tests require Chromium.");
+  const packaged = testInfo.project.name === "packaged";
+  const executablePath = path.join(desktopRoot, "out", "C-AICLI Desktop-win32-x64", "caicli-desktop.exe");
+  const environment = { ...process.env, APPDATA: path.join(process.env.TEMP ?? desktopRoot, "caicli-playwright-appdata") };
+  const application = packaged
+    ? await electron.launch({ executablePath, args: ["--disable-gpu"], env: environment })
+    : await electron.launch({ args: ["--disable-gpu", path.join(desktopRoot, "e2e", "fixture-main.cjs")], env: environment });
+  try {
+    const page = await application.firstWindow();
+    await expect(page.getByText("AppHost ready")).toBeVisible();
+    if (packaged) {
+      await expect(page.getByRole("heading", { name: "Open a workspace" })).toBeVisible();
+      await page.reload();
+      await expect(page.getByText("AppHost ready")).toBeVisible();
+      return;
+    }
+    const projection = await page.evaluate(async () => ({
+      list: await window.caicli.listThreads(),
+      detail: await window.caicli.getThread({ threadId: "fixture-thread", afterSequence: 0 }),
+    }));
+    assertFixtureProjection(projection);
+    await expect(page.getByText("Fixture review thread")).toBeVisible();
+    await page.locator(".thread-select").click({ force: true });
+    await expect(page.getByText("User message")).toBeVisible();
+    await expect(page.locator(".timeline-card")).toHaveCount(14);
+    await page.getByRole("tab", { name: "Preview" }).click();
+    await expect(page.getByText(/do not prove manufacturing or image correctness/i)).toBeVisible();
+    await page.reload();
+    await expect(page.getByText("Fixture review thread")).toBeVisible();
+  } finally {
+    if (packaged) await application.close();
+    else application.process().kill();
+  }
+});

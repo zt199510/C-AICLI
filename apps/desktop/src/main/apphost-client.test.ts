@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { decodeJsonRpcResponse, FrameDecoder, parseResponse } from "./apphost-client";
+import { decodeJsonRpcResponse, FrameDecoder, parseResponse, parseServerMessage } from "./apphost-client";
 
 describe("AppHost frame decoder", () => {
   it("reassembles partial frames and returns consecutive payloads", () => {
@@ -77,6 +77,35 @@ describe("AppHost response envelope", () => {
     expect(parseResponse({ jsonrpc: "2.0", id: 2, error: { code: -32000, message: "safe" } })).toEqual({
       jsonrpc: "2.0", id: 2, error: { code: -32000, message: "safe" },
     });
+  });
+});
+
+describe("AppHost server message union", () => {
+  const changed = {
+    schemaVersion: 1,
+    eventSequence: 1,
+    workspaceId: "workspace-1",
+    threadId: "thread-1",
+    revision: 2,
+    changeKind: "renamed",
+    emittedAtUtc: "2026-07-17T04:00:00.000Z",
+  };
+
+  it("accepts an exact generated thread notification without a response id", () => {
+    expect(parseServerMessage({ jsonrpc: "2.0", method: "thread.changed", params: changed })).toEqual({
+      jsonrpc: "2.0", method: "thread.changed", params: changed,
+    });
+  });
+
+  it.each([
+    { jsonrpc: "2.0", method: "unknown", params: changed },
+    { jsonrpc: "2.0", method: "thread.changed" },
+    { jsonrpc: "2.0", id: 1, method: "thread.changed", params: changed },
+    { jsonrpc: "2.0", method: "thread.changed", params: changed, extra: true },
+    { jsonrpc: "2.0", method: "thread.changed", params: { ...changed, eventSequence: 0 } },
+    { jsonrpc: "2.0", method: "thread.changed", params: { ...changed, extra: true } },
+  ])("rejects invalid notification %#", (value) => {
+    expect(() => parseServerMessage(value)).toThrow("protocol-invalid");
   });
 });
 

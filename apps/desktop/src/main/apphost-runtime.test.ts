@@ -2,6 +2,7 @@ import { EventEmitter } from "node:events";
 import { describe, expect, it, vi } from "vitest";
 import type { InitializeResult, WorkspaceOpenResult } from "../generated/desktop-contracts";
 import { AppHostRuntime, type RuntimeClient } from "./apphost-runtime";
+import type { DesktopRequestDescriptor } from "./desktop-requests";
 
 describe("AppHost runtime", () => {
   it("starts once and publishes a safe ready snapshot", async () => {
@@ -58,6 +59,21 @@ describe("AppHost runtime", () => {
     expect(runtime.getStatus().code).toBe("runtime-stopped");
     expect(client.stop).toHaveBeenCalledOnce();
   });
+
+  it("retains only the last successful canonical workspace snapshot and clears it on crash", async () => {
+    const client = new FakeClient();
+    client.openWorkspace
+      .mockResolvedValueOnce(workspaceResult("workspace-1"))
+      .mockResolvedValueOnce({ schemaVersion: 1, succeeded: false, data: null, error: { code: "invalid", category: "workspace", safeMessage: "bad", retryable: false }, diagnostics: [], truncated: false });
+    const runtime = createRuntime([client]);
+    await runtime.start();
+    await runtime.openWorkspace("C:\\first");
+    expect(runtime.getWorkspaceSnapshot()?.workspaceId).toBe("workspace-1");
+    await runtime.openWorkspace("C:\\failed");
+    expect(runtime.getWorkspaceSnapshot()?.workspaceId).toBe("workspace-1");
+    client.emit("exit");
+    expect(runtime.getWorkspaceSnapshot()).toBeNull();
+  });
 });
 
 class FakeClient extends EventEmitter implements RuntimeClient {
@@ -65,6 +81,21 @@ class FakeClient extends EventEmitter implements RuntimeClient {
   stop = vi.fn<() => Promise<void>>().mockResolvedValue();
   openWorkspace = vi.fn<(path: string) => Promise<WorkspaceOpenResult>>().mockResolvedValue({} as WorkspaceOpenResult);
   forceTerminateForTest = vi.fn();
+  request<TParams extends object, TResult>(
+    descriptor: DesktopRequestDescriptor<TParams, TResult>, parameters: TParams,
+  ): Promise<TResult> { return Promise.reject(new Error(`unused ${descriptor.method} ${Object.keys(parameters).length}`)); }
+}
+
+function workspaceResult(workspaceId: string): WorkspaceOpenResult {
+  return {
+    schemaVersion: 1, succeeded: true,
+    data: {
+      workspaceId, rootPath: "C:\\workspace", status: "ready",
+      capabilities: { readOnlyQueries: true, gitQueries: true, localCatalogs: true, managedArtifacts: true },
+      configuration: { hasApiKey: false, apiKeySource: "none", modelSource: "default", agentBackendSource: "default", approvalMode: "ask", approvalModeSource: "default", loadedSourceCount: 0 },
+    },
+    error: null, diagnostics: [], truncated: false,
+  };
 }
 
 function createRuntime(clients: FakeClient[]): AppHostRuntime {
