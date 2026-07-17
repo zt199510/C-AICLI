@@ -10,7 +10,7 @@
 
 ---
 
-状态：执行中；Task 1-12 与 Task 13 Step 1-4 已通过，等待 clean-source release acceptance
+状态：Passed；Task 1-13 与全部周末 Gate 已通过
 
 更新时间：2026-07-17
 
@@ -781,7 +781,7 @@ git add apps/desktop tools/Invoke-DesktopSmoke.ps1 docs_md/weekly/70_week_secure
 git commit -m "feat: 完成第70周安全桌面 Shell"
 ```
 
-- [ ] **Step 5：从 clean HEAD 运行 release acceptance 与最终 package**
+- [x] **Step 5：从 clean HEAD 运行 release acceptance 与最终 package**
 
 ```powershell
 $env:PATH = "$env:USERPROFILE\.dotnet;$env:PATH"

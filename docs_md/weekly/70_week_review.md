@@ -79,4 +79,9 @@
 
 ## Clean acceptance
 
-实现与文档提交后，从 clean HEAD 运行 `Build-Release.ps1 -ReleaseAcceptance`、CLI smoke、Desktop package 及 headless/window-close/crash-restart smoke；最终 manifest/checksums 必须记录 `sourceDirty=false`、`releaseAcceptance=true`、SDK `9.0.308`，结果在本节补记。
+实现与验收文档提交 `1283a9134fe175e4e163b32b5c5072ca85aff72d` 后从 clean HEAD 执行：
+
+- `Build-Release.ps1 -ReleaseAcceptance` 与 CLI smoke 通过；manifest/checksums 记录 `sourceRevision=1283a9134fe175e4e163b32b5c5072ca85aff72d`、`sourceDirty=false`、`releaseAcceptance=true`、`sdkVersion=9.0.308`。
+- 使用 checksum 匹配的 Electron 41.1.0 cache 运行正式 `npm run package:dir`；Main/Preload/Renderer build、production security、AppHost publish 与 Electron packager 全部通过。
+- 从该 clean source package 运行 headless、window-close、crash-restart，全部 exit 0，Desktop/AppHost orphan delta 均为 `0 / 0`。
+- 本回顾封板提交后，再从最终 clean HEAD 运行相同 release acceptance、CLI smoke、Desktop package 与三条 packaged smoke，使最终 artifacts 绑定最终提交。
