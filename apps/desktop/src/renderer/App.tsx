@@ -8,8 +8,8 @@ export function App() {
   const [workspace, setWorkspace] = useState<WorkspaceOpenResult | null>(null);
   const [opening, setOpening] = useState(false);
   const [bridgeUnavailable, setBridgeUnavailable] = useState(false);
-  const [leftOpen, setLeftOpen] = useState(true);
-  const [inspectorOpen, setInspectorOpen] = useState(true);
+  const [leftOpen, setLeftOpen] = useState(() => window.innerWidth >= 900);
+  const [inspectorOpen, setInspectorOpen] = useState(() => window.innerWidth > 1120);
   const receivedEvent = useRef(false);
 
   useEffect(() => {
@@ -31,6 +31,33 @@ export function App() {
       });
     return unsubscribe;
   }, []);
+
+  useEffect(() => {
+    const updateLayout = () => {
+      if (window.innerWidth < 900) {
+        setLeftOpen(false);
+        setInspectorOpen(false);
+      } else if (window.innerWidth <= 1120) {
+        setLeftOpen(true);
+        setInspectorOpen(false);
+      } else {
+        setLeftOpen(true);
+        setInspectorOpen(true);
+      }
+    };
+    window.addEventListener("resize", updateLayout);
+    return () => window.removeEventListener("resize", updateLayout);
+  }, []);
+
+  function showThreads() {
+    setLeftOpen(true);
+    if (window.innerWidth < 900) setInspectorOpen(false);
+  }
+
+  function showInspector() {
+    setInspectorOpen(true);
+    if (window.innerWidth < 900) setLeftOpen(false);
+  }
 
   async function openWorkspace() {
     if (!window.caicli || runtime.state !== "ready") return;
@@ -82,7 +109,7 @@ export function App() {
         <main className="task-surface">
           <div className="task-toolbar">
             <div className="toolbar-group">
-              {!leftOpen && <button className="icon-button" type="button" title="Show threads" aria-label="Show threads" onClick={() => setLeftOpen(true)}><PanelLeft size={17} aria-hidden="true" /></button>}
+              {!leftOpen && <button className="icon-button" type="button" title="Show threads" aria-label="Show threads" onClick={showThreads}><PanelLeft size={17} aria-hidden="true" /></button>}
               <span className="task-label">Workspace</span>
             </div>
             <div className="toolbar-group">
@@ -90,7 +117,7 @@ export function App() {
                 {opening ? <RefreshCw className="spin" size={16} aria-hidden="true" /> : <FolderOpen size={16} aria-hidden="true" />}
                 {opening ? "Opening" : "Open workspace"}
               </button>
-              {!inspectorOpen && <button className="icon-button" type="button" title="Show runtime inspector" aria-label="Show runtime inspector" onClick={() => setInspectorOpen(true)}><PanelRight size={17} aria-hidden="true" /></button>}
+              {!inspectorOpen && <button className="icon-button" type="button" title="Show runtime inspector" aria-label="Show runtime inspector" onClick={showInspector}><PanelRight size={17} aria-hidden="true" /></button>}
             </div>
           </div>
 

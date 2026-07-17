@@ -5,7 +5,10 @@ import { createRuntimeStatus, type DesktopBridge } from "../shared/bridge-contra
 import { App } from "./App";
 
 describe("desktop shell", () => {
-  beforeEach(() => { window.caicli = bridge(); });
+  beforeEach(() => {
+    Object.defineProperty(window, "innerWidth", { value: 1440, configurable: true, writable: true });
+    window.caicli = bridge();
+  });
 
   it("reads the runtime snapshot without initializing AppHost from the renderer", async () => {
     render(<App />);
@@ -27,6 +30,17 @@ describe("desktop shell", () => {
     expect(screen.getByRole("button", { name: "Show threads" })).toBeTruthy();
     await userEvent.click(screen.getByRole("button", { name: "Close runtime inspector" }));
     expect(screen.getByRole("button", { name: "Show runtime inspector" })).toBeTruthy();
+  });
+
+  it("keeps narrow drawers closed and mutually exclusive", async () => {
+    window.innerWidth = 760;
+    render(<App />);
+    expect(screen.getByRole("button", { name: "Show threads" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Show runtime inspector" })).toBeTruthy();
+    await userEvent.click(screen.getByRole("button", { name: "Show threads" }));
+    expect(screen.queryByRole("button", { name: "Show runtime inspector" })).toBeTruthy();
+    await userEvent.click(screen.getByRole("button", { name: "Show runtime inspector" }));
+    expect(screen.getByRole("button", { name: "Show threads" })).toBeTruthy();
   });
 });
 
