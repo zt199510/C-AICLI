@@ -15,6 +15,7 @@ const allowedLicenses = new Set([
   "BSD-3-Clause",
   "ISC",
   "MIT",
+  "MIT-0",
   "MPL-2.0",
   "(MIT OR CC0-1.0)",
 ]);

@@ -2,14 +2,23 @@
 
 Generated from `package-lock.json`. Do not edit manually.
 
-- Packages: 295
+- Packages: 347
 - Registry sources outside npmjs.org: 0
-- License summary: (MIT OR CC0-1.0) (1), 0BSD (1), Apache-2.0 (17), BlueOak-1.0.0 (5), BSD-2-Clause (12), BSD-3-Clause (5), ISC (14), MIT (228), MPL-2.0 (12)
+- License summary: (MIT OR CC0-1.0) (1), 0BSD (1), Apache-2.0 (19), BlueOak-1.0.0 (5), BSD-2-Clause (14), BSD-3-Clause (6), ISC (16), MIT (272), MIT-0 (1), MPL-2.0 (12)
 
 The packaged Electron runtime also carries Electron's `LICENSE` and Chromium's `LICENSES.chromium.html` files next to the executable.
 
 | Package | Version | License |
 |---|---:|---|
+| @asamuzakjp/css-color | 3.2.0 | MIT |
+| @babel/code-frame | 7.29.7 | MIT |
+| @babel/helper-validator-identifier | 7.29.7 | MIT |
+| @babel/runtime | 7.29.7 | MIT |
+| @csstools/color-helpers | 5.1.0 | MIT-0 |
+| @csstools/css-calc | 2.1.4 | MIT |
+| @csstools/css-color-parser | 3.1.0 | MIT |
+| @csstools/css-parser-algorithms | 3.0.5 | MIT |
+| @csstools/css-tokenizer | 3.0.4 | MIT |
 | @electron-internal/extract-zip | 1.0.4 | BSD-2-Clause |
 | @electron/asar | 4.2.0 | MIT |
 | @electron/get | 2.0.3 | MIT |
@@ -84,7 +93,11 @@ The packaged Electron runtime also carries Electron's `LICENSE` and Chromium's `
 | @sindresorhus/is | 4.6.0 | MIT |
 | @standard-schema/spec | 1.1.0 | MIT |
 | @szmarczak/http-timer | 4.0.6 | MIT |
+| @testing-library/dom | 10.4.1 | MIT |
+| @testing-library/react | 16.3.0 | MIT |
+| @testing-library/user-event | 14.6.1 | MIT |
 | @tybys/wasm-util | 0.10.3 | MIT |
+| @types/aria-query | 5.0.4 | MIT |
 | @types/cacheable-request | 6.0.3 | MIT |
 | @types/chai | 5.2.3 | MIT |
 | @types/deep-eql | 4.0.2 | MIT |
@@ -120,7 +133,11 @@ The packaged Electron runtime also carries Electron's `LICENSE` and Chromium's `
 | @xmldom/xmldom | 0.9.10 | MIT |
 | acorn | 8.17.0 | MIT |
 | acorn-jsx | 5.3.2 | MIT |
+| agent-base | 7.1.4 | MIT |
 | ajv | 6.15.0 | MIT |
+| ansi-regex | 5.0.1 | MIT |
+| ansi-styles | 5.2.0 | MIT |
+| aria-query | 5.3.0 | Apache-2.0 |
 | assertion-error | 2.0.1 | MIT |
 | balanced-match | 4.0.4 | MIT |
 | base64-js | 1.5.1 | MIT |
@@ -135,17 +152,23 @@ The packaged Electron runtime also carries Electron's `LICENSE` and Chromium's `
 | commander | 9.5.0 | MIT |
 | convert-source-map | 2.0.0 | MIT |
 | cross-spawn | 7.0.6 | MIT |
+| cssstyle | 4.6.0 | MIT |
 | csstype | 3.2.3 | MIT |
+| data-urls | 5.0.0 | MIT |
 | debug | 4.4.3 | MIT |
+| decimal.js | 10.6.0 | MIT |
 | decompress-response | 6.0.0 | MIT |
 | deep-is | 0.1.4 | MIT |
 | defer-to-connect | 2.0.1 | MIT |
 | define-data-property | 1.1.4 | MIT |
 | define-properties | 1.2.1 | MIT |
+| dequal | 2.0.3 | MIT |
 | detect-libc | 2.1.2 | Apache-2.0 |
 | detect-node | 2.1.0 | MIT |
+| dom-accessibility-api | 0.5.16 | MIT |
 | electron | 41.1.0 | MIT |
 | end-of-stream | 1.4.5 | MIT |
+| entities | 6.0.1 | BSD-2-Clause |
 | env-paths | 2.2.1 | MIT |
 | env-paths | 3.0.0 | MIT |
 | err-code | 2.0.3 | MIT |
@@ -192,15 +215,22 @@ The packaged Electron runtime also carries Electron's `LICENSE` and Chromium's `
 | got | 11.8.6 | MIT |
 | graceful-fs | 4.2.11 | ISC |
 | has-property-descriptors | 1.0.2 | MIT |
+| html-encoding-sniffer | 4.0.0 | MIT |
 | http-cache-semantics | 4.2.0 | BSD-2-Clause |
+| http-proxy-agent | 7.0.2 | MIT |
 | http2-wrapper | 1.0.3 | MIT |
+| https-proxy-agent | 7.0.6 | MIT |
+| iconv-lite | 0.6.3 | MIT |
 | ignore | 5.3.2 | MIT |
 | ignore | 7.0.6 | MIT |
 | imurmurhash | 0.1.4 | MIT |
 | is-extglob | 2.1.1 | MIT |
 | is-glob | 4.0.3 | MIT |
+| is-potential-custom-element-name | 1.0.1 | MIT |
 | isbinaryfile | 4.0.10 | MIT |
 | isexe | 2.0.0 | ISC |
+| js-tokens | 4.0.0 | MIT |
+| jsdom | 26.1.0 | MIT |
 | json-buffer | 3.0.1 | MIT |
 | json-schema-traverse | 0.4.1 | MIT |
 | json-stable-stringify-without-jsonify | 1.0.1 | MIT |
@@ -223,8 +253,10 @@ The packaged Electron runtime also carries Electron's `LICENSE` and Chromium's `
 | lightningcss-win32-x64-msvc | 1.32.0 | MPL-2.0 |
 | locate-path | 6.0.0 | MIT |
 | lowercase-keys | 2.0.0 | MIT |
+| lru-cache | 10.4.3 | ISC |
 | lru-cache | 11.5.2 | BlueOak-1.0.0 |
 | lucide-react | 1.24.0 | ISC |
+| lz-string | 1.5.0 | MIT |
 | magic-string | 0.30.21 | MIT |
 | matcher | 3.0.0 | MIT |
 | mimic-response | 1.0.1 | MIT |
@@ -235,6 +267,7 @@ The packaged Electron runtime also carries Electron's `LICENSE` and Chromium's `
 | nanoid | 3.3.16 | MIT |
 | natural-compare | 1.4.0 | MIT |
 | normalize-url | 6.1.0 | MIT |
+| nwsapi | 2.2.24 | MIT |
 | object-keys | 1.1.1 | MIT |
 | obug | 2.1.3 | MIT |
 | once | 1.4.0 | ISC |
@@ -242,6 +275,7 @@ The packaged Electron runtime also carries Electron's `LICENSE` and Chromium's `
 | p-cancelable | 2.1.1 | MIT |
 | p-limit | 3.1.0 | MIT |
 | p-locate | 5.0.0 | MIT |
+| parse5 | 7.3.0 | MIT |
 | path-exists | 4.0.0 | MIT |
 | path-key | 3.1.1 | MIT |
 | path-scurry | 2.0.2 | BlueOak-1.0.0 |
@@ -254,6 +288,7 @@ The packaged Electron runtime also carries Electron's `LICENSE` and Chromium's `
 | postcss | 8.5.19 | MIT |
 | postject | 1.0.0-alpha.6 | MIT |
 | prelude-ls | 1.2.1 | MIT |
+| pretty-format | 27.5.1 | MIT |
 | progress | 2.0.3 | MIT |
 | promise-retry | 2.0.1 | MIT |
 | pump | 3.0.4 | MIT |
@@ -261,12 +296,16 @@ The packaged Electron runtime also carries Electron's `LICENSE` and Chromium's `
 | quick-lru | 5.1.1 | MIT |
 | react | 19.2.7 | MIT |
 | react-dom | 19.2.7 | MIT |
+| react-is | 17.0.2 | MIT |
 | resedit | 2.0.3 | MIT |
 | resolve-alpn | 1.2.1 | MIT |
 | responselike | 2.0.1 | MIT |
 | retry | 0.12.0 | MIT |
 | roarr | 2.15.4 | BSD-3-Clause |
 | rolldown | 1.1.5 | MIT |
+| rrweb-cssom | 0.8.0 | MIT |
+| safer-buffer | 2.1.2 | MIT |
+| saxes | 6.0.0 | ISC |
 | scheduler | 0.27.0 | MIT |
 | semver | 6.3.1 | ISC |
 | semver | 7.8.5 | ISC |
@@ -280,10 +319,15 @@ The packaged Electron runtime also carries Electron's `LICENSE` and Chromium's `
 | stackback | 0.0.2 | MIT |
 | std-env | 4.2.0 | MIT |
 | sumchecker | 3.0.1 | Apache-2.0 |
+| symbol-tree | 3.2.4 | MIT |
 | tinybench | 2.9.0 | MIT |
 | tinyexec | 1.2.4 | MIT |
 | tinyglobby | 0.2.17 | MIT |
 | tinyrainbow | 3.1.0 | MIT |
+| tldts | 6.1.86 | MIT |
+| tldts-core | 6.1.86 | MIT |
+| tough-cookie | 5.1.2 | BSD-3-Clause |
+| tr46 | 5.1.1 | MIT |
 | ts-api-utils | 2.5.0 | MIT |
 | tslib | 2.8.1 | 0BSD |
 | type-check | 0.4.0 | MIT |
@@ -297,11 +341,19 @@ The packaged Electron runtime also carries Electron's `LICENSE` and Chromium's `
 | uri-js | 4.4.1 | BSD-2-Clause |
 | vite | 8.1.4 | MIT |
 | vitest | 4.1.10 | MIT |
+| w3c-xmlserializer | 5.0.0 | MIT |
+| webidl-conversions | 7.0.0 | BSD-2-Clause |
+| whatwg-encoding | 3.1.1 | MIT |
+| whatwg-mimetype | 4.0.0 | MIT |
+| whatwg-url | 14.2.0 | MIT |
 | which | 2.0.2 | ISC |
 | why-is-node-running | 2.3.0 | MIT |
 | word-wrap | 1.2.5 | MIT |
 | wrappy | 1.0.2 | ISC |
+| ws | 8.21.1 | MIT |
+| xml-name-validator | 5.0.0 | Apache-2.0 |
 | xmlbuilder | 15.1.1 | MIT |
+| xmlchars | 2.2.0 | MIT |
 | yargs-parser | 22.0.0 | ISC |
 | yauzl | 2.10.0 | MIT |
 | yocto-queue | 0.1.0 | MIT |
