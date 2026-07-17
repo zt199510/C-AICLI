@@ -2,6 +2,12 @@ import {
   SCHEMA_VERSION,
   isArtifactGetParams,
   isChangesGetParams,
+  isCatalogListParams,
+  isComposerClearParams,
+  isComposerEnqueueParams,
+  isComposerGetParams,
+  isContextSearchParams,
+  isContextResolveResult,
   isReportGetParams,
   isThreadArchiveParams,
   isThreadCreateParams,
@@ -10,6 +16,11 @@ import {
   type ArtifactGetResult,
   type ArtifactListResult,
   type ChangesGetResult,
+  type CatalogListResult,
+  type ComposerCatalogSelectionData,
+  type ComposerStateResult,
+  type ContextResolveResult,
+  type ContextSearchResult,
   type ReportGetResult,
   type ReportListResult,
   type ThreadChangedParams,
@@ -36,6 +47,13 @@ export const IPC_CHANNELS = Object.freeze({
   getReport: "report:get",
   listArtifacts: "artifact:list",
   getArtifact: "artifact:get",
+  listCatalog: "catalog:list",
+  searchContext: "context:search",
+  pickFile: "context:pick-file",
+  pickFolder: "context:pick-folder",
+  getComposer: "composer:get",
+  enqueueComposer: "composer:enqueue",
+  clearComposer: "composer:clear",
   runtimeStatus: "runtime:status",
 });
 
@@ -46,6 +64,28 @@ export interface ArchiveThreadCommand { readonly threadId: string; readonly expe
 export interface GetChangesCommand { readonly sessionName?: string; }
 export interface GetReportCommand { readonly reportId: string; }
 export interface GetArtifactCommand { readonly artifactId: string; }
+export interface ListCatalogCommand { readonly kind: "skills" | "experts" | "automations"; }
+export interface SearchContextCommand { readonly query: string; }
+export interface GetComposerCommand { readonly threadId: string; }
+export interface EnqueueComposerCommand {
+  readonly threadId: string;
+  readonly expectedThreadRevision: number;
+  readonly expectedQueueRevision: number;
+  readonly clientMutationId: string;
+  readonly prompt: string;
+  readonly contextSelectionIds: readonly string[];
+  readonly catalogSelections: readonly ComposerCatalogSelectionData[];
+}
+export interface ClearComposerCommand {
+  readonly threadId: string;
+  readonly expectedQueueRevision: number;
+  readonly clientMutationId: string;
+}
+export interface ContextPickResult {
+  readonly schemaVersion: 1;
+  readonly canceled: boolean;
+  readonly result: ContextResolveResult | null;
+}
 
 export type RuntimeState =
   | "starting"
@@ -90,6 +130,13 @@ export interface DesktopBridge {
   getReport(command: GetReportCommand): Promise<ReportGetResult>;
   listArtifacts(): Promise<ArtifactListResult>;
   getArtifact(command: GetArtifactCommand): Promise<ArtifactGetResult>;
+  listCatalog(command: ListCatalogCommand): Promise<CatalogListResult>;
+  searchContext(command: SearchContextCommand): Promise<ContextSearchResult>;
+  pickFile(): Promise<ContextPickResult>;
+  pickFolder(): Promise<ContextPickResult>;
+  getComposer(command: GetComposerCommand): Promise<ComposerStateResult>;
+  enqueueComposer(command: EnqueueComposerCommand): Promise<ComposerStateResult>;
+  clearComposer(command: ClearComposerCommand): Promise<ComposerStateResult>;
   onRuntimeStatus(listener: (status: RuntimeStatus) => void): () => void;
   onThreadChanged(listener: (event: ThreadChangedParams) => void): () => void;
 }
@@ -188,6 +235,33 @@ export function isGetReportCommand(value: unknown): value is GetReportCommand {
 
 export function isGetArtifactCommand(value: unknown): value is GetArtifactCommand {
   return hasExactKeys(value, ["artifactId"]) && isArtifactGetParams({ schemaVersion: SCHEMA_VERSION, artifactId: value.artifactId });
+}
+
+export function isListCatalogCommand(value: unknown): value is ListCatalogCommand {
+  return hasExactKeys(value, ["kind"]) && isCatalogListParams({ schemaVersion: SCHEMA_VERSION, kind: value.kind, pageSize: 200 }) && value.kind !== "project-packs";
+}
+
+export function isSearchContextCommand(value: unknown): value is SearchContextCommand {
+  return hasExactKeys(value, ["query"]) && isContextSearchParams({ schemaVersion: SCHEMA_VERSION, query: value.query });
+}
+
+export function isGetComposerCommand(value: unknown): value is GetComposerCommand {
+  return hasExactKeys(value, ["threadId"]) && isComposerGetParams({ schemaVersion: SCHEMA_VERSION, threadId: value.threadId });
+}
+
+export function isEnqueueComposerCommand(value: unknown): value is EnqueueComposerCommand {
+  return hasExactKeys(value, ["threadId", "expectedThreadRevision", "expectedQueueRevision", "clientMutationId", "prompt", "contextSelectionIds", "catalogSelections"]) &&
+    isComposerEnqueueParams({ schemaVersion: SCHEMA_VERSION, ...value });
+}
+
+export function isClearComposerCommand(value: unknown): value is ClearComposerCommand {
+  return hasExactKeys(value, ["threadId", "expectedQueueRevision", "clientMutationId"]) &&
+    isComposerClearParams({ schemaVersion: SCHEMA_VERSION, ...value });
+}
+
+export function isContextPickResult(value: unknown): value is ContextPickResult {
+  if (!hasExactKeys(value, ["schemaVersion", "canceled", "result"]) || value.schemaVersion !== 1 || typeof value.canceled !== "boolean") return false;
+  return value.canceled ? value.result === null : isContextResolveResult(value.result);
 }
 
 function hasExactKeys(value: unknown, expected: readonly string[]): value is Record<string, unknown> {

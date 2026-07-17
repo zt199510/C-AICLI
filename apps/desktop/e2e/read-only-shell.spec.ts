@@ -31,6 +31,18 @@ test("read-only thread timeline review survives renderer reload", async ({ brows
     await page.locator(".thread-select").click({ force: true });
     await expect(page.getByText("User message")).toBeVisible();
     await expect(page.locator(".timeline-card")).toHaveCount(14);
+    await page.getByRole("button", { name: "Attach workspace file" }).click();
+    await expect(page.getByLabel("Selected composer context").getByText("src/review.ts")).toBeVisible();
+    await page.getByRole("textbox", { name: "Composer prompt" }).fill("Explain fixture @fixture");
+    await expect(page.getByRole("listbox", { name: "Composer mentions" })).toBeVisible();
+    await page.getByRole("option", { name: /Fixture skills/i }).click();
+    await page.getByRole("button", { name: "Queue prompt" }).click();
+    await expect(page.getByText("Ready to run")).toBeVisible();
+    await page.reload();
+    await page.locator(".thread-select").click({ force: true });
+    await expect(page.getByText("Ready to run")).toBeVisible();
+    await page.getByRole("button", { name: "Clear pending input" }).click();
+    await expect(page.getByText("Ready to run")).toHaveCount(0);
     await page.getByRole("tab", { name: "Preview" }).click();
     await expect(page.getByText(/do not prove manufacturing or image correctness/i)).toBeVisible();
     await page.reload();

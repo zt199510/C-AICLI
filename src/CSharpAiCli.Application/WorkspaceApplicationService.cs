@@ -18,11 +18,13 @@ public sealed record WorkspaceCapabilityProjection(
     bool ReadOnlyQueries,
     bool GitQueries,
     bool LocalCatalogs,
-    bool ManagedArtifacts);
+    bool ManagedArtifacts,
+    bool ControlledContext);
 
 public sealed record WorkspaceConfigurationProjection(
     bool HasApiKey,
     string ApiKeySource,
+    string EffectiveModel,
     string ModelSource,
     string AgentBackendSource,
     string ApprovalMode,
@@ -121,10 +123,12 @@ public sealed class WorkspaceApplicationService
                 ReadOnlyQueries: true,
                 GitQueries: true,
                 LocalCatalogs: true,
-                ManagedArtifacts: true),
+                ManagedArtifacts: true,
+                ControlledContext: true),
             new WorkspaceConfigurationProjection(
                 configuration.HasApiKey,
                 ApplicationProjection.Safe(configuration.ApiKeySource, 256),
+                ApplicationProjection.Safe(configuration.Model, 256),
                 ApplicationProjection.Safe(configuration.ModelSource, 256),
                 ApplicationProjection.Safe(configuration.AgentBackendSource, 256),
                 configuration.ApprovalMode.ToString(),

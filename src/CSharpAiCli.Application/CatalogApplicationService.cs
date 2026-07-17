@@ -1,4 +1,7 @@
 using System.Collections.ObjectModel;
+using System.Security.Cryptography;
+using System.Text;
+using System.Text.Json;
 using CSharpAiCli.Core;
 using CSharpAiCli.ProjectPacks;
 using CSharpAiCli.ProjectPacks.GerberTiff;
@@ -34,16 +37,24 @@ public sealed record CatalogItemProjection(
 public sealed record CatalogQueryProjection
 {
     public CatalogQueryProjection(
+        string WorkspaceId,
         string Catalog,
+        string CatalogRevision,
         IReadOnlyList<CatalogItemProjection>? Items,
         bool Truncated)
     {
+        this.WorkspaceId = WorkspaceId;
         this.Catalog = Catalog;
+        this.CatalogRevision = CatalogRevision;
         this.Items = new ReadOnlyCollection<CatalogItemProjection>((Items ?? []).ToArray());
         this.Truncated = Truncated;
     }
 
+    public string WorkspaceId { get; }
+
     public string Catalog { get; }
+
+    public string CatalogRevision { get; }
 
     public IReadOnlyList<CatalogItemProjection> Items { get; }
 
@@ -105,10 +116,48 @@ public sealed class CatalogApplicationService
             .OrderBy(item => item.Id, StringComparer.OrdinalIgnoreCase)
             .Take(request.PageSize)
             .ToArray();
+        string workspaceId = CreateWorkspaceId(request.Workspace.RootPath);
+        string revision = CreateRevision(workspaceId, request.Catalog, items, loaded.Diagnostics, truncated);
         return ApplicationResult<CatalogQueryProjection>.Success(
-            new CatalogQueryProjection(request.Catalog, items, truncated),
+            new CatalogQueryProjection(workspaceId, request.Catalog, revision, items, truncated),
             loaded.Diagnostics,
             truncated);
+    }
+
+    private static string CreateRevision(
+        string workspaceId,
+        string catalog,
+        IReadOnlyList<CatalogItemProjection> items,
+        IReadOnlyList<ApplicationDiagnostic> diagnostics,
+        bool truncated)
+    {
+        byte[] canonical = JsonSerializer.SerializeToUtf8Bytes(new
+        {
+            workspaceId,
+            catalog,
+            items = items.Select(item => new
+            {
+                item.Id,
+                item.DisplayName,
+                item.Version,
+                item.Description,
+                item.SourceKind,
+                item.SourcePath,
+                item.ReadOnly,
+                item.ToolBoundary,
+                capabilities = item.Capabilities.Order(StringComparer.Ordinal).ToArray()
+            }).ToArray(),
+            diagnostics = diagnostics.Select(item => new { item.Code, item.Category, item.SafeMessage }).ToArray(),
+            truncated
+        });
+        return Convert.ToHexString(SHA256.HashData(canonical)).ToLowerInvariant();
+    }
+
+    private static string CreateWorkspaceId(string rootPath)
+    {
+        string normalized = Path.TrimEndingDirectorySeparator(Path.GetFullPath(rootPath));
+        if (OperatingSystem.IsWindows()) normalized = normalized.ToUpperInvariant();
+        return "ws_" + Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(normalized)).AsSpan(0, 12)).ToLowerInvariant();
     }
 
     private static (IReadOnlyList<CatalogItemProjection>, IReadOnlyList<ApplicationDiagnostic>) LoadSkills(

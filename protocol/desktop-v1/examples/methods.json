@@ -5,20 +5,20 @@
       "params": {
         "schemaVersion": 1,
         "protocolVersion": "desktop-v1",
-        "contractSha256": "0e89e542511ee9a1531db2bda55daa75ed4593257bdf5e9b80a99b065dcd33a4",
+        "contractSha256": "1a66bec61e044dd7e684f32361053fc534ff78d9eb27b8bbfc66675ef8f7aa3a",
         "clientName": "desktop-example",
         "clientVersion": "0.6.0",
         "clientInstanceId": "example-client-1",
-        "requestedCapabilities": ["framed-json-rpc", "workspace-session", "application-outcome"]
+        "requestedCapabilities": ["framed-json-rpc", "workspace-session", "application-outcome", "composer.controlled-context"]
       },
       "result": {
         "schemaVersion": 1,
         "protocolVersion": "desktop-v1",
-        "contractSha256": "0e89e542511ee9a1531db2bda55daa75ed4593257bdf5e9b80a99b065dcd33a4",
+        "contractSha256": "1a66bec61e044dd7e684f32361053fc534ff78d9eb27b8bbfc66675ef8f7aa3a",
         "serverVersion": "0.6.0",
         "serverInstanceId": "server_0123456789abcdef01234567",
-        "negotiatedCapabilities": ["framed-json-rpc", "workspace-session", "application-outcome"],
-        "methods": ["app.initialize", "app.cancel", "app.shutdown", "workspace.open", "thread.list", "thread.get", "thread.create", "thread.rename", "thread.archive", "thread.delete", "catalog.list", "changes.get", "report.list", "report.get", "artifact.list", "artifact.get"],
+        "negotiatedCapabilities": ["framed-json-rpc", "workspace-session", "application-outcome", "composer.controlled-context"],
+        "methods": ["app.initialize", "app.cancel", "app.shutdown", "workspace.open", "thread.list", "thread.get", "thread.create", "thread.rename", "thread.archive", "thread.delete", "catalog.list", "context.search", "context.resolve", "composer.get", "composer.enqueue", "composer.clear", "changes.get", "report.list", "report.get", "artifact.list", "artifact.get"],
         "notifications": [],
         "limits": {
           "maxHeaderBytes": 8192,
@@ -37,7 +37,19 @@
           "maxOutputQueueBytes": 4194304,
           "maxDiagnosticBytes": 4096,
           "maxRetainedStderrBytes": 16384,
-          "applicationTargetBytes": 786432
+          "applicationTargetBytes": 786432,
+          "maxPromptBytes": 65536,
+          "maxContextSelections": 32,
+          "maxCatalogSelections": 16,
+          "maxSingleFileBytes": 10485760,
+          "maxTotalFileBytes": 33554432,
+          "maxFolderFiles": 500,
+          "maxFolderBytes": 67108864,
+          "maxContextSearchResults": 100,
+          "maxContextScannedEntries": 5000,
+          "maxContextSearchQueryBytes": 256,
+          "maxRelativePathBytes": 4096,
+          "maxQueueMutationIdBytes": 128
         },
         "security": {
           "rendererNodeAccess": false,
@@ -97,6 +109,31 @@
       "method": "catalog.list",
       "params": { "schemaVersion": 1, "kind": "project-packs", "pageSize": 50 },
       "result": { "schemaVersion": 1, "succeeded": false, "data": null, "error": { "code": "catalog-unavailable", "category": "unavailable", "safeMessage": "Catalog is unavailable.", "retryable": true }, "diagnostics": [], "truncated": false }
+    },
+    {
+      "method": "context.search",
+      "params": { "schemaVersion": 1, "query": "src" },
+      "result": { "schemaVersion": 1, "succeeded": false, "data": null, "error": { "code": "context-unavailable", "category": "unavailable", "safeMessage": "Context search is unavailable.", "retryable": true }, "diagnostics": [], "truncated": false }
+    },
+    {
+      "method": "context.resolve",
+      "params": { "schemaVersion": 1, "nativePath": "C:\\workspace\\src\\app.ts", "kind": "file" },
+      "result": { "schemaVersion": 1, "succeeded": false, "data": null, "error": { "code": "context-denied", "category": "denied", "safeMessage": "Context selection was denied.", "retryable": false }, "diagnostics": [], "truncated": false }
+    },
+    {
+      "method": "composer.get",
+      "params": { "schemaVersion": 1, "threadId": "thread_0123456789abcdef01234567" },
+      "result": { "schemaVersion": 1, "succeeded": false, "data": null, "error": { "code": "composer-unavailable", "category": "unavailable", "safeMessage": "Composer state is unavailable.", "retryable": true }, "diagnostics": [], "truncated": false }
+    },
+    {
+      "method": "composer.enqueue",
+      "params": { "schemaVersion": 1, "threadId": "thread_0123456789abcdef01234567", "expectedThreadRevision": 0, "expectedQueueRevision": 0, "clientMutationId": "enqueue-example-1", "prompt": "Explain this workspace", "contextSelectionIds": [], "catalogSelections": [] },
+      "result": { "schemaVersion": 1, "succeeded": false, "data": null, "error": { "code": "composer-conflict", "category": "conflict", "safeMessage": "Composer queue changed.", "retryable": false }, "diagnostics": [], "truncated": false }
+    },
+    {
+      "method": "composer.clear",
+      "params": { "schemaVersion": 1, "threadId": "thread_0123456789abcdef01234567", "expectedQueueRevision": 1, "clientMutationId": "clear-example-1" },
+      "result": { "schemaVersion": 1, "succeeded": false, "data": null, "error": { "code": "composer-not-found", "category": "not-found", "safeMessage": "Pending composer intent was not found.", "retryable": false }, "diagnostics": [], "truncated": false }
     },
     {
       "method": "changes.get",

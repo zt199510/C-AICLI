@@ -169,6 +169,11 @@ public sealed class DesktopProtocolTests
                 DesktopProtocolDefinition.ThreadArchiveMethod,
                 DesktopProtocolDefinition.ThreadDeleteMethod,
                 DesktopProtocolDefinition.CatalogListMethod,
+                DesktopProtocolDefinition.ContextSearchMethod,
+                DesktopProtocolDefinition.ContextResolveMethod,
+                DesktopProtocolDefinition.ComposerGetMethod,
+                DesktopProtocolDefinition.ComposerEnqueueMethod,
+                DesktopProtocolDefinition.ComposerClearMethod,
                 DesktopProtocolDefinition.ChangesGetMethod,
                 DesktopProtocolDefinition.ReportListMethod,
                 DesktopProtocolDefinition.ReportGetMethod,
@@ -434,6 +439,59 @@ public sealed class DesktopProtocolTests
         using JsonDocument missingArtifact = HandleRequest(server, 8, DesktopProtocolDefinition.ArtifactGetMethod,
             new { schemaVersion = 1, artifactId = "artifact_missing" });
         Assert.False(missingArtifact.RootElement.GetProperty("result").GetProperty("succeeded").GetBoolean());
+    }
+
+    [Fact]
+    public void Server_dispatches_controlled_context_catalog_and_composer_queue_without_turn_execution()
+    {
+        using TempDirectory temp = TempDirectory.Create();
+        File.WriteAllText(Path.Combine(temp.Path, "note.txt"), "hello composer");
+        using DesktopRpcServer server = new();
+        using JsonDocument initialized = Initialize(server, 1);
+        using JsonDocument opened = OpenWorkspace(server, 2, temp.Path);
+        using JsonDocument created = HandleRequest(server, 3, DesktopProtocolDefinition.ThreadCreateMethod,
+            new { schemaVersion = 1, title = "composer protocol" });
+        JsonElement thread = created.RootElement.GetProperty("result").GetProperty("data");
+        string threadId = thread.GetProperty("threadId").GetString()!;
+        long threadRevision = thread.GetProperty("revision").GetInt64();
+
+        using JsonDocument context = HandleRequest(server, 4, DesktopProtocolDefinition.ContextResolveMethod,
+            new { schemaVersion = 1, nativePath = Path.Combine(temp.Path, "note.txt"), kind = "file" });
+        JsonElement contextData = context.RootElement.GetProperty("result").GetProperty("data");
+        string selectionId = contextData.GetProperty("selectionId").GetString()!;
+        Assert.Equal("note.txt", contextData.GetProperty("relativePath").GetString());
+        Assert.DoesNotContain(temp.Path, contextData.GetRawText(), StringComparison.OrdinalIgnoreCase);
+
+        using JsonDocument catalog = HandleRequest(server, 5, DesktopProtocolDefinition.CatalogListMethod,
+            new { schemaVersion = 1, kind = "experts", pageSize = 200 });
+        JsonElement catalogData = catalog.RootElement.GetProperty("result").GetProperty("data");
+        string catalogRevision = catalogData.GetProperty("catalogRevision").GetString()!;
+        Assert.Equal(opened.RootElement.GetProperty("result").GetProperty("data").GetProperty("workspaceId").GetString(),
+            catalogData.GetProperty("workspaceId").GetString());
+
+        using JsonDocument before = HandleRequest(server, 6, DesktopProtocolDefinition.ComposerGetMethod,
+            new { schemaVersion = 1, threadId });
+        Assert.Equal(0, before.RootElement.GetProperty("result").GetProperty("data").GetProperty("queueRevision").GetInt64());
+        using JsonDocument enqueued = HandleRequest(server, 7, DesktopProtocolDefinition.ComposerEnqueueMethod,
+            new
+            {
+                schemaVersion = 1, threadId, expectedThreadRevision = threadRevision, expectedQueueRevision = 0,
+                clientMutationId = "enqueue-protocol-1", prompt = "Review the note",
+                contextSelectionIds = new[] { selectionId },
+                catalogSelections = new[] { new { kind = "expert", id = "reviewer", catalogRevision } }
+            });
+        JsonElement composer = enqueued.RootElement.GetProperty("result").GetProperty("data");
+        Assert.Equal("ready", composer.GetProperty("pendingIntent").GetProperty("delivery").GetString());
+        Assert.Equal(1, composer.GetProperty("queueRevision").GetInt64());
+
+        using JsonDocument detail = HandleRequest(server, 8, DesktopProtocolDefinition.ThreadGetMethod,
+            new { schemaVersion = 1, threadId, afterSequence = 0, timelinePageSize = 50 });
+        Assert.Empty(detail.RootElement.GetProperty("result").GetProperty("data").GetProperty("turns").EnumerateArray());
+        Assert.Empty(detail.RootElement.GetProperty("result").GetProperty("data").GetProperty("timeline").EnumerateArray());
+
+        using JsonDocument clear = HandleRequest(server, 9, DesktopProtocolDefinition.ComposerClearMethod,
+            new { schemaVersion = 1, threadId, expectedQueueRevision = 1, clientMutationId = "clear-protocol-1" });
+        Assert.Equal(JsonValueKind.Null, clear.RootElement.GetProperty("result").GetProperty("data").GetProperty("pendingIntent").ValueKind);
     }
 
     private static async Task WriteRequest(Stream output, int id, string method, object parameters)

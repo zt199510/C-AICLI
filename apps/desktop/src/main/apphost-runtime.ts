@@ -3,6 +3,11 @@ import {
   type ArtifactGetResult,
   type ArtifactListResult,
   type ChangesGetResult,
+  type CatalogListResult,
+  type ComposerCatalogSelectionData,
+  type ComposerStateResult,
+  type ContextResolveResult,
+  type ContextSearchResult,
   type InitializeResult,
   type ReportGetResult,
   type ReportListResult,
@@ -18,7 +23,13 @@ import type { AppHostLaunchSpec } from "./apphost-launch";
 import {
   ARTIFACT_GET_REQUEST,
   ARTIFACT_LIST_REQUEST,
+  CATALOG_LIST_REQUEST,
   CHANGES_GET_REQUEST,
+  COMPOSER_CLEAR_REQUEST,
+  COMPOSER_ENQUEUE_REQUEST,
+  COMPOSER_GET_REQUEST,
+  CONTEXT_RESOLVE_REQUEST,
+  CONTEXT_SEARCH_REQUEST,
   REPORT_GET_REQUEST,
   REPORT_LIST_REQUEST,
   REVIEW_LIST_PAGE_SIZE,
@@ -157,6 +168,38 @@ export class AppHostRuntime {
 
   archiveThread(threadId: string, expectedRevision: number): Promise<ThreadSummaryResult> {
     return this.query(THREAD_ARCHIVE_REQUEST, { schemaVersion: SCHEMA_VERSION, threadId, expectedRevision });
+  }
+
+  listCatalog(kind: "skills" | "experts" | "automations" | "project-packs"): Promise<CatalogListResult> {
+    return this.query(CATALOG_LIST_REQUEST, { schemaVersion: SCHEMA_VERSION, kind, pageSize: 200 });
+  }
+
+  searchContext(query: string): Promise<ContextSearchResult> {
+    return this.query(CONTEXT_SEARCH_REQUEST, { schemaVersion: SCHEMA_VERSION, query });
+  }
+
+  resolveContext(nativePath: string, kind: "file" | "folder"): Promise<ContextResolveResult> {
+    return this.query(CONTEXT_RESOLVE_REQUEST, { schemaVersion: SCHEMA_VERSION, nativePath, kind });
+  }
+
+  getComposer(threadId: string): Promise<ComposerStateResult> {
+    return this.query(COMPOSER_GET_REQUEST, { schemaVersion: SCHEMA_VERSION, threadId });
+  }
+
+  enqueueComposer(command: {
+    threadId: string;
+    expectedThreadRevision: number;
+    expectedQueueRevision: number;
+    clientMutationId: string;
+    prompt: string;
+    contextSelectionIds: readonly string[];
+    catalogSelections: readonly ComposerCatalogSelectionData[];
+  }): Promise<ComposerStateResult> {
+    return this.query(COMPOSER_ENQUEUE_REQUEST, { schemaVersion: SCHEMA_VERSION, ...command });
+  }
+
+  clearComposer(threadId: string, expectedQueueRevision: number, clientMutationId: string): Promise<ComposerStateResult> {
+    return this.query(COMPOSER_CLEAR_REQUEST, { schemaVersion: SCHEMA_VERSION, threadId, expectedQueueRevision, clientMutationId });
   }
 
   getChanges(sessionName?: string): Promise<ChangesGetResult> {

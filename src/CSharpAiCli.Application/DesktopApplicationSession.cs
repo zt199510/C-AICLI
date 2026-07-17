@@ -146,6 +146,8 @@ public sealed class DesktopApplicationSession : IDisposable
     private readonly ChangesApplicationService changesService = new();
     private readonly ReportApplicationService reportService = new();
     private readonly ArtifactApplicationService artifactService = new();
+    private readonly ControlledContextApplicationService contextService;
+    private readonly ComposerApplicationService composerService;
 
     internal DesktopApplicationSession(
         CliEnvironmentSnapshot snapshot,
@@ -153,6 +155,8 @@ public sealed class DesktopApplicationSession : IDisposable
     {
         this.snapshot = snapshot ?? throw new ArgumentNullException(nameof(snapshot));
         Workspace = workspace ?? throw new ArgumentNullException(nameof(workspace));
+        contextService = new ControlledContextApplicationService();
+        composerService = new ComposerApplicationService(contextService);
     }
 
     public WorkspaceSnapshotProjection Workspace { get; }
@@ -192,11 +196,23 @@ public sealed class DesktopApplicationSession : IDisposable
     public ApplicationResult<ThreadSummaryProjection> ArchiveThread(
         string threadId,
         long expectedRevision,
-        CancellationToken cancellationToken = default) => Execute(
-            token => threadService.Archive(
-                new ThreadArchiveRequest(snapshot, threadId, expectedRevision),
-                token),
-            cancellationToken);
+        CancellationToken cancellationToken = default) => Execute(token =>
+        {
+            ApplicationResult<ComposerStateProjection> composer = composerService.Get(new ComposerGetRequest(snapshot, threadId), token);
+            if (!composer.Succeeded)
+            {
+                return ApplicationResult<ThreadSummaryProjection>.Failure(
+                    composer.Error ?? new ApplicationError("composer-queue-unavailable", ApplicationErrorCategory.Unavailable,
+                        "Composer queue could not be checked before archive.", true), composer.Diagnostics);
+            }
+            if (composer.Succeeded && composer.Data?.PendingIntent is not null)
+            {
+                return ApplicationResult<ThreadSummaryProjection>.Failure(new ApplicationError(
+                    "composer-intent-pending", ApplicationErrorCategory.Conflict,
+                    "Clear the pending composer intent before archiving this thread.", false));
+            }
+            return threadService.Archive(new ThreadArchiveRequest(snapshot, threadId, expectedRevision), token);
+        }, cancellationToken);
 
     public ApplicationResult<ThreadDeleteProjection> DeleteThread(
         string threadId,
@@ -214,6 +230,43 @@ public sealed class DesktopApplicationSession : IDisposable
         CancellationToken cancellationToken = default) => Execute(
             token => catalogService.Query(new CatalogQueryRequest(snapshot.Workspace, kind, pageSize), token),
             cancellationToken);
+
+    public ApplicationResult<ControlledContextSearchProjection> SearchContext(
+        string query,
+        CancellationToken cancellationToken = default) => Execute(
+            token => contextService.Search(Workspace, query, token), cancellationToken);
+
+    public ApplicationResult<ControlledContextDescriptor> ResolveContext(
+        string nativePath,
+        string expectedKind,
+        CancellationToken cancellationToken = default) => Execute(
+            token => contextService.ResolveNativePath(Workspace, nativePath, expectedKind, token), cancellationToken);
+
+    public ApplicationResult<ComposerStateProjection> GetComposer(
+        string threadId,
+        CancellationToken cancellationToken = default) => Execute(
+            token => composerService.Get(new ComposerGetRequest(snapshot, threadId), token), cancellationToken);
+
+    public ApplicationResult<ComposerStateProjection> EnqueueComposer(
+        string threadId,
+        long expectedThreadRevision,
+        long expectedQueueRevision,
+        string clientMutationId,
+        string prompt,
+        IReadOnlyList<string> contextSelectionIds,
+        IReadOnlyList<ComposerCatalogSelection> catalogSelections,
+        CancellationToken cancellationToken = default) => Execute(
+            token => composerService.Enqueue(new ComposerEnqueueRequest(
+                snapshot, threadId, expectedThreadRevision, expectedQueueRevision, clientMutationId,
+                prompt, contextSelectionIds, catalogSelections), token), cancellationToken);
+
+    public ApplicationResult<ComposerStateProjection> ClearComposer(
+        string threadId,
+        long expectedQueueRevision,
+        string clientMutationId,
+        CancellationToken cancellationToken = default) => Execute(
+            token => composerService.Clear(new ComposerClearRequest(
+                snapshot, threadId, expectedQueueRevision, clientMutationId), token), cancellationToken);
 
     public ApplicationResult<DesktopChangesProjection> GetChanges(
         string? sessionName,
@@ -298,6 +351,7 @@ public sealed class DesktopApplicationSession : IDisposable
 
     public void Dispose()
     {
+        contextService.Clear();
         lifetime.Cancel();
         lifetime.Dispose();
     }

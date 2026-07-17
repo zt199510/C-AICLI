@@ -44,8 +44,8 @@ describe("desktop authoritative projection", () => {
 
 const workspace: WorkspaceSnapshotData = {
   workspaceId: "workspace-1", rootPath: "C:\\workspace", status: "ready",
-  capabilities: { readOnlyQueries: true, gitQueries: true, localCatalogs: true, managedArtifacts: true },
-  configuration: { hasApiKey: false, apiKeySource: "none", modelSource: "default", agentBackendSource: "default", approvalMode: "ask", approvalModeSource: "default", loadedSourceCount: 0 },
+  capabilities: { readOnlyQueries: true, gitQueries: true, localCatalogs: true, managedArtifacts: true, controlledContext: true },
+  configuration: { hasApiKey: false, apiKeySource: "none", effectiveModel: "gpt-test", modelSource: "default", agentBackendSource: "default", approvalMode: "ask", approvalModeSource: "default", loadedSourceCount: 0 },
 };
 
 const thread: ThreadSummaryData = {

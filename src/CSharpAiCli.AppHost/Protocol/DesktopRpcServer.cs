@@ -254,6 +254,11 @@ public sealed class DesktopRpcServer : IDisposable
                 DesktopProtocolDefinition.ThreadArchiveMethod => ArchiveThread(id, parameters, requestCancellation),
                 DesktopProtocolDefinition.ThreadDeleteMethod => DeleteThread(id, parameters, requestCancellation),
                 DesktopProtocolDefinition.CatalogListMethod => ListCatalog(id, parameters, requestCancellation),
+                DesktopProtocolDefinition.ContextSearchMethod => SearchContext(id, parameters, requestCancellation),
+                DesktopProtocolDefinition.ContextResolveMethod => ResolveContext(id, parameters, requestCancellation),
+                DesktopProtocolDefinition.ComposerGetMethod => GetComposer(id, parameters, requestCancellation),
+                DesktopProtocolDefinition.ComposerEnqueueMethod => EnqueueComposer(id, parameters, requestCancellation),
+                DesktopProtocolDefinition.ComposerClearMethod => ClearComposer(id, parameters, requestCancellation),
                 DesktopProtocolDefinition.ChangesGetMethod => GetChanges(id, parameters, requestCancellation),
                 DesktopProtocolDefinition.ReportListMethod => ListReports(id, parameters, requestCancellation),
                 DesktopProtocolDefinition.ReportGetMethod => GetReport(id, parameters, requestCancellation),
@@ -510,6 +515,52 @@ public sealed class DesktopRpcServer : IDisposable
             cancellationToken)));
     }
 
+    private byte[] SearchContext(long? id, JsonElement parameters, CancellationToken cancellationToken)
+    {
+        if (!TryDeserialize(parameters, out ContextSearchParams? request) || request is null ||
+            !DesktopProtocolValidation.TryValidate(request, out _))
+            return InvalidParams(id, "Context search parameters are invalid.");
+        return Success(id, DesktopProtocolMapper.Map(applicationSession!.SearchContext(request.Query, cancellationToken)));
+    }
+
+    private byte[] ResolveContext(long? id, JsonElement parameters, CancellationToken cancellationToken)
+    {
+        if (!TryDeserialize(parameters, out ContextResolveParams? request) || request is null ||
+            !DesktopProtocolValidation.TryValidate(request, out _))
+            return InvalidParams(id, "Context resolve parameters are invalid.");
+        return Success(id, DesktopProtocolMapper.Map(applicationSession!.ResolveContext(
+            request.NativePath, request.Kind, cancellationToken)));
+    }
+
+    private byte[] GetComposer(long? id, JsonElement parameters, CancellationToken cancellationToken)
+    {
+        if (!TryDeserialize(parameters, out ComposerGetParams? request) || request is null ||
+            !DesktopProtocolValidation.TryValidate(request, out _))
+            return InvalidParams(id, "Composer parameters are invalid.");
+        return Success(id, DesktopProtocolMapper.Map(applicationSession!.GetComposer(request.ThreadId, cancellationToken)));
+    }
+
+    private byte[] EnqueueComposer(long? id, JsonElement parameters, CancellationToken cancellationToken)
+    {
+        if (!TryDeserialize(parameters, out ComposerEnqueueParams? request) || request is null ||
+            !DesktopProtocolValidation.TryValidate(request, out _))
+            return InvalidParams(id, "Composer enqueue parameters are invalid.");
+        return Success(id, DesktopProtocolMapper.Map(applicationSession!.EnqueueComposer(
+            request.ThreadId, request.ExpectedThreadRevision, request.ExpectedQueueRevision,
+            request.ClientMutationId, request.Prompt, request.ContextSelectionIds,
+            request.CatalogSelections.Select(item => new ComposerCatalogSelection(
+                item.Kind, item.Id, item.CatalogRevision)).ToArray(), cancellationToken)));
+    }
+
+    private byte[] ClearComposer(long? id, JsonElement parameters, CancellationToken cancellationToken)
+    {
+        if (!TryDeserialize(parameters, out ComposerClearParams? request) || request is null ||
+            !DesktopProtocolValidation.TryValidate(request, out _))
+            return InvalidParams(id, "Composer clear parameters are invalid.");
+        return Success(id, DesktopProtocolMapper.Map(applicationSession!.ClearComposer(
+            request.ThreadId, request.ExpectedQueueRevision, request.ClientMutationId, cancellationToken)));
+    }
+
     private byte[] ListReports(long? id, JsonElement parameters, CancellationToken cancellationToken)
     {
         if (!TryDeserialize(parameters, out ReportListParams? request) || request is null ||
@@ -598,7 +649,19 @@ public sealed class DesktopRpcServer : IDisposable
         MaxOutputQueueBytes = DesktopProtocolDefinition.MaxOutputQueueBytes,
         MaxDiagnosticBytes = DesktopProtocolDefinition.MaxDiagnosticBytes,
         MaxRetainedStderrBytes = DesktopProtocolDefinition.MaxRetainedStderrBytes,
-        ApplicationTargetBytes = DesktopProtocolDefinition.ApplicationTargetBytes
+        ApplicationTargetBytes = DesktopProtocolDefinition.ApplicationTargetBytes,
+        MaxPromptBytes = DesktopProtocolDefinition.MaxPromptBytes,
+        MaxContextSelections = DesktopProtocolDefinition.MaxContextSelections,
+        MaxCatalogSelections = DesktopProtocolDefinition.MaxCatalogSelections,
+        MaxSingleFileBytes = DesktopProtocolDefinition.MaxSingleFileBytes,
+        MaxTotalFileBytes = DesktopProtocolDefinition.MaxTotalFileBytes,
+        MaxFolderFiles = DesktopProtocolDefinition.MaxFolderFiles,
+        MaxFolderBytes = DesktopProtocolDefinition.MaxFolderBytes,
+        MaxContextSearchResults = DesktopProtocolDefinition.MaxContextSearchResults,
+        MaxContextScannedEntries = DesktopProtocolDefinition.MaxContextScannedEntries,
+        MaxContextSearchQueryBytes = DesktopProtocolDefinition.MaxContextSearchQueryBytes,
+        MaxRelativePathBytes = DesktopProtocolDefinition.MaxRelativePathBytes,
+        MaxQueueMutationIdBytes = DesktopProtocolDefinition.MaxQueueMutationIdBytes
     };
 
     private static WorkspaceSnapshotData Map(WorkspaceSnapshotProjection value) => new()
@@ -611,12 +674,14 @@ public sealed class DesktopRpcServer : IDisposable
             ReadOnlyQueries = value.Capabilities.ReadOnlyQueries,
             GitQueries = value.Capabilities.GitQueries,
             LocalCatalogs = value.Capabilities.LocalCatalogs,
-            ManagedArtifacts = value.Capabilities.ManagedArtifacts
+            ManagedArtifacts = value.Capabilities.ManagedArtifacts,
+            ControlledContext = value.Capabilities.ControlledContext
         },
         Configuration = new WorkspaceConfigurationData
         {
             HasApiKey = value.Configuration.HasApiKey,
             ApiKeySource = value.Configuration.ApiKeySource,
+            EffectiveModel = value.Configuration.EffectiveModel,
             ModelSource = value.Configuration.ModelSource,
             AgentBackendSource = value.Configuration.AgentBackendSource,
             ApprovalMode = value.Configuration.ApprovalMode,

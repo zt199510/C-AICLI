@@ -35,6 +35,13 @@ describe("desktop security baseline", () => {
       "report:get",
       "artifact:list",
       "artifact:get",
+      "catalog:list",
+      "context:search",
+      "context:pick-file",
+      "context:pick-folder",
+      "composer:get",
+      "composer:enqueue",
+      "composer:clear",
       "runtime:status",
     ]);
     const ready = createRuntimeStatus("runtime-ready");

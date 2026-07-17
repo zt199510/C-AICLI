@@ -2,7 +2,7 @@
 
 更新时间：2026-07-17
 
-状态：Week 66-71 已完成并通过技术 Gate；Week 72 待执行
+状态：Week 66-72 已完成并通过技术 Gate；Week 73 待执行
 
 详细产品与技术边界统一以 `docs_md/spec/desktop_app_development_framework_0_6_0.md` 为准。本排期负责把该框架拆成 Week 66-77 的依赖顺序、周末验收和发布 Gate，不扩展产品范围。
 
@@ -189,6 +189,8 @@ open workspace
 周末 Gate：packaged/unpacked fake read-only smoke 可打开既有记录并复核结果；Renderer reload 后状态一致。
 
 ### Week 72：Composer、Catalog 与受控上下文
+
+详细计划：`72_week_composer_catalog_controlled_context.plan.md`
 
 主要交付：
 

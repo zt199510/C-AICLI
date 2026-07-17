@@ -134,7 +134,7 @@ async function validateFixture(source: JsonObject) {
 }
 
 describe("desktop-v1 contract source", () => {
-  it("freezes the Week 69 method and notification allowlists", async () => {
+  it("freezes the Week 72 method and notification allowlists", async () => {
     const contract = await readContract();
 
     expect(contract.protocolVersion).toBe("desktop-v1");
@@ -151,6 +151,11 @@ describe("desktop-v1 contract source", () => {
       "thread.archive",
       "thread.delete",
       "catalog.list",
+      "context.search",
+      "context.resolve",
+      "composer.get",
+      "composer.enqueue",
+      "composer.clear",
       "changes.get",
       "report.list",
       "report.get",
@@ -164,6 +169,8 @@ describe("desktop-v1 contract source", () => {
       "thread.rename",
       "thread.archive",
       "thread.delete",
+      "composer.enqueue",
+      "composer.clear",
     ]);
     expect(contract.methods.filter(({ timeout }) => timeout === "mutation").map(({ name }) => name))
       .toEqual(contract.methods.filter(({ mutation }) => mutation).map(({ name }) => name));
@@ -182,6 +189,7 @@ describe("desktop-v1 contract source", () => {
       { name: "framed-json-rpc", required: true },
       { name: "workspace-session", required: true },
       { name: "application-outcome", required: true },
+      { name: "composer.controlled-context", required: false },
       { name: "thread.changed", required: false },
     ]);
     expect(contract.errors.map(({ code }) => code)).toEqual([
@@ -236,6 +244,18 @@ describe("desktop-v1 contract source", () => {
       maxDiagnosticBytes: 4_096,
       maxRetainedStderrBytes: 16_384,
       applicationTargetBytes: 786_432,
+      maxPromptBytes: 65_536,
+      maxContextSelections: 32,
+      maxCatalogSelections: 16,
+      maxSingleFileBytes: 10_485_760,
+      maxTotalFileBytes: 33_554_432,
+      maxFolderFiles: 500,
+      maxFolderBytes: 67_108_864,
+      maxContextSearchResults: 100,
+      maxContextScannedEntries: 5_000,
+      maxContextSearchQueryBytes: 256,
+      maxRelativePathBytes: 4_096,
+      maxQueueMutationIdBytes: 128,
     });
   });
 

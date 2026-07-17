@@ -60,6 +60,13 @@ function bridge(status = createRuntimeStatus("runtime-ready")): DesktopBridge {
     getReport: vi.fn(async () => { throw new Error("unused"); }),
     listArtifacts: vi.fn(async () => { throw new Error("unused"); }),
     getArtifact: vi.fn(async () => { throw new Error("unused"); }),
+    listCatalog: vi.fn(async () => { throw new Error("unused"); }),
+    searchContext: vi.fn(async () => { throw new Error("unused"); }),
+    pickFile: vi.fn(async () => { throw new Error("unused"); }),
+    pickFolder: vi.fn(async () => { throw new Error("unused"); }),
+    getComposer: vi.fn(async () => { throw new Error("unused"); }),
+    enqueueComposer: vi.fn(async () => { throw new Error("unused"); }),
+    clearComposer: vi.fn(async () => { throw new Error("unused"); }),
     onRuntimeStatus: vi.fn(() => () => undefined),
     onThreadChanged: vi.fn(() => () => undefined),
   };

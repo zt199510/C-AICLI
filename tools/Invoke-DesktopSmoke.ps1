@@ -56,7 +56,7 @@ function Start-OwnedDesktop([string]$capturePath, [int]$width, [int]$height) {
 
 try {
     if ($CaptureShell) {
-        $artifactRoot = Join-Path $repoRoot "artifacts\week71-read-only-review"
+        $artifactRoot = Join-Path $repoRoot "artifacts\week72-composer"
         [System.IO.Directory]::CreateDirectory($artifactRoot) | Out-Null
         foreach ($size in @(@(1920, 1080), @(1440, 900), @(1280, 720), @(760, 560))) {
             $capturePath = Join-Path $artifactRoot ("shell-{0}x{1}.png" -f $size[0], $size[1])

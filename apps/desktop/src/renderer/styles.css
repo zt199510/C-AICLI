@@ -24,7 +24,7 @@ button:focus-visible { outline:2px solid #2176c7; outline-offset:2px; }
 .icon-button { flex:0 0 auto; width:30px; height:30px; display:inline-grid; place-items:center; border:0; border-radius:5px; background:transparent; color:#62696e; cursor:pointer; }
 .icon-button:hover { background:#eef0f2; }
 .empty-list { padding:18px 12px; color:#8a9095; font-size:13px; }
-.task-surface { display:grid; grid-template-rows:auto minmax(0,1fr); background:#f8f9fa; }
+.task-surface { display:grid; grid-template-rows:auto minmax(0,1fr) auto; background:#f8f9fa; }
 .task-toolbar { background:#fff; }
 .task-label { min-width:0; }
 .command-button,.primary-action { display:inline-flex; align-items:center; justify-content:center; gap:8px; min-height:32px; border-radius:6px; border:1px solid #c9cdd1; background:#fff; color:#272c30; padding:6px 11px; font-size:13px; cursor:pointer; white-space:nowrap; }
@@ -88,6 +88,24 @@ button:focus-visible { outline:2px solid #2176c7; outline-offset:2px; }
 .timeline-payload { margin-top:8px; color:#555d62; font-size:12px; overflow-wrap:anywhere; }.timeline-payload summary { cursor:pointer; }.timeline-payload pre,.review-section pre { max-width:100%; overflow:auto; white-space:pre-wrap; overflow-wrap:anywhere; font:11px/1.45 Consolas,monospace; background:#f5f6f7; padding:8px; border-radius:5px; }
 .source-pointer { margin-top:8px; color:#747c81; font:10px/1.4 Consolas,monospace; overflow-wrap:anywhere; }
 .empty-timeline { display:grid; place-items:center; min-height:180px; color:#7b8287; }.load-more { display:flex; justify-content:center; padding:14px; }
+.composer { position:relative; z-index:2; min-width:0; border-top:1px solid #d8dadd; background:#fff; padding:9px clamp(8px,2vw,18px) 8px; box-shadow:0 -5px 18px #1c28300b; }
+.queued-intent { display:flex; align-items:center; justify-content:space-between; gap:10px; border:1px solid #b8d6c4; border-radius:7px; background:#eef8f2; padding:8px 10px; color:#285e3e; font-size:12px; }
+.queued-intent>div { min-width:0; display:flex; flex-direction:column; gap:2px; }.queued-intent button,.composer-tools button { display:inline-flex; align-items:center; gap:5px; border:1px solid #c9cdd1; border-radius:5px; background:#fff; color:#41484d; padding:5px 8px; cursor:pointer; }
+.composer-chips { display:flex; gap:5px; overflow:auto; padding:0 0 7px; }
+.composer-chip { flex:0 0 auto; max-width:260px; display:inline-flex; align-items:center; gap:4px; border-radius:999px; background:#e8f0f7; color:#2f5f87; padding:3px 4px 3px 8px; font-size:11px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.catalog-chip { background:#eee9f5; color:#654d82; }.composer-chip button { flex:0 0 auto; display:inline-grid; place-items:center; border:0; border-radius:50%; background:transparent; padding:2px; color:inherit; cursor:pointer; }
+.composer-input-wrap { position:relative; }
+.composer textarea { width:100%; min-height:58px; max-height:26vh; resize:vertical; border:1px solid #bfc5c9; border-radius:8px; background:#fff; color:#252a2e; padding:9px 10px; font:13px/1.45 "Segoe UI",Arial,sans-serif; overflow-wrap:anywhere; }
+.composer textarea:focus { outline:2px solid #2176c7; outline-offset:1px; }.composer textarea:disabled { background:#f2f3f4; color:#777; }
+.composer-footer { min-width:0; display:flex; align-items:center; justify-content:space-between; gap:8px; padding-top:6px; }
+.composer-tools,.composer-summary { min-width:0; display:flex; align-items:center; gap:6px; }.composer-tools button:disabled { opacity:.5; cursor:default; }
+.composer-summary>span { min-width:0; color:#747b80; font-size:10px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.composer-send { flex:0 0 auto; display:inline-flex; align-items:center; gap:6px; border:1px solid #226d45; border-radius:6px; background:#226d45; color:#fff; padding:6px 10px; cursor:pointer; }.composer-send:disabled { border-color:#adb2b5; background:#adb2b5; cursor:default; }
+.composer-status,.composer-error { min-height:14px; padding-top:3px; color:#70777c; font-size:10px; overflow-wrap:anywhere; }.composer-error { color:#9a3030; }
+.mention-menu { position:absolute; z-index:8; left:0; right:0; bottom:calc(100% + 5px); max-height:min(400px,50vh); overflow:auto; border:1px solid #c6cacf; border-radius:8px; background:#fff; box-shadow:0 12px 30px #18232b24; padding:5px; }
+.mention-heading { position:sticky; top:-5px; z-index:1; display:flex; align-items:center; justify-content:space-between; background:#fff; border-bottom:1px solid #e5e7e9; padding:6px 7px; color:#596167; font-size:11px; font-weight:650; }.mention-heading button { border:0; background:transparent; color:#777; cursor:pointer; }
+.mention-group>div { padding:7px 7px 3px; color:#747b80; font-size:10px; font-weight:650; text-transform:uppercase; }.mention-group button { width:100%; min-width:0; display:grid; gap:2px; border:0; border-radius:5px; background:#fff; padding:6px 8px; text-align:left; cursor:pointer; }.mention-group button:hover,.mention-group button:focus { background:#edf4f9; }.mention-group button span,.mention-group button small { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }.mention-group button small { color:#747b80; font-size:10px; }
+.mention-state { padding:12px 8px; color:#777e83; font-size:12px; }
 .review-inspector { height:calc(100% - 44px); min-height:0; display:grid; grid-template-rows:auto minmax(0,1fr); }
 .review-tabs { display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); border-bottom:1px solid #e2e4e6; }
 .review-tabs button { min-width:0; border:0; border-bottom:2px solid transparent; background:#fff; padding:10px 3px 8px; color:#697076; font-size:10px; cursor:pointer; overflow:hidden; text-overflow:ellipsis; }
@@ -123,5 +141,6 @@ button:focus-visible { outline:2px solid #2176c7; outline-offset:2px; }
   .runtime-status span:last-child { max-width:150px; overflow:hidden; text-overflow:ellipsis; }
   .task-toolbar { padding-inline:8px; }
   .command-button { padding-inline:8px; }
+  .composer { padding-inline:7px; }.composer-footer { align-items:stretch; flex-direction:column; }.composer-tools,.composer-summary { justify-content:space-between; width:100%; }.composer textarea { min-height:52px; max-height:20vh; }.composer-summary>span { max-width:58vw; }
 }
 @media (prefers-reduced-motion:reduce) { .spin { animation:none; } }

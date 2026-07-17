@@ -2,6 +2,16 @@ import {
   DESKTOP_METHOD_METADATA,
   DESKTOP_METHODS,
   DESKTOP_NOTIFICATIONS,
+  isCatalogListParams,
+  isCatalogListResult,
+  isComposerClearParams,
+  isComposerEnqueueParams,
+  isComposerGetParams,
+  isComposerStateResult,
+  isContextResolveParams,
+  isContextResolveResult,
+  isContextSearchParams,
+  isContextSearchResult,
   isArtifactGetParams,
   isArtifactGetResult,
   isArtifactListParams,
@@ -30,6 +40,16 @@ import {
   type ArtifactListResult,
   type ChangesGetParams,
   type ChangesGetResult,
+  type CatalogListParams,
+  type CatalogListResult,
+  type ComposerClearParams,
+  type ComposerEnqueueParams,
+  type ComposerGetParams,
+  type ComposerStateResult,
+  type ContextResolveParams,
+  type ContextResolveResult,
+  type ContextSearchParams,
+  type ContextSearchResult,
   type InitializeResult,
   type ReportGetParams,
   type ReportGetResult,
@@ -119,6 +139,42 @@ export const THREAD_ARCHIVE_REQUEST = descriptor<ThreadArchiveParams, ThreadSumm
   DESKTOP_METHOD_METADATA.ThreadArchiveMethod.timeout,
   isThreadArchiveParams,
   isThreadSummaryResult,
+);
+export const CATALOG_LIST_REQUEST = descriptor<CatalogListParams, CatalogListResult>(
+  DESKTOP_METHODS.CatalogListMethod,
+  DESKTOP_METHOD_METADATA.CatalogListMethod.timeout,
+  isCatalogListParams,
+  isCatalogListResult,
+);
+export const CONTEXT_SEARCH_REQUEST = descriptor<ContextSearchParams, ContextSearchResult>(
+  DESKTOP_METHODS.ContextSearchMethod,
+  DESKTOP_METHOD_METADATA.ContextSearchMethod.timeout,
+  isContextSearchParams,
+  isContextSearchResult,
+);
+export const CONTEXT_RESOLVE_REQUEST = descriptor<ContextResolveParams, ContextResolveResult>(
+  DESKTOP_METHODS.ContextResolveMethod,
+  DESKTOP_METHOD_METADATA.ContextResolveMethod.timeout,
+  isContextResolveParams,
+  isContextResolveResult,
+);
+export const COMPOSER_GET_REQUEST = descriptor<ComposerGetParams, ComposerStateResult>(
+  DESKTOP_METHODS.ComposerGetMethod,
+  DESKTOP_METHOD_METADATA.ComposerGetMethod.timeout,
+  isComposerGetParams,
+  isComposerStateResult,
+);
+export const COMPOSER_ENQUEUE_REQUEST = descriptor<ComposerEnqueueParams, ComposerStateResult>(
+  DESKTOP_METHODS.ComposerEnqueueMethod,
+  DESKTOP_METHOD_METADATA.ComposerEnqueueMethod.timeout,
+  isComposerEnqueueParams,
+  isComposerStateResult,
+);
+export const COMPOSER_CLEAR_REQUEST = descriptor<ComposerClearParams, ComposerStateResult>(
+  DESKTOP_METHODS.ComposerClearMethod,
+  DESKTOP_METHOD_METADATA.ComposerClearMethod.timeout,
+  isComposerClearParams,
+  isComposerStateResult,
 );
 export const CHANGES_GET_REQUEST = descriptor<ChangesGetParams, ChangesGetResult>(
   DESKTOP_METHODS.ChangesGetMethod,

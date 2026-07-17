@@ -6,6 +6,7 @@
     { "name": "framed-json-rpc", "required": true },
     { "name": "workspace-session", "required": true },
     { "name": "application-outcome", "required": true },
+    { "name": "composer.controlled-context", "required": false },
     { "name": "thread.changed", "required": false }
   ],
   "errors": [
@@ -59,7 +60,19 @@
     "maxOutputQueueBytes": 4194304,
     "maxDiagnosticBytes": 4096,
     "maxRetainedStderrBytes": 16384,
-    "applicationTargetBytes": 786432
+    "applicationTargetBytes": 786432,
+    "maxPromptBytes": 65536,
+    "maxContextSelections": 32,
+    "maxCatalogSelections": 16,
+    "maxSingleFileBytes": 10485760,
+    "maxTotalFileBytes": 33554432,
+    "maxFolderFiles": 500,
+    "maxFolderBytes": 67108864,
+    "maxContextSearchResults": 100,
+    "maxContextScannedEntries": 5000,
+    "maxContextSearchQueryBytes": 256,
+    "maxRelativePathBytes": 4096,
+    "maxQueueMutationIdBytes": 128
   },
   "methods": [
     {
@@ -163,6 +176,52 @@
       "timeout": "query"
     },
     {
+      "constant": "ContextSearchMethod",
+      "name": "context.search",
+      "params": "ContextSearchParams",
+      "result": "ContextSearchResult",
+      "requiresWorkspace": true,
+      "mutation": false,
+      "timeout": "query"
+    },
+    {
+      "constant": "ContextResolveMethod",
+      "name": "context.resolve",
+      "params": "ContextResolveParams",
+      "result": "ContextResolveResult",
+      "internal": true,
+      "requiresWorkspace": true,
+      "mutation": false,
+      "timeout": "query"
+    },
+    {
+      "constant": "ComposerGetMethod",
+      "name": "composer.get",
+      "params": "ComposerGetParams",
+      "result": "ComposerStateResult",
+      "requiresWorkspace": true,
+      "mutation": false,
+      "timeout": "query"
+    },
+    {
+      "constant": "ComposerEnqueueMethod",
+      "name": "composer.enqueue",
+      "params": "ComposerEnqueueParams",
+      "result": "ComposerStateResult",
+      "requiresWorkspace": true,
+      "mutation": true,
+      "timeout": "mutation"
+    },
+    {
+      "constant": "ComposerClearMethod",
+      "name": "composer.clear",
+      "params": "ComposerClearParams",
+      "result": "ComposerStateResult",
+      "requiresWorkspace": true,
+      "mutation": true,
+      "timeout": "mutation"
+    },
+    {
       "constant": "ChangesGetMethod",
       "name": "changes.get",
       "params": "ChangesGetParams",
@@ -248,7 +307,19 @@
         { "jsonName": "maxOutputQueueBytes", "type": "int32", "min": 4194304, "max": 4194304 },
         { "jsonName": "maxDiagnosticBytes", "type": "int32", "min": 4096, "max": 4096 },
         { "jsonName": "maxRetainedStderrBytes", "type": "int32", "min": 16384, "max": 16384 },
-        { "jsonName": "applicationTargetBytes", "type": "int32", "min": 786432, "max": 786432 }
+        { "jsonName": "applicationTargetBytes", "type": "int32", "min": 786432, "max": 786432 },
+        { "jsonName": "maxPromptBytes", "type": "int32", "min": 65536, "max": 65536 },
+        { "jsonName": "maxContextSelections", "type": "int32", "min": 32, "max": 32 },
+        { "jsonName": "maxCatalogSelections", "type": "int32", "min": 16, "max": 16 },
+        { "jsonName": "maxSingleFileBytes", "type": "int32", "min": 10485760, "max": 10485760 },
+        { "jsonName": "maxTotalFileBytes", "type": "int32", "min": 33554432, "max": 33554432 },
+        { "jsonName": "maxFolderFiles", "type": "int32", "min": 500, "max": 500 },
+        { "jsonName": "maxFolderBytes", "type": "int32", "min": 67108864, "max": 67108864 },
+        { "jsonName": "maxContextSearchResults", "type": "int32", "min": 100, "max": 100 },
+        { "jsonName": "maxContextScannedEntries", "type": "int32", "min": 5000, "max": 5000 },
+        { "jsonName": "maxContextSearchQueryBytes", "type": "int32", "min": 256, "max": 256 },
+        { "jsonName": "maxRelativePathBytes", "type": "int32", "min": 4096, "max": 4096 },
+        { "jsonName": "maxQueueMutationIdBytes", "type": "int32", "min": 128, "max": 128 }
       ]
     },
     {
@@ -334,7 +405,8 @@
         { "jsonName": "readOnlyQueries", "type": "boolean" },
         { "jsonName": "gitQueries", "type": "boolean" },
         { "jsonName": "localCatalogs", "type": "boolean" },
-        { "jsonName": "managedArtifacts", "type": "boolean" }
+        { "jsonName": "managedArtifacts", "type": "boolean" },
+        { "jsonName": "controlledContext", "type": "boolean" }
       ]
     },
     {
@@ -342,6 +414,7 @@
       "properties": [
         { "jsonName": "hasApiKey", "type": "boolean" },
         { "jsonName": "apiKeySource", "type": "string", "maxUtf8Bytes": 256 },
+        { "jsonName": "effectiveModel", "type": "string", "maxUtf8Bytes": 256 },
         { "jsonName": "modelSource", "type": "string", "maxUtf8Bytes": 256 },
         { "jsonName": "agentBackendSource", "type": "string", "maxUtf8Bytes": 256 },
         { "jsonName": "approvalMode", "type": "string", "maxUtf8Bytes": 64 },
@@ -607,7 +680,9 @@
     {
       "name": "CatalogListData",
       "properties": [
+        { "jsonName": "workspaceId", "type": "string", "maxUtf8Bytes": 64 },
         { "jsonName": "kind", "type": "string", "maxUtf8Bytes": 32, "enum": ["skills", "experts", "automations", "project-packs"] },
+        { "jsonName": "catalogRevision", "type": "string", "maxUtf8Bytes": 64 },
         { "jsonName": "items", "type": "array", "items": "CatalogItemData", "maxItems": 200 },
         { "jsonName": "truncated", "type": "boolean" }
       ]
@@ -618,6 +693,135 @@
         { "jsonName": "schemaVersion", "type": "int32", "min": 1, "max": 1 },
         { "jsonName": "succeeded", "type": "boolean" },
         { "jsonName": "data", "type": "CatalogListData", "nullable": true },
+        { "jsonName": "error", "type": "ApplicationErrorData", "nullable": true },
+        { "jsonName": "diagnostics", "type": "array", "items": "ApplicationDiagnosticData", "maxItems": 100 },
+        { "jsonName": "truncated", "type": "boolean" }
+      ]
+    },
+    {
+      "name": "ContextSearchParams",
+      "properties": [
+        { "jsonName": "schemaVersion", "type": "int32", "min": 1, "max": 1 },
+        { "jsonName": "query", "type": "string", "maxUtf8Bytes": 256 }
+      ]
+    },
+    {
+      "name": "ContextResolveParams",
+      "properties": [
+        { "jsonName": "schemaVersion", "type": "int32", "min": 1, "max": 1 },
+        { "jsonName": "nativePath", "type": "string", "maxUtf8Bytes": 4096 },
+        { "jsonName": "kind", "type": "string", "maxUtf8Bytes": 16, "enum": ["file", "folder"] }
+      ]
+    },
+    {
+      "name": "ContextDescriptorData",
+      "properties": [
+        { "jsonName": "selectionId", "type": "string", "maxUtf8Bytes": 96 },
+        { "jsonName": "relativePath", "type": "string", "maxUtf8Bytes": 4096 },
+        { "jsonName": "kind", "type": "string", "maxUtf8Bytes": 16, "enum": ["file", "folder"] },
+        { "jsonName": "byteCount", "type": "int64", "min": 0, "max": 67108864 },
+        { "jsonName": "fileCount", "type": "int32", "min": 1, "max": 500 },
+        { "jsonName": "availability", "type": "string", "maxUtf8Bytes": 32, "enum": ["available"] }
+      ]
+    },
+    {
+      "name": "ContextSearchData",
+      "properties": [
+        { "jsonName": "items", "type": "array", "items": "ContextDescriptorData", "maxItems": 100 },
+        { "jsonName": "truncated", "type": "boolean" },
+        { "jsonName": "scannedEntries", "type": "int32", "min": 0, "max": 5000 }
+      ]
+    },
+    {
+      "name": "ContextSearchResult",
+      "properties": [
+        { "jsonName": "schemaVersion", "type": "int32", "min": 1, "max": 1 },
+        { "jsonName": "succeeded", "type": "boolean" },
+        { "jsonName": "data", "type": "ContextSearchData", "nullable": true },
+        { "jsonName": "error", "type": "ApplicationErrorData", "nullable": true },
+        { "jsonName": "diagnostics", "type": "array", "items": "ApplicationDiagnosticData", "maxItems": 100 },
+        { "jsonName": "truncated", "type": "boolean" }
+      ]
+    },
+    {
+      "name": "ContextResolveResult",
+      "properties": [
+        { "jsonName": "schemaVersion", "type": "int32", "min": 1, "max": 1 },
+        { "jsonName": "succeeded", "type": "boolean" },
+        { "jsonName": "data", "type": "ContextDescriptorData", "nullable": true },
+        { "jsonName": "error", "type": "ApplicationErrorData", "nullable": true },
+        { "jsonName": "diagnostics", "type": "array", "items": "ApplicationDiagnosticData", "maxItems": 100 },
+        { "jsonName": "truncated", "type": "boolean" }
+      ]
+    },
+    {
+      "name": "ComposerGetParams",
+      "properties": [
+        { "jsonName": "schemaVersion", "type": "int32", "min": 1, "max": 1 },
+        { "jsonName": "threadId", "type": "string", "maxUtf8Bytes": 64 }
+      ]
+    },
+    {
+      "name": "ComposerCatalogSelectionData",
+      "properties": [
+        { "jsonName": "kind", "type": "string", "maxUtf8Bytes": 16, "enum": ["skill", "expert", "automation"] },
+        { "jsonName": "id", "type": "string", "maxUtf8Bytes": 256 },
+        { "jsonName": "catalogRevision", "type": "string", "maxUtf8Bytes": 64 }
+      ]
+    },
+    {
+      "name": "ComposerEnqueueParams",
+      "properties": [
+        { "jsonName": "schemaVersion", "type": "int32", "min": 1, "max": 1 },
+        { "jsonName": "threadId", "type": "string", "maxUtf8Bytes": 64 },
+        { "jsonName": "expectedThreadRevision", "type": "int64", "min": 0, "max": 9007199254740991 },
+        { "jsonName": "expectedQueueRevision", "type": "int64", "min": 0, "max": 9007199254740991 },
+        { "jsonName": "clientMutationId", "type": "string", "maxUtf8Bytes": 128 },
+        { "jsonName": "prompt", "type": "string", "maxUtf8Bytes": 65536 },
+        { "jsonName": "contextSelectionIds", "type": "array", "items": "string", "maxItems": 32, "maxUtf8Bytes": 96 },
+        { "jsonName": "catalogSelections", "type": "array", "items": "ComposerCatalogSelectionData", "maxItems": 16 }
+      ]
+    },
+    {
+      "name": "ComposerClearParams",
+      "properties": [
+        { "jsonName": "schemaVersion", "type": "int32", "min": 1, "max": 1 },
+        { "jsonName": "threadId", "type": "string", "maxUtf8Bytes": 64 },
+        { "jsonName": "expectedQueueRevision", "type": "int64", "min": 0, "max": 9007199254740991 },
+        { "jsonName": "clientMutationId", "type": "string", "maxUtf8Bytes": 128 }
+      ]
+    },
+    {
+      "name": "PendingComposerIntentData",
+      "properties": [
+        { "jsonName": "intentId", "type": "string", "maxUtf8Bytes": 96 },
+        { "jsonName": "delivery", "type": "string", "maxUtf8Bytes": 16, "enum": ["ready", "next-turn"] },
+        { "jsonName": "createdAtUtc", "type": "datetime" },
+        { "jsonName": "contextCount", "type": "int32", "min": 0, "max": 32 },
+        { "jsonName": "catalogCount", "type": "int32", "min": 0, "max": 16 }
+      ]
+    },
+    {
+      "name": "ComposerStateData",
+      "properties": [
+        { "jsonName": "workspaceId", "type": "string", "maxUtf8Bytes": 64 },
+        { "jsonName": "threadId", "type": "string", "maxUtf8Bytes": 64 },
+        { "jsonName": "threadRevision", "type": "int64", "min": 0, "max": 9007199254740991 },
+        { "jsonName": "queueRevision", "type": "int64", "min": 0, "max": 9007199254740991 },
+        { "jsonName": "pendingIntent", "type": "PendingComposerIntentData", "nullable": true },
+        { "jsonName": "effectiveModel", "type": "string", "maxUtf8Bytes": 256 },
+        { "jsonName": "modelSource", "type": "string", "maxUtf8Bytes": 256 },
+        { "jsonName": "approvalMode", "type": "string", "maxUtf8Bytes": 64 },
+        { "jsonName": "approvalModeSource", "type": "string", "maxUtf8Bytes": 256 },
+        { "jsonName": "controlledContext", "type": "boolean" }
+      ]
+    },
+    {
+      "name": "ComposerStateResult",
+      "properties": [
+        { "jsonName": "schemaVersion", "type": "int32", "min": 1, "max": 1 },
+        { "jsonName": "succeeded", "type": "boolean" },
+        { "jsonName": "data", "type": "ComposerStateData", "nullable": true },
         { "jsonName": "error", "type": "ApplicationErrorData", "nullable": true },
         { "jsonName": "diagnostics", "type": "array", "items": "ApplicationDiagnosticData", "maxItems": 100 },
         { "jsonName": "truncated", "type": "boolean" }

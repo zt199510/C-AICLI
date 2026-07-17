@@ -1,6 +1,7 @@
 import { FolderOpen, PanelLeft, PanelLeftClose, PanelRight, RefreshCw, X } from "lucide-react";
 import { useEffect, useState } from "react";
 import { ReviewInspector } from "./ReviewInspector";
+import { Composer } from "./Composer";
 import { ThreadSidebar } from "./ThreadSidebar";
 import { TimelineView } from "./TimelineView";
 import { useDesktopController } from "./use-desktop-controller";
@@ -87,6 +88,22 @@ export function App() {
               <TimelineView detail={state.detail} status={state.detailStatus} error={state.detailError} onLoadMore={controller.loadMore} />
             )}
           </section>
+          <Composer
+            draft={controller.composerDraft}
+            composer={controller.composer}
+            disabledReason={controller.composerDisabledReason}
+            onText={controller.setComposerText}
+            onSearch={(query) => void controller.searchMentions(query)}
+            onCloseMentions={controller.closeMentions}
+            onContext={controller.addComposerContext}
+            onCatalog={controller.addComposerCatalog}
+            onRemoveContext={controller.removeComposerContext}
+            onRemoveCatalog={controller.removeComposerCatalog}
+            onPickFile={() => void controller.pickComposerFile()}
+            onPickFolder={() => void controller.pickComposerFolder()}
+            onSend={() => void controller.enqueueComposer()}
+            onClear={() => void controller.clearComposer()}
+          />
         </main>
 
         <aside className={`inspector drawer ${inspectorOpen ? "drawer-open" : ""}`} aria-label="Review inspector">

@@ -1,12 +1,18 @@
 import { useCallback, useEffect, useReducer, useRef } from "react";
-import type { ThreadChangedParams, WorkspaceSnapshotData } from "../generated/desktop-contracts";
+import type { CatalogItemData, ContextDescriptorData, ThreadChangedParams, WorkspaceSnapshotData } from "../generated/desktop-contracts";
 import { createRuntimeStatus, type DesktopBridge } from "../shared/bridge-contract";
 import { desktopReducer, initialDesktopState, type ReviewState } from "./desktop-state";
+import { composerReducer, currentDraft, draftKey, initialComposerUiState, type ComposerCatalogKind, type SelectedCatalogItem } from "./composer-state";
 
 export function useDesktopController(bridge: DesktopBridge | undefined) {
   const [state, dispatch] = useReducer(desktopReducer, initialDesktopState);
+  const [composer, dispatchComposer] = useReducer(composerReducer, initialComposerUiState);
   const stateRef = useRef(state);
   stateRef.current = state;
+  const composerRef = useRef(composer);
+  composerRef.current = composer;
+  const mentionRequest = useRef(0);
+  const composerWorkspace = useRef<string | null>(null);
   const resyncRunning = useRef(false);
   const resyncDirty = useRef(false);
 
@@ -120,6 +126,26 @@ export function useDesktopController(bridge: DesktopBridge | undefined) {
     return () => { disposed = true; unsubscribeThread(); unsubscribeRuntime(); };
   }, [adoptWorkspace, bridge, queueResync]);
 
+  useEffect(() => {
+    const workspaceId = state.workspace?.workspaceId ?? null;
+    if (workspaceId !== composerWorkspace.current) {
+      composerWorkspace.current = workspaceId;
+      mentionRequest.current++;
+      dispatchComposer({ type: "reset" });
+    }
+    if (!bridge || !workspaceId || !state.selectedThreadId || state.runtime.state !== "ready") return;
+    const threadId = state.selectedThreadId;
+    const epoch = state.contextEpoch;
+    const selectionEpoch = state.selectionEpoch;
+    dispatchComposer({ type: "snapshot-loading" });
+    void bridge.getComposer({ threadId }).then((result) => {
+      const current = stateRef.current;
+      if (current.contextEpoch !== epoch || current.selectionEpoch !== selectionEpoch || current.selectedThreadId !== threadId) return;
+      if (result.succeeded && result.data) dispatchComposer({ type: "snapshot", snapshot: result.data });
+      else dispatchComposer({ type: "snapshot-error" });
+    }).catch(() => dispatchComposer({ type: "snapshot-error" }));
+  }, [bridge, state.contextEpoch, state.runtime.state, state.selectedThreadId, state.selectionEpoch, state.workspace?.workspaceId]);
+
   const selectThread = useCallback((threadId: string) => {
     const current = stateRef.current;
     const selectionEpoch = current.selectionEpoch + (current.selectedThreadId === threadId ? 0 : 1);
@@ -203,6 +229,127 @@ export function useDesktopController(bridge: DesktopBridge | undefined) {
     } catch { dispatch({ type: "review-error", epoch, message: "Artifact could not be loaded." }); }
   }, [bridge]);
 
+  const activeDraftKey = state.workspace && state.selectedThreadId
+    ? draftKey(state.workspace.workspaceId, state.selectedThreadId)
+    : null;
+
+  const searchMentions = useCallback(async (query: string) => {
+    if (!bridge) return;
+    const snapshot = stateRef.current;
+    if (!snapshot.workspace || !snapshot.selectedThreadId) return;
+    const requestId = ++mentionRequest.current;
+    dispatchComposer({ type: "mentions-loading" });
+    try {
+      const [context, skills, experts, automations] = await Promise.all([
+        bridge.searchContext({ query }),
+        bridge.listCatalog({ kind: "skills" }),
+        bridge.listCatalog({ kind: "experts" }),
+        bridge.listCatalog({ kind: "automations" }),
+      ]);
+      const current = stateRef.current;
+      if (requestId !== mentionRequest.current || current.contextEpoch !== snapshot.contextEpoch || current.selectionEpoch !== snapshot.selectionEpoch) return;
+      if (!context.succeeded || !context.data || !skills.succeeded || !skills.data || !experts.succeeded || !experts.data || !automations.succeeded || !automations.data) {
+        dispatchComposer({ type: "mentions", value: { loading: false, error: "Mentions could not be loaded.", truncated: false, context: [], skills: [], experts: [], automations: [], revisions: { skills: "", experts: "", automations: "" } } });
+        return;
+      }
+      const filter = (items: readonly CatalogItemData[]) => !query ? items : items.filter(item => `${item.displayName} ${item.description}`.toLowerCase().includes(query.toLowerCase()));
+      dispatchComposer({ type: "mentions", value: {
+        loading: false, error: null,
+        truncated: context.data.truncated || context.truncated || skills.data.truncated || experts.data.truncated || automations.data.truncated,
+        context: context.data.items, skills: filter(skills.data.items), experts: filter(experts.data.items), automations: filter(automations.data.items),
+        revisions: { skills: skills.data.catalogRevision, experts: experts.data.catalogRevision, automations: automations.data.catalogRevision },
+      } });
+    } catch {
+      if (requestId === mentionRequest.current) dispatchComposer({ type: "mentions", value: { loading: false, error: "Mentions could not be loaded.", truncated: false, context: [], skills: [], experts: [], automations: [], revisions: { skills: "", experts: "", automations: "" } } });
+    }
+  }, [bridge]);
+
+  const addContext = useCallback((item: ContextDescriptorData) => {
+    const current = stateRef.current;
+    if (!current.workspace || !current.selectedThreadId) return;
+    const key = draftKey(current.workspace.workspaceId, current.selectedThreadId);
+    dispatchComposer({ type: "add-context", key, item });
+    dispatchComposer({ type: "text", key, text: (composerRef.current.drafts[key]?.text ?? "").replace(/(?:^|\s)@[^\s@]*$/u, " ").trimStart() });
+    dispatchComposer({ type: "mentions-close" });
+  }, []);
+
+  const addCatalog = useCallback((kind: ComposerCatalogKind, item: CatalogItemData, revision: string) => {
+    const current = stateRef.current;
+    if (!current.workspace || !current.selectedThreadId || !revision) return;
+    const key = draftKey(current.workspace.workspaceId, current.selectedThreadId);
+    dispatchComposer({ type: "add-catalog", key, item: { kind, id: item.id, label: item.displayName, catalogRevision: revision } });
+    dispatchComposer({ type: "text", key, text: (composerRef.current.drafts[key]?.text ?? "").replace(/(?:^|\s)@[^\s@]*$/u, " ").trimStart() });
+    dispatchComposer({ type: "mentions-close" });
+  }, []);
+
+  const pickContext = useCallback(async (kind: "file" | "folder") => {
+    if (!bridge) return;
+    const snapshot = stateRef.current;
+    if (!snapshot.workspace || !snapshot.selectedThreadId) return;
+    const key = draftKey(snapshot.workspace.workspaceId, snapshot.selectedThreadId);
+    try {
+      const picked = kind === "file" ? await bridge.pickFile() : await bridge.pickFolder();
+      const current = stateRef.current;
+      if (current.contextEpoch !== snapshot.contextEpoch || current.selectionEpoch !== snapshot.selectionEpoch) return;
+      if (picked.canceled) return;
+      if (!picked.result?.succeeded || !picked.result.data) {
+        dispatchComposer({ type: "status", key, status: "error", error: safeFailure(picked.result?.error?.safeMessage) });
+        return;
+      }
+      dispatchComposer({ type: "add-context", key, item: picked.result.data });
+    } catch { dispatchComposer({ type: "status", key, status: "error", error: "Context picker failed." }); }
+  }, [bridge]);
+
+  const enqueueComposer = useCallback(async () => {
+    if (!bridge) return;
+    const snapshot = stateRef.current;
+    const composerSnapshot = composerRef.current.snapshot;
+    if (!snapshot.workspace || !snapshot.selectedThreadId || !snapshot.detail || !composerSnapshot) return;
+    const key = draftKey(snapshot.workspace.workspaceId, snapshot.selectedThreadId);
+    const draft = currentDraft(composerRef.current, key);
+    if (!draft.text.trim()) return;
+    dispatchComposer({ type: "status", key, status: "validating" });
+    const epoch = snapshot.contextEpoch;
+    const selectionEpoch = snapshot.selectionEpoch;
+    try {
+      dispatchComposer({ type: "status", key, status: "enqueueing" });
+      const result = await bridge.enqueueComposer({
+        threadId: snapshot.selectedThreadId,
+        expectedThreadRevision: snapshot.detail.thread.revision,
+        expectedQueueRevision: composerSnapshot.queueRevision,
+        clientMutationId: `enqueue-${crypto.randomUUID()}`,
+        prompt: draft.text,
+        contextSelectionIds: draft.contextSelections.map(item => item.selectionId),
+        catalogSelections: draft.catalogSelections.map(item => ({ kind: item.kind, id: item.id, catalogRevision: item.catalogRevision })),
+      });
+      if (!result.succeeded || !result.data) {
+        dispatchComposer({ type: "status", key, status: "error", error: safeFailure(result.error?.safeMessage) });
+        return;
+      }
+      const intentId = result.data.pendingIntent?.intentId;
+      const authoritative = await bridge.getComposer({ threadId: snapshot.selectedThreadId });
+      const current = stateRef.current;
+      if (current.contextEpoch !== epoch || current.selectionEpoch !== selectionEpoch || current.selectedThreadId !== snapshot.selectedThreadId) return;
+      if (!authoritative.succeeded || !authoritative.data || !intentId || authoritative.data.pendingIntent?.intentId !== intentId) {
+        dispatchComposer({ type: "status", key, status: "error", error: "Queue confirmation could not be verified." });
+        return;
+      }
+      dispatchComposer({ type: "snapshot", snapshot: authoritative.data });
+      dispatchComposer({ type: "clear-draft", key });
+    } catch { dispatchComposer({ type: "status", key, status: "error", error: "Prompt could not be queued." }); }
+  }, [bridge]);
+
+  const clearComposer = useCallback(async () => {
+    if (!bridge) return;
+    const snapshot = stateRef.current;
+    const composerSnapshot = composerRef.current.snapshot;
+    if (!snapshot.selectedThreadId || !composerSnapshot?.pendingIntent) return;
+    try {
+      const result = await bridge.clearComposer({ threadId: snapshot.selectedThreadId, expectedQueueRevision: composerSnapshot.queueRevision, clientMutationId: `clear-${crypto.randomUUID()}` });
+      if (result.succeeded && result.data) dispatchComposer({ type: "snapshot", snapshot: result.data });
+    } catch { /* authoritative pending state remains visible */ }
+  }, [bridge]);
+
   return {
     state,
     openWorkspace,
@@ -215,6 +362,20 @@ export function useDesktopController(bridge: DesktopBridge | undefined) {
     setReviewTab,
     selectReport,
     selectArtifact,
+    composer,
+    composerDraft: currentDraft(composer, activeDraftKey),
+    composerDisabledReason: !state.workspace ? "Open a workspace to compose." : !state.selectedThreadId ? "Select a thread to compose." : state.detail?.thread.status === "archived" ? "Archived threads cannot accept input." : state.runtime.state !== "ready" ? "AppHost is unavailable." : composer.snapshot?.pendingIntent ? "Clear the pending input before composing another." : null,
+    setComposerText: (text: string) => { if (activeDraftKey) dispatchComposer({ type: "text", key: activeDraftKey, text }); },
+    searchMentions,
+    closeMentions: () => { mentionRequest.current++; dispatchComposer({ type: "mentions-close" }); },
+    addComposerContext: addContext,
+    addComposerCatalog: addCatalog,
+    removeComposerContext: (selectionId: string) => { if (activeDraftKey) dispatchComposer({ type: "remove-context", key: activeDraftKey, selectionId }); },
+    removeComposerCatalog: (item: SelectedCatalogItem) => { if (activeDraftKey) dispatchComposer({ type: "remove-catalog", key: activeDraftKey, kind: item.kind, id: item.id }); },
+    pickComposerFile: () => pickContext("file"),
+    pickComposerFolder: () => pickContext("folder"),
+    enqueueComposer,
+    clearComposer,
   };
 }
 

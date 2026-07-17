@@ -61,7 +61,9 @@ internal static class DesktopProtocolMapper
             ? null
             : new CatalogListData
             {
+                WorkspaceId = value.Data.WorkspaceId,
                 Kind = value.Data.Catalog,
+                CatalogRevision = value.Data.CatalogRevision,
                 Items = value.Data.Items.Select(item => new CatalogItemData
                 {
                     Id = item.Id,
@@ -75,6 +77,60 @@ internal static class DesktopProtocolMapper
                 }).ToArray(),
                 Truncated = value.Data.Truncated
             },
+        Error = Map(value.Error),
+        Diagnostics = Map(value.Diagnostics),
+        Truncated = value.Truncated
+    };
+
+    public static ContextSearchResult Map(ApplicationResult<ControlledContextSearchProjection> value) => new()
+    {
+        SchemaVersion = DesktopProtocolDefinition.SchemaVersion,
+        Succeeded = value.Succeeded,
+        Data = value.Data is null ? null : new ContextSearchData
+        {
+            Items = value.Data.Items.Select(Map).ToArray(),
+            Truncated = value.Data.Truncated,
+            ScannedEntries = value.Data.ScannedEntries
+        },
+        Error = Map(value.Error),
+        Diagnostics = Map(value.Diagnostics),
+        Truncated = value.Truncated
+    };
+
+    public static ContextResolveResult Map(ApplicationResult<ControlledContextDescriptor> value) => new()
+    {
+        SchemaVersion = DesktopProtocolDefinition.SchemaVersion,
+        Succeeded = value.Succeeded,
+        Data = value.Data is null ? null : Map(value.Data),
+        Error = Map(value.Error),
+        Diagnostics = Map(value.Diagnostics),
+        Truncated = value.Truncated
+    };
+
+    public static ComposerStateResult Map(ApplicationResult<ComposerStateProjection> value) => new()
+    {
+        SchemaVersion = DesktopProtocolDefinition.SchemaVersion,
+        Succeeded = value.Succeeded,
+        Data = value.Data is null ? null : new ComposerStateData
+        {
+            WorkspaceId = value.Data.WorkspaceId,
+            ThreadId = value.Data.ThreadId,
+            ThreadRevision = value.Data.ThreadRevision,
+            QueueRevision = value.Data.QueueRevision,
+            PendingIntent = value.Data.PendingIntent is null ? null : new PendingComposerIntentData
+            {
+                IntentId = value.Data.PendingIntent.IntentId,
+                Delivery = value.Data.PendingIntent.Delivery,
+                CreatedAtUtc = value.Data.PendingIntent.CreatedAtUtc,
+                ContextCount = value.Data.PendingIntent.ContextCount,
+                CatalogCount = value.Data.PendingIntent.CatalogCount
+            },
+            EffectiveModel = value.Data.EffectiveModel,
+            ModelSource = value.Data.ModelSource,
+            ApprovalMode = value.Data.ApprovalMode,
+            ApprovalModeSource = value.Data.ApprovalModeSource,
+            ControlledContext = value.Data.ControlledContext
+        },
         Error = Map(value.Error),
         Diagnostics = Map(value.Diagnostics),
         Truncated = value.Truncated
@@ -198,6 +254,16 @@ internal static class DesktopProtocolMapper
             SourceId = value.Origin.SourceId,
             SourceFingerprint = value.Origin.SourceFingerprint
         }
+    };
+
+    private static ContextDescriptorData Map(ControlledContextDescriptor value) => new()
+    {
+        SelectionId = value.SelectionId,
+        RelativePath = value.RelativePath,
+        Kind = value.Kind,
+        ByteCount = value.ByteCount,
+        FileCount = value.FileCount,
+        Availability = value.Availability
     };
 
     private static ThreadDetailData Map(ThreadDetailProjection value) => new()

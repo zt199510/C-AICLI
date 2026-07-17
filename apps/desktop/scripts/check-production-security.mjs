@@ -52,11 +52,13 @@ const reviewedChannels = [
   "runtime:get-status", "runtime:restart", "runtime:status", "workspace:open", "workspace:get-snapshot",
   "thread:list", "thread:get", "thread:create", "thread:rename", "thread:archive", "thread:changed",
   "changes:get", "report:list", "report:get", "artifact:list", "artifact:get",
+  "catalog:list", "context:search", "context:pick-file", "context:pick-folder",
+  "composer:get", "composer:enqueue", "composer:clear",
 ];
 for (const channel of reviewedChannels) {
   if (!preload.includes(channel)) throw new Error(`Preload bundle is missing reviewed channel: ${channel}`);
 }
-for (const value of ["desktop:initialize", "desktop:request", "shell.openExternal", "node:fs", "child_process", "thread:delete", "catalog:list", "turn:start"]) {
+for (const value of ["desktop:initialize", "desktop:request", "shell.openExternal", "node:fs", "child_process", "thread:delete", "context:resolve", "turn:start", "approval:resolve", "terminal:"]) {
   if (preload.includes(value)) throw new Error(`Preload bundle contains forbidden surface: ${value}`);
 }
 

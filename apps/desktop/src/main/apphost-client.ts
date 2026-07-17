@@ -133,6 +133,7 @@ export class AppHostClient extends EventEmitter {
         DESKTOP_CAPABILITIES.FramedJsonRpc,
         DESKTOP_CAPABILITIES.WorkspaceSession,
         DESKTOP_CAPABILITIES.ApplicationOutcome,
+        DESKTOP_CAPABILITIES.ComposerControlledContext,
         DESKTOP_CAPABILITIES.ThreadChanged,
       ],
     });
@@ -342,6 +343,7 @@ function isExactHandshake(result: InitializeResult): boolean {
     DESKTOP_CAPABILITIES.FramedJsonRpc,
     DESKTOP_CAPABILITIES.WorkspaceSession,
     DESKTOP_CAPABILITIES.ApplicationOutcome,
+    DESKTOP_CAPABILITIES.ComposerControlledContext,
     DESKTOP_CAPABILITIES.ThreadChanged,
   ];
   return result.schemaVersion === SCHEMA_VERSION &&

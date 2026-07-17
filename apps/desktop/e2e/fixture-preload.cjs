@@ -1,10 +1,10 @@
-const { contextBridge } = require("electron");
+const { contextBridge, ipcRenderer } = require("electron");
 
 const timestamp = "2026-07-17T00:00:00.000Z";
 const workspace = {
   workspaceId: "fixture-workspace", rootPath: "C:\\fixture\\workspace", status: "ready",
-  capabilities: { readOnlyQueries: true, gitQueries: true, localCatalogs: true, managedArtifacts: true },
-  configuration: { hasApiKey: false, apiKeySource: "none", modelSource: "fixture", agentBackendSource: "fixture", approvalMode: "ask", approvalModeSource: "fixture", loadedSourceCount: 0 },
+  capabilities: { readOnlyQueries: true, gitQueries: true, localCatalogs: true, managedArtifacts: true, controlledContext: true },
+  configuration: { hasApiKey: false, apiKeySource: "none", effectiveModel: "gpt-fixture", modelSource: "fixture", agentBackendSource: "fixture", approvalMode: "OnRequest", approvalModeSource: "fixture", loadedSourceCount: 0 },
 };
 const thread = {
   threadId: "fixture-thread", revision: 3, workspaceId: workspace.workspaceId, title: "Fixture review thread", status: "completed",
@@ -26,6 +26,8 @@ const artifact = {
 };
 const ok = (data) => ({ schemaVersion: 1, succeeded: true, data, error: null, diagnostics: [], truncated: false });
 const noop = () => () => {};
+const contextItem = { selectionId: "ctx_fixture", relativePath: "src/review.ts", kind: "file", byteCount: 128, fileCount: 1, availability: "available" };
+const catalog = (kind) => ok({ workspaceId: workspace.workspaceId, kind, catalogRevision: "a".repeat(64), items: [{ id: `fixture-${kind}`, displayName: `Fixture ${kind}`, version: "1", description: `Fixture ${kind} capability`, sourceKind: "fixture", readOnly: true, toolBoundary: "read-only", capabilities: [] }], truncated: false });
 
 contextBridge.exposeInMainWorld("caicli", Object.freeze({
   getRuntimeStatus: async () => ({ schemaVersion: 1, state: "ready", code: "runtime-ready", message: "AppHost ready", canRestart: false, protocolVersion: "desktop-v1" }),
@@ -38,5 +40,12 @@ contextBridge.exposeInMainWorld("caicli", Object.freeze({
   getChanges: async () => ok({ status: "ready", exitCode: 0, gitStatusSummary: "M src/review.ts", gitStatusSucceeded: true, gitStatusErrorCode: null, dirty: true, diffStatSummary: "1 file changed", diffSucceeded: true, diffErrorCode: null, diffTruncated: false, changedFiles: [{ path: "src/review.ts", status: "M" }], sessionSource: null, sessionName: null, warnings: [] }),
   listReports: async () => ok({ reports: [], truncated: false }), getReport: async () => { throw new Error("not used"); },
   listArtifacts: async () => ok({ artifacts: [artifact], truncated: false }), getArtifact: async () => ok(artifact),
+  listCatalog: async ({ kind }) => catalog(kind),
+  searchContext: async () => ok({ items: [contextItem], truncated: false, scannedEntries: 1 }),
+  pickFile: async () => ({ schemaVersion: 1, canceled: false, result: ok(contextItem) }),
+  pickFolder: async () => ({ schemaVersion: 1, canceled: true, result: null }),
+  getComposer: async (command) => ipcRenderer.invoke("fixture:composer-get", command),
+  enqueueComposer: async (command) => ipcRenderer.invoke("fixture:composer-enqueue", command),
+  clearComposer: async (command) => ipcRenderer.invoke("fixture:composer-clear", command),
   onRuntimeStatus: noop, onThreadChanged: noop,
 }));

@@ -2,6 +2,9 @@ import {
   isArtifactGetResult,
   isArtifactListResult,
   isChangesGetResult,
+  isCatalogListResult,
+  isComposerStateResult,
+  isContextSearchResult,
   isReportGetResult,
   isReportListResult,
   isThreadChangedParams,
@@ -15,6 +18,12 @@ import {
 import {
   IPC_CHANNELS,
   assertRuntimeStatus,
+  isClearComposerCommand,
+  isContextPickResult,
+  isEnqueueComposerCommand,
+  isGetComposerCommand,
+  isListCatalogCommand,
+  isSearchContextCommand,
   isArchiveThreadCommand,
   isCreateThreadCommand,
   isGetArtifactCommand,
@@ -30,6 +39,11 @@ import {
   type GetChangesCommand,
   type GetReportCommand,
   type GetThreadCommand,
+  type ClearComposerCommand,
+  type EnqueueComposerCommand,
+  type GetComposerCommand,
+  type ListCatalogCommand,
+  type SearchContextCommand,
   type RenameThreadCommand,
   type RuntimeStatus,
 } from "../shared/bridge-contract";
@@ -44,7 +58,7 @@ export function createDesktopBridge(ipc: IpcRendererAdapter): DesktopBridge {
   const validated = async <T>(channel: string, validator: (value: unknown) => value is T, ...args: unknown[]): Promise<T> => {
     const value = await ipc.invoke(channel, ...args);
     if (!validator(value)) throw new Error("Invalid desktop result.");
-    return value;
+    return deepFreeze(value);
   };
   return Object.freeze({
     async getRuntimeStatus() {
@@ -95,6 +109,28 @@ export function createDesktopBridge(ipc: IpcRendererAdapter): DesktopBridge {
       if (!isGetArtifactCommand(command)) return Promise.reject(new Error("Invalid artifact command."));
       return validated(IPC_CHANNELS.getArtifact, isArtifactGetResult, command);
     },
+    listCatalog(command: ListCatalogCommand) {
+      if (!isListCatalogCommand(command)) return Promise.reject(new Error("Invalid catalog command."));
+      return validated(IPC_CHANNELS.listCatalog, isCatalogListResult, command);
+    },
+    searchContext(command: SearchContextCommand) {
+      if (!isSearchContextCommand(command)) return Promise.reject(new Error("Invalid context search command."));
+      return validated(IPC_CHANNELS.searchContext, isContextSearchResult, command);
+    },
+    pickFile: () => validated(IPC_CHANNELS.pickFile, isContextPickResult),
+    pickFolder: () => validated(IPC_CHANNELS.pickFolder, isContextPickResult),
+    getComposer(command: GetComposerCommand) {
+      if (!isGetComposerCommand(command)) return Promise.reject(new Error("Invalid composer command."));
+      return validated(IPC_CHANNELS.getComposer, isComposerStateResult, command);
+    },
+    enqueueComposer(command: EnqueueComposerCommand) {
+      if (!isEnqueueComposerCommand(command)) return Promise.reject(new Error("Invalid composer enqueue command."));
+      return validated(IPC_CHANNELS.enqueueComposer, isComposerStateResult, command);
+    },
+    clearComposer(command: ClearComposerCommand) {
+      if (!isClearComposerCommand(command)) return Promise.reject(new Error("Invalid composer clear command."));
+      return validated(IPC_CHANNELS.clearComposer, isComposerStateResult, command);
+    },
     onRuntimeStatus(listener: (status: RuntimeStatus) => void) {
       const wrapped = (_event: unknown, value: unknown) => {
         if (isRuntimeStatus(value)) listener(value);
@@ -110,4 +146,12 @@ export function createDesktopBridge(ipc: IpcRendererAdapter): DesktopBridge {
       return () => ipc.removeListener(IPC_CHANNELS.threadChanged, wrapped);
     },
   });
+}
+
+function deepFreeze<T>(value: T): T {
+  if (value !== null && typeof value === "object" && !Object.isFrozen(value)) {
+    for (const item of Object.values(value as Record<string, unknown>)) deepFreeze(item);
+    Object.freeze(value);
+  }
+  return value;
 }

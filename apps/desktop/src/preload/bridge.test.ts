@@ -16,21 +16,28 @@ describe("preload bridge", () => {
     expect(Object.isFrozen(bridge)).toBe(true);
     expect(Object.keys(bridge).sort()).toEqual([
       "archiveThread",
+      "clearComposer",
       "createThread",
+      "enqueueComposer",
       "getArtifact",
       "getChanges",
+      "getComposer",
       "getReport",
       "getRuntimeStatus",
       "getThread",
       "getWorkspaceSnapshot",
       "listArtifacts",
+      "listCatalog",
       "listReports",
       "listThreads",
       "onRuntimeStatus",
       "onThreadChanged",
       "openWorkspace",
+      "pickFile",
+      "pickFolder",
       "renameThread",
       "restartRuntime",
+      "searchContext",
     ]);
   });
 
