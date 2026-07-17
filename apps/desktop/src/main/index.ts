@@ -1,147 +1,138 @@
-import path from "node:path";
-import { app, BrowserWindow, dialog, ipcMain } from "electron";
-import type { InitializeResult, WorkspaceOpenResult } from "../generated/desktop-contracts";
-import { DESKTOP_METHODS, SCHEMA_VERSION } from "../generated/desktop-contracts";
-import { IPC_CHANNELS, type RuntimeStatus } from "../shared/bridge-contract";
+import fs from "node:fs/promises";
+import { app, dialog, ipcMain, session } from "electron";
+import type { BrowserWindow } from "electron";
+import { IPC_CHANNELS } from "../shared/bridge-contract";
 import { AppHostClient } from "./apphost-client";
 import { resolveAppHostLaunch } from "./apphost-launch";
-import { applyNavigationPolicy, createWebPreferences } from "./security";
+import { AppHostRuntime } from "./apphost-runtime";
+import { isCurrentWindowSender, registerDesktopIpc } from "./ipc-bridge";
+import { installSessionPolicy } from "./security";
+import { createDesktopWindow, focusDesktopWindow } from "./window";
 import { isRuntimeWindowAvailable, sendRuntimeStatus } from "./window-lifecycle";
 
 let mainWindow: BrowserWindow | null = null;
-let initializeResult: InitializeResult | null = null;
-let initializePromise: Promise<InitializeResult> | null = null;
 let shutdownStarted = false;
-const appHost = new AppHostClient();
+let disposeIpc: (() => void) | null = null;
 
-function publishStatus(status: RuntimeStatus): void {
-  sendRuntimeStatus(mainWindow, IPC_CHANNELS.runtimeStatus, status);
-}
-
-function createWindow(): BrowserWindow {
-  const preloadPath = path.join(app.getAppPath(), "dist", "preload", "index.cjs");
-  const window = new BrowserWindow({
-    width: 1440,
-    height: 900,
-    minWidth: 900,
-    minHeight: 620,
-    show: false,
-    backgroundColor: "#f4f5f6",
-    webPreferences: createWebPreferences(preloadPath),
-  });
-  window.removeMenu();
-  applyNavigationPolicy(window.webContents);
-  window.once("ready-to-show", () => {
-    if (!window.isDestroyed()) window.show();
-  });
-  window.once("closed", () => {
-    if (mainWindow === window) mainWindow = null;
-  });
-
-  const developmentUrl = process.env.VITE_DEV_SERVER_URL;
-  if (developmentUrl) void window.loadURL(developmentUrl);
-  else void window.loadFile(path.join(app.getAppPath(), "dist", "renderer", "index.html"));
-  return window;
-}
-
-function registerBridge(): void {
-  ipcMain.handle(IPC_CHANNELS.initialize, () => {
-    if (initializeResult) return initializeResult;
-    if (initializePromise) return initializePromise;
-    throw new Error("AppHost is not ready.");
-  });
-  ipcMain.handle(IPC_CHANNELS.openWorkspace, async (): Promise<WorkspaceOpenResult | null> => {
-    if (!isRuntimeWindowAvailable(mainWindow) || !initializeResult) {
-      throw new Error("AppHost is not ready.");
-    }
-    const selection = await dialog.showOpenDialog(mainWindow, {
-      properties: ["openDirectory", "dontAddToRecent"],
-      title: "Open workspace",
-    });
-    if (selection.canceled || selection.filePaths.length !== 1) return null;
-    return appHost.request<WorkspaceOpenResult>(DESKTOP_METHODS.WorkspaceOpenMethod, {
-      schemaVersion: SCHEMA_VERSION,
-      path: selection.filePaths[0],
-    });
-  });
-}
-
-appHost.on("exit", () => {
-  initializeResult = null;
-  initializePromise = null;
-  publishStatus({ state: "stopped", detail: "AppHost stopped" });
+const runtime = new AppHostRuntime({
+  createClient: () => new AppHostClient(),
+  resolveLaunch: () => resolveAppHostLaunch({
+    appIsPackaged: app.isPackaged,
+    appPath: app.getAppPath(),
+    resourcesPath: process.resourcesPath,
+    environment: process.env,
+  }),
 });
 
-app.whenReady().then(async () => {
-  if (process.env.CAICLI_DESKTOP_SMOKE === "1") {
-    try {
-      const initialized = await appHost.start(
-        resolveAppHostLaunch({
-          appIsPackaged: app.isPackaged,
-          appPath: app.getAppPath(),
-          resourcesPath: process.resourcesPath,
-          environment: process.env,
-        }),
-      );
-      if (initialized.protocolVersion !== "desktop-v1") throw new Error("Unexpected protocol version.");
-      await appHost.stop();
-      app.exit(0);
-    } catch (error) {
-      const detail = error instanceof Error ? error.message.slice(0, 512) : "unknown error";
-      console.error(`desktop smoke failed: ${detail}`);
-      await appHost.stop();
-      app.exit(2);
+const hasInstanceLock = app.requestSingleInstanceLock();
+if (!hasInstanceLock) app.quit();
+
+app.on("second-instance", () => { focusDesktopWindow(mainWindow); });
+
+runtime.subscribe((status) => {
+  sendRuntimeStatus(mainWindow, IPC_CHANNELS.runtimeStatus, status);
+});
+
+if (hasInstanceLock) {
+  void app.whenReady().then(async () => {
+    installSessionPolicy(session.defaultSession, app);
+
+    if (process.env.CAICLI_DESKTOP_SMOKE === "1") {
+      const status = await runtime.start();
+      await runtime.stop();
+      app.exit(status.state === "ready" ? 0 : 2);
+      return;
     }
-    return;
-  }
 
-  registerBridge();
-  mainWindow = createWindow();
-  publishStatus({ state: "starting", detail: "Starting AppHost" });
-  try {
-    initializePromise = appHost.start(
-      resolveAppHostLaunch({
-        appIsPackaged: app.isPackaged,
-        appPath: app.getAppPath(),
-        resourcesPath: process.resourcesPath,
-        environment: process.env,
-      }),
-    );
-    initializeResult = await initializePromise;
-    publishStatus({ state: "ready", detail: initializeResult.protocolVersion });
-  } catch {
-    publishStatus({ state: "failed", detail: "AppHost failed to start" });
-  } finally {
-    initializePromise = null;
-  }
+    if (process.env.CAICLI_DESKTOP_CRASH_RESTART === "1") {
+      const started = await runtime.start();
+      if (started.state !== "ready") { app.exit(2); return; }
+      runtime.forceTerminateForTest();
+      const failed = await waitForRuntimeState("failed", 10_000);
+      const restarted = failed ? await runtime.restart() : runtime.getStatus();
+      await runtime.stop();
+      app.exit(failed && restarted.state === "ready" ? 0 : 2);
+      return;
+    }
 
-  const autoExitMilliseconds = Number.parseInt(
-    process.env.CAICLI_DESKTOP_AUTO_EXIT_MS ?? "",
-    10,
-  );
-  if (Number.isSafeInteger(autoExitMilliseconds) && autoExitMilliseconds >= 1000) {
-    setTimeout(() => app.quit(), autoExitMilliseconds).unref();
-  }
+    mainWindow = createDesktopWindow({
+      app,
+      developmentUrl: process.env.VITE_DEV_SERVER_URL,
+    });
+    mainWindow.once("closed", () => { mainWindow = null; });
+    disposeIpc = registerDesktopIpc({
+      ipcMain,
+      runtime,
+      dialog,
+      getWindow: () => mainWindow,
+      isAllowedSender: (event) => isCurrentWindowSender(event, mainWindow),
+    });
+    await runtime.start();
+    await captureShellIfRequested();
+    installSmokeTimers();
+  });
+}
 
-  const closeWindowMilliseconds = Number.parseInt(
-    process.env.CAICLI_DESKTOP_CLOSE_WINDOW_MS ?? "",
-    10,
-  );
-  if (Number.isSafeInteger(closeWindowMilliseconds) && closeWindowMilliseconds >= 1000) {
+app.on("window-all-closed", () => app.quit());
+app.on("before-quit", (event) => {
+  if (shutdownStarted) return;
+  shutdownStarted = true;
+  event.preventDefault();
+  disposeIpc?.();
+  disposeIpc = null;
+  const deadline = setTimeout(() => app.exit(0), 2500);
+  void runtime.stop().finally(() => {
+    clearTimeout(deadline);
+    app.quit();
+  });
+});
+
+function installSmokeTimers(): void {
+  const autoExitMilliseconds = parseSmokeDelay(process.env.CAICLI_DESKTOP_AUTO_EXIT_MS);
+  if (autoExitMilliseconds !== null) setTimeout(() => app.quit(), autoExitMilliseconds).unref();
+
+  const closeWindowMilliseconds = parseSmokeDelay(process.env.CAICLI_DESKTOP_CLOSE_WINDOW_MS);
+  if (closeWindowMilliseconds !== null) {
     setTimeout(() => {
       if (isRuntimeWindowAvailable(mainWindow)) mainWindow.close();
     }, closeWindowMilliseconds).unref();
   }
-});
+}
 
-app.on("window-all-closed", () => app.quit());
-app.on("before-quit", (event) => {
-  if (!shutdownStarted && appHost.isRunning()) {
-    shutdownStarted = true;
-    event.preventDefault();
-    void appHost.stop().finally(() => {
-      initializeResult = null;
-      app.quit();
+function parseSmokeDelay(value: string | undefined): number | null {
+  const parsed = Number.parseInt(value ?? "", 10);
+  return Number.isSafeInteger(parsed) && parsed >= 1000 ? parsed : null;
+}
+
+function waitForRuntimeState(state: "failed", timeoutMs: number): Promise<boolean> {
+  if (runtime.getStatus().state === state) return Promise.resolve(true);
+  return new Promise((resolve) => {
+    const timeout = setTimeout(() => { unsubscribe(); resolve(false); }, timeoutMs);
+    const unsubscribe = runtime.subscribe((status) => {
+      if (status.state !== state) return;
+      clearTimeout(timeout);
+      unsubscribe();
+      resolve(true);
     });
+  });
+}
+
+async function captureShellIfRequested(): Promise<void> {
+  const capturePath = process.env.CAICLI_DESKTOP_CAPTURE_PATH;
+  if (!capturePath || !isRuntimeWindowAvailable(mainWindow)) return;
+  const window = mainWindow;
+  const width = parseCaptureDimension(process.env.CAICLI_DESKTOP_CAPTURE_WIDTH, 1440);
+  const height = parseCaptureDimension(process.env.CAICLI_DESKTOP_CAPTURE_HEIGHT, 900);
+  window.setContentSize(width, height);
+  if (window.webContents.isLoading()) {
+    await new Promise<void>((resolve) => window.webContents.once("did-finish-load", () => resolve()));
   }
-});
+  const image = await window.webContents.capturePage();
+  await fs.writeFile(capturePath, image.toPNG());
+  app.quit();
+}
+
+function parseCaptureDimension(value: string | undefined, fallback: number): number {
+  const parsed = Number.parseInt(value ?? "", 10);
+  return Number.isSafeInteger(parsed) && parsed >= 320 && parsed <= 4096 ? parsed : fallback;
+}

@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
+import { createRuntimeStatus } from "../shared/bridge-contract";
 import { sendRuntimeStatus, type RuntimeStatusTarget } from "./window-lifecycle";
 
 function createTarget(windowDestroyed: boolean, webContentsDestroyed: boolean) {
@@ -17,7 +18,7 @@ describe("runtime window lifecycle", () => {
   it("sends status to a live window", () => {
     const { send, target } = createTarget(false, false);
 
-    expect(sendRuntimeStatus(target, "runtime:status", { state: "ready", detail: "desktop-v1" }))
+    expect(sendRuntimeStatus(target, "runtime:status", createRuntimeStatus("runtime-ready")))
       .toBe(true);
     expect(send).toHaveBeenCalledOnce();
   });
@@ -25,7 +26,7 @@ describe("runtime window lifecycle", () => {
   it("ignores a destroyed BrowserWindow", () => {
     const { send, target } = createTarget(true, false);
 
-    expect(sendRuntimeStatus(target, "runtime:status", { state: "stopped", detail: "stopped" }))
+    expect(sendRuntimeStatus(target, "runtime:status", createRuntimeStatus("runtime-stopped")))
       .toBe(false);
     expect(send).not.toHaveBeenCalled();
   });
@@ -33,7 +34,7 @@ describe("runtime window lifecycle", () => {
   it("ignores destroyed webContents", () => {
     const { send, target } = createTarget(false, true);
 
-    expect(sendRuntimeStatus(target, "runtime:status", { state: "stopped", detail: "stopped" }))
+    expect(sendRuntimeStatus(target, "runtime:status", createRuntimeStatus("runtime-stopped")))
       .toBe(false);
     expect(send).not.toHaveBeenCalled();
   });
