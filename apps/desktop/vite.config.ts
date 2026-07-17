@@ -34,7 +34,22 @@ export default defineConfig(({ command }) => ({
     strictPort: true,
   },
   test: {
-    environment: "node",
-    include: ["src/**/*.test.ts"],
+    projects: [
+      {
+        test: {
+          name: "main-preload",
+          environment: "node",
+          include: ["src/**/*.test.ts"],
+        },
+      },
+      {
+        test: {
+          name: "renderer",
+          environment: "jsdom",
+          include: ["src/**/*.test.tsx"],
+          setupFiles: ["./src/renderer/test-setup.ts"],
+        },
+      },
+    ],
   },
 }));

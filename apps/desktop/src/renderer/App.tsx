@@ -1,62 +1,79 @@
-import { FolderOpen, PanelLeftClose, RefreshCw } from "lucide-react";
-import { useEffect, useState } from "react";
-import type { InitializeResult, WorkspaceOpenResult } from "../generated/desktop-contracts";
-import type { RuntimeStatus } from "../shared/bridge-contract";
-
-const initialStatus: RuntimeStatus = { state: "starting", detail: "Starting AppHost" };
+import { FolderOpen, PanelLeft, PanelLeftClose, PanelRight, RefreshCw, X } from "lucide-react";
+import { useEffect, useRef, useState } from "react";
+import type { WorkspaceOpenResult } from "../generated/desktop-contracts";
+import { createRuntimeStatus, type RuntimeStatus } from "../shared/bridge-contract";
 
 export function App() {
-  const [runtime, setRuntime] = useState<RuntimeStatus>(initialStatus);
-  const [initialization, setInitialization] = useState<InitializeResult | null>(null);
+  const [runtime, setRuntime] = useState<RuntimeStatus>(() => createRuntimeStatus("runtime-starting"));
   const [workspace, setWorkspace] = useState<WorkspaceOpenResult | null>(null);
   const [opening, setOpening] = useState(false);
+  const [bridgeUnavailable, setBridgeUnavailable] = useState(false);
+  const [leftOpen, setLeftOpen] = useState(true);
+  const [inspectorOpen, setInspectorOpen] = useState(true);
+  const receivedEvent = useRef(false);
 
   useEffect(() => {
     if (!window.caicli) {
-      setRuntime({ state: "failed", detail: "Desktop bridge unavailable" });
+      setBridgeUnavailable(true);
+      setRuntime(createRuntimeStatus("apphost-start-failed"));
       return;
     }
-
-    const unsubscribe = window.caicli.onRuntimeStatus(setRuntime);
-    window.caicli
-      .initialize()
-      .then((result) => {
-        setInitialization(result);
-        setRuntime({ state: "ready", detail: result.protocolVersion });
-      })
-      .catch(() => setRuntime({ state: "failed", detail: "AppHost unavailable" }));
+    const unsubscribe = window.caicli.onRuntimeStatus((status) => {
+      receivedEvent.current = true;
+      setRuntime(status);
+      if (status.state !== "ready") setWorkspace(null);
+    });
+    void window.caicli.getRuntimeStatus()
+      .then((status) => { if (!receivedEvent.current) setRuntime(status); })
+      .catch(() => {
+        setBridgeUnavailable(true);
+        setRuntime(createRuntimeStatus("apphost-start-failed"));
+      });
     return unsubscribe;
   }, []);
 
   async function openWorkspace() {
-    if (!window.caicli) return;
+    if (!window.caicli || runtime.state !== "ready") return;
     setOpening(true);
     try {
       const selected = await window.caicli.openWorkspace();
       if (selected) setWorkspace(selected);
+    } catch {
+      setWorkspace(null);
     } finally {
       setOpening(false);
     }
   }
 
+  async function restartRuntime() {
+    if (!window.caicli || !runtime.canRestart) return;
+    setWorkspace(null);
+    setRuntime(createRuntimeStatus("runtime-restarting"));
+    try { setRuntime(await window.caicli.restartRuntime()); }
+    catch { setRuntime(createRuntimeStatus("restart-failed")); }
+  }
+
+  const workspacePath = workspace?.succeeded ? workspace.data?.rootPath : null;
+  const workspaceError = workspace && !workspace.succeeded ? workspace.error?.safeMessage : null;
+  const statusMessage = bridgeUnavailable ? "Desktop bridge unavailable" : runtime.message;
+
   return (
-    <div className="app-shell">
+    <div className={`app-shell ${leftOpen ? "" : "left-collapsed"} ${inspectorOpen ? "" : "inspector-collapsed"}`}>
       <header className="titlebar">
         <div className="brand">C-AICLI Desktop</div>
-        <div className="workspace-title">{workspace?.data?.rootPath ?? "No workspace"}</div>
-        <div className={`runtime-status runtime-${runtime.state}`}>
+        <div className="workspace-title" title={workspacePath ?? "No workspace"}>{workspacePath ?? "No workspace"}</div>
+        <div className={`runtime-status runtime-${runtime.state}`} aria-live="polite">
           <span className="status-dot" aria-hidden="true" />
-          {runtime.detail}
+          <span>{statusMessage}</span>
         </div>
       </header>
 
       <div className="workspace-layout">
-        <aside className="thread-sidebar">
+        <aside className={`thread-sidebar drawer ${leftOpen ? "drawer-open" : ""}`} aria-label="Threads panel">
           <div className="panel-heading">
             <span>Threads</span>
-            <button className="icon-button" type="button" title="Collapse threads" disabled>
-              <PanelLeftClose size={16} aria-hidden="true" />
-              <span className="sr-only">Collapse threads</span>
+            <button className="icon-button" type="button" title="Collapse threads" aria-label="Collapse threads" onClick={() => setLeftOpen(false)}>
+              <PanelLeftClose size={17} aria-hidden="true" />
             </button>
           </div>
           <div className="empty-list">No threads</div>
@@ -64,53 +81,56 @@ export function App() {
 
         <main className="task-surface">
           <div className="task-toolbar">
-            <span className="task-label">Workspace</span>
-            <button
-              className="command-button"
-              type="button"
-              onClick={openWorkspace}
-              disabled={opening || runtime.state !== "ready"}
-            >
-              {opening ? <RefreshCw className="spin" size={16} aria-hidden="true" /> : <FolderOpen size={16} aria-hidden="true" />}
-              {opening ? "Opening" : "Open workspace"}
-            </button>
+            <div className="toolbar-group">
+              {!leftOpen && <button className="icon-button" type="button" title="Show threads" aria-label="Show threads" onClick={() => setLeftOpen(true)}><PanelLeft size={17} aria-hidden="true" /></button>}
+              <span className="task-label">Workspace</span>
+            </div>
+            <div className="toolbar-group">
+              <button className="command-button" type="button" onClick={openWorkspace} disabled={opening || runtime.state !== "ready"}>
+                {opening ? <RefreshCw className="spin" size={16} aria-hidden="true" /> : <FolderOpen size={16} aria-hidden="true" />}
+                {opening ? "Opening" : "Open workspace"}
+              </button>
+              {!inspectorOpen && <button className="icon-button" type="button" title="Show runtime inspector" aria-label="Show runtime inspector" onClick={() => setInspectorOpen(true)}><PanelRight size={17} aria-hidden="true" /></button>}
+            </div>
           </div>
 
-          <section className="timeline" aria-label="Task timeline">
-            {workspace?.succeeded && workspace.data ? (
-              <div className="workspace-ready">
+          <section className="timeline" aria-label="Workspace">
+            {runtime.state === "failed" ? (
+              <div className="state-card failure-card">
+                <h1>{statusMessage}</h1>
+                <p>The desktop runtime is unavailable. Workspace access remains disabled.</p>
+                <button className="primary-action" type="button" disabled={!runtime.canRestart || bridgeUnavailable} onClick={restartRuntime}>
+                  <RefreshCw size={17} aria-hidden="true" /> Restart AppHost
+                </button>
+              </div>
+            ) : workspacePath ? (
+              <div className="state-card workspace-ready">
                 <FolderOpen size={28} aria-hidden="true" />
-                <h1>{workspace.data.rootPath}</h1>
-                <p>{workspace.data.workspaceId}</p>
+                <h1>{workspacePath}</h1>
+                <p>{workspace?.data?.workspaceId}</p>
               </div>
             ) : (
-              <div className="workspace-empty">
-                <h1>Open a workspace</h1>
-                <button
-                  className="primary-action"
-                  type="button"
-                  onClick={openWorkspace}
-                  disabled={opening || runtime.state !== "ready"}
-                >
-                  <FolderOpen size={17} aria-hidden="true" />
-                  Open workspace
+              <div className="state-card workspace-empty">
+                <h1>{runtime.state === "ready" ? "Open a workspace" : runtime.message}</h1>
+                {workspaceError && <p role="alert">{workspaceError}</p>}
+                <button className="primary-action" type="button" onClick={openWorkspace} disabled={opening || runtime.state !== "ready"}>
+                  <FolderOpen size={17} aria-hidden="true" /> Open workspace
                 </button>
               </div>
             )}
           </section>
         </main>
 
-        <aside className="inspector">
-          <div className="panel-heading">Runtime</div>
+        <aside className={`inspector drawer ${inspectorOpen ? "drawer-open" : ""}`} aria-label="Runtime inspector">
+          <div className="panel-heading">
+            <span>Runtime</span>
+            <button className="icon-button" type="button" title="Close runtime inspector" aria-label="Close runtime inspector" onClick={() => setInspectorOpen(false)}><X size={17} aria-hidden="true" /></button>
+          </div>
           <dl className="runtime-details">
-            <dt>State</dt>
-            <dd>{runtime.state}</dd>
-            <dt>Protocol</dt>
-            <dd>{initialization?.protocolVersion ?? "-"}</dd>
-            <dt>Transport</dt>
-            <dd>{initialization?.security.transport ?? "-"}</dd>
-            <dt>Node access</dt>
-            <dd>{initialization?.security.rendererNodeAccess ? "enabled" : "disabled"}</dd>
+            <dt>State</dt><dd>{runtime.state}</dd>
+            <dt>Code</dt><dd>{runtime.code}</dd>
+            <dt>Protocol</dt><dd>{runtime.protocolVersion ?? "-"}</dd>
+            <dt>Restart</dt><dd>{runtime.canRestart ? "available" : "unavailable"}</dd>
           </dl>
         </aside>
       </div>
