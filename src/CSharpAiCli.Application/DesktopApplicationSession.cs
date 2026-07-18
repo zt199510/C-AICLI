@@ -146,6 +146,7 @@ public sealed class DesktopApplicationSession : IDisposable
     private readonly ChangesApplicationService changesService = new();
     private readonly ReportApplicationService reportService = new();
     private readonly ArtifactApplicationService artifactService = new();
+    private readonly GerberReviewApplicationService gerberReviewService = new();
     private readonly ControlledContextApplicationService contextService;
     private readonly ComposerApplicationService composerService;
     private readonly TurnExecutionApplicationService turnExecutionService = new();
@@ -417,6 +418,44 @@ public sealed class DesktopApplicationSession : IDisposable
         CancellationToken cancellationToken = default) => Execute(
             token => artifactService.Get(new ArtifactGetRequest(snapshot, artifactId), token),
             cancellationToken);
+
+    public ApplicationResult<ArtifactReviewProjection> PreviewArtifact(
+        string artifactId,
+        CancellationToken cancellationToken = default) => Execute(
+            token => artifactService.Preview(new ArtifactReviewRequest(snapshot, artifactId), token), cancellationToken);
+
+    public ApplicationResult<ArtifactReviewProjection> VerifyArtifact(
+        string artifactId,
+        CancellationToken cancellationToken = default) => Execute(
+            token => artifactService.Verify(new ArtifactReviewRequest(snapshot, artifactId), token), cancellationToken);
+
+    public ApplicationResult<ArtifactExportProjection> ExportArtifact(
+        string artifactId,
+        string destinationPath,
+        string clientMutationId,
+        CancellationToken cancellationToken = default) => Execute(
+            token => artifactService.Export(new ArtifactExportRequest(
+                snapshot, artifactId, destinationPath, clientMutationId), token), cancellationToken);
+
+    public ApplicationResult<GerberReviewProjection> GetGerberReview(
+        string runId,
+        CancellationToken cancellationToken = default) => Execute(
+            token => gerberReviewService.Get(new GerberReviewRequest(snapshot, runId), token), cancellationToken);
+
+    public ApplicationResult<GerberReviewProjection> GetGerberPreview(
+        string runId,
+        CancellationToken cancellationToken = default) => Execute(
+            token => gerberReviewService.Preview(new GerberReviewRequest(snapshot, runId), token), cancellationToken);
+
+    public ApplicationResult<GerberReviewProjection> DecideGerberReview(
+        string runId,
+        long expectedRevision,
+        string reason,
+        string clientMutationId,
+        bool accept,
+        CancellationToken cancellationToken = default) => Execute(
+            token => gerberReviewService.Decide(new GerberDecisionRequest(
+                snapshot, runId, expectedRevision, reason, clientMutationId, accept), token), cancellationToken);
 
     public void Dispose()
     {

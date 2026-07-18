@@ -184,6 +184,52 @@ public sealed class ApplicationQueryServiceTests
             service.List(new ArtifactListRequest(fixture.Snapshot), cancellation.Token));
     }
 
+    [Fact]
+    public void Artifact_review_verifies_identity_and_fails_closed_after_tamper()
+    {
+        using ArtifactFixture fixture = ArtifactFixture.Create();
+        ArtifactApplicationService service = new(_ => new ManagedArtifactStore(fixture.Store));
+        string artifactId = Assert.Single(service.List(
+            new ArtifactListRequest(fixture.Snapshot, RunId: fixture.RunId)).Data!.Artifacts).ArtifactId;
+
+        ApplicationResult<ArtifactReviewProjection> valid = service.Verify(
+            new ArtifactReviewRequest(fixture.Snapshot, artifactId));
+        File.AppendAllText(fixture.ArtifactPath, "tamper");
+        ApplicationResult<ArtifactReviewProjection> changed = service.Verify(
+            new ArtifactReviewRequest(fixture.Snapshot, artifactId));
+
+        Assert.True(valid.Succeeded);
+        Assert.True(valid.Data?.Verified);
+        Assert.False(valid.Data?.CorrectnessProof);
+        Assert.True(changed.Succeeded);
+        Assert.False(changed.Data?.Verified);
+        Assert.Equal(ManagedArtifactAvailability.Changed, changed.Data?.Availability);
+    }
+
+    [Fact]
+    public void Artifact_export_rejects_workspace_and_existing_destinations()
+    {
+        using ArtifactFixture fixture = ArtifactFixture.Create();
+        ArtifactApplicationService service = new(_ => new ManagedArtifactStore(fixture.Store));
+        string artifactId = Assert.Single(service.List(
+            new ArtifactListRequest(fixture.Snapshot, RunId: fixture.RunId)).Data!.Artifacts).ArtifactId;
+        string outside = Path.Combine(fixture.Snapshot.UserConfigPath, "..", "export.json");
+        Directory.CreateDirectory(Path.GetDirectoryName(Path.GetFullPath(outside))!);
+
+        ApplicationResult<ArtifactExportProjection> denied = service.Export(new ArtifactExportRequest(
+            fixture.Snapshot, artifactId, Path.Combine(fixture.Snapshot.Workspace.RootPath, "export.json"), "m1"));
+        ApplicationResult<ArtifactExportProjection> exported = service.Export(new ArtifactExportRequest(
+            fixture.Snapshot, artifactId, outside, "m2"));
+        ApplicationResult<ArtifactExportProjection> existing = service.Export(new ArtifactExportRequest(
+            fixture.Snapshot, artifactId, outside, "m3"));
+
+        Assert.False(denied.Succeeded);
+        Assert.Equal(ApplicationErrorCategory.Denied, denied.Error?.Category);
+        Assert.True(exported.Succeeded);
+        Assert.True(File.Exists(Path.GetFullPath(outside)));
+        Assert.False(existing.Succeeded);
+    }
+
     private static CliEnvironmentSnapshot CreateSnapshot(TempDirectory temp) => CliEnvironmentSnapshot.Create(
         temp.Workspace,
         currentDirectory: temp.Workspace,

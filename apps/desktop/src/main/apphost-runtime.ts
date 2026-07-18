@@ -2,6 +2,9 @@ import {
   SCHEMA_VERSION,
   type ArtifactGetResult,
   type ArtifactListResult,
+  type TerminalStateResult, type ArtifactReviewResult, type ArtifactExportResult, type GerberReviewResult,
+  type TerminalOpenParams, type TerminalInputParams, type TerminalResizeParams, type TerminalMutationParams,
+  type GerberDecisionParams,
   type ChangesGetResult,
   type CatalogListResult,
   type ComposerCatalogSelectionData,
@@ -29,6 +32,9 @@ import type { AppHostLaunchSpec } from "./apphost-launch";
 import {
   ARTIFACT_GET_REQUEST,
   ARTIFACT_LIST_REQUEST,
+  ARTIFACT_PREVIEW_REQUEST, ARTIFACT_EXPORT_REQUEST, ARTIFACT_VERIFY_REQUEST,
+  TERMINAL_OPEN_REQUEST, TERMINAL_INPUT_REQUEST, TERMINAL_RESIZE_REQUEST, TERMINAL_CANCEL_REQUEST, TERMINAL_CLOSE_REQUEST, TERMINAL_GET_REQUEST,
+  GERBER_REVIEW_GET_REQUEST, GERBER_PREVIEW_REQUEST, GERBER_ACCEPT_REQUEST, GERBER_REJECT_REQUEST,
   CATALOG_LIST_REQUEST,
   CHANGES_GET_REQUEST,
   COMPOSER_CLEAR_REQUEST,
@@ -253,6 +259,46 @@ export class AppHostRuntime {
 
   getArtifact(artifactId: string): Promise<ArtifactGetResult> {
     return this.query(ARTIFACT_GET_REQUEST, { schemaVersion: SCHEMA_VERSION, artifactId });
+  }
+
+  openTerminal(command: Omit<TerminalOpenParams, "schemaVersion">): Promise<TerminalStateResult> {
+    return this.query(TERMINAL_OPEN_REQUEST, { schemaVersion: SCHEMA_VERSION, ...command });
+  }
+  inputTerminal(command: Omit<TerminalInputParams, "schemaVersion">): Promise<TerminalStateResult> {
+    return this.query(TERMINAL_INPUT_REQUEST, { schemaVersion: SCHEMA_VERSION, ...command });
+  }
+  resizeTerminal(command: Omit<TerminalResizeParams, "schemaVersion">): Promise<TerminalStateResult> {
+    return this.query(TERMINAL_RESIZE_REQUEST, { schemaVersion: SCHEMA_VERSION, ...command });
+  }
+  cancelTerminal(command: Omit<TerminalMutationParams, "schemaVersion">): Promise<TerminalStateResult> {
+    return this.query(TERMINAL_CANCEL_REQUEST, { schemaVersion: SCHEMA_VERSION, ...command });
+  }
+  closeTerminal(command: Omit<TerminalMutationParams, "schemaVersion">): Promise<TerminalStateResult> {
+    return this.query(TERMINAL_CLOSE_REQUEST, { schemaVersion: SCHEMA_VERSION, ...command });
+  }
+  getTerminal(sessionId: string, afterCursor: number): Promise<TerminalStateResult> {
+    return this.query(TERMINAL_GET_REQUEST, { schemaVersion: SCHEMA_VERSION, sessionId, afterCursor });
+  }
+  previewArtifact(artifactId: string): Promise<ArtifactReviewResult> {
+    return this.query(ARTIFACT_PREVIEW_REQUEST, { schemaVersion: SCHEMA_VERSION, artifactId });
+  }
+  exportArtifact(artifactId: string, destinationPath: string, clientMutationId: string): Promise<ArtifactExportResult> {
+    return this.query(ARTIFACT_EXPORT_REQUEST, { schemaVersion: SCHEMA_VERSION, artifactId, destinationPath, clientMutationId });
+  }
+  verifyArtifact(artifactId: string): Promise<ArtifactReviewResult> {
+    return this.query(ARTIFACT_VERIFY_REQUEST, { schemaVersion: SCHEMA_VERSION, artifactId });
+  }
+  getGerberReview(runId: string): Promise<GerberReviewResult> {
+    return this.query(GERBER_REVIEW_GET_REQUEST, { schemaVersion: SCHEMA_VERSION, runId });
+  }
+  getGerberPreview(runId: string): Promise<GerberReviewResult> {
+    return this.query(GERBER_PREVIEW_REQUEST, { schemaVersion: SCHEMA_VERSION, runId });
+  }
+  acceptGerber(command: Omit<GerberDecisionParams, "schemaVersion">): Promise<GerberReviewResult> {
+    return this.query(GERBER_ACCEPT_REQUEST, { schemaVersion: SCHEMA_VERSION, ...command });
+  }
+  rejectGerber(command: Omit<GerberDecisionParams, "schemaVersion">): Promise<GerberReviewResult> {
+    return this.query(GERBER_REJECT_REQUEST, { schemaVersion: SCHEMA_VERSION, ...command });
   }
 
   forceTerminateForTest(): void {

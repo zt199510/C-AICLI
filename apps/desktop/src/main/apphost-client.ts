@@ -136,6 +136,9 @@ export class AppHostClient extends EventEmitter {
         DESKTOP_CAPABILITIES.ComposerControlledContext,
         DESKTOP_CAPABILITIES.TurnWritePath,
         DESKTOP_CAPABILITIES.ThreadChanged,
+        DESKTOP_CAPABILITIES.TerminalUserSession,
+        DESKTOP_CAPABILITIES.ArtifactReview,
+        DESKTOP_CAPABILITIES.GerberReview,
       ],
     });
     if (!isExactHandshake(initialized)) {
@@ -347,6 +350,9 @@ function isExactHandshake(result: InitializeResult): boolean {
     DESKTOP_CAPABILITIES.ComposerControlledContext,
     DESKTOP_CAPABILITIES.TurnWritePath,
     DESKTOP_CAPABILITIES.ThreadChanged,
+    DESKTOP_CAPABILITIES.TerminalUserSession,
+    DESKTOP_CAPABILITIES.ArtifactReview,
+    DESKTOP_CAPABILITIES.GerberReview,
   ];
   return result.schemaVersion === SCHEMA_VERSION &&
     result.protocolVersion === PROTOCOL_VERSION &&

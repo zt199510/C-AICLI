@@ -6,7 +6,7 @@ import type { ReviewState } from "./desktop-state";
 import { ReviewInspector } from "./ReviewInspector";
 
 describe("read-only review inspector", () => {
-  it("shows unsafe-looking relative paths as text, never links", async () => {
+  it("never turns projected artifact paths into links", async () => {
     const onArtifact = vi.fn();
     render(<ReviewInspector review={{ ...review, activeTab: "artifacts", artifacts: [artifact], selectedArtifact: artifact }} workspaceReady onTab={vi.fn()} onReport={vi.fn()} onArtifact={onArtifact} />);
     expect(screen.getByText("file:///sentinel-secret")).toBeTruthy();

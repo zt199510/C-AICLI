@@ -28,6 +28,10 @@ const ok = (data) => ({ schemaVersion: 1, succeeded: true, data, error: null, di
 const noop = () => () => {};
 const contextItem = { selectionId: "ctx_fixture", relativePath: "src/review.ts", kind: "file", byteCount: 128, fileCount: 1, availability: "available" };
 const catalog = (kind) => ok({ workspaceId: workspace.workspaceId, kind, catalogRevision: "a".repeat(64), items: [{ id: `fixture-${kind}`, displayName: `Fixture ${kind}`, version: "1", description: `Fixture ${kind} capability`, sourceKind: "fixture", readOnly: true, toolBoundary: "read-only", capabilities: [] }], truncated: false });
+let terminalOutput = "";
+let terminalStatus = "closed";
+const terminal = () => ok({ sessionId: "terminal_fixture", status: terminalStatus, shellProfile: "system-default", output: terminalOutput, cursor: terminalOutput.length, truncated: false, exitCode: terminalStatus === "exited" ? 130 : null, startedAtUtc: timestamp, exitedAtUtc: terminalStatus === "running" ? null : timestamp });
+const gerber = () => ok({ runId: "fixture-run", revision: 4, state: "awaiting-acceptance", hardVerificationPassed: false, humanDecisionEligible: false, previewAvailable: true, correctnessProof: false, decision: null, disabledReason: "Fixture evidence is not a current hard verification pass.", verificationArtifactId: null, previewArtifactIds: [artifact.artifactId] });
 
 contextBridge.exposeInMainWorld("caicli", Object.freeze({
   getRuntimeStatus: async () => ({ schemaVersion: 1, state: "ready", code: "runtime-ready", message: "AppHost ready", canRestart: false, protocolVersion: "desktop-v1" }),
@@ -40,6 +44,16 @@ contextBridge.exposeInMainWorld("caicli", Object.freeze({
   getChanges: async () => ok({ status: "ready", exitCode: 0, gitStatusSummary: "M src/review.ts", gitStatusSucceeded: true, gitStatusErrorCode: null, dirty: true, diffStatSummary: "1 file changed", diffSucceeded: true, diffErrorCode: null, diffTruncated: false, changedFiles: [{ path: "src/review.ts", status: "M" }], sessionSource: null, sessionName: null, warnings: [] }),
   listReports: async () => ok({ reports: [], truncated: false }), getReport: async () => { throw new Error("not used"); },
   listArtifacts: async () => ok({ artifacts: [artifact], truncated: false }), getArtifact: async () => ok(artifact),
+  openTerminal: async () => { terminalStatus = "running"; terminalOutput = ""; return terminal(); },
+  inputTerminal: async ({ text }) => { terminalOutput += text.includes("echo") ? "terminal-user-sentinel\n" : text; return terminal(); },
+  resizeTerminal: async () => terminal(), getTerminal: async () => terminal(),
+  cancelTerminal: async () => { terminalStatus = "exited"; return terminal(); },
+  closeTerminal: async () => { terminalStatus = "closed"; return terminal(); },
+  previewArtifact: async () => ok({ artifactId: artifact.artifactId, kind: artifact.kind, availability: "available", verified: true, observedSize: artifact.size, previewAvailable: true, correctnessProof: false, diagnosticCode: null, safeMessage: "Managed preview only; correctness is unproven." }),
+  verifyArtifact: async () => ok({ artifactId: artifact.artifactId, kind: artifact.kind, availability: "available", verified: true, observedSize: artifact.size, previewAvailable: true, correctnessProof: false, diagnosticCode: null, safeMessage: "Identity verified." }),
+  exportArtifact: async () => null,
+  getGerberReview: async () => gerber(), getGerberPreview: async () => gerber(),
+  acceptGerber: async () => { throw new Error("Preview cannot accept fixture."); }, rejectGerber: async () => { throw new Error("Fixture reject unavailable."); },
   listCatalog: async ({ kind }) => catalog(kind),
   searchContext: async () => ok({ items: [contextItem], truncated: false, scannedEntries: 1 }),
   pickFile: async () => ({ schemaVersion: 1, canceled: false, result: ok(contextItem) }),

@@ -5,20 +5,20 @@
       "params": {
         "schemaVersion": 1,
         "protocolVersion": "desktop-v1",
-        "contractSha256": "ad70588ffa3d51e8550d5bbb57d88901ed141563f1ce7ff680505adcb8012e1e",
+        "contractSha256": "62a9856a1fef376050be345ec84f9857f91bba03c434c220d6e6d6bd90047f7b",
         "clientName": "desktop-example",
         "clientVersion": "0.6.0",
         "clientInstanceId": "example-client-1",
-        "requestedCapabilities": ["framed-json-rpc", "workspace-session", "application-outcome", "composer.controlled-context", "turn.write-path"]
+        "requestedCapabilities": ["framed-json-rpc", "workspace-session", "application-outcome", "composer.controlled-context", "turn.write-path", "terminal.user-session", "artifact.review", "gerber.review"]
       },
       "result": {
         "schemaVersion": 1,
         "protocolVersion": "desktop-v1",
-        "contractSha256": "ad70588ffa3d51e8550d5bbb57d88901ed141563f1ce7ff680505adcb8012e1e",
+        "contractSha256": "62a9856a1fef376050be345ec84f9857f91bba03c434c220d6e6d6bd90047f7b",
         "serverVersion": "0.6.0",
         "serverInstanceId": "server_0123456789abcdef01234567",
-        "negotiatedCapabilities": ["framed-json-rpc", "workspace-session", "application-outcome", "composer.controlled-context", "turn.write-path"],
-        "methods": ["app.initialize", "app.cancel", "app.shutdown", "workspace.open", "thread.list", "thread.get", "thread.create", "thread.rename", "thread.archive", "thread.delete", "catalog.list", "context.search", "context.resolve", "composer.get", "composer.enqueue", "composer.clear", "turn.start", "turn.cancel", "approval.resolve", "turn.resume", "turn.restart", "changes.get", "report.list", "report.get", "artifact.list", "artifact.get"],
+        "negotiatedCapabilities": ["framed-json-rpc", "workspace-session", "application-outcome", "composer.controlled-context", "turn.write-path", "terminal.user-session", "artifact.review", "gerber.review"],
+        "methods": ["app.initialize", "app.cancel", "app.shutdown", "workspace.open", "thread.list", "thread.get", "thread.create", "thread.rename", "thread.archive", "thread.delete", "catalog.list", "context.search", "context.resolve", "composer.get", "composer.enqueue", "composer.clear", "turn.start", "turn.cancel", "approval.resolve", "turn.resume", "turn.restart", "changes.get", "report.list", "report.get", "artifact.list", "artifact.get", "terminal.open", "terminal.input", "terminal.resize", "terminal.cancel", "terminal.close", "terminal.get", "artifact.preview", "artifact.export", "artifact.verify", "gerber.review.get", "gerber.preview", "gerber.accept", "gerber.reject"],
         "notifications": [],
         "limits": {
           "maxHeaderBytes": 8192,
@@ -56,7 +56,12 @@
           "maxAssistantPreviewBytes": 8192,
           "maxApprovalSummaryBytes": 4096,
           "approvalLifetimeMs": 1800000,
-          "cancelAcknowledgementMs": 5000
+          "cancelAcknowledgementMs": 5000,
+          "maxTerminalInputBytes": 8192,
+          "maxTerminalScrollbackBytes": 65536,
+          "maxTerminalColumns": 400,
+          "maxTerminalRows": 200,
+          "maxHumanReasonBytes": 1024
         },
         "security": {
           "rendererNodeAccess": false,
@@ -191,6 +196,71 @@
       "method": "artifact.get",
       "params": { "schemaVersion": 1, "artifactId": "artifact_0123456789abcdef" },
       "result": { "schemaVersion": 1, "succeeded": false, "data": null, "error": { "code": "artifact-not-found", "category": "not-found", "safeMessage": "Artifact was not found.", "retryable": false }, "diagnostics": [], "truncated": false }
+    },
+    {
+      "method": "terminal.open",
+      "params": { "schemaVersion": 1, "shellProfile": "system-default", "clientMutationId": "terminal-open-1" },
+      "result": { "schemaVersion": 1, "succeeded": false, "data": null, "error": { "code": "terminal-unavailable", "category": "unavailable", "safeMessage": "Terminal is unavailable.", "retryable": true }, "diagnostics": [], "truncated": false }
+    },
+    {
+      "method": "terminal.input",
+      "params": { "schemaVersion": 1, "sessionId": "terminal_0123456789abcdef", "text": "echo hello\n", "clientMutationId": "terminal-input-1" },
+      "result": { "schemaVersion": 1, "succeeded": false, "data": null, "error": { "code": "terminal-not-found", "category": "not-found", "safeMessage": "Terminal session was not found.", "retryable": false }, "diagnostics": [], "truncated": false }
+    },
+    {
+      "method": "terminal.resize",
+      "params": { "schemaVersion": 1, "sessionId": "terminal_0123456789abcdef", "cols": 120, "rows": 30, "clientMutationId": "terminal-resize-1" },
+      "result": { "schemaVersion": 1, "succeeded": false, "data": null, "error": { "code": "terminal-not-found", "category": "not-found", "safeMessage": "Terminal session was not found.", "retryable": false }, "diagnostics": [], "truncated": false }
+    },
+    {
+      "method": "terminal.cancel",
+      "params": { "schemaVersion": 1, "sessionId": "terminal_0123456789abcdef", "clientMutationId": "terminal-cancel-1" },
+      "result": { "schemaVersion": 1, "succeeded": false, "data": null, "error": { "code": "terminal-not-found", "category": "not-found", "safeMessage": "Terminal session was not found.", "retryable": false }, "diagnostics": [], "truncated": false }
+    },
+    {
+      "method": "terminal.close",
+      "params": { "schemaVersion": 1, "sessionId": "terminal_0123456789abcdef", "clientMutationId": "terminal-close-1" },
+      "result": { "schemaVersion": 1, "succeeded": false, "data": null, "error": { "code": "terminal-not-found", "category": "not-found", "safeMessage": "Terminal session was not found.", "retryable": false }, "diagnostics": [], "truncated": false }
+    },
+    {
+      "method": "terminal.get",
+      "params": { "schemaVersion": 1, "sessionId": "terminal_0123456789abcdef", "afterCursor": 0 },
+      "result": { "schemaVersion": 1, "succeeded": false, "data": null, "error": { "code": "terminal-not-found", "category": "not-found", "safeMessage": "Terminal session was not found.", "retryable": false }, "diagnostics": [], "truncated": false }
+    },
+    {
+      "method": "artifact.preview",
+      "params": { "schemaVersion": 1, "artifactId": "artifact_0123456789abcdef" },
+      "result": { "schemaVersion": 1, "succeeded": false, "data": null, "error": { "code": "artifact-not-found", "category": "not-found", "safeMessage": "Artifact was not found.", "retryable": false }, "diagnostics": [], "truncated": false }
+    },
+    {
+      "method": "artifact.export",
+      "params": { "schemaVersion": 1, "artifactId": "artifact_0123456789abcdef", "destinationPath": "C:\\Exports\\artifact.tiff", "clientMutationId": "artifact-export-1" },
+      "result": { "schemaVersion": 1, "succeeded": false, "data": null, "error": { "code": "artifact-not-found", "category": "not-found", "safeMessage": "Artifact was not found.", "retryable": false }, "diagnostics": [], "truncated": false }
+    },
+    {
+      "method": "artifact.verify",
+      "params": { "schemaVersion": 1, "artifactId": "artifact_0123456789abcdef" },
+      "result": { "schemaVersion": 1, "succeeded": false, "data": null, "error": { "code": "artifact-not-found", "category": "not-found", "safeMessage": "Artifact was not found.", "retryable": false }, "diagnostics": [], "truncated": false }
+    },
+    {
+      "method": "gerber.review.get",
+      "params": { "schemaVersion": 1, "runId": "run_0123456789abcdef" },
+      "result": { "schemaVersion": 1, "succeeded": false, "data": null, "error": { "code": "run-not-found", "category": "not-found", "safeMessage": "Review run was not found.", "retryable": false }, "diagnostics": [], "truncated": false }
+    },
+    {
+      "method": "gerber.preview",
+      "params": { "schemaVersion": 1, "runId": "run_0123456789abcdef" },
+      "result": { "schemaVersion": 1, "succeeded": false, "data": null, "error": { "code": "preview-unavailable", "category": "unavailable", "safeMessage": "Preview is unavailable.", "retryable": false }, "diagnostics": [], "truncated": false }
+    },
+    {
+      "method": "gerber.accept",
+      "params": { "schemaVersion": 1, "runId": "run_0123456789abcdef", "expectedRevision": 4, "reason": "Reviewed", "clientMutationId": "gerber-accept-1" },
+      "result": { "schemaVersion": 1, "succeeded": false, "data": null, "error": { "code": "hard-verification-required", "category": "conflict", "safeMessage": "Current hard verification is required.", "retryable": false }, "diagnostics": [], "truncated": false }
+    },
+    {
+      "method": "gerber.reject",
+      "params": { "schemaVersion": 1, "runId": "run_0123456789abcdef", "expectedRevision": 4, "reason": "Visual defect", "clientMutationId": "gerber-reject-1" },
+      "result": { "schemaVersion": 1, "succeeded": false, "data": null, "error": { "code": "revision-conflict", "category": "conflict", "safeMessage": "Run revision changed.", "retryable": false }, "diagnostics": [], "truncated": false }
     }
   ],
   "notifications": [

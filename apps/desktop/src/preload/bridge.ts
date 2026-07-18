@@ -1,6 +1,7 @@
 import {
   isArtifactGetResult,
   isArtifactListResult,
+  isTerminalStateResult, isArtifactReviewResult, isArtifactExportResult, isGerberReviewResult,
   isChangesGetResult,
   isCatalogListResult,
   isComposerStateResult,
@@ -38,6 +39,8 @@ import {
   isResolveApprovalCommand,
   isResumeTurnCommand,
   isRestartTurnCommand,
+  isOpenTerminalCommand, isInputTerminalCommand, isResizeTerminalCommand, isTerminalMutationCommand,
+  isGetTerminalCommand, isArtifactReviewCommand, isGerberReviewCommand, isGerberDecisionCommand,
   type ArchiveThreadCommand,
   type CreateThreadCommand,
   type DesktopBridge,
@@ -57,6 +60,8 @@ import {
   type ResolveApprovalCommand,
   type ResumeTurnCommand,
   type RestartTurnCommand,
+  type OpenTerminalCommand, type InputTerminalCommand, type ResizeTerminalCommand, type TerminalMutationCommand,
+  type GetTerminalCommand, type ArtifactReviewCommand, type GerberReviewCommand, type GerberDecisionCommand,
 } from "../shared/bridge-contract";
 
 export interface IpcRendererAdapter {
@@ -119,6 +124,61 @@ export function createDesktopBridge(ipc: IpcRendererAdapter): DesktopBridge {
     getArtifact(command: GetArtifactCommand) {
       if (!isGetArtifactCommand(command)) return Promise.reject(new Error("Invalid artifact command."));
       return validated(IPC_CHANNELS.getArtifact, isArtifactGetResult, command);
+    },
+    openTerminal(command: OpenTerminalCommand) {
+      if (!isOpenTerminalCommand(command)) return Promise.reject(new Error("Invalid terminal open command."));
+      return validated(IPC_CHANNELS.openTerminal, isTerminalStateResult, command);
+    },
+    inputTerminal(command: InputTerminalCommand) {
+      if (!isInputTerminalCommand(command)) return Promise.reject(new Error("Invalid terminal input command."));
+      return validated(IPC_CHANNELS.inputTerminal, isTerminalStateResult, command);
+    },
+    resizeTerminal(command: ResizeTerminalCommand) {
+      if (!isResizeTerminalCommand(command)) return Promise.reject(new Error("Invalid terminal resize command."));
+      return validated(IPC_CHANNELS.resizeTerminal, isTerminalStateResult, command);
+    },
+    cancelTerminal(command: TerminalMutationCommand) {
+      if (!isTerminalMutationCommand(command)) return Promise.reject(new Error("Invalid terminal cancel command."));
+      return validated(IPC_CHANNELS.cancelTerminal, isTerminalStateResult, command);
+    },
+    closeTerminal(command: TerminalMutationCommand) {
+      if (!isTerminalMutationCommand(command)) return Promise.reject(new Error("Invalid terminal close command."));
+      return validated(IPC_CHANNELS.closeTerminal, isTerminalStateResult, command);
+    },
+    getTerminal(command: GetTerminalCommand) {
+      if (!isGetTerminalCommand(command)) return Promise.reject(new Error("Invalid terminal get command."));
+      return validated(IPC_CHANNELS.getTerminal, isTerminalStateResult, command);
+    },
+    previewArtifact(command: ArtifactReviewCommand) {
+      if (!isArtifactReviewCommand(command)) return Promise.reject(new Error("Invalid artifact preview command."));
+      return validated(IPC_CHANNELS.previewArtifact, isArtifactReviewResult, command);
+    },
+    async exportArtifact(command: ArtifactReviewCommand) {
+      if (!isArtifactReviewCommand(command)) throw new Error("Invalid artifact export command.");
+      const value = await ipc.invoke(IPC_CHANNELS.exportArtifact, command);
+      if (value === null) return null;
+      if (!isArtifactExportResult(value)) throw new Error("Invalid artifact export result.");
+      return deepFreeze(value);
+    },
+    verifyArtifact(command: ArtifactReviewCommand) {
+      if (!isArtifactReviewCommand(command)) return Promise.reject(new Error("Invalid artifact verify command."));
+      return validated(IPC_CHANNELS.verifyArtifact, isArtifactReviewResult, command);
+    },
+    getGerberReview(command: GerberReviewCommand) {
+      if (!isGerberReviewCommand(command)) return Promise.reject(new Error("Invalid Gerber review command."));
+      return validated(IPC_CHANNELS.getGerberReview, isGerberReviewResult, command);
+    },
+    getGerberPreview(command: GerberReviewCommand) {
+      if (!isGerberReviewCommand(command)) return Promise.reject(new Error("Invalid Gerber preview command."));
+      return validated(IPC_CHANNELS.getGerberPreview, isGerberReviewResult, command);
+    },
+    acceptGerber(command: GerberDecisionCommand) {
+      if (!isGerberDecisionCommand(command)) return Promise.reject(new Error("Invalid Gerber decision command."));
+      return validated(IPC_CHANNELS.acceptGerber, isGerberReviewResult, command);
+    },
+    rejectGerber(command: GerberDecisionCommand) {
+      if (!isGerberDecisionCommand(command)) return Promise.reject(new Error("Invalid Gerber decision command."));
+      return validated(IPC_CHANNELS.rejectGerber, isGerberReviewResult, command);
     },
     listCatalog(command: ListCatalogCommand) {
       if (!isListCatalogCommand(command)) return Promise.reject(new Error("Invalid catalog command."));

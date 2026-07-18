@@ -5,6 +5,7 @@ import { Composer } from "./Composer";
 import { TaskControls } from "./TaskControls";
 import { ThreadSidebar } from "./ThreadSidebar";
 import { TimelineView } from "./TimelineView";
+import { TerminalPanel } from "./TerminalPanel";
 import { useDesktopController } from "./use-desktop-controller";
 
 export function App() {
@@ -89,6 +90,7 @@ export function App() {
               <TimelineView detail={state.detail} status={state.detailStatus} error={state.detailError} onLoadMore={controller.loadMore} />
             )}
           </section>
+          <TerminalPanel workspaceReady={Boolean(state.workspace)} />
           <TaskControls
             detail={state.detail}
             onCancel={controller.cancelTurn}

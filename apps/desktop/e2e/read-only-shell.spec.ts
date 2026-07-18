@@ -8,6 +8,7 @@ const desktopRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "
 test("read-only thread timeline review survives renderer reload", async ({ browserName }, testInfo) => {
   if (browserName !== "chromium") throw new Error("Electron tests require Chromium.");
   const packaged = testInfo.project.name === "packaged";
+  if (packaged) testInfo.setTimeout(60_000);
   const executablePath = path.join(desktopRoot, "out", "C-AICLI Desktop-win32-x64", "caicli-desktop.exe");
   const environment = { ...process.env, APPDATA: path.join(process.env.TEMP ?? desktopRoot, "caicli-playwright-appdata") };
   const application = packaged
@@ -43,8 +44,21 @@ test("read-only thread timeline review survives renderer reload", async ({ brows
     await expect(page.getByText("Ready to run")).toBeVisible();
     await page.getByRole("button", { name: "Clear pending input" }).click();
     await expect(page.getByText("Ready to run")).toHaveCount(0);
-    await page.getByRole("tab", { name: "Preview" }).click();
+    await page.getByRole("button", { name: "Open terminal" }).click();
+    await page.getByRole("textbox", { name: "Terminal input" }).fill("echo terminal-user-sentinel");
+    await page.getByRole("button", { name: "Send" }).click();
+    await expect(page.getByText("terminal-user-sentinel")).toBeVisible();
+    await page.getByRole("button", { name: "Cancel process" }).click();
+    await page.getByRole("button", { name: "Close terminal" }).click();
+    await page.getByRole("tab", { name: "Artifacts" }).click();
+    await page.getByRole("button", { name: /gerber-preview/i }).click();
+    await expect(page.getByText("artifacts/preview.gbr")).toBeVisible();
+    await expect(page.locator(".artifact-detail").getByText(/C:\\fixture\\workspace/i)).toHaveCount(0);
+    await page.getByRole("tab", { name: "Gerber" }).click();
     await expect(page.getByText(/do not prove manufacturing or image correctness/i)).toBeVisible();
+    await page.getByRole("button", { name: "Load verification" }).click();
+    await expect(page.getByText("Not passed")).toBeVisible();
+    await expect(page.getByRole("button", { name: "Accept verified run" })).toBeDisabled();
     await page.reload();
     await expect(page.getByText("Fixture review thread")).toBeVisible();
   } finally {

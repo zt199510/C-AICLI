@@ -3,7 +3,7 @@ import { createRuntimeStatus, IPC_CHANNELS } from "../shared/bridge-contract";
 import { registerDesktopIpc } from "./ipc-bridge";
 
 describe("desktop IPC registry", () => {
-  it("registers exactly twenty-six invoke handlers and disposes them", () => {
+  it("registers exactly thirty-nine invoke handlers and disposes them", () => {
     const handlers = new Map<string, (...args: unknown[]) => unknown>();
     const removeHandler = vi.fn((channel: string) => handlers.delete(channel));
     const ipcMain = {
@@ -19,7 +19,7 @@ describe("desktop IPC registry", () => {
     const dispose = registerDesktopIpc({
       ipcMain: ipcMain as never,
       runtime,
-      dialog: { showOpenDialog: vi.fn() },
+      dialog: { showOpenDialog: vi.fn(), showSaveDialog: vi.fn() },
       getWindow: () => null,
       isAllowedSender: () => true,
     });
@@ -50,9 +50,13 @@ describe("desktop IPC registry", () => {
       IPC_CHANNELS.getReport,
       IPC_CHANNELS.listArtifacts,
       IPC_CHANNELS.getArtifact,
+      IPC_CHANNELS.openTerminal, IPC_CHANNELS.inputTerminal, IPC_CHANNELS.resizeTerminal,
+      IPC_CHANNELS.cancelTerminal, IPC_CHANNELS.closeTerminal, IPC_CHANNELS.getTerminal,
+      IPC_CHANNELS.previewArtifact, IPC_CHANNELS.verifyArtifact, IPC_CHANNELS.exportArtifact,
+      IPC_CHANNELS.getGerberReview, IPC_CHANNELS.getGerberPreview, IPC_CHANNELS.acceptGerber, IPC_CHANNELS.rejectGerber,
     ]);
     dispose();
-    expect(removeHandler).toHaveBeenCalledTimes(26);
+    expect(removeHandler).toHaveBeenCalledTimes(39);
   });
 
   it("rejects untrusted senders and unexpected arguments", async () => {
@@ -77,7 +81,7 @@ function captureHandlers(options: { allowed: boolean }) {
       openWorkspace: async () => { throw new Error("unused"); },
       ...readOnlyRuntime(),
     },
-    dialog: { showOpenDialog: async () => ({ canceled: true, filePaths: [] }) },
+    dialog: { showOpenDialog: async () => ({ canceled: true, filePaths: [] }), showSaveDialog: async () => ({ canceled: true }) },
     getWindow: () => null,
     isAllowedSender: () => options.allowed,
   });
@@ -109,5 +113,9 @@ function readOnlyRuntime() {
     resolveApproval: unused,
     resumeTurn: unused,
     restartTurn: unused,
+    openTerminal: unused, inputTerminal: unused, resizeTerminal: unused,
+    cancelTerminal: unused, closeTerminal: unused, getTerminal: unused,
+    previewArtifact: unused, exportArtifact: unused, verifyArtifact: unused,
+    getGerberReview: unused, getGerberPreview: unused, acceptGerber: unused, rejectGerber: unused,
   };
 }

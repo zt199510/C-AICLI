@@ -272,6 +272,60 @@ internal static class DesktopProtocolMapper
         Truncated = value.Truncated
     };
 
+    public static ArtifactReviewResult Map(ApplicationResult<ArtifactReviewProjection> value) => new()
+    {
+        SchemaVersion = DesktopProtocolDefinition.SchemaVersion,
+        Succeeded = value.Succeeded,
+        Data = value.Data is null ? null : new ArtifactReviewData
+        {
+            ArtifactId = value.Data.ArtifactId,
+            Kind = value.Data.Kind,
+            Availability = value.Data.Availability,
+            Verified = value.Data.Verified,
+            ObservedSize = value.Data.ObservedSize,
+            PreviewAvailable = value.Data.PreviewAvailable,
+            CorrectnessProof = false,
+            DiagnosticCode = value.Data.DiagnosticCode,
+            SafeMessage = value.Data.SafeMessage
+        },
+        Error = Map(value.Error), Diagnostics = Map(value.Diagnostics), Truncated = value.Truncated
+    };
+
+    public static ArtifactExportResult Map(ApplicationResult<ArtifactExportProjection> value) => new()
+    {
+        SchemaVersion = DesktopProtocolDefinition.SchemaVersion,
+        Succeeded = value.Succeeded,
+        Data = value.Data is null ? null : new ArtifactExportData
+        {
+            ArtifactId = value.Data.ArtifactId,
+            Exported = value.Data.Exported,
+            FileName = value.Data.FileName,
+            Size = value.Data.Size
+        },
+        Error = Map(value.Error), Diagnostics = Map(value.Diagnostics), Truncated = value.Truncated
+    };
+
+    public static GerberReviewResult Map(ApplicationResult<GerberReviewProjection> value) => new()
+    {
+        SchemaVersion = DesktopProtocolDefinition.SchemaVersion,
+        Succeeded = value.Succeeded,
+        Data = value.Data is null ? null : new GerberReviewData
+        {
+            RunId = value.Data.RunId,
+            Revision = value.Data.Revision,
+            State = value.Data.State,
+            HardVerificationPassed = value.Data.HardVerificationPassed,
+            HumanDecisionEligible = value.Data.HumanDecisionEligible,
+            PreviewAvailable = value.Data.PreviewAvailable,
+            CorrectnessProof = false,
+            Decision = value.Data.Decision,
+            DisabledReason = value.Data.DisabledReason,
+            VerificationArtifactId = value.Data.VerificationArtifactId,
+            PreviewArtifactIds = value.Data.PreviewArtifactIds.ToArray()
+        },
+        Error = Map(value.Error), Diagnostics = Map(value.Diagnostics), Truncated = value.Truncated
+    };
+
     private static ThreadSummaryData Map(ThreadSummaryProjection value) => new()
     {
         ThreadId = value.ThreadId,

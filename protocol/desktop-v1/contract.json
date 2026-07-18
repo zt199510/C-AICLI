@@ -8,7 +8,10 @@
     { "name": "application-outcome", "required": true },
     { "name": "composer.controlled-context", "required": false },
     { "name": "thread.changed", "required": false },
-    { "name": "turn.write-path", "required": false }
+    { "name": "turn.write-path", "required": false },
+    { "name": "terminal.user-session", "required": false },
+    { "name": "artifact.review", "required": false },
+    { "name": "gerber.review", "required": false }
   ],
   "errors": [
     { "code": "parse-error", "rpcCode": -32700 },
@@ -80,7 +83,12 @@
     "maxAssistantPreviewBytes": 8192,
     "maxApprovalSummaryBytes": 4096,
     "approvalLifetimeMs": 1800000,
-    "cancelAcknowledgementMs": 5000
+    "cancelAcknowledgementMs": 5000,
+    "maxTerminalInputBytes": 8192,
+    "maxTerminalScrollbackBytes": 65536,
+    "maxTerminalColumns": 400,
+    "maxTerminalRows": 200,
+    "maxHumanReasonBytes": 1024
   },
   "methods": [
     {
@@ -318,6 +326,124 @@
       "requiresWorkspace": true,
       "mutation": false,
       "timeout": "query"
+    },
+    {
+      "constant": "TerminalOpenMethod",
+      "name": "terminal.open",
+      "params": "TerminalOpenParams",
+      "result": "TerminalStateResult",
+      "requiresWorkspace": true,
+      "mutation": true,
+      "timeout": "mutation"
+    },
+    {
+      "constant": "TerminalInputMethod",
+      "name": "terminal.input",
+      "params": "TerminalInputParams",
+      "result": "TerminalStateResult",
+      "requiresWorkspace": true,
+      "mutation": true,
+      "timeout": "mutation"
+    },
+    {
+      "constant": "TerminalResizeMethod",
+      "name": "terminal.resize",
+      "params": "TerminalResizeParams",
+      "result": "TerminalStateResult",
+      "requiresWorkspace": true,
+      "mutation": true,
+      "timeout": "mutation"
+    },
+    {
+      "constant": "TerminalCancelMethod",
+      "name": "terminal.cancel",
+      "params": "TerminalMutationParams",
+      "result": "TerminalStateResult",
+      "requiresWorkspace": true,
+      "mutation": true,
+      "timeout": "mutation"
+    },
+    {
+      "constant": "TerminalCloseMethod",
+      "name": "terminal.close",
+      "params": "TerminalMutationParams",
+      "result": "TerminalStateResult",
+      "requiresWorkspace": true,
+      "mutation": true,
+      "timeout": "mutation"
+    },
+    {
+      "constant": "TerminalGetMethod",
+      "name": "terminal.get",
+      "params": "TerminalGetParams",
+      "result": "TerminalStateResult",
+      "requiresWorkspace": true,
+      "mutation": false,
+      "timeout": "query"
+    },
+    {
+      "constant": "ArtifactPreviewMethod",
+      "name": "artifact.preview",
+      "params": "ArtifactReviewParams",
+      "result": "ArtifactReviewResult",
+      "requiresWorkspace": true,
+      "mutation": false,
+      "timeout": "query"
+    },
+    {
+      "constant": "ArtifactExportMethod",
+      "name": "artifact.export",
+      "params": "ArtifactExportParams",
+      "result": "ArtifactExportResult",
+      "internal": true,
+      "requiresWorkspace": true,
+      "mutation": true,
+      "timeout": "mutation"
+    },
+    {
+      "constant": "ArtifactVerifyMethod",
+      "name": "artifact.verify",
+      "params": "ArtifactReviewParams",
+      "result": "ArtifactReviewResult",
+      "requiresWorkspace": true,
+      "mutation": false,
+      "timeout": "query"
+    },
+    {
+      "constant": "GerberReviewGetMethod",
+      "name": "gerber.review.get",
+      "params": "GerberReviewParams",
+      "result": "GerberReviewResult",
+      "requiresWorkspace": true,
+      "mutation": false,
+      "timeout": "query"
+    },
+    {
+      "constant": "GerberPreviewMethod",
+      "name": "gerber.preview",
+      "params": "GerberReviewParams",
+      "result": "GerberReviewResult",
+      "requiresWorkspace": true,
+      "mutation": false,
+      "timeout": "query"
+    },
+    {
+      "constant": "GerberAcceptMethod",
+      "name": "gerber.accept",
+      "params": "GerberDecisionParams",
+      "result": "GerberReviewResult",
+      "requiresWorkspace": true,
+      "mutation": true,
+      "timeout": "mutation"
+    },
+    {
+      "constant": "GerberRejectMethod",
+      "name": "gerber.reject",
+      "params": "GerberDecisionParams",
+      "result": "GerberReviewResult",
+      "requiresWorkspace": true,
+      "mutation": true,
+      "timeout": "mutation"
     }
   ],
   "notifications": [
@@ -379,7 +505,12 @@
         { "jsonName": "maxAssistantPreviewBytes", "type": "int32", "min": 8192, "max": 8192 },
         { "jsonName": "maxApprovalSummaryBytes", "type": "int32", "min": 4096, "max": 4096 },
         { "jsonName": "approvalLifetimeMs", "type": "int32", "min": 1800000, "max": 1800000 },
-        { "jsonName": "cancelAcknowledgementMs", "type": "int32", "min": 5000, "max": 5000 }
+        { "jsonName": "cancelAcknowledgementMs", "type": "int32", "min": 5000, "max": 5000 },
+        { "jsonName": "maxTerminalInputBytes", "type": "int32", "min": 8192, "max": 8192 },
+        { "jsonName": "maxTerminalScrollbackBytes", "type": "int32", "min": 65536, "max": 65536 },
+        { "jsonName": "maxTerminalColumns", "type": "int32", "min": 400, "max": 400 },
+        { "jsonName": "maxTerminalRows", "type": "int32", "min": 200, "max": 200 },
+        { "jsonName": "maxHumanReasonBytes", "type": "int32", "min": 1024, "max": 1024 }
       ]
     },
     {
@@ -401,7 +532,7 @@
         { "jsonName": "serverVersion", "type": "string", "maxUtf8Bytes": 128 },
         { "jsonName": "serverInstanceId", "type": "string", "maxUtf8Bytes": 64 },
         { "jsonName": "negotiatedCapabilities", "type": "array", "items": "string", "maxItems": 16, "maxUtf8Bytes": 64 },
-        { "jsonName": "methods", "type": "array", "items": "string", "maxItems": 32, "maxUtf8Bytes": 128 },
+        { "jsonName": "methods", "type": "array", "items": "string", "maxItems": 64, "maxUtf8Bytes": 128 },
         { "jsonName": "notifications", "type": "array", "items": "string", "maxItems": 16, "maxUtf8Bytes": 128 },
         { "jsonName": "limits", "type": "ProtocolLimits" },
         { "jsonName": "security", "type": "SecuritySummary" }
@@ -1188,6 +1319,179 @@
         { "jsonName": "schemaVersion", "type": "int32", "min": 1, "max": 1 },
         { "jsonName": "succeeded", "type": "boolean" },
         { "jsonName": "data", "type": "ArtifactMetadataData", "nullable": true },
+        { "jsonName": "error", "type": "ApplicationErrorData", "nullable": true },
+        { "jsonName": "diagnostics", "type": "array", "items": "ApplicationDiagnosticData", "maxItems": 100 },
+        { "jsonName": "truncated", "type": "boolean" }
+      ]
+    },
+    {
+      "name": "TerminalOpenParams",
+      "properties": [
+        { "jsonName": "schemaVersion", "type": "int32", "min": 1, "max": 1 },
+        { "jsonName": "shellProfile", "type": "string", "maxUtf8Bytes": 32, "enum": ["system-default", "powershell", "cmd"] },
+        { "jsonName": "clientMutationId", "type": "string", "maxUtf8Bytes": 128 }
+      ]
+    },
+    {
+      "name": "TerminalInputParams",
+      "properties": [
+        { "jsonName": "schemaVersion", "type": "int32", "min": 1, "max": 1 },
+        { "jsonName": "sessionId", "type": "string", "maxUtf8Bytes": 128 },
+        { "jsonName": "text", "type": "string", "maxUtf8Bytes": 8192 },
+        { "jsonName": "clientMutationId", "type": "string", "maxUtf8Bytes": 128 }
+      ]
+    },
+    {
+      "name": "TerminalResizeParams",
+      "properties": [
+        { "jsonName": "schemaVersion", "type": "int32", "min": 1, "max": 1 },
+        { "jsonName": "sessionId", "type": "string", "maxUtf8Bytes": 128 },
+        { "jsonName": "cols", "type": "int32", "min": 20, "max": 400 },
+        { "jsonName": "rows", "type": "int32", "min": 5, "max": 200 },
+        { "jsonName": "clientMutationId", "type": "string", "maxUtf8Bytes": 128 }
+      ]
+    },
+    {
+      "name": "TerminalMutationParams",
+      "properties": [
+        { "jsonName": "schemaVersion", "type": "int32", "min": 1, "max": 1 },
+        { "jsonName": "sessionId", "type": "string", "maxUtf8Bytes": 128 },
+        { "jsonName": "clientMutationId", "type": "string", "maxUtf8Bytes": 128 }
+      ]
+    },
+    {
+      "name": "TerminalGetParams",
+      "properties": [
+        { "jsonName": "schemaVersion", "type": "int32", "min": 1, "max": 1 },
+        { "jsonName": "sessionId", "type": "string", "maxUtf8Bytes": 128 },
+        { "jsonName": "afterCursor", "type": "int64", "min": 0, "max": 9007199254740991 }
+      ]
+    },
+    {
+      "name": "TerminalStateData",
+      "properties": [
+        { "jsonName": "sessionId", "type": "string", "maxUtf8Bytes": 128 },
+        { "jsonName": "status", "type": "string", "maxUtf8Bytes": 32, "enum": ["running", "exited", "closed", "failed"] },
+        { "jsonName": "shellProfile", "type": "string", "maxUtf8Bytes": 32 },
+        { "jsonName": "output", "type": "string", "maxUtf8Bytes": 65536 },
+        { "jsonName": "cursor", "type": "int64", "min": 0, "max": 9007199254740991 },
+        { "jsonName": "truncated", "type": "boolean" },
+        { "jsonName": "exitCode", "type": "int32", "min": -2147483648, "max": 2147483647, "nullable": true },
+        { "jsonName": "startedAtUtc", "type": "datetime" },
+        { "jsonName": "exitedAtUtc", "type": "datetime", "nullable": true }
+      ]
+    },
+    {
+      "name": "TerminalStateResult",
+      "properties": [
+        { "jsonName": "schemaVersion", "type": "int32", "min": 1, "max": 1 },
+        { "jsonName": "succeeded", "type": "boolean" },
+        { "jsonName": "data", "type": "TerminalStateData", "nullable": true },
+        { "jsonName": "error", "type": "ApplicationErrorData", "nullable": true },
+        { "jsonName": "diagnostics", "type": "array", "items": "ApplicationDiagnosticData", "maxItems": 100 },
+        { "jsonName": "truncated", "type": "boolean" }
+      ]
+    },
+    {
+      "name": "ArtifactReviewParams",
+      "properties": [
+        { "jsonName": "schemaVersion", "type": "int32", "min": 1, "max": 1 },
+        { "jsonName": "artifactId", "type": "string", "maxUtf8Bytes": 256 }
+      ]
+    },
+    {
+      "name": "ArtifactExportParams",
+      "properties": [
+        { "jsonName": "schemaVersion", "type": "int32", "min": 1, "max": 1 },
+        { "jsonName": "artifactId", "type": "string", "maxUtf8Bytes": 256 },
+        { "jsonName": "destinationPath", "type": "string", "maxUtf8Bytes": 4096 },
+        { "jsonName": "clientMutationId", "type": "string", "maxUtf8Bytes": 128 }
+      ]
+    },
+    {
+      "name": "ArtifactReviewData",
+      "properties": [
+        { "jsonName": "artifactId", "type": "string", "maxUtf8Bytes": 256 },
+        { "jsonName": "kind", "type": "string", "maxUtf8Bytes": 256 },
+        { "jsonName": "availability", "type": "string", "maxUtf8Bytes": 128 },
+        { "jsonName": "verified", "type": "boolean" },
+        { "jsonName": "observedSize", "type": "int64", "min": 0, "max": 9007199254740991, "nullable": true },
+        { "jsonName": "previewAvailable", "type": "boolean" },
+        { "jsonName": "correctnessProof", "type": "boolean" },
+        { "jsonName": "diagnosticCode", "type": "string", "maxUtf8Bytes": 256, "nullable": true },
+        { "jsonName": "safeMessage", "type": "string", "maxUtf8Bytes": 4096 }
+      ]
+    },
+    {
+      "name": "ArtifactReviewResult",
+      "properties": [
+        { "jsonName": "schemaVersion", "type": "int32", "min": 1, "max": 1 },
+        { "jsonName": "succeeded", "type": "boolean" },
+        { "jsonName": "data", "type": "ArtifactReviewData", "nullable": true },
+        { "jsonName": "error", "type": "ApplicationErrorData", "nullable": true },
+        { "jsonName": "diagnostics", "type": "array", "items": "ApplicationDiagnosticData", "maxItems": 100 },
+        { "jsonName": "truncated", "type": "boolean" }
+      ]
+    },
+    {
+      "name": "ArtifactExportData",
+      "properties": [
+        { "jsonName": "artifactId", "type": "string", "maxUtf8Bytes": 256 },
+        { "jsonName": "exported", "type": "boolean" },
+        { "jsonName": "fileName", "type": "string", "maxUtf8Bytes": 512 },
+        { "jsonName": "size", "type": "int64", "min": 0, "max": 9007199254740991 }
+      ]
+    },
+    {
+      "name": "ArtifactExportResult",
+      "properties": [
+        { "jsonName": "schemaVersion", "type": "int32", "min": 1, "max": 1 },
+        { "jsonName": "succeeded", "type": "boolean" },
+        { "jsonName": "data", "type": "ArtifactExportData", "nullable": true },
+        { "jsonName": "error", "type": "ApplicationErrorData", "nullable": true },
+        { "jsonName": "diagnostics", "type": "array", "items": "ApplicationDiagnosticData", "maxItems": 100 },
+        { "jsonName": "truncated", "type": "boolean" }
+      ]
+    },
+    {
+      "name": "GerberReviewParams",
+      "properties": [
+        { "jsonName": "schemaVersion", "type": "int32", "min": 1, "max": 1 },
+        { "jsonName": "runId", "type": "string", "maxUtf8Bytes": 256 }
+      ]
+    },
+    {
+      "name": "GerberDecisionParams",
+      "properties": [
+        { "jsonName": "schemaVersion", "type": "int32", "min": 1, "max": 1 },
+        { "jsonName": "runId", "type": "string", "maxUtf8Bytes": 256 },
+        { "jsonName": "expectedRevision", "type": "int64", "min": 1, "max": 9007199254740991 },
+        { "jsonName": "reason", "type": "string", "maxUtf8Bytes": 1024 },
+        { "jsonName": "clientMutationId", "type": "string", "maxUtf8Bytes": 128 }
+      ]
+    },
+    {
+      "name": "GerberReviewData",
+      "properties": [
+        { "jsonName": "runId", "type": "string", "maxUtf8Bytes": 256 },
+        { "jsonName": "revision", "type": "int64", "min": 1, "max": 9007199254740991 },
+        { "jsonName": "state", "type": "string", "maxUtf8Bytes": 64 },
+        { "jsonName": "hardVerificationPassed", "type": "boolean" },
+        { "jsonName": "humanDecisionEligible", "type": "boolean" },
+        { "jsonName": "previewAvailable", "type": "boolean" },
+        { "jsonName": "correctnessProof", "type": "boolean" },
+        { "jsonName": "decision", "type": "string", "maxUtf8Bytes": 32, "nullable": true },
+        { "jsonName": "disabledReason", "type": "string", "maxUtf8Bytes": 4096, "nullable": true },
+        { "jsonName": "verificationArtifactId", "type": "string", "maxUtf8Bytes": 256, "nullable": true },
+        { "jsonName": "previewArtifactIds", "type": "array", "items": "string", "maxItems": 64, "maxUtf8Bytes": 256 }
+      ]
+    },
+    {
+      "name": "GerberReviewResult",
+      "properties": [
+        { "jsonName": "schemaVersion", "type": "int32", "min": 1, "max": 1 },
+        { "jsonName": "succeeded", "type": "boolean" },
+        { "jsonName": "data", "type": "GerberReviewData", "nullable": true },
         { "jsonName": "error", "type": "ApplicationErrorData", "nullable": true },
         { "jsonName": "diagnostics", "type": "array", "items": "ApplicationDiagnosticData", "maxItems": 100 },
         { "jsonName": "truncated", "type": "boolean" }

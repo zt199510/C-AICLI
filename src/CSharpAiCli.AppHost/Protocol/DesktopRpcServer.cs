@@ -25,12 +25,16 @@ public sealed class DesktopRpcServer : IDisposable
 
     private readonly DesktopApplicationSessionFactory sessionFactory;
     private readonly DesktopThreadNotificationSequencer notificationSequencer = new(TimeProvider.System);
+    private readonly DesktopUserTerminalSupervisor terminalSupervisor = new();
     private DesktopWriteExecutionSupervisor writeSupervisor;
     private DesktopRpcOutputQueue? liveOutput;
     private DesktopApplicationSession? applicationSession;
     private Func<long, bool>? cancelRequest;
     private bool threadNotificationsNegotiated;
     private bool turnWritePathNegotiated;
+    private bool terminalNegotiated;
+    private bool artifactReviewNegotiated;
+    private bool gerberReviewNegotiated;
     private SessionState state;
 
     public DesktopRpcServer()
@@ -252,6 +256,13 @@ public sealed class DesktopRpcServer : IDisposable
                 return Error(id, DesktopProtocolDefinition.MethodNotFoundRpcCode,
                     DesktopProtocolDefinition.MethodNotFoundError, "Desktop protocol method is not available.");
             }
+            if (IsTerminalMethod(method) && !terminalNegotiated ||
+                IsArtifactReviewMethod(method) && !artifactReviewNegotiated ||
+                IsGerberReviewMethod(method) && !gerberReviewNegotiated)
+            {
+                return Error(id, DesktopProtocolDefinition.MethodNotFoundRpcCode,
+                    DesktopProtocolDefinition.MethodNotFoundError, "Desktop protocol method is not available.");
+            }
 
             return method switch
             {
@@ -281,6 +292,19 @@ public sealed class DesktopRpcServer : IDisposable
                 DesktopProtocolDefinition.ReportGetMethod => GetReport(id, parameters, requestCancellation),
                 DesktopProtocolDefinition.ArtifactListMethod => ListArtifacts(id, parameters, requestCancellation),
                 DesktopProtocolDefinition.ArtifactGetMethod => GetArtifact(id, parameters, requestCancellation),
+                DesktopProtocolDefinition.TerminalOpenMethod => OpenTerminal(id, parameters),
+                DesktopProtocolDefinition.TerminalInputMethod => InputTerminal(id, parameters),
+                DesktopProtocolDefinition.TerminalResizeMethod => ResizeTerminal(id, parameters),
+                DesktopProtocolDefinition.TerminalCancelMethod => CancelTerminal(id, parameters),
+                DesktopProtocolDefinition.TerminalCloseMethod => CloseTerminal(id, parameters),
+                DesktopProtocolDefinition.TerminalGetMethod => GetTerminal(id, parameters),
+                DesktopProtocolDefinition.ArtifactPreviewMethod => PreviewArtifact(id, parameters, requestCancellation),
+                DesktopProtocolDefinition.ArtifactExportMethod => ExportArtifact(id, parameters, requestCancellation),
+                DesktopProtocolDefinition.ArtifactVerifyMethod => VerifyArtifact(id, parameters, requestCancellation),
+                DesktopProtocolDefinition.GerberReviewGetMethod => GetGerberReview(id, parameters, requestCancellation),
+                DesktopProtocolDefinition.GerberPreviewMethod => GetGerberPreview(id, parameters, requestCancellation),
+                DesktopProtocolDefinition.GerberAcceptMethod => DecideGerberReview(id, parameters, true, requestCancellation),
+                DesktopProtocolDefinition.GerberRejectMethod => DecideGerberReview(id, parameters, false, requestCancellation),
                 _ => Error(id, DesktopProtocolDefinition.MethodNotFoundRpcCode,
                     DesktopProtocolDefinition.MethodNotFoundError, "Desktop protocol method is not available.")
             };
@@ -338,6 +362,9 @@ public sealed class DesktopRpcServer : IDisposable
         state = SessionState.Initialized;
         threadNotificationsNegotiated = requested.Contains(DesktopProtocolDefinition.ThreadChangedCapability);
         turnWritePathNegotiated = requested.Contains(DesktopProtocolDefinition.TurnWritePathCapability);
+        terminalNegotiated = requested.Contains(DesktopProtocolDefinition.TerminalUserSessionCapability);
+        artifactReviewNegotiated = requested.Contains(DesktopProtocolDefinition.ArtifactReviewCapability);
+        gerberReviewNegotiated = requested.Contains(DesktopProtocolDefinition.GerberReviewCapability);
         InitializeResult result = new()
         {
             SchemaVersion = DesktopProtocolDefinition.SchemaVersion,
@@ -347,7 +374,10 @@ public sealed class DesktopRpcServer : IDisposable
             ServerInstanceId = "server_" + Guid.NewGuid().ToString("N")[..24],
             NegotiatedCapabilities = DesktopProtocolDefinition.Capabilities.Where(requested.Contains).ToArray(),
             Methods = DesktopProtocolDefinition.Methods
-                .Where(method => turnWritePathNegotiated || !IsTurnWritePathMethod(method))
+                .Where(method => (turnWritePathNegotiated || !IsTurnWritePathMethod(method)) &&
+                    (terminalNegotiated || !IsTerminalMethod(method)) &&
+                    (artifactReviewNegotiated || !IsArtifactReviewMethod(method)) &&
+                    (gerberReviewNegotiated || !IsGerberReviewMethod(method)))
                 .ToArray(),
             Notifications = requested.Contains(DesktopProtocolDefinition.ThreadChangedCapability)
                 ? DesktopProtocolDefinition.Notifications
@@ -396,6 +426,7 @@ public sealed class DesktopRpcServer : IDisposable
         DesktopApplicationSession? previous = applicationSession;
         writeSupervisor.Stop();
         writeSupervisor.Dispose();
+        terminalSupervisor.Reset();
         writeSupervisor = new DesktopWriteExecutionSupervisor(NotifyCommittedAsync);
         applicationSession = opened.Session;
         state = SessionState.WorkspaceReady;
@@ -698,6 +729,91 @@ public sealed class DesktopRpcServer : IDisposable
             cancellationToken)));
     }
 
+    private byte[] OpenTerminal(long? id, JsonElement parameters)
+    {
+        if (!TryDeserialize(parameters, out TerminalOpenParams? request) || request is null ||
+            !DesktopProtocolValidation.TryValidate(request, out _)) return InvalidParams(id, "Terminal open parameters are invalid.");
+        return Success(id, terminalSupervisor.Open(applicationSession!.Workspace.RootPath,
+            request.ShellProfile, request.ClientMutationId));
+    }
+
+    private byte[] InputTerminal(long? id, JsonElement parameters)
+    {
+        if (!TryDeserialize(parameters, out TerminalInputParams? request) || request is null ||
+            !DesktopProtocolValidation.TryValidate(request, out _)) return InvalidParams(id, "Terminal input parameters are invalid.");
+        return Success(id, terminalSupervisor.Input(request.SessionId, request.Text, request.ClientMutationId));
+    }
+
+    private byte[] ResizeTerminal(long? id, JsonElement parameters)
+    {
+        if (!TryDeserialize(parameters, out TerminalResizeParams? request) || request is null ||
+            !DesktopProtocolValidation.TryValidate(request, out _)) return InvalidParams(id, "Terminal resize parameters are invalid.");
+        return Success(id, terminalSupervisor.Resize(request.SessionId, request.Cols, request.Rows, request.ClientMutationId));
+    }
+
+    private byte[] CancelTerminal(long? id, JsonElement parameters) => TerminalMutation(id, parameters, close: false);
+    private byte[] CloseTerminal(long? id, JsonElement parameters) => TerminalMutation(id, parameters, close: true);
+
+    private byte[] TerminalMutation(long? id, JsonElement parameters, bool close)
+    {
+        if (!TryDeserialize(parameters, out TerminalMutationParams? request) || request is null ||
+            !DesktopProtocolValidation.TryValidate(request, out _)) return InvalidParams(id, "Terminal mutation parameters are invalid.");
+        return Success(id, close
+            ? terminalSupervisor.Close(request.SessionId, request.ClientMutationId)
+            : terminalSupervisor.Cancel(request.SessionId, request.ClientMutationId));
+    }
+
+    private byte[] GetTerminal(long? id, JsonElement parameters)
+    {
+        if (!TryDeserialize(parameters, out TerminalGetParams? request) || request is null ||
+            !DesktopProtocolValidation.TryValidate(request, out _)) return InvalidParams(id, "Terminal get parameters are invalid.");
+        return Success(id, terminalSupervisor.Get(request.SessionId, request.AfterCursor));
+    }
+
+    private byte[] PreviewArtifact(long? id, JsonElement parameters, CancellationToken cancellationToken)
+    {
+        if (!TryDeserialize(parameters, out ArtifactReviewParams? request) || request is null ||
+            !DesktopProtocolValidation.TryValidate(request, out _)) return InvalidParams(id, "Artifact preview parameters are invalid.");
+        return Success(id, DesktopProtocolMapper.Map(applicationSession!.PreviewArtifact(request.ArtifactId, cancellationToken)));
+    }
+
+    private byte[] VerifyArtifact(long? id, JsonElement parameters, CancellationToken cancellationToken)
+    {
+        if (!TryDeserialize(parameters, out ArtifactReviewParams? request) || request is null ||
+            !DesktopProtocolValidation.TryValidate(request, out _)) return InvalidParams(id, "Artifact verify parameters are invalid.");
+        return Success(id, DesktopProtocolMapper.Map(applicationSession!.VerifyArtifact(request.ArtifactId, cancellationToken)));
+    }
+
+    private byte[] ExportArtifact(long? id, JsonElement parameters, CancellationToken cancellationToken)
+    {
+        if (!TryDeserialize(parameters, out ArtifactExportParams? request) || request is null ||
+            !DesktopProtocolValidation.TryValidate(request, out _)) return InvalidParams(id, "Artifact export parameters are invalid.");
+        return Success(id, DesktopProtocolMapper.Map(applicationSession!.ExportArtifact(
+            request.ArtifactId, request.DestinationPath, request.ClientMutationId, cancellationToken)));
+    }
+
+    private byte[] GetGerberReview(long? id, JsonElement parameters, CancellationToken cancellationToken)
+    {
+        if (!TryDeserialize(parameters, out GerberReviewParams? request) || request is null ||
+            !DesktopProtocolValidation.TryValidate(request, out _)) return InvalidParams(id, "Gerber review parameters are invalid.");
+        return Success(id, DesktopProtocolMapper.Map(applicationSession!.GetGerberReview(request.RunId, cancellationToken)));
+    }
+
+    private byte[] GetGerberPreview(long? id, JsonElement parameters, CancellationToken cancellationToken)
+    {
+        if (!TryDeserialize(parameters, out GerberReviewParams? request) || request is null ||
+            !DesktopProtocolValidation.TryValidate(request, out _)) return InvalidParams(id, "Gerber preview parameters are invalid.");
+        return Success(id, DesktopProtocolMapper.Map(applicationSession!.GetGerberPreview(request.RunId, cancellationToken)));
+    }
+
+    private byte[] DecideGerberReview(long? id, JsonElement parameters, bool accept, CancellationToken cancellationToken)
+    {
+        if (!TryDeserialize(parameters, out GerberDecisionParams? request) || request is null ||
+            !DesktopProtocolValidation.TryValidate(request, out _)) return InvalidParams(id, "Gerber decision parameters are invalid.");
+        return Success(id, DesktopProtocolMapper.Map(applicationSession!.DecideGerberReview(
+            request.RunId, request.ExpectedRevision, request.Reason, request.ClientMutationId, accept, cancellationToken)));
+    }
+
     private byte[] Shutdown(long? id, JsonElement parameters)
     {
         if (!TryDeserialize(parameters, out ShutdownParams? request) || request is null ||
@@ -751,7 +867,12 @@ public sealed class DesktopRpcServer : IDisposable
         MaxAssistantPreviewBytes = DesktopProtocolDefinition.MaxAssistantPreviewBytes,
         MaxApprovalSummaryBytes = DesktopProtocolDefinition.MaxApprovalSummaryBytes,
         ApprovalLifetimeMs = DesktopProtocolDefinition.ApprovalLifetimeMs,
-        CancelAcknowledgementMs = DesktopProtocolDefinition.CancelAcknowledgementMs
+        CancelAcknowledgementMs = DesktopProtocolDefinition.CancelAcknowledgementMs,
+        MaxTerminalInputBytes = DesktopProtocolDefinition.MaxTerminalInputBytes,
+        MaxTerminalScrollbackBytes = DesktopProtocolDefinition.MaxTerminalScrollbackBytes,
+        MaxTerminalColumns = DesktopProtocolDefinition.MaxTerminalColumns,
+        MaxTerminalRows = DesktopProtocolDefinition.MaxTerminalRows,
+        MaxHumanReasonBytes = DesktopProtocolDefinition.MaxHumanReasonBytes
     };
 
     private static WorkspaceSnapshotData Map(WorkspaceSnapshotProjection value) => new()
@@ -865,6 +986,19 @@ public sealed class DesktopRpcServer : IDisposable
         DesktopProtocolDefinition.ApprovalResolveMethod or
         DesktopProtocolDefinition.TurnResumeMethod or
         DesktopProtocolDefinition.TurnRestartMethod;
+
+    private static bool IsTerminalMethod(string method) => method is
+        DesktopProtocolDefinition.TerminalOpenMethod or DesktopProtocolDefinition.TerminalInputMethod or
+        DesktopProtocolDefinition.TerminalResizeMethod or DesktopProtocolDefinition.TerminalCancelMethod or
+        DesktopProtocolDefinition.TerminalCloseMethod or DesktopProtocolDefinition.TerminalGetMethod;
+
+    private static bool IsArtifactReviewMethod(string method) => method is
+        DesktopProtocolDefinition.ArtifactPreviewMethod or DesktopProtocolDefinition.ArtifactExportMethod or
+        DesktopProtocolDefinition.ArtifactVerifyMethod;
+
+    private static bool IsGerberReviewMethod(string method) => method is
+        DesktopProtocolDefinition.GerberReviewGetMethod or DesktopProtocolDefinition.GerberPreviewMethod or
+        DesktopProtocolDefinition.GerberAcceptMethod or DesktopProtocolDefinition.GerberRejectMethod;
 
     private static bool TryReadRequestId(JsonElement root, out long id)
     {
@@ -1084,6 +1218,10 @@ public sealed class DesktopRpcServer : IDisposable
         state = SessionState.Closed;
         threadNotificationsNegotiated = false;
         turnWritePathNegotiated = false;
+        terminalNegotiated = false;
+        artifactReviewNegotiated = false;
+        gerberReviewNegotiated = false;
+        terminalSupervisor.Dispose();
         writeSupervisor.Dispose();
         DesktopApplicationSession? session = applicationSession;
         applicationSession = null;

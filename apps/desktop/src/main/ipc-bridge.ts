@@ -1,4 +1,5 @@
-import type { BrowserWindow, IpcMain, IpcMainInvokeEvent, OpenDialogOptions } from "electron";
+import { randomUUID } from "node:crypto";
+import type { BrowserWindow, IpcMain, IpcMainInvokeEvent, OpenDialogOptions, SaveDialogOptions } from "electron";
 import {
   isArtifactGetResult,
   isArtifactListResult,
@@ -15,6 +16,7 @@ import {
   isThreadSummaryResult,
   isWorkspaceOpenResult,
   isWorkspaceSnapshotData,
+  isTerminalStateResult, isArtifactReviewResult, isArtifactExportResult, isGerberReviewResult,
 } from "../generated/desktop-contracts";
 import {
   IPC_CHANNELS,
@@ -36,6 +38,8 @@ import {
   isResolveApprovalCommand,
   isResumeTurnCommand,
   isRestartTurnCommand,
+  isOpenTerminalCommand, isInputTerminalCommand, isResizeTerminalCommand, isTerminalMutationCommand,
+  isGetTerminalCommand, isArtifactReviewCommand, isGerberReviewCommand, isGerberDecisionCommand,
 } from "../shared/bridge-contract";
 import type { AppHostRuntime } from "./apphost-runtime";
 import { isRuntimeWindowAvailable } from "./window-lifecycle";
@@ -45,6 +49,7 @@ export interface DialogAdapter {
     canceled: boolean;
     filePaths: string[];
   }>;
+  showSaveDialog(window: BrowserWindow, options: SaveDialogOptions): Promise<{ canceled: boolean; filePath?: string }>;
 }
 
 export interface DesktopIpcOptions {
@@ -54,7 +59,9 @@ export interface DesktopIpcOptions {
     "listThreads" | "getThread" | "createThread" | "renameThread" | "archiveThread" |
     "getChanges" | "listReports" | "getReport" | "listArtifacts" | "getArtifact" |
     "listCatalog" | "searchContext" | "resolveContext" | "getComposer" | "enqueueComposer" | "clearComposer" |
-    "startTurn" | "cancelTurn" | "resolveApproval" | "resumeTurn" | "restartTurn">;
+    "startTurn" | "cancelTurn" | "resolveApproval" | "resumeTurn" | "restartTurn" |
+    "openTerminal" | "inputTerminal" | "resizeTerminal" | "cancelTerminal" | "closeTerminal" | "getTerminal" |
+    "previewArtifact" | "exportArtifact" | "verifyArtifact" | "getGerberReview" | "getGerberPreview" | "acceptGerber" | "rejectGerber">;
   dialog: DialogAdapter;
   getWindow(): BrowserWindow | null;
   isAllowedSender(event: IpcMainInvokeEvent): boolean;
@@ -246,6 +253,90 @@ export function registerDesktopIpc(options: DesktopIpcOptions): () => void {
     if (!isArtifactGetResult(value)) throw new Error("Invalid artifact result.");
     return value;
   });
+  options.ipcMain.handle(IPC_CHANNELS.openTerminal, async (event, ...args) => {
+    const command = assertOne(event, args, isOpenTerminalCommand);
+    const value = await options.runtime.openTerminal(command);
+    if (!isTerminalStateResult(value)) throw new Error("Invalid terminal result.");
+    return value;
+  });
+  options.ipcMain.handle(IPC_CHANNELS.inputTerminal, async (event, ...args) => {
+    const command = assertOne(event, args, isInputTerminalCommand);
+    const value = await options.runtime.inputTerminal(command);
+    if (!isTerminalStateResult(value)) throw new Error("Invalid terminal result.");
+    return value;
+  });
+  options.ipcMain.handle(IPC_CHANNELS.resizeTerminal, async (event, ...args) => {
+    const command = assertOne(event, args, isResizeTerminalCommand);
+    const value = await options.runtime.resizeTerminal(command);
+    if (!isTerminalStateResult(value)) throw new Error("Invalid terminal result.");
+    return value;
+  });
+  options.ipcMain.handle(IPC_CHANNELS.cancelTerminal, async (event, ...args) => {
+    const command = assertOne(event, args, isTerminalMutationCommand);
+    const value = await options.runtime.cancelTerminal(command);
+    if (!isTerminalStateResult(value)) throw new Error("Invalid terminal result.");
+    return value;
+  });
+  options.ipcMain.handle(IPC_CHANNELS.closeTerminal, async (event, ...args) => {
+    const command = assertOne(event, args, isTerminalMutationCommand);
+    const value = await options.runtime.closeTerminal(command);
+    if (!isTerminalStateResult(value)) throw new Error("Invalid terminal result.");
+    return value;
+  });
+  options.ipcMain.handle(IPC_CHANNELS.getTerminal, async (event, ...args) => {
+    const command = assertOne(event, args, isGetTerminalCommand);
+    const value = await options.runtime.getTerminal(command.sessionId, command.afterCursor);
+    if (!isTerminalStateResult(value)) throw new Error("Invalid terminal result.");
+    return value;
+  });
+  options.ipcMain.handle(IPC_CHANNELS.previewArtifact, async (event, ...args) => {
+    const command = assertOne(event, args, isArtifactReviewCommand);
+    const value = await options.runtime.previewArtifact(command.artifactId);
+    if (!isArtifactReviewResult(value)) throw new Error("Invalid artifact preview result.");
+    return value;
+  });
+  options.ipcMain.handle(IPC_CHANNELS.verifyArtifact, async (event, ...args) => {
+    const command = assertOne(event, args, isArtifactReviewCommand);
+    const value = await options.runtime.verifyArtifact(command.artifactId);
+    if (!isArtifactReviewResult(value)) throw new Error("Invalid artifact verify result.");
+    return value;
+  });
+  options.ipcMain.handle(IPC_CHANNELS.exportArtifact, async (event, ...args) => {
+    const command = assertOne(event, args, isArtifactReviewCommand);
+    const window = options.getWindow();
+    if (!isRuntimeWindowAvailable(window)) throw new Error("Desktop window is unavailable.");
+    const selection = await options.dialog.showSaveDialog(window, {
+      title: "Export managed artifact", defaultPath: command.artifactId,
+    });
+    if (selection.canceled || !selection.filePath) return null;
+    const value = await options.runtime.exportArtifact(command.artifactId, selection.filePath, `export-${randomUUID()}`);
+    if (!isArtifactExportResult(value)) throw new Error("Invalid artifact export result.");
+    return value;
+  });
+  options.ipcMain.handle(IPC_CHANNELS.getGerberReview, async (event, ...args) => {
+    const command = assertOne(event, args, isGerberReviewCommand);
+    const value = await options.runtime.getGerberReview(command.runId);
+    if (!isGerberReviewResult(value)) throw new Error("Invalid Gerber review result.");
+    return value;
+  });
+  options.ipcMain.handle(IPC_CHANNELS.getGerberPreview, async (event, ...args) => {
+    const command = assertOne(event, args, isGerberReviewCommand);
+    const value = await options.runtime.getGerberPreview(command.runId);
+    if (!isGerberReviewResult(value)) throw new Error("Invalid Gerber preview result.");
+    return value;
+  });
+  options.ipcMain.handle(IPC_CHANNELS.acceptGerber, async (event, ...args) => {
+    const command = assertOne(event, args, isGerberDecisionCommand);
+    const value = await options.runtime.acceptGerber(command);
+    if (!isGerberReviewResult(value)) throw new Error("Invalid Gerber decision result.");
+    return value;
+  });
+  options.ipcMain.handle(IPC_CHANNELS.rejectGerber, async (event, ...args) => {
+    const command = assertOne(event, args, isGerberDecisionCommand);
+    const value = await options.runtime.rejectGerber(command);
+    if (!isGerberReviewResult(value)) throw new Error("Invalid Gerber decision result.");
+    return value;
+  });
 
   return () => {
     for (const channel of [
@@ -275,6 +366,10 @@ export function registerDesktopIpc(options: DesktopIpcOptions): () => void {
       IPC_CHANNELS.getReport,
       IPC_CHANNELS.listArtifacts,
       IPC_CHANNELS.getArtifact,
+      IPC_CHANNELS.openTerminal, IPC_CHANNELS.inputTerminal, IPC_CHANNELS.resizeTerminal,
+      IPC_CHANNELS.cancelTerminal, IPC_CHANNELS.closeTerminal, IPC_CHANNELS.getTerminal,
+      IPC_CHANNELS.previewArtifact, IPC_CHANNELS.exportArtifact, IPC_CHANNELS.verifyArtifact,
+      IPC_CHANNELS.getGerberReview, IPC_CHANNELS.getGerberPreview, IPC_CHANNELS.acceptGerber, IPC_CHANNELS.rejectGerber,
     ]) options.ipcMain.removeHandler(channel);
   };
 }

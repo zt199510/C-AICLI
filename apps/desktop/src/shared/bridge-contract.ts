@@ -1,6 +1,8 @@
 import {
   SCHEMA_VERSION,
   isArtifactGetParams,
+  isTerminalOpenParams, isTerminalInputParams, isTerminalResizeParams, isTerminalMutationParams, isTerminalGetParams,
+  isArtifactReviewParams, isGerberReviewParams, isGerberDecisionParams,
   isChangesGetParams,
   isCatalogListParams,
   isComposerClearParams,
@@ -20,6 +22,7 @@ import {
   isThreadRenameParams,
   type ArtifactGetResult,
   type ArtifactListResult,
+  type TerminalStateResult, type ArtifactReviewResult, type ArtifactExportResult, type GerberReviewResult,
   type ChangesGetResult,
   type CatalogListResult,
   type ComposerCatalogSelectionData,
@@ -53,6 +56,19 @@ export const IPC_CHANNELS = Object.freeze({
   getReport: "report:get",
   listArtifacts: "artifact:list",
   getArtifact: "artifact:get",
+  openTerminal: "terminal:open",
+  inputTerminal: "terminal:input",
+  resizeTerminal: "terminal:resize",
+  cancelTerminal: "terminal:cancel",
+  closeTerminal: "terminal:close",
+  getTerminal: "terminal:get",
+  previewArtifact: "artifact:preview",
+  exportArtifact: "artifact:export",
+  verifyArtifact: "artifact:verify",
+  getGerberReview: "gerber:review:get",
+  getGerberPreview: "gerber:preview",
+  acceptGerber: "gerber:accept",
+  rejectGerber: "gerber:reject",
   listCatalog: "catalog:list",
   searchContext: "context:search",
   pickFile: "context:pick-file",
@@ -75,6 +91,14 @@ export interface ArchiveThreadCommand { readonly threadId: string; readonly expe
 export interface GetChangesCommand { readonly sessionName?: string; }
 export interface GetReportCommand { readonly reportId: string; }
 export interface GetArtifactCommand { readonly artifactId: string; }
+export interface OpenTerminalCommand { readonly shellProfile: "system-default" | "powershell" | "cmd"; readonly clientMutationId: string; }
+export interface InputTerminalCommand { readonly sessionId: string; readonly text: string; readonly clientMutationId: string; }
+export interface ResizeTerminalCommand { readonly sessionId: string; readonly cols: number; readonly rows: number; readonly clientMutationId: string; }
+export interface TerminalMutationCommand { readonly sessionId: string; readonly clientMutationId: string; }
+export interface GetTerminalCommand { readonly sessionId: string; readonly afterCursor: number; }
+export interface ArtifactReviewCommand { readonly artifactId: string; }
+export interface GerberReviewCommand { readonly runId: string; }
+export interface GerberDecisionCommand { readonly runId: string; readonly expectedRevision: number; readonly reason: string; readonly clientMutationId: string; }
 export interface ListCatalogCommand { readonly kind: "skills" | "experts" | "automations"; }
 export interface SearchContextCommand { readonly query: string; }
 export interface GetComposerCommand { readonly threadId: string; }
@@ -146,6 +170,19 @@ export interface DesktopBridge {
   getReport(command: GetReportCommand): Promise<ReportGetResult>;
   listArtifacts(): Promise<ArtifactListResult>;
   getArtifact(command: GetArtifactCommand): Promise<ArtifactGetResult>;
+  openTerminal(command: OpenTerminalCommand): Promise<TerminalStateResult>;
+  inputTerminal(command: InputTerminalCommand): Promise<TerminalStateResult>;
+  resizeTerminal(command: ResizeTerminalCommand): Promise<TerminalStateResult>;
+  cancelTerminal(command: TerminalMutationCommand): Promise<TerminalStateResult>;
+  closeTerminal(command: TerminalMutationCommand): Promise<TerminalStateResult>;
+  getTerminal(command: GetTerminalCommand): Promise<TerminalStateResult>;
+  previewArtifact(command: ArtifactReviewCommand): Promise<ArtifactReviewResult>;
+  exportArtifact(command: ArtifactReviewCommand): Promise<ArtifactExportResult | null>;
+  verifyArtifact(command: ArtifactReviewCommand): Promise<ArtifactReviewResult>;
+  getGerberReview(command: GerberReviewCommand): Promise<GerberReviewResult>;
+  getGerberPreview(command: GerberReviewCommand): Promise<GerberReviewResult>;
+  acceptGerber(command: GerberDecisionCommand): Promise<GerberReviewResult>;
+  rejectGerber(command: GerberDecisionCommand): Promise<GerberReviewResult>;
   listCatalog(command: ListCatalogCommand): Promise<CatalogListResult>;
   searchContext(command: SearchContextCommand): Promise<ContextSearchResult>;
   pickFile(): Promise<ContextPickResult>;
@@ -256,6 +293,31 @@ export function isGetReportCommand(value: unknown): value is GetReportCommand {
 
 export function isGetArtifactCommand(value: unknown): value is GetArtifactCommand {
   return hasExactKeys(value, ["artifactId"]) && isArtifactGetParams({ schemaVersion: SCHEMA_VERSION, artifactId: value.artifactId });
+}
+
+export function isOpenTerminalCommand(value: unknown): value is OpenTerminalCommand {
+  return hasExactKeys(value, ["shellProfile", "clientMutationId"]) && isTerminalOpenParams({ schemaVersion: SCHEMA_VERSION, ...value });
+}
+export function isInputTerminalCommand(value: unknown): value is InputTerminalCommand {
+  return hasExactKeys(value, ["sessionId", "text", "clientMutationId"]) && isTerminalInputParams({ schemaVersion: SCHEMA_VERSION, ...value });
+}
+export function isResizeTerminalCommand(value: unknown): value is ResizeTerminalCommand {
+  return hasExactKeys(value, ["sessionId", "cols", "rows", "clientMutationId"]) && isTerminalResizeParams({ schemaVersion: SCHEMA_VERSION, ...value });
+}
+export function isTerminalMutationCommand(value: unknown): value is TerminalMutationCommand {
+  return hasExactKeys(value, ["sessionId", "clientMutationId"]) && isTerminalMutationParams({ schemaVersion: SCHEMA_VERSION, ...value });
+}
+export function isGetTerminalCommand(value: unknown): value is GetTerminalCommand {
+  return hasExactKeys(value, ["sessionId", "afterCursor"]) && isTerminalGetParams({ schemaVersion: SCHEMA_VERSION, ...value });
+}
+export function isArtifactReviewCommand(value: unknown): value is ArtifactReviewCommand {
+  return hasExactKeys(value, ["artifactId"]) && isArtifactReviewParams({ schemaVersion: SCHEMA_VERSION, ...value });
+}
+export function isGerberReviewCommand(value: unknown): value is GerberReviewCommand {
+  return hasExactKeys(value, ["runId"]) && isGerberReviewParams({ schemaVersion: SCHEMA_VERSION, ...value });
+}
+export function isGerberDecisionCommand(value: unknown): value is GerberDecisionCommand {
+  return hasExactKeys(value, ["runId", "expectedRevision", "reason", "clientMutationId"]) && isGerberDecisionParams({ schemaVersion: SCHEMA_VERSION, ...value });
 }
 
 export function isListCatalogCommand(value: unknown): value is ListCatalogCommand {

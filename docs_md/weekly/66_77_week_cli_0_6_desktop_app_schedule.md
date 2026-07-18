@@ -1,8 +1,8 @@
 # C-AICLI 0.6.0 Desktop App 12 周开发排期
 
-更新时间：2026-07-17
+更新时间：2026-07-18
 
-状态：Week 66-73 核心实现已完成；Week 73 packaged E2E 因 Electron 下载 `ECONNRESET` 待重试
+状态：Week 66-74 已完成；Week 73 packaged carryover 已通过本机 Electron 缓存闭环
 
 详细产品与技术边界统一以 `docs_md/spec/desktop_app_development_framework_0_6_0.md` 为准。本排期负责把该框架拆成 Week 66-77 的依赖顺序、周末验收和发布 Gate，不扩展产品范围。
 
@@ -221,6 +221,10 @@ open workspace
 周末 Gate：fake runtime packaged E2E 完成 create -> run -> approval -> deny/allow -> cancel/resume -> final summary；无 approval bypass 或重复执行。
 
 ### Week 74：Terminal、Artifacts 与 Gerber/TIFF 人工闭环
+
+详细计划：`74_week_terminal_artifacts_gerber_tiff_human_loop.plan.md`
+
+状态：Passed（review：`74_week_review.md`）
 
 主要交付：
 

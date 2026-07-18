@@ -22,6 +22,9 @@ import {
   isArtifactGetResult,
   isArtifactListParams,
   isArtifactListResult,
+  isTerminalOpenParams, isTerminalInputParams, isTerminalResizeParams, isTerminalMutationParams, isTerminalGetParams, isTerminalStateResult,
+  isArtifactReviewParams, isArtifactReviewResult, isArtifactExportParams, isArtifactExportResult,
+  isGerberReviewParams, isGerberDecisionParams, isGerberReviewResult,
   isChangesGetParams,
   isChangesGetResult,
   isInitializeResult,
@@ -44,6 +47,9 @@ import {
   type ArtifactGetResult,
   type ArtifactListParams,
   type ArtifactListResult,
+  type TerminalOpenParams, type TerminalInputParams, type TerminalResizeParams, type TerminalMutationParams, type TerminalGetParams, type TerminalStateResult,
+  type ArtifactReviewParams, type ArtifactReviewResult, type ArtifactExportParams, type ArtifactExportResult,
+  type GerberReviewParams, type GerberDecisionParams, type GerberReviewResult,
   type ChangesGetParams,
   type ChangesGetResult,
   type CatalogListParams,
@@ -233,6 +239,19 @@ export const ARTIFACT_GET_REQUEST = descriptor<ArtifactGetParams, ArtifactGetRes
   isArtifactGetParams,
   isArtifactGetResult,
 );
+export const TERMINAL_OPEN_REQUEST = descriptor<TerminalOpenParams, TerminalStateResult>(DESKTOP_METHODS.TerminalOpenMethod, "mutation", isTerminalOpenParams, isTerminalStateResult);
+export const TERMINAL_INPUT_REQUEST = descriptor<TerminalInputParams, TerminalStateResult>(DESKTOP_METHODS.TerminalInputMethod, "mutation", isTerminalInputParams, isTerminalStateResult);
+export const TERMINAL_RESIZE_REQUEST = descriptor<TerminalResizeParams, TerminalStateResult>(DESKTOP_METHODS.TerminalResizeMethod, "mutation", isTerminalResizeParams, isTerminalStateResult);
+export const TERMINAL_CANCEL_REQUEST = descriptor<TerminalMutationParams, TerminalStateResult>(DESKTOP_METHODS.TerminalCancelMethod, "mutation", isTerminalMutationParams, isTerminalStateResult);
+export const TERMINAL_CLOSE_REQUEST = descriptor<TerminalMutationParams, TerminalStateResult>(DESKTOP_METHODS.TerminalCloseMethod, "mutation", isTerminalMutationParams, isTerminalStateResult);
+export const TERMINAL_GET_REQUEST = descriptor<TerminalGetParams, TerminalStateResult>(DESKTOP_METHODS.TerminalGetMethod, "query", isTerminalGetParams, isTerminalStateResult);
+export const ARTIFACT_PREVIEW_REQUEST = descriptor<ArtifactReviewParams, ArtifactReviewResult>(DESKTOP_METHODS.ArtifactPreviewMethod, "query", isArtifactReviewParams, isArtifactReviewResult);
+export const ARTIFACT_EXPORT_REQUEST = descriptor<ArtifactExportParams, ArtifactExportResult>(DESKTOP_METHODS.ArtifactExportMethod, "mutation", isArtifactExportParams, isArtifactExportResult);
+export const ARTIFACT_VERIFY_REQUEST = descriptor<ArtifactReviewParams, ArtifactReviewResult>(DESKTOP_METHODS.ArtifactVerifyMethod, "query", isArtifactReviewParams, isArtifactReviewResult);
+export const GERBER_REVIEW_GET_REQUEST = descriptor<GerberReviewParams, GerberReviewResult>(DESKTOP_METHODS.GerberReviewGetMethod, "query", isGerberReviewParams, isGerberReviewResult);
+export const GERBER_PREVIEW_REQUEST = descriptor<GerberReviewParams, GerberReviewResult>(DESKTOP_METHODS.GerberPreviewMethod, "query", isGerberReviewParams, isGerberReviewResult);
+export const GERBER_ACCEPT_REQUEST = descriptor<GerberDecisionParams, GerberReviewResult>(DESKTOP_METHODS.GerberAcceptMethod, "mutation", isGerberDecisionParams, isGerberReviewResult);
+export const GERBER_REJECT_REQUEST = descriptor<GerberDecisionParams, GerberReviewResult>(DESKTOP_METHODS.GerberRejectMethod, "mutation", isGerberDecisionParams, isGerberReviewResult);
 
 export const THREAD_CHANGED_NOTIFICATION = Object.freeze({
   method: DESKTOP_NOTIFICATIONS.ThreadChangedNotification,

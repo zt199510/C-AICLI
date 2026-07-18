@@ -134,7 +134,7 @@ async function validateFixture(source: JsonObject) {
 }
 
 describe("desktop-v1 contract source", () => {
-  it("freezes the Week 73 method and notification allowlists", async () => {
+  it("freezes the Week 74 method and notification allowlists", async () => {
     const contract = await readContract();
 
     expect(contract.protocolVersion).toBe("desktop-v1");
@@ -166,6 +166,9 @@ describe("desktop-v1 contract source", () => {
       "report.get",
       "artifact.list",
       "artifact.get",
+      "terminal.open", "terminal.input", "terminal.resize", "terminal.cancel", "terminal.close", "terminal.get",
+      "artifact.preview", "artifact.export", "artifact.verify",
+      "gerber.review.get", "gerber.preview", "gerber.accept", "gerber.reject",
     ]);
     expect(contract.methods.filter(({ requiresWorkspace }) => requiresWorkspace).map(({ name }) => name))
       .toEqual(contract.methods.slice(4).map(({ name }) => name));
@@ -181,6 +184,8 @@ describe("desktop-v1 contract source", () => {
       "approval.resolve",
       "turn.resume",
       "turn.restart",
+      "terminal.open", "terminal.input", "terminal.resize", "terminal.cancel", "terminal.close",
+      "artifact.export", "gerber.accept", "gerber.reject",
     ]);
     expect(contract.methods.filter(({ timeout }) => timeout === "mutation").map(({ name }) => name))
       .toEqual(contract.methods.filter(({ mutation }) => mutation).map(({ name }) => name));
@@ -202,6 +207,9 @@ describe("desktop-v1 contract source", () => {
       { name: "composer.controlled-context", required: false },
       { name: "thread.changed", required: false },
       { name: "turn.write-path", required: false },
+      { name: "terminal.user-session", required: false },
+      { name: "artifact.review", required: false },
+      { name: "gerber.review", required: false },
     ]);
     expect(contract.errors.map(({ code }) => code)).toEqual([
       "parse-error",
@@ -274,6 +282,11 @@ describe("desktop-v1 contract source", () => {
       maxApprovalSummaryBytes: 4_096,
       approvalLifetimeMs: 1_800_000,
       cancelAcknowledgementMs: 5_000,
+      maxTerminalInputBytes: 8_192,
+      maxTerminalScrollbackBytes: 65_536,
+      maxTerminalColumns: 400,
+      maxTerminalRows: 200,
+      maxHumanReasonBytes: 1_024,
     });
   });
 

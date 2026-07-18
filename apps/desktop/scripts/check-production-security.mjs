@@ -52,6 +52,9 @@ const reviewedChannels = [
   "runtime:get-status", "runtime:restart", "runtime:status", "workspace:open", "workspace:get-snapshot",
   "thread:list", "thread:get", "thread:create", "thread:rename", "thread:archive", "thread:changed",
   "changes:get", "report:list", "report:get", "artifact:list", "artifact:get",
+  "terminal:open", "terminal:input", "terminal:resize", "terminal:cancel", "terminal:close", "terminal:get",
+  "artifact:preview", "artifact:export", "artifact:verify",
+  "gerber:review:get", "gerber:preview", "gerber:accept", "gerber:reject",
   "catalog:list", "context:search", "context:pick-file", "context:pick-folder",
   "composer:get", "composer:enqueue", "composer:clear",
   "turn:start", "turn:cancel", "approval:resolve", "turn:resume", "turn:restart",
@@ -59,7 +62,7 @@ const reviewedChannels = [
 for (const channel of reviewedChannels) {
   if (!preload.includes(channel)) throw new Error(`Preload bundle is missing reviewed channel: ${channel}`);
 }
-for (const value of ["desktop:initialize", "desktop:request", "shell.openExternal", "node:fs", "child_process", "thread:delete", "context:resolve", "terminal:"]) {
+for (const value of ["desktop:initialize", "desktop:request", "shell.openExternal", "node:fs", "child_process", "thread:delete", "context:resolve", "terminal:write", "terminal:process", "artifact:delete", "artifact:bytes"]) {
   if (preload.includes(value)) throw new Error(`Preload bundle contains forbidden surface: ${value}`);
 }
 

@@ -103,7 +103,10 @@ public sealed class DesktopProtocolTests
                 DesktopProtocolDefinition.WorkspaceSessionCapability,
                 DesktopProtocolDefinition.ApplicationOutcomeCapability,
                 DesktopProtocolDefinition.TurnWritePathCapability,
-                DesktopProtocolDefinition.ThreadChangedCapability
+                DesktopProtocolDefinition.ThreadChangedCapability,
+                DesktopProtocolDefinition.TerminalUserSessionCapability,
+                DesktopProtocolDefinition.ArtifactReviewCapability,
+                DesktopProtocolDefinition.GerberReviewCapability
             }
         });
         await WriteRequest(input, 2, DesktopProtocolDefinition.WorkspaceOpenMethod, new
@@ -184,7 +187,20 @@ public sealed class DesktopProtocolTests
                 DesktopProtocolDefinition.ReportListMethod,
                 DesktopProtocolDefinition.ReportGetMethod,
                 DesktopProtocolDefinition.ArtifactListMethod,
-                DesktopProtocolDefinition.ArtifactGetMethod
+                DesktopProtocolDefinition.ArtifactGetMethod,
+                DesktopProtocolDefinition.TerminalOpenMethod,
+                DesktopProtocolDefinition.TerminalInputMethod,
+                DesktopProtocolDefinition.TerminalResizeMethod,
+                DesktopProtocolDefinition.TerminalCancelMethod,
+                DesktopProtocolDefinition.TerminalCloseMethod,
+                DesktopProtocolDefinition.TerminalGetMethod,
+                DesktopProtocolDefinition.ArtifactPreviewMethod,
+                DesktopProtocolDefinition.ArtifactExportMethod,
+                DesktopProtocolDefinition.ArtifactVerifyMethod,
+                DesktopProtocolDefinition.GerberReviewGetMethod,
+                DesktopProtocolDefinition.GerberPreviewMethod,
+                DesktopProtocolDefinition.GerberAcceptMethod,
+                DesktopProtocolDefinition.GerberRejectMethod
             ],
             methods);
     }
@@ -319,6 +335,9 @@ public sealed class DesktopProtocolTests
             .Select(method => method.GetString()!)
             .ToArray();
         Assert.DoesNotContain(DesktopProtocolDefinition.TurnStartMethod, methods);
+        Assert.DoesNotContain(DesktopProtocolDefinition.TerminalOpenMethod, methods);
+        Assert.DoesNotContain(DesktopProtocolDefinition.ArtifactPreviewMethod, methods);
+        Assert.DoesNotContain(DesktopProtocolDefinition.GerberReviewGetMethod, methods);
 
         using JsonDocument workspace = OpenWorkspace(server, 2, temp.Path);
         Assert.True(workspace.RootElement.GetProperty("result").GetProperty("succeeded").GetBoolean());
@@ -332,6 +351,12 @@ public sealed class DesktopProtocolTests
             clientMutationId = "turn-start-test"
         });
         Assert.Equal(DesktopProtocolDefinition.MethodNotFoundError, ErrorCode(start));
+
+        using JsonDocument terminal = HandleRequest(server, 4, DesktopProtocolDefinition.TerminalOpenMethod, new
+        {
+            schemaVersion = 1, shellProfile = "system-default", clientMutationId = "terminal-open-test"
+        });
+        Assert.Equal(DesktopProtocolDefinition.MethodNotFoundError, ErrorCode(terminal));
     }
 
     [Fact]

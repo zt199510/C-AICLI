@@ -1,4 +1,5 @@
-import type { ArtifactMetadataData } from "../generated/desktop-contracts";
+import { useState } from "react";
+import type { ArtifactMetadataData, GerberReviewData } from "../generated/desktop-contracts";
 import type { ReviewState } from "./desktop-state";
 
 const tabs = ["changes", "reports", "artifacts", "preview"] as const;
@@ -25,7 +26,7 @@ export function ReviewInspector({ review, workspaceReady, onTab, onReport, onArt
         {workspaceReady && review.activeTab === "changes" ? <ChangesPanel review={review} /> : null}
         {workspaceReady && review.activeTab === "reports" ? <ReportsPanel review={review} onReport={onReport} /> : null}
         {workspaceReady && review.activeTab === "artifacts" ? <ArtifactsPanel review={review} onArtifact={onArtifact} /> : null}
-        {workspaceReady && review.activeTab === "preview" ? <PreviewPanel artifacts={review.artifacts} selected={review.selectedArtifact} onArtifact={onArtifact} /> : null}
+        {workspaceReady && review.activeTab === "preview" ? <GerberPanel artifacts={review.artifacts} selected={review.selectedArtifact} onArtifact={onArtifact} /> : null}
       </div>
     </div>
   );
@@ -57,17 +58,67 @@ function ReportsPanel({ review, onReport }: { review: ReviewState; onReport(id: 
 function ArtifactsPanel({ review, onArtifact }: { review: ReviewState; onArtifact(id: string): void }) {
   return <div className="review-section"><h2>Artifacts</h2>
     {review.artifacts.length ? <div className="review-list">{review.artifacts.map((artifact) => <button type="button" key={artifact.artifactId} onClick={() => onArtifact(artifact.artifactId)}><span>{artifact.kind}</span><span>{artifact.availability}</span></button>)}</div> : review.status === "ready" ? <p>No artifacts.</p> : null}
-    {review.selectedArtifact ? <ArtifactDetail artifact={review.selectedArtifact} /> : null}
+    {review.selectedArtifact ? <><ArtifactDetail artifact={review.selectedArtifact} /><ArtifactActions artifact={review.selectedArtifact} /></> : null}
   </div>;
 }
 
-function PreviewPanel({ artifacts, selected, onArtifact }: { artifacts: readonly ArtifactMetadataData[]; selected: ArtifactMetadataData | null; onArtifact(id: string): void }) {
+function GerberPanel({ artifacts, selected, onArtifact }: { artifacts: readonly ArtifactMetadataData[]; selected: ArtifactMetadataData | null; onArtifact(id: string): void }) {
   const managed = artifacts.filter(isManagedPreview);
+  const [review, setReview] = useState<GerberReviewData | null>(null);
+  const [reason, setReason] = useState("");
+  const [message, setMessage] = useState<string | null>(null);
+  const runId = selected?.owner.runId ?? managed[0]?.owner.runId;
+
+  async function load(preview: boolean) {
+    if (!runId) return;
+    try {
+      const result = preview ? await window.caicli.getGerberPreview({ runId }) : await window.caicli.getGerberReview({ runId });
+      if (!result.succeeded || !result.data) throw new Error(result.error?.safeMessage ?? "Review unavailable.");
+      setReview(result.data); setMessage(preview ? "Managed preview metadata refreshed; correctness remains unproven." : null);
+    } catch (value) { setMessage(value instanceof Error ? value.message : "Review unavailable."); }
+  }
+
+  async function decide(accept: boolean) {
+    if (!runId || !review) return;
+    try {
+      const command = { runId, expectedRevision: review.revision, reason: reason || (accept ? "Reviewed in Desktop" : ""), clientMutationId: `gerber-${Date.now()}` };
+      const result = accept ? await window.caicli.acceptGerber(command) : await window.caicli.rejectGerber(command);
+      if (!result.succeeded || !result.data) throw new Error(result.error?.safeMessage ?? "Decision failed closed.");
+      setReview(result.data); setMessage(`Decision recorded: ${result.data.decision ?? result.data.state}.`);
+    } catch (value) { setMessage(value instanceof Error ? value.message : "Decision failed closed."); }
+  }
+
   return <div className="review-section"><h2>Managed preview metadata</h2>
     <p className="disclaimer">Metadata and verification status do not prove manufacturing or image correctness. No file bytes are opened or rendered here.</p>
     {managed.length ? <div className="review-list">{managed.map((artifact) => <button type="button" key={artifact.artifactId} onClick={() => onArtifact(artifact.artifactId)}><span>{artifact.kind}</span><span>{artifact.verification}</span></button>)}</div> : <p>No managed Gerber/TIFF preview artifacts.</p>}
     {selected && isManagedPreview(selected) ? <ArtifactDetail artifact={selected} /> : null}
+    {runId ? <div className="review-actions"><button type="button" onClick={() => void load(false)}>Load verification</button><button type="button" onClick={() => void load(true)}>Refresh preview</button></div> : null}
+    {review ? <>
+      <dl><dt>Run state</dt><dd>{review.state}</dd><dt>Hard verification</dt><dd>{review.hardVerificationPassed ? "Passed" : "Not passed"}</dd><dt>Preview</dt><dd>{review.previewAvailable ? "Available" : "Missing"}</dd><dt>Correctness proof</dt><dd>No</dd></dl>
+      <input className="decision-reason" aria-label="Human decision reason" maxLength={1024} value={reason} onChange={(event) => setReason(event.target.value)} placeholder="Reject reason (required)" />
+      <div className="review-actions"><button type="button" disabled={!review.humanDecisionEligible} onClick={() => void decide(true)}>Accept verified run</button><button type="button" disabled={!review.humanDecisionEligible || !reason.trim()} onClick={() => void decide(false)}>Reject run</button></div>
+      {review.disabledReason ? <p>{review.disabledReason}</p> : null}
+    </> : null}
+    {message ? <p className="review-status" role="status" aria-live="polite">{message}</p> : null}
   </div>;
+}
+
+function ArtifactActions({ artifact }: { artifact: ArtifactMetadataData }) {
+  const [message, setMessage] = useState<string | null>(null);
+  async function act(kind: "preview" | "verify" | "export") {
+    try {
+      if (kind === "export") {
+        const result = await window.caicli.exportArtifact({ artifactId: artifact.artifactId });
+        setMessage(result === null ? "Export canceled." : result.succeeded ? `Exported ${result.data?.fileName ?? "artifact"}.` : result.error?.safeMessage ?? "Export failed.");
+        return;
+      }
+      const result = kind === "preview"
+        ? await window.caicli.previewArtifact({ artifactId: artifact.artifactId })
+        : await window.caicli.verifyArtifact({ artifactId: artifact.artifactId });
+      setMessage(result.succeeded ? result.data?.safeMessage ?? "Artifact checked." : result.error?.safeMessage ?? "Artifact check failed.");
+    } catch { setMessage("Artifact action failed safely."); }
+  }
+  return <><div className="review-actions"><button type="button" onClick={() => void act("verify")}>Verify identity</button><button type="button" onClick={() => void act("preview")}>Preview metadata</button><button type="button" onClick={() => void act("export")}>Export…</button></div>{message ? <p className="review-status" role="status" aria-live="polite">{message}</p> : null}</>;
 }
 
 function ArtifactDetail({ artifact }: { artifact: ArtifactMetadataData }) {
@@ -88,4 +139,4 @@ function isManagedPreview(artifact: ArtifactMetadataData): boolean {
   return artifact.ownership.toLowerCase() === "managed" && (kind.includes("gerber") || kind.includes("tiff") || kind.includes("tif"));
 }
 
-function title(value: string): string { return value[0]?.toUpperCase() + value.slice(1); }
+function title(value: string): string { return value === "preview" ? "Gerber" : value[0]?.toUpperCase() + value.slice(1); }
