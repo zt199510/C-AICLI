@@ -208,13 +208,47 @@ public sealed class TurnExecutionApplicationService
         ThreadStore store = threadStoreFactory(request.Snapshot);
         ThreadStoreReadResult read = store.Read(request.ThreadId);
         if (!read.Succeeded || read.Aggregate is null) return ThreadFailure(read.Diagnostic);
+        ThreadMutationReceiptRecord? existingRestartReceipt = read.Aggregate.Record.MutationReceipts
+            .SingleOrDefault(receipt => receipt.MutationId == request.ClientMutationId);
+        TurnRecord? existingRestart = existingRestartReceipt is null ? null : read.Aggregate.Turns
+            .SingleOrDefault(turn => turn.Mode == "desktop-restart" && turn.SourceCorrelation == request.SourceTurnId);
+        if (existingRestart is not null)
+            return ApplicationResult<TurnExecutionStateProjection>.Success(Project(read.Aggregate, existingRestart, true));
+
         TurnRecord? source = read.Aggregate.Turns.SingleOrDefault(turn => turn.TurnId == request.SourceTurnId);
-        if (source?.ExecutionInput is null || source.Revision != request.ExpectedSourceTurnRevision ||
-            (!TurnStatus.IsTerminal(source.Status) && !source.RecoveryRequired) || read.Aggregate.Record.ActiveTurnId is not null)
+        string recoveryMutationId = RecoveryMutationId(request.ClientMutationId);
+        bool recoveryAlreadyCommitted = read.Aggregate.Record.MutationReceipts.Any(
+            receipt => receipt.MutationId == recoveryMutationId);
+        bool staleActiveSource = source is not null &&
+            read.RecoveryRequired &&
+            read.Aggregate.Record.ActiveTurnId == source.TurnId &&
+            source.Status is TurnStatus.Running or TurnStatus.WaitingForApproval or TurnStatus.Canceling;
+        if (source?.ExecutionInput is null ||
+            (!recoveryAlreadyCommitted && (source.Revision != request.ExpectedSourceTurnRevision ||
+                read.Aggregate.Record.Revision != request.ExpectedThreadRevision)) ||
+            (!TurnStatus.IsTerminal(source.Status) && !staleActiveSource && !source.RecoveryRequired) ||
+            (read.Aggregate.Record.ActiveTurnId is not null && !staleActiveSource))
             return Failure("restart-source-invalid", ApplicationErrorCategory.Conflict, "Source turn cannot be restarted safely.");
-        DateTimeOffset now = NowAtLeast(read.Aggregate.Record.UpdatedAtUtc);
-        string intentId = "intent_" + Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(request.ClientMutationId + "\0" + source.TurnId))).ToLowerInvariant()[..32];
-        PendingComposerIntentRecord input = source.ExecutionInput with { IntentId = intentId, ThreadRevision = read.Aggregate.Record.Revision, CreatedAtUtc = now };
+
+        if (staleActiveSource)
+        {
+            ThreadStoreMutationResult recovered = store.RecoverInterrupted(
+                request.ThreadId,
+                read.Aggregate.Record.Revision,
+                NowAtLeast(read.Aggregate.Record.UpdatedAtUtc),
+                recoveryMutationId);
+            if (!recovered.Succeeded || recovered.Aggregate is null) return ThreadFailure(recovered.Diagnostic);
+            read = ThreadStoreReadResult.Success(recovered.Aggregate);
+            source = recovered.Aggregate.Turns.Single(turn => turn.TurnId == request.SourceTurnId);
+        }
+
+        if (read.Aggregate is not ThreadAggregate restartAggregate ||
+            restartAggregate.Record.ActiveTurnId is not null || source is null || !TurnStatus.IsTerminal(source.Status))
+            return Failure("restart-source-invalid", ApplicationErrorCategory.Conflict, "Source turn cannot be restarted safely.");
+        TurnRecord restartSource = source;
+        DateTimeOffset now = NowAtLeast(restartAggregate.Record.UpdatedAtUtc);
+        string intentId = "intent_" + Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(request.ClientMutationId + "\0" + restartSource.TurnId))).ToLowerInvariant()[..32];
+        PendingComposerIntentRecord input = restartSource.ExecutionInput! with { IntentId = intentId, ThreadRevision = restartAggregate.Record.Revision, CreatedAtUtc = now };
         string hash = ComposerIntentContractValidator.ComputeCanonicalInputSha256(input);
         ComposerIntentClaimRecord claim = new()
         {
@@ -230,23 +264,29 @@ public sealed class TurnExecutionApplicationService
         {
             TurnId = claim.TurnId,
             ThreadId = request.ThreadId,
-            Ordinal = read.Aggregate.Turns.Count + 1,
+            Ordinal = restartAggregate.Turns.Count + 1,
             CreatedAtUtc = now,
-            TaskSummary = source.TaskSummary,
+            TaskSummary = restartSource.TaskSummary,
             Mode = "desktop-restart",
-            SourceCorrelation = source.TurnId,
+            SourceCorrelation = restartSource.TurnId,
             ExecutionInput = input,
             CanonicalInputSha256 = hash
         };
         string prompt = ApplicationProjection.Safe(input.Prompt, ThreadPersistenceLimits.MaxTimelineSummaryBytes);
-        TimelineItemRecord message = Item(read.Aggregate.Record, restarted.TurnId, "restart-" + request.ClientMutationId,
+        TimelineItemRecord message = Item(restartAggregate.Record, restarted.TurnId, "restart-" + request.ClientMutationId,
             TimelineItemType.UserMessage, "committed", prompt, now,
             new TimelinePayloadRecord { Message = new TimelineMessagePayloadRecord(prompt) });
-        ThreadStoreMutationResult result = store.StartTurnFromIntent(request.ThreadId, request.ExpectedThreadRevision,
+        ThreadStoreMutationResult result = store.StartTurnFromIntent(request.ThreadId, restartAggregate.Record.Revision,
             request.ClientMutationId, claim, input, restarted, message);
         if (!result.Succeeded || result.Aggregate is null) return ThreadFailure(result.Diagnostic);
         return ApplicationResult<TurnExecutionStateProjection>.Success(Project(result.Aggregate,
             result.Aggregate.Turns.Single(turn => turn.TurnId == restarted.TurnId), result.Idempotent));
+    }
+
+    private static string RecoveryMutationId(string clientMutationId)
+    {
+        string hash = Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(clientMutationId))).ToLowerInvariant();
+        return "restart-recovery-" + hash[..32];
     }
 
     private sealed class PersistedEventSink(

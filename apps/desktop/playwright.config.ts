@@ -6,10 +6,11 @@ export default defineConfig({
   expect: { timeout: 8_000 },
   fullyParallel: false,
   workers: 1,
+  retries: 0,
   reporter: [["list"]],
   use: { trace: "retain-on-failure", screenshot: "only-on-failure" },
   projects: [
-    { name: "unpacked", testMatch: /read-only-shell\.spec\.ts/ },
-    { name: "packaged", testMatch: /read-only-shell\.spec\.ts/ },
+    { name: "unpacked", testMatch: /(?:read-only-shell|desktop-recovery|long-session)\.spec\.ts/ },
+    { name: "packaged", testMatch: /(?:read-only-shell|desktop-recovery)\.spec\.ts/ },
   ],
 });

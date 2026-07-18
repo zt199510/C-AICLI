@@ -3,7 +3,7 @@
 body { margin:0; min-width:320px; min-height:480px; overflow:hidden; }
 button { font:inherit; letter-spacing:0; }
 button:focus-visible { outline:2px solid #2176c7; outline-offset:2px; }
-.app-shell { min-height:100vh; display:grid; grid-template-rows:48px minmax(0,1fr); }
+.app-shell { height:100vh; min-height:480px; display:grid; grid-template-rows:48px minmax(0,1fr); }
 .titlebar { display:grid; grid-template-columns:220px minmax(0,1fr) auto; align-items:center; border-bottom:1px solid #d8dadd; background:#fff; padding:0 14px; min-width:0; }
 .brand { font-weight:650; font-size:14px; white-space:nowrap; }
 .workspace-title { color:#686e73; font-size:13px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; padding:0 18px; }

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import type { ThreadDetailData, ThreadSummaryData, TimelineItemData, WorkspaceSnapshotData } from "../generated/desktop-contracts";
+import type { ChangesData, ThreadDetailData, ThreadSummaryData, TimelineItemData, WorkspaceSnapshotData } from "../generated/desktop-contracts";
 import { createRuntimeStatus } from "../shared/bridge-contract";
 import { desktopReducer, initialDesktopState, mergeDetail } from "./desktop-state";
 
@@ -34,6 +34,52 @@ describe("desktop authoritative projection", () => {
     expect(mismatch.refreshing).toBe(true);
   });
 
+  it("marks gaps, out-of-order events, and conflicting identities dirty without mutating canonical data", () => {
+    const opened = desktopReducer(initialDesktopState, { type: "workspace", workspace });
+    const first = desktopReducer(opened, { type: "event", event: event(4) });
+    const settled = desktopReducer(first, { type: "refresh-complete" });
+    const gap = desktopReducer(settled, { type: "event", event: event(7) });
+    const gapSettled = desktopReducer(gap, { type: "refresh-complete" });
+    const outOfOrder = desktopReducer(gapSettled, { type: "event", event: event(6) });
+    const conflict = desktopReducer(gapSettled, { type: "event", event: { ...event(7), revision: 99 } });
+    const duplicate = desktopReducer(gapSettled, { type: "event", event: event(7) });
+
+    expect(gap.lastEventSequence).toBe(7);
+    expect(outOfOrder.lastEventSequence).toBe(7);
+    expect(outOfOrder.refreshing).toBe(true);
+    expect(conflict.lastEventSequence).toBe(7);
+    expect(conflict.refreshing).toBe(true);
+    expect(duplicate.refreshing).toBe(false);
+    expect(outOfOrder.threads).toBe(gapSettled.threads);
+  });
+
+  it("keeps valid thread rows while surfacing a bounded corrupt-state warning", () => {
+    const opened = desktopReducer(initialDesktopState, { type: "workspace", workspace });
+    const ready = desktopReducer(opened, {
+      type: "threads-ready",
+      epoch: opened.contextEpoch,
+      threads: [thread],
+      truncated: false,
+      warning: "Corrupt state was isolated: Thread JSON is corrupt.",
+    });
+    expect(ready.threads).toEqual([thread]);
+    expect(ready.threadsStatus).toBe("ready");
+    expect(ready.threadsError).toContain("Corrupt state was isolated");
+  });
+
+  it("preserves the bounded flag for a truncated changes projection", () => {
+    const opened = desktopReducer(initialDesktopState, { type: "workspace", workspace });
+    const ready = desktopReducer(opened, {
+      type: "changes-ready",
+      epoch: opened.contextEpoch,
+      value: changes,
+      truncated: true,
+    });
+    expect(ready.review.status).toBe("ready");
+    expect(ready.review.truncated).toBe(true);
+    expect(ready.review.changes?.diffTruncated).toBe(true);
+  });
+
   it("merges forward pages by sequence/id and marks invariant conflicts for recovery", () => {
     const next = { ...detail, timeline: [item(2, "item-2")], nextSequence: null, timelineTruncated: false };
     expect(mergeDetail(detail, next).timeline.map((value) => value.sequence)).toEqual([1, 2]);
@@ -46,6 +92,12 @@ const workspace: WorkspaceSnapshotData = {
   workspaceId: "workspace-1", rootPath: "C:\\workspace", status: "ready",
   capabilities: { readOnlyQueries: true, gitQueries: true, localCatalogs: true, managedArtifacts: true, controlledContext: true },
   configuration: { hasApiKey: false, apiKeySource: "none", effectiveModel: "gpt-test", modelSource: "default", agentBackendSource: "default", approvalMode: "ask", approvalModeSource: "default", loadedSourceCount: 0 },
+};
+
+const changes: ChangesData = {
+  status: "ready", exitCode: 0, gitStatusSummary: "M src/review.ts", gitStatusSucceeded: true, gitStatusErrorCode: null,
+  dirty: true, diffStatSummary: "bounded", diffSucceeded: true, diffErrorCode: null, diffTruncated: true,
+  changedFiles: [{ path: "src/review.ts", status: "M" }], sessionSource: null, sessionName: null, warnings: ["bounded"],
 };
 
 const thread: ThreadSummaryData = {

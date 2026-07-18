@@ -155,6 +155,61 @@ public sealed class ThreadApplicationServiceTests
         Assert.Equal(0, fixture.Store.Read(foreign.ThreadId).Aggregate?.Record.Revision);
     }
 
+    [Fact]
+    public void Get_projects_stale_active_turn_as_recovery_required()
+    {
+        using Fixture fixture = Fixture.Create();
+        string threadId = ThreadIdentity.CreateThreadId();
+        string turnId = ThreadIdentity.CreateTurnId();
+        TurnRecord turn = new()
+        {
+            TurnId = turnId,
+            ThreadId = threadId,
+            Ordinal = 1,
+            Status = TurnStatus.Queued,
+            CreatedAtUtc = fixture.Now,
+            TaskSummary = "Interrupted desktop write"
+        };
+        ThreadRecord record = fixture.Record(threadId, "Recovery");
+        ThreadStoreMutationResult created = fixture.Store.CreateProjection(record, [turn], []);
+        Assert.True(created.Succeeded, created.Diagnostic?.SafeMessage);
+        ThreadStoreMutationResult running = fixture.Store.TransitionTurn(
+            threadId, turnId, created.Aggregate!.Record.Revision, TurnStatus.Running, fixture.Now);
+        Assert.True(running.Succeeded, running.Diagnostic?.SafeMessage);
+
+        ApplicationResult<ThreadDetailProjection> detail = fixture.CreateService().Get(
+            new ThreadGetRequest(fixture.Snapshot, threadId));
+
+        Assert.True(detail.Succeeded, detail.Error?.SafeMessage);
+        Assert.True(detail.Data!.RecoveryRequired);
+        Assert.True(Assert.Single(detail.Data.Turns).RecoveryRequired);
+        Assert.Equal(TurnStatus.Running, detail.Data.Turns[0].Status);
+    }
+
+    [Fact]
+    public void List_preserves_valid_neighbor_and_reports_corrupt_state()
+    {
+        using Fixture fixture = Fixture.Create();
+        ThreadApplicationService service = fixture.CreateService();
+        ApplicationResult<ThreadSummaryProjection> valid = service.Create(
+            new ThreadCreateRequest(fixture.Snapshot, "Valid neighbor"));
+        ApplicationResult<ThreadSummaryProjection> corrupt = service.Create(
+            new ThreadCreateRequest(fixture.Snapshot, "Corrupt neighbor"));
+        ThreadStoreLayout layout = fixture.Store.GetLayout(corrupt.Data!.ThreadId);
+        File.WriteAllText(layout.ManifestPath, "{not-json}");
+        string workspaceId = new WorkspaceApplicationService().Snapshot(fixture.Snapshot).Data!.WorkspaceId;
+
+        ApplicationResult<ThreadListProjection> listed = service.List(
+            new ThreadListRequest(fixture.Snapshot, workspaceId));
+
+        Assert.True(listed.Succeeded, listed.Error?.SafeMessage);
+        Assert.Equal(valid.Data!.ThreadId, Assert.Single(listed.Data!.Threads).ThreadId);
+        ApplicationDiagnostic diagnostic = Assert.Single(listed.Diagnostics);
+        Assert.Equal(ThreadErrorCode.ThreadRecordCorrupt, diagnostic.Code);
+        Assert.Equal(ApplicationErrorCategory.CorruptState, diagnostic.Category);
+        Assert.DoesNotContain(layout.ManifestPath, diagnostic.SafeMessage, StringComparison.OrdinalIgnoreCase);
+    }
+
     private sealed class Fixture : IDisposable
     {
         private DateTimeOffset current;

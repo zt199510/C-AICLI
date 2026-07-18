@@ -1,4 +1,6 @@
 import { _electron as electron, expect, test } from "@playwright/test";
+import fs from "node:fs";
+import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { assertFixtureProjection } from "./fixtures";
@@ -9,8 +11,9 @@ test("read-only thread timeline review survives renderer reload", async ({ brows
   if (browserName !== "chromium") throw new Error("Electron tests require Chromium.");
   const packaged = testInfo.project.name === "packaged";
   if (packaged) testInfo.setTimeout(60_000);
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "caicli-week75-read-only-"));
   const executablePath = path.join(desktopRoot, "out", "C-AICLI Desktop-win32-x64", "caicli-desktop.exe");
-  const environment = { ...process.env, APPDATA: path.join(process.env.TEMP ?? desktopRoot, "caicli-playwright-appdata") };
+  const environment = { ...process.env, APPDATA: path.join(root, "appdata"), CAICLI_USER_PROFILE: path.join(root, "profile"), CAICLI_E2E_ROOT: root };
   const application = packaged
     ? await electron.launch({ executablePath, args: ["--disable-gpu"], env: environment })
     : await electron.launch({ args: ["--disable-gpu", path.join(desktopRoot, "e2e", "fixture-main.cjs")], env: environment });
@@ -62,7 +65,8 @@ test("read-only thread timeline review survives renderer reload", async ({ brows
     await page.reload();
     await expect(page.getByText("Fixture review thread")).toBeVisible();
   } finally {
-    if (packaged) await application.close();
-    else application.process().kill();
+    await application.close();
+    fs.rmSync(root, { recursive: true, force: true });
+    expect(fs.existsSync(root), "Read-only E2E temp root must be released.").toBe(false);
   }
 });

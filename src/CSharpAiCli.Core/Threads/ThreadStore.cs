@@ -64,6 +64,7 @@ public sealed record ThreadTimelinePageResult(
 
 public sealed class ThreadStore
 {
+    private const int StableReadAttempts = 4;
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web)
     {
         WriteIndented = true,
@@ -195,28 +196,39 @@ public sealed class ThreadStore
 
     public ThreadStoreReadResult Read(string threadId, CancellationToken cancellationToken = default)
     {
-        try
+        ThreadStoreReadResult? last = null;
+        for (int attempt = 0; attempt < StableReadAttempts; attempt++)
         {
-            cancellationToken.ThrowIfCancellationRequested();
-            ThreadStoreLayout layout = GetLayout(threadId);
-            return ReadValidated(layout, cancellationToken);
+            try
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+                ThreadStoreLayout layout = GetLayout(threadId);
+                last = ReadValidated(layout, cancellationToken);
+            }
+            catch (OperationCanceledException)
+            {
+                throw;
+            }
+            catch (ThreadContractException exception)
+            {
+                last = ThreadStoreReadResult.Failure(exception.ErrorCode, exception.Message, threadId);
+            }
+            catch (JsonException)
+            {
+                return ThreadStoreReadResult.Failure(ThreadErrorCode.ThreadRecordCorrupt, "Thread JSON is corrupt.", threadId);
+            }
+            catch (Exception exception) when (IsStoreException(exception) || exception is InvalidOperationException or ArgumentException)
+            {
+                last = ThreadStoreReadResult.Failure(ThreadErrorCode.ThreadStoreUnavailable, "Thread could not be read.", threadId);
+            }
+
+            if (last.Succeeded || last.Diagnostic?.ErrorCode is not (ThreadErrorCode.ThreadStoreUnavailable or ThreadErrorCode.ThreadReferenceMissing))
+            {
+                return last;
+            }
         }
-        catch (OperationCanceledException)
-        {
-            throw;
-        }
-        catch (ThreadContractException exception)
-        {
-            return ThreadStoreReadResult.Failure(exception.ErrorCode, exception.Message, threadId);
-        }
-        catch (JsonException)
-        {
-            return ThreadStoreReadResult.Failure(ThreadErrorCode.ThreadRecordCorrupt, "Thread JSON is corrupt.", threadId);
-        }
-        catch (Exception exception) when (IsStoreException(exception) || exception is InvalidOperationException or ArgumentException)
-        {
-            return ThreadStoreReadResult.Failure(ThreadErrorCode.ThreadStoreUnavailable, "Thread could not be read.", threadId);
-        }
+
+        return last ?? ThreadStoreReadResult.Failure(ThreadErrorCode.ThreadStoreUnavailable, "Thread could not be read.", threadId);
     }
 
     public ThreadStoreListResult List(string? workspaceId = null, CancellationToken cancellationToken = default)
@@ -1281,6 +1293,8 @@ public sealed class ThreadStore
             CompletedAtUtc = recoveredAtUtc,
             StopReason = "interrupted",
             ErrorCode = "interrupted",
+            RecoveryRequired = true,
+            ActiveApproval = null,
             TimelineFirstSequence = current.TimelineFirstSequence ?? items[0].Sequence,
             TimelineLastSequence = items[^1].Sequence,
             TimelineItemCount = current.TimelineItemCount + items.Count

@@ -229,6 +229,47 @@ public sealed class ThreadStoreTests
     }
 
     [Fact]
+    public async Task Concurrent_reads_reconcile_atomic_manifest_and_turn_replacements()
+    {
+        using TestThreadStore test = TestThreadStore.CreateWithQueuedTurn();
+        var failures = new System.Collections.Concurrent.ConcurrentBag<ThreadStoreDiagnostic>();
+        var start = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        int complete = 0;
+        Task reader = Task.Run(async () =>
+        {
+            await start.Task;
+            while (Volatile.Read(ref complete) == 0)
+            {
+                ThreadStoreReadResult read = test.Store.Read(test.ThreadId);
+                if (!read.Succeeded && read.Diagnostic is not null) failures.Add(read.Diagnostic);
+            }
+        });
+        Task writer = Task.Run(async () =>
+        {
+            await start.Task;
+            try
+            {
+                long revision = 1;
+                for (int sequence = 1; sequence <= 24; sequence++)
+                {
+                    ThreadStoreMutationResult result = test.Store.AppendTimeline(
+                        test.ThreadId, test.TurnId, revision, sequence, $"read-race-{sequence}",
+                        [test.NewMessage(sequence, $"message-{sequence}")]);
+                    Assert.True(result.Succeeded, result.Diagnostic?.SafeMessage);
+                    revision = result.Aggregate!.Record.Revision;
+                }
+            }
+            finally
+            {
+                Volatile.Write(ref complete, 1);
+            }
+        });
+        start.SetResult();
+        await Task.WhenAll(writer, reader).WaitAsync(TimeSpan.FromSeconds(10));
+        Assert.Empty(failures);
+    }
+
+    [Fact]
     public void Unsupported_oversize_and_duplicate_committed_sequence_fail_closed()
     {
         using TestThreadStore schema = TestThreadStore.Create();

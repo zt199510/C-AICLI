@@ -20,7 +20,8 @@ ipcMain.handle("fixture:composer-enqueue", (_event, command) => {
 ipcMain.handle("fixture:composer-clear", () => { queueRevision++; pendingIntent = null; return ok(composerState()); });
 
 app.disableHardwareAcceleration();
-app.setPath("userData", path.join(os.tmpdir(), `caicli-e2e-${process.pid}`));
+const ownedRoot = process.env.CAICLI_E2E_ROOT;
+app.setPath("userData", ownedRoot ? path.join(ownedRoot, "user-data") : path.join(os.tmpdir(), `caicli-e2e-${process.pid}`));
 
 app.whenReady().then(() => {
   const window = new BrowserWindow({

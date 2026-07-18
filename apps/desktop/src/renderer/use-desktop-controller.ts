@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useReducer, useRef } from "react";
 import type { CatalogItemData, ContextDescriptorData, ThreadChangedParams, WorkspaceSnapshotData } from "../generated/desktop-contracts";
 import { createRuntimeStatus, type DesktopBridge } from "../shared/bridge-contract";
-import { desktopReducer, initialDesktopState, type ReviewState } from "./desktop-state";
+import { desktopReducer, initialDesktopState, threadEventIdentity, type ReviewState } from "./desktop-state";
 import { composerReducer, currentDraft, draftKey, initialComposerUiState, type ComposerCatalogKind, type SelectedCatalogItem } from "./composer-state";
 
 export function useDesktopController(bridge: DesktopBridge | undefined) {
@@ -25,7 +25,14 @@ export function useDesktopController(bridge: DesktopBridge | undefined) {
         dispatch({ type: "threads-error", epoch, message: safeFailure(result.error?.safeMessage) });
         return;
       }
-      dispatch({ type: "threads-ready", epoch, threads: result.data.threads, truncated: result.data.truncated || result.truncated });
+      const corrupt = result.diagnostics.find((diagnostic) => diagnostic.category === "corrupt-state");
+      dispatch({
+        type: "threads-ready",
+        epoch,
+        threads: result.data.threads,
+        truncated: result.data.truncated || result.truncated,
+        warning: corrupt ? `Corrupt state was isolated: ${safeFailure(corrupt.safeMessage)}` : null,
+      });
     } catch {
       dispatch({ type: "threads-error", epoch, message: "Threads could not be loaded." });
     }
@@ -109,12 +116,10 @@ export function useDesktopController(bridge: DesktopBridge | undefined) {
         dispatch({ type: "event", event });
         return;
       }
-      if (snapshot.lastEventSequence !== null && event.eventSequence <= snapshot.lastEventSequence) {
-        dispatch({ type: "event", event });
-        return;
-      }
+      const exactDuplicate = snapshot.lastEventSequence === event.eventSequence &&
+        snapshot.lastEventIdentity === threadEventIdentity(event);
       dispatch({ type: "event", event });
-      queueResync();
+      if (!exactDuplicate) queueResync();
     });
     void bridge.getRuntimeStatus().then((status) => {
       if (disposed || receivedRuntimeEvent) return;
@@ -194,7 +199,7 @@ export function useDesktopController(bridge: DesktopBridge | undefined) {
     dispatch({ type: "review-loading", epoch });
     const failed = () => dispatch({ type: "review-error", epoch, message: "Review data could not be loaded." });
     if (tab === "changes") void bridge.getChanges({}).then((result) => {
-      if (result.succeeded && result.data) dispatch({ type: "changes-ready", epoch, value: result.data });
+      if (result.succeeded && result.data) dispatch({ type: "changes-ready", epoch, value: result.data, truncated: result.data.diffTruncated || result.truncated });
       else failed();
     }).catch(failed);
     else if (tab === "reports") void bridge.listReports().then((result) => {
@@ -369,13 +374,27 @@ export function useDesktopController(bridge: DesktopBridge | undefined) {
     const snapshot = stateRef.current;
     if (!snapshot.selectedThreadId || !snapshot.detail) return "Select a thread first.";
     try {
-      const result = await bridge.cancelTurn({
-        threadId: snapshot.selectedThreadId,
-        turnId,
-        expectedThreadRevision: snapshot.detail.thread.revision,
-        expectedTurnRevision: turnRevision,
-        clientMutationId: `cancel-${crypto.randomUUID()}`,
-      });
+      const clientMutationId = `cancel-${crypto.randomUUID()}`;
+      let expectedThreadRevision = snapshot.detail.thread.revision;
+      let expectedTurnRevision = turnRevision;
+      let result = await bridge.cancelTurn({ threadId: snapshot.selectedThreadId, turnId, expectedThreadRevision, expectedTurnRevision, clientMutationId });
+      for (let attempt = 1; !result.succeeded && result.error?.category === "conflict" && attempt < 4; attempt++) {
+        // A running turn may commit bounded diagnostic items between render and
+        // click. Bounded conflict reconciliation repeats the user's cancel with
+        // the same mutation identity; it never starts or replays execution.
+        const latest = await bridge.getThread({ threadId: snapshot.selectedThreadId, afterSequence: 0 });
+        if (!latest.succeeded || !latest.data) return safeFailure(latest.error?.safeMessage);
+        const latestTurn = latest.data.turns.find((turn) => turn.turnId === turnId);
+        if (!latestTurn) return "Turn is no longer available.";
+        if (latestTurn.status === "canceling" || latestTurn.status === "canceled") {
+          await refreshThreads(snapshot.contextEpoch);
+          await fetchThread(snapshot.selectedThreadId, 0, false, snapshot.contextEpoch, snapshot.selectionEpoch);
+          return null;
+        }
+        expectedThreadRevision = latest.data.thread.revision;
+        expectedTurnRevision = latestTurn.revision;
+        result = await bridge.cancelTurn({ threadId: snapshot.selectedThreadId, turnId, expectedThreadRevision, expectedTurnRevision, clientMutationId });
+      }
       await refreshThreads(snapshot.contextEpoch);
       await fetchThread(snapshot.selectedThreadId, 0, false, snapshot.contextEpoch, snapshot.selectionEpoch);
       return result.succeeded ? null : safeFailure(result.error?.safeMessage);
@@ -389,16 +408,22 @@ export function useDesktopController(bridge: DesktopBridge | undefined) {
     const snapshot = stateRef.current;
     if (!snapshot.selectedThreadId || !snapshot.detail) return "Select a thread first.";
     try {
-      const result = await bridge.resolveApproval({
-        threadId: snapshot.selectedThreadId,
-        turnId,
-        requestId,
-        decision,
-        expectedThreadRevision: snapshot.detail.thread.revision,
-        expectedTurnRevision: turnRevision,
-        expectedApprovalRevision: approvalRevision,
-        clientMutationId: `approval-${crypto.randomUUID()}`,
-      });
+      const clientMutationId = `approval-${crypto.randomUUID()}`;
+      let expectedThreadRevision = snapshot.detail.thread.revision;
+      let expectedTurnRevision = turnRevision;
+      let expectedApprovalRevision = approvalRevision;
+      let result = await bridge.resolveApproval({ threadId: snapshot.selectedThreadId, turnId, requestId, decision, expectedThreadRevision, expectedTurnRevision, expectedApprovalRevision, clientMutationId });
+      for (let attempt = 1; !result.succeeded && result.error?.category === "conflict" && attempt < 4; attempt++) {
+        const latest = await bridge.getThread({ threadId: snapshot.selectedThreadId, afterSequence: 0 });
+        if (!latest.succeeded || !latest.data) return safeFailure(latest.error?.safeMessage);
+        const latestTurn = latest.data.turns.find((turn) => turn.turnId === turnId);
+        const latestApproval = latestTurn?.approval;
+        if (!latestTurn || latestApproval?.requestId !== requestId) return "Approval request is no longer active.";
+        expectedThreadRevision = latest.data.thread.revision;
+        expectedTurnRevision = latestTurn.revision;
+        expectedApprovalRevision = latestApproval.approvalRevision;
+        result = await bridge.resolveApproval({ threadId: snapshot.selectedThreadId, turnId, requestId, decision, expectedThreadRevision, expectedTurnRevision, expectedApprovalRevision, clientMutationId });
+      }
       await refreshThreads(snapshot.contextEpoch);
       await fetchThread(snapshot.selectedThreadId, 0, false, snapshot.contextEpoch, snapshot.selectionEpoch);
       return result.succeeded ? null : safeFailure(result.error?.safeMessage);

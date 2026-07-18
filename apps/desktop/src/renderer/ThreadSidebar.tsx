@@ -63,7 +63,7 @@ export function ThreadSidebar(props: ThreadSidebarProps) {
       {commandError && <div className="inline-error" role="alert">{commandError}</div>}
       {props.truncated && <div className="capped-banner">Showing the first 200 threads.</div>}
       {props.status === "loading" && props.threads.length === 0 ? <div className="empty-list">Loading threads…</div> : null}
-      {props.status === "error" ? <div className="inline-error" role="alert">{props.error}</div> : null}
+      {props.error ? <div className="inline-error" role="alert">{props.error}</div> : null}
       {props.status !== "loading" && visible.length === 0 ? <div className="empty-list">No threads match this view.</div> : null}
       <div className="thread-list" role="list">
         {visible.map((entry) => (

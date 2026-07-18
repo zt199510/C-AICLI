@@ -2,7 +2,7 @@
 
 更新时间：2026-07-18
 
-状态：Week 66-74 已完成；Week 73 packaged carryover 已通过本机 Electron 缓存闭环
+状态：Week 66-75 已完成；Week 75 recovery/long-session unpacked 与 packaged Gate 已通过
 
 详细产品与技术边界统一以 `docs_md/spec/desktop_app_development_framework_0_6_0.md` 为准。本排期负责把该框架拆成 Week 66-77 的依赖顺序、周末验收和发布 Gate，不扩展产品范围。
 
@@ -237,6 +237,12 @@ open workspace
 周末 Gate：terminal 不形成 tool/approval bypass；preview 不能自动 accept；stale evidence、missing artifact、tamper 和 cleanup tests 通过。
 
 ### Week 75：故障恢复、长会话与 Desktop E2E
+
+详细计划：`75_week_failure_recovery_long_sessions_desktop_e2e.plan.md`
+
+状态：Passed（review：`75_week_review.md`）
+
+执行回顾：`75_week_review.md`
 
 主要交付：
 

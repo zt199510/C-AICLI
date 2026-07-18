@@ -39,6 +39,7 @@ export interface DesktopState {
   readonly detail: ThreadDetailData | null;
   readonly detailError: string | null;
   readonly lastEventSequence: number | null;
+  readonly lastEventIdentity: string | null;
   readonly refreshing: boolean;
   readonly ignoredEvents: number;
   readonly review: ReviewState;
@@ -58,6 +59,7 @@ export const initialDesktopState: DesktopState = Object.freeze({
   detail: null,
   detailError: null,
   lastEventSequence: null,
+  lastEventIdentity: null,
   refreshing: false,
   ignoredEvents: 0,
   review: emptyReview(),
@@ -67,7 +69,7 @@ export type DesktopAction =
   | { type: "runtime"; status: RuntimeStatus }
   | { type: "workspace"; workspace: WorkspaceSnapshotData | null }
   | { type: "threads-loading"; epoch: number }
-  | { type: "threads-ready"; epoch: number; threads: readonly ThreadSummaryData[]; truncated: boolean }
+  | { type: "threads-ready"; epoch: number; threads: readonly ThreadSummaryData[]; truncated: boolean; warning?: string | null }
   | { type: "threads-error"; epoch: number; message: string }
   | { type: "select"; threadId: string | null }
   | { type: "detail-loading"; epoch: number; selectionEpoch: number; threadId: string }
@@ -78,7 +80,7 @@ export type DesktopAction =
   | { type: "review-tab"; tab: ReviewState["activeTab"] }
   | { type: "review-loading"; epoch: number }
   | { type: "review-error"; epoch: number; message: string }
-  | { type: "changes-ready"; epoch: number; value: ChangesData }
+  | { type: "changes-ready"; epoch: number; value: ChangesData; truncated: boolean }
   | { type: "reports-ready"; epoch: number; value: readonly ReportMetadataData[]; truncated: boolean }
   | { type: "report-ready"; epoch: number; value: ReportDetailData }
   | { type: "artifacts-ready"; epoch: number; value: readonly ArtifactMetadataData[]; truncated: boolean }
@@ -102,7 +104,7 @@ export function desktopReducer(state: DesktopState, action: DesktopAction): Desk
         threadsStatus: "ready",
         threads: action.threads,
         threadsTruncated: action.truncated,
-        threadsError: null,
+        threadsError: action.warning ?? null,
       } : state;
     case "threads-error":
       return action.epoch === state.contextEpoch ? { ...state, threadsStatus: "error", threadsError: action.message } : state;
@@ -137,16 +139,18 @@ export function desktopReducer(state: DesktopState, action: DesktopAction): Desk
       if (!state.workspace || action.event.workspaceId !== state.workspace.workspaceId) {
         return { ...state, ignoredEvents: state.ignoredEvents + 1 };
       }
+      const identity = threadEventIdentity(action.event);
       if (state.lastEventSequence !== null && action.event.eventSequence <= state.lastEventSequence) {
-        return { ...state, ignoredEvents: state.ignoredEvents + 1 };
+        const exactDuplicate = action.event.eventSequence === state.lastEventSequence && identity === state.lastEventIdentity;
+        return { ...state, ignoredEvents: state.ignoredEvents + 1, refreshing: exactDuplicate ? state.refreshing : true };
       }
-      return { ...state, lastEventSequence: action.event.eventSequence, refreshing: true };
+      return { ...state, lastEventSequence: action.event.eventSequence, lastEventIdentity: identity, refreshing: true };
     }
     case "refresh-complete": return { ...state, refreshing: false };
     case "review-tab": return { ...state, review: { ...state.review, activeTab: action.tab, status: "idle", error: null } };
     case "review-loading": return action.epoch === state.contextEpoch ? { ...state, review: { ...state.review, status: "loading", error: null } } : state;
     case "review-error": return action.epoch === state.contextEpoch ? { ...state, review: { ...state.review, status: "error", error: action.message } } : state;
-    case "changes-ready": return reviewReady(state, action.epoch, { changes: action.value });
+    case "changes-ready": return reviewReady(state, action.epoch, { changes: action.value, truncated: action.truncated });
     case "reports-ready": return reviewReady(state, action.epoch, { reports: action.value, truncated: action.truncated });
     case "report-ready": return reviewReady(state, action.epoch, { selectedReport: action.value });
     case "artifacts-ready": return reviewReady(state, action.epoch, { artifacts: action.value, truncated: action.truncated });
@@ -173,9 +177,14 @@ function resetContext(state: DesktopState, workspace: WorkspaceSnapshotData | nu
     detail: null,
     detailError: null,
     lastEventSequence: null,
+    lastEventIdentity: null,
     refreshing: false,
     review: emptyReview(),
   };
+}
+
+export function threadEventIdentity(event: ThreadChangedParams): string {
+  return `${event.threadId}\0${event.revision}\0${event.committedSequence}\0${event.changeKind}`;
 }
 
 function emptyReview(): ReviewState {

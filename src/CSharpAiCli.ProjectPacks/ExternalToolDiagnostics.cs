@@ -400,6 +400,7 @@ public sealed class ExternalToolProbeRunner
         List<ProjectPackDiagnostic> diagnostics = [.. inspection.Diagnostics];
         BoundedText stdout = BoundedText.Empty;
         BoundedText stderr = BoundedText.Empty;
+        using CancellationTokenSource outputReadCancellation = new();
 
         try
         {
@@ -410,8 +411,8 @@ public sealed class ExternalToolProbeRunner
             process = new Process { StartInfo = startInfo };
             process.Start();
             process.StandardInput.Close();
-            stdoutTask = ReadBoundedAsync(process.StandardOutput, requirement.MaxProbeOutputCharacters);
-            stderrTask = ReadBoundedAsync(process.StandardError, requirement.MaxProbeOutputCharacters);
+            stdoutTask = ReadBoundedAsync(process.StandardOutput, requirement.MaxProbeOutputCharacters, outputReadCancellation.Token);
+            stderrTask = ReadBoundedAsync(process.StandardError, requirement.MaxProbeOutputCharacters, outputReadCancellation.Token);
 
             while (!process.WaitForExit(PollMilliseconds))
             {
@@ -431,6 +432,7 @@ public sealed class ExternalToolProbeRunner
             if (timedOut || canceled)
             {
                 processCleanedUp = TryKillAndWait(process);
+                outputReadCancellation.Cancel();
             }
 
             if (process.HasExited)
@@ -621,24 +623,35 @@ public sealed class ExternalToolProbeRunner
         }
     }
 
-    private static async Task<BoundedText> ReadBoundedAsync(StreamReader reader, int maxCharacters)
+    private static async Task<BoundedText> ReadBoundedAsync(
+        StreamReader reader,
+        int maxCharacters,
+        CancellationToken cancellationToken)
     {
         char[] buffer = new char[4_096];
         StringBuilder builder = new(Math.Min(maxCharacters, 16_384));
         bool truncated = false;
-        int read;
-        while ((read = await reader.ReadAsync(buffer.AsMemory()).ConfigureAwait(false)) > 0)
+        try
         {
-            int remaining = maxCharacters - builder.Length;
-            if (remaining > 0)
+            int read;
+            while ((read = await reader.ReadAsync(buffer.AsMemory(), cancellationToken).ConfigureAwait(false)) > 0)
             {
-                builder.Append(buffer, 0, Math.Min(remaining, read));
-            }
+                int remaining = maxCharacters - builder.Length;
+                if (remaining > 0)
+                {
+                    builder.Append(buffer, 0, Math.Min(remaining, read));
+                }
 
-            if (read > remaining)
-            {
-                truncated = true;
+                if (read > remaining)
+                {
+                    truncated = true;
+                }
             }
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            // Timeout/cancel owns the business outcome. Return the bounded tail
+            // already observed instead of leaving a pipe read pending after kill.
         }
 
         return new BoundedText(builder.ToString(), truncated);

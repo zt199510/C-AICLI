@@ -86,6 +86,53 @@ public sealed class TurnExecutionApplicationServiceTests
         Assert.True(test.Composer.Clear(test.WorkspaceId, test.WorkspaceRoot, test.ThreadId, after.Revision, "clear-second").Succeeded);
     }
 
+    [Fact]
+    public void Restart_ExplicitlyRecoversStaleRunningTurnAndIsIdempotent()
+    {
+        using Harness test = new("[pause] recover this controlled write");
+        TurnExecutionStateProjection started = test.Start("start-crash").Data!;
+        ThreadStoreMutationResult running = test.Threads.TransitionTurn(
+            test.ThreadId,
+            started.TurnId,
+            started.ThreadRevision,
+            TurnStatus.Running,
+            test.Now.AddSeconds(1));
+        Assert.True(running.Succeeded, running.Diagnostic?.SafeMessage);
+        TurnRecord stale = Assert.Single(running.Aggregate!.Turns);
+
+        var request = new TurnRestartRequest(
+            test.Snapshot,
+            test.ThreadId,
+            stale.TurnId,
+            running.Aggregate.Record.Revision,
+            stale.Revision,
+            Confirmed: true,
+            ClientMutationId: "restart-after-crash");
+        ApplicationResult<TurnExecutionStateProjection> restarted = test.Service.Restart(request);
+        ApplicationResult<TurnExecutionStateProjection> replayed = test.Service.Restart(request);
+
+        Assert.True(restarted.Succeeded, restarted.Error?.SafeMessage);
+        Assert.True(replayed.Succeeded, replayed.Error?.SafeMessage);
+        Assert.True(replayed.Data!.Idempotent);
+        Assert.Equal(restarted.Data!.TurnId, replayed.Data.TurnId);
+        ThreadAggregate aggregate = test.Threads.Read(test.ThreadId).Aggregate!;
+        Assert.Equal(2, aggregate.Turns.Count);
+        TurnRecord source = aggregate.Turns[0];
+        TurnRecord attempt = aggregate.Turns[1];
+        Assert.Equal(TurnStatus.Failed, source.Status);
+        Assert.Equal("interrupted", source.StopReason);
+        Assert.Equal("interrupted", source.ErrorCode);
+        Assert.True(source.RecoveryRequired);
+        Assert.Null(source.ActiveApproval);
+        Assert.NotEqual(source.TurnId, attempt.TurnId);
+        Assert.Equal(source.TurnId, attempt.SourceCorrelation);
+        Assert.Equal("desktop-restart", attempt.Mode);
+        Assert.Equal(attempt.TurnId, aggregate.Record.ActiveTurnId);
+        Assert.Equal(1, aggregate.Record.MutationReceipts.Count(receipt => receipt.MutationId == "restart-after-crash"));
+        Assert.Contains(test.Threads.ReadTimelinePage(test.ThreadId, 0, 100).Items,
+            item => item.Payload.Warning?.Code == "interrupted");
+    }
+
     private sealed class Harness : IDisposable
     {
         public Harness(string prompt)

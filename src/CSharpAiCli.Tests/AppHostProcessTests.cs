@@ -133,6 +133,28 @@ public sealed class AppHostProcessTests
         Assert.DoesNotContain(secretSentinel, diagnostics, StringComparison.Ordinal);
     }
 
+    [Theory]
+    [InlineData("Content-Len", "frame-header-incomplete")]
+    [InlineData("Content-Length: 512\r\n\r\n{\"jsonrpc\":\"2.0\"}", "frame-body-incomplete")]
+    public async Task Real_process_rejects_partial_eof_without_echoing_payload(
+        string partialFrame,
+        string expectedCode)
+    {
+        using Process process = StartProcess();
+        const string secretSentinel = "partial-frame-secret";
+        byte[] partial = Encoding.ASCII.GetBytes(partialFrame + secretSentinel);
+        await process.StandardInput.BaseStream.WriteAsync(partial);
+        await process.StandardInput.BaseStream.FlushAsync();
+        process.StandardInput.Close();
+        using CancellationTokenSource exitTimeout = new(TimeSpan.FromSeconds(10));
+        await process.WaitForExitAsync(exitTimeout.Token);
+        string diagnostics = await process.StandardError.ReadToEndAsync();
+
+        Assert.Equal(2, process.ExitCode);
+        Assert.Contains(expectedCode, diagnostics, StringComparison.Ordinal);
+        Assert.DoesNotContain(secretSentinel, diagnostics, StringComparison.Ordinal);
+    }
+
     [Fact]
     public async Task Real_process_cancels_session_on_stdin_disconnect()
     {

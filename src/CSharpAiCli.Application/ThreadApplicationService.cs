@@ -144,7 +144,12 @@ public sealed class ThreadApplicationService
         }
 
         var diagnostics = new List<ApplicationDiagnostic>();
-        TurnSummaryProjection[] turns = read.Aggregate.Turns.Select(turn => ProjectTurn(turn, request.Snapshot, diagnostics, cancellationToken)).ToArray();
+        TurnSummaryProjection[] turns = read.Aggregate.Turns.Select(turn => ProjectTurn(
+            turn,
+            request.Snapshot,
+            diagnostics,
+            cancellationToken,
+            read.RecoveryRequired && turn.TurnId == read.Aggregate.Record.ActiveTurnId)).ToArray();
         TimelineItemProjection[] items = timeline.Items.Select(item => ProjectItem(item, request.Snapshot, diagnostics, cancellationToken)).ToArray();
         ThreadDetailProjection detail = new(
             ProjectSummary(read.Aggregate.Record),
@@ -587,7 +592,8 @@ public sealed class ThreadApplicationService
         TurnRecord turn,
         CliEnvironmentSnapshot snapshot,
         List<ApplicationDiagnostic> diagnostics,
-        CancellationToken cancellationToken) => new(
+        CancellationToken cancellationToken,
+        bool recoveryRequired = false) => new(
         turn.TurnId,
         turn.Ordinal,
         turn.Revision,
@@ -602,7 +608,7 @@ public sealed class ThreadApplicationService
         turn.TimelineFirstSequence,
         turn.TimelineLastSequence,
         turn.TimelineItemCount,
-        turn.RecoveryRequired,
+        turn.RecoveryRequired || recoveryRequired,
         turn.ActiveApproval is null ? null : ProjectApproval(turn.ActiveApproval));
 
     private static DurableApprovalProjection ProjectApproval(DurableApprovalRequestRecord value) => new(
