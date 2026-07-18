@@ -87,6 +87,7 @@ describe("AppHost server message union", () => {
     workspaceId: "workspace-1",
     threadId: "thread-1",
     revision: 2,
+    committedSequence: 0,
     changeKind: "renamed",
     emittedAtUtc: "2026-07-17T04:00:00.000Z",
   };

@@ -35,6 +35,9 @@ internal sealed class DesktopThreadNotificationSequencer
                 DesktopProtocolDefinition.ThreadRenameMethod => "renamed",
                 DesktopProtocolDefinition.ThreadArchiveMethod => "archived",
                 DesktopProtocolDefinition.ThreadDeleteMethod => "deleted",
+                DesktopProtocolDefinition.TurnStartMethod or DesktopProtocolDefinition.TurnCancelMethod or
+                DesktopProtocolDefinition.ApprovalResolveMethod or DesktopProtocolDefinition.TurnResumeMethod or
+                DesktopProtocolDefinition.TurnRestartMethod => "updated",
                 _ => null
             };
             if (changeKind is null ||
@@ -50,13 +53,17 @@ internal sealed class DesktopThreadNotificationSequencer
 
             string? threadId = threadIdElement.GetString();
             long revision;
-            if (data.TryGetProperty("revision", out JsonElement revisionElement))
+            if (data.TryGetProperty("revision", out JsonElement revisionElement) ||
+                data.TryGetProperty("threadRevision", out revisionElement))
             {
                 revision = revisionElement.GetInt64();
             }
             else
             {
-                revision = request.RootElement.GetProperty("params").GetProperty("expectedRevision").GetInt64();
+                JsonElement requestParams = request.RootElement.GetProperty("params");
+                revision = requestParams.TryGetProperty("expectedRevision", out JsonElement expected)
+                    ? expected.GetInt64()
+                    : requestParams.GetProperty("expectedThreadRevision").GetInt64();
             }
 
             if (string.IsNullOrWhiteSpace(threadId))
@@ -71,6 +78,9 @@ internal sealed class DesktopThreadNotificationSequencer
                 WorkspaceId = workspaceId,
                 ThreadId = threadId,
                 Revision = revision,
+                CommittedSequence = data.TryGetProperty("committedSequence", out JsonElement committed)
+                    ? committed.GetInt64()
+                    : 0,
                 ChangeKind = changeKind,
                 EmittedAtUtc = timeProvider.GetUtcNow()
             };
@@ -88,5 +98,26 @@ internal sealed class DesktopThreadNotificationSequencer
         {
             return null;
         }
+    }
+
+    public byte[] CreateDirty(string workspaceId, string threadId, long revision, long committedSequence)
+    {
+        ThreadChangedParams parameters = new()
+        {
+            SchemaVersion = DesktopProtocolDefinition.SchemaVersion,
+            EventSequence = Interlocked.Increment(ref sequence),
+            WorkspaceId = workspaceId,
+            ThreadId = threadId,
+            Revision = revision,
+            CommittedSequence = committedSequence,
+            ChangeKind = "updated",
+            EmittedAtUtc = timeProvider.GetUtcNow()
+        };
+        return JsonSerializer.SerializeToUtf8Bytes(new
+        {
+            jsonrpc = "2.0",
+            method = DesktopProtocolDefinition.ThreadChangedNotification,
+            @params = parameters
+        }, JsonOptions);
     }
 }

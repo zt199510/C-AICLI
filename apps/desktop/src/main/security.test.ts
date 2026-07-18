@@ -42,6 +42,11 @@ describe("desktop security baseline", () => {
       "composer:get",
       "composer:enqueue",
       "composer:clear",
+      "turn:start",
+      "turn:cancel",
+      "approval:resolve",
+      "turn:resume",
+      "turn:restart",
       "runtime:status",
     ]);
     const ready = createRuntimeStatus("runtime-ready");

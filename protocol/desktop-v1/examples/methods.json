@@ -5,20 +5,20 @@
       "params": {
         "schemaVersion": 1,
         "protocolVersion": "desktop-v1",
-        "contractSha256": "1a66bec61e044dd7e684f32361053fc534ff78d9eb27b8bbfc66675ef8f7aa3a",
+        "contractSha256": "ad70588ffa3d51e8550d5bbb57d88901ed141563f1ce7ff680505adcb8012e1e",
         "clientName": "desktop-example",
         "clientVersion": "0.6.0",
         "clientInstanceId": "example-client-1",
-        "requestedCapabilities": ["framed-json-rpc", "workspace-session", "application-outcome", "composer.controlled-context"]
+        "requestedCapabilities": ["framed-json-rpc", "workspace-session", "application-outcome", "composer.controlled-context", "turn.write-path"]
       },
       "result": {
         "schemaVersion": 1,
         "protocolVersion": "desktop-v1",
-        "contractSha256": "1a66bec61e044dd7e684f32361053fc534ff78d9eb27b8bbfc66675ef8f7aa3a",
+        "contractSha256": "ad70588ffa3d51e8550d5bbb57d88901ed141563f1ce7ff680505adcb8012e1e",
         "serverVersion": "0.6.0",
         "serverInstanceId": "server_0123456789abcdef01234567",
-        "negotiatedCapabilities": ["framed-json-rpc", "workspace-session", "application-outcome", "composer.controlled-context"],
-        "methods": ["app.initialize", "app.cancel", "app.shutdown", "workspace.open", "thread.list", "thread.get", "thread.create", "thread.rename", "thread.archive", "thread.delete", "catalog.list", "context.search", "context.resolve", "composer.get", "composer.enqueue", "composer.clear", "changes.get", "report.list", "report.get", "artifact.list", "artifact.get"],
+        "negotiatedCapabilities": ["framed-json-rpc", "workspace-session", "application-outcome", "composer.controlled-context", "turn.write-path"],
+        "methods": ["app.initialize", "app.cancel", "app.shutdown", "workspace.open", "thread.list", "thread.get", "thread.create", "thread.rename", "thread.archive", "thread.delete", "catalog.list", "context.search", "context.resolve", "composer.get", "composer.enqueue", "composer.clear", "turn.start", "turn.cancel", "approval.resolve", "turn.resume", "turn.restart", "changes.get", "report.list", "report.get", "artifact.list", "artifact.get"],
         "notifications": [],
         "limits": {
           "maxHeaderBytes": 8192,
@@ -49,7 +49,14 @@
           "maxContextScannedEntries": 5000,
           "maxContextSearchQueryBytes": 256,
           "maxRelativePathBytes": 4096,
-          "maxQueueMutationIdBytes": 128
+          "maxQueueMutationIdBytes": 128,
+          "maxExecutionInputBytes": 262144,
+          "maxTimelineAppendItems": 32,
+          "maxTimelineAppendBytes": 262144,
+          "maxAssistantPreviewBytes": 8192,
+          "maxApprovalSummaryBytes": 4096,
+          "approvalLifetimeMs": 1800000,
+          "cancelAcknowledgementMs": 5000
         },
         "security": {
           "rendererNodeAccess": false,
@@ -136,6 +143,31 @@
       "result": { "schemaVersion": 1, "succeeded": false, "data": null, "error": { "code": "composer-not-found", "category": "not-found", "safeMessage": "Pending composer intent was not found.", "retryable": false }, "diagnostics": [], "truncated": false }
     },
     {
+      "method": "turn.start",
+      "params": { "schemaVersion": 1, "threadId": "thread_0123456789abcdef01234567", "expectedThreadRevision": 1, "expectedQueueRevision": 1, "clientMutationId": "turn-start-example-1" },
+      "result": { "schemaVersion": 1, "succeeded": false, "data": null, "error": { "code": "turn-start-conflict", "category": "conflict", "safeMessage": "Turn could not be started.", "retryable": false }, "diagnostics": [], "truncated": false }
+    },
+    {
+      "method": "turn.cancel",
+      "params": { "schemaVersion": 1, "threadId": "thread_0123456789abcdef01234567", "turnId": "turn_0123456789abcdef01234567", "expectedThreadRevision": 2, "expectedTurnRevision": 1, "clientMutationId": "turn-cancel-example-1" },
+      "result": { "schemaVersion": 1, "succeeded": false, "data": null, "error": { "code": "turn-cancel-conflict", "category": "conflict", "safeMessage": "Turn could not be canceled.", "retryable": false }, "diagnostics": [], "truncated": false }
+    },
+    {
+      "method": "approval.resolve",
+      "params": { "schemaVersion": 1, "threadId": "thread_0123456789abcdef01234567", "turnId": "turn_0123456789abcdef01234567", "requestId": "approval_0123456789abcdef", "decision": "approve", "expectedThreadRevision": 3, "expectedTurnRevision": 2, "expectedApprovalRevision": 1, "clientMutationId": "approval-example-1" },
+      "result": { "schemaVersion": 1, "succeeded": false, "data": null, "error": { "code": "approval-stale", "category": "conflict", "safeMessage": "Approval request is stale.", "retryable": false }, "diagnostics": [], "truncated": false }
+    },
+    {
+      "method": "turn.resume",
+      "params": { "schemaVersion": 1, "threadId": "thread_0123456789abcdef01234567", "turnId": "turn_0123456789abcdef01234567", "expectedThreadRevision": 4, "expectedTurnRevision": 3, "checkpointId": "checkpoint_0123456789abcdef", "clientMutationId": "turn-resume-example-1" },
+      "result": { "schemaVersion": 1, "succeeded": false, "data": null, "error": { "code": "restart-required", "category": "conflict", "safeMessage": "A safe resume checkpoint is unavailable.", "retryable": false }, "diagnostics": [], "truncated": false }
+    },
+    {
+      "method": "turn.restart",
+      "params": { "schemaVersion": 1, "threadId": "thread_0123456789abcdef01234567", "sourceTurnId": "turn_0123456789abcdef01234567", "expectedThreadRevision": 4, "expectedSourceTurnRevision": 3, "confirmed": true, "clientMutationId": "turn-restart-example-1" },
+      "result": { "schemaVersion": 1, "succeeded": false, "data": null, "error": { "code": "restart-source-invalid", "category": "conflict", "safeMessage": "Source turn cannot be restarted.", "retryable": false }, "diagnostics": [], "truncated": false }
+    },
+    {
       "method": "changes.get",
       "params": { "schemaVersion": 1 },
       "result": { "schemaVersion": 1, "succeeded": false, "data": null, "error": { "code": "changes-unavailable", "category": "unavailable", "safeMessage": "Changes are unavailable.", "retryable": true }, "diagnostics": [], "truncated": false }
@@ -170,6 +202,7 @@
         "workspaceId": "ws_0123456789abcdef01234567",
         "threadId": "thread_0123456789abcdef01234567",
         "revision": 0,
+        "committedSequence": 0,
         "changeKind": "created",
         "emittedAtUtc": "2026-07-16T12:00:00Z"
       }

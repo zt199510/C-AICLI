@@ -336,8 +336,22 @@ export function useDesktopController(bridge: DesktopBridge | undefined) {
       }
       dispatchComposer({ type: "snapshot", snapshot: authoritative.data });
       dispatchComposer({ type: "clear-draft", key });
+      const started = await bridge.startTurn({
+        threadId: snapshot.selectedThreadId,
+        expectedThreadRevision: snapshot.detail.thread.revision,
+        expectedQueueRevision: authoritative.data.queueRevision,
+        clientMutationId: `start-${intentId}`,
+      });
+      if (!started.succeeded || !started.data) {
+        dispatchComposer({ type: "status", key, status: "error", error: safeFailure(started.error?.safeMessage) });
+        return;
+      }
+      const refreshed = await bridge.getComposer({ threadId: snapshot.selectedThreadId });
+      if (refreshed.succeeded && refreshed.data) dispatchComposer({ type: "snapshot", snapshot: refreshed.data });
+      await refreshThreads(epoch);
+      await fetchThread(snapshot.selectedThreadId, 0, false, epoch, selectionEpoch);
     } catch { dispatchComposer({ type: "status", key, status: "error", error: "Prompt could not be queued." }); }
-  }, [bridge]);
+  }, [bridge, fetchThread, refreshThreads]);
 
   const clearComposer = useCallback(async () => {
     if (!bridge) return;
@@ -349,6 +363,91 @@ export function useDesktopController(bridge: DesktopBridge | undefined) {
       if (result.succeeded && result.data) dispatchComposer({ type: "snapshot", snapshot: result.data });
     } catch { /* authoritative pending state remains visible */ }
   }, [bridge]);
+
+  const cancelTurn = useCallback(async (turnId: string, turnRevision: number) => {
+    if (!bridge) return "Desktop bridge unavailable.";
+    const snapshot = stateRef.current;
+    if (!snapshot.selectedThreadId || !snapshot.detail) return "Select a thread first.";
+    try {
+      const result = await bridge.cancelTurn({
+        threadId: snapshot.selectedThreadId,
+        turnId,
+        expectedThreadRevision: snapshot.detail.thread.revision,
+        expectedTurnRevision: turnRevision,
+        clientMutationId: `cancel-${crypto.randomUUID()}`,
+      });
+      await refreshThreads(snapshot.contextEpoch);
+      await fetchThread(snapshot.selectedThreadId, 0, false, snapshot.contextEpoch, snapshot.selectionEpoch);
+      return result.succeeded ? null : safeFailure(result.error?.safeMessage);
+    } catch {
+      return "Turn could not be canceled.";
+    }
+  }, [bridge, fetchThread, refreshThreads]);
+
+  const resolveApproval = useCallback(async (turnId: string, requestId: string, approvalRevision: number, turnRevision: number, decision: "approve" | "deny") => {
+    if (!bridge) return "Desktop bridge unavailable.";
+    const snapshot = stateRef.current;
+    if (!snapshot.selectedThreadId || !snapshot.detail) return "Select a thread first.";
+    try {
+      const result = await bridge.resolveApproval({
+        threadId: snapshot.selectedThreadId,
+        turnId,
+        requestId,
+        decision,
+        expectedThreadRevision: snapshot.detail.thread.revision,
+        expectedTurnRevision: turnRevision,
+        expectedApprovalRevision: approvalRevision,
+        clientMutationId: `approval-${crypto.randomUUID()}`,
+      });
+      await refreshThreads(snapshot.contextEpoch);
+      await fetchThread(snapshot.selectedThreadId, 0, false, snapshot.contextEpoch, snapshot.selectionEpoch);
+      return result.succeeded ? null : safeFailure(result.error?.safeMessage);
+    } catch {
+      return "Approval could not be resolved.";
+    }
+  }, [bridge, fetchThread, refreshThreads]);
+
+  const resumeTurn = useCallback(async (turnId: string, turnRevision: number) => {
+    if (!bridge) return "Desktop bridge unavailable.";
+    const snapshot = stateRef.current;
+    if (!snapshot.selectedThreadId || !snapshot.detail) return "Select a thread first.";
+    try {
+      const result = await bridge.resumeTurn({
+        threadId: snapshot.selectedThreadId,
+        turnId,
+        expectedThreadRevision: snapshot.detail.thread.revision,
+        expectedTurnRevision: turnRevision,
+        checkpointId: "checkpoint-unavailable",
+        clientMutationId: `resume-${crypto.randomUUID()}`,
+      });
+      await refreshThreads(snapshot.contextEpoch);
+      await fetchThread(snapshot.selectedThreadId, 0, false, snapshot.contextEpoch, snapshot.selectionEpoch);
+      return result.succeeded ? null : safeFailure(result.error?.safeMessage);
+    } catch {
+      return "Turn could not be resumed.";
+    }
+  }, [bridge, fetchThread, refreshThreads]);
+
+  const restartTurn = useCallback(async (sourceTurnId: string, sourceTurnRevision: number) => {
+    if (!bridge) return "Desktop bridge unavailable.";
+    const snapshot = stateRef.current;
+    if (!snapshot.selectedThreadId || !snapshot.detail) return "Select a thread first.";
+    try {
+      const result = await bridge.restartTurn({
+        threadId: snapshot.selectedThreadId,
+        sourceTurnId,
+        expectedThreadRevision: snapshot.detail.thread.revision,
+        expectedSourceTurnRevision: sourceTurnRevision,
+        confirmed: true,
+        clientMutationId: `restart-${crypto.randomUUID()}`,
+      });
+      await refreshThreads(snapshot.contextEpoch);
+      await fetchThread(snapshot.selectedThreadId, 0, false, snapshot.contextEpoch, snapshot.selectionEpoch);
+      return result.succeeded ? null : safeFailure(result.error?.safeMessage);
+    } catch {
+      return "Turn could not be restarted.";
+    }
+  }, [bridge, fetchThread, refreshThreads]);
 
   return {
     state,
@@ -376,6 +475,10 @@ export function useDesktopController(bridge: DesktopBridge | undefined) {
     pickComposerFolder: () => pickContext("folder"),
     enqueueComposer,
     clearComposer,
+    cancelTurn,
+    resolveApproval,
+    resumeTurn,
+    restartTurn,
   };
 }
 

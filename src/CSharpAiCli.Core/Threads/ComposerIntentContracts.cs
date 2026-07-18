@@ -17,6 +17,16 @@ public static class ComposerIntentLimits
     public const int MaxRelativePathBytes = 4_096;
     public const int MaxMutationIdBytes = 128;
     public const int MaxMutationReceipts = 64;
+    public const int MaxExecutionInputBytes = 256 * 1024;
+}
+
+public static class ComposerQueueLifecycle
+{
+    public const string Empty = "empty";
+    public const string Pending = "pending";
+    public const string Claimed = "claimed";
+
+    public static bool IsKnown(string? value) => value is Empty or Pending or Claimed;
 }
 
 public static class ComposerDelivery
@@ -91,24 +101,39 @@ public sealed record PendingComposerIntentRecord
     public DateTimeOffset CreatedAtUtc { get; init; }
 }
 
+public sealed record ComposerIntentClaimRecord
+{
+    public string ClaimId { get; init; } = string.Empty;
+    public string IntentId { get; init; } = string.Empty;
+    public string TurnId { get; init; } = string.Empty;
+    public string CanonicalInputSha256 { get; init; } = string.Empty;
+    public string StartMutationId { get; init; } = string.Empty;
+    public long SourceQueueRevision { get; init; }
+    public DateTimeOffset ClaimedAtUtc { get; init; }
+}
+
 public sealed record ComposerMutationReceiptRecord
 {
     public string MutationId { get; init; } = string.Empty;
     public string PayloadSha256 { get; init; } = string.Empty;
     public string Operation { get; init; } = string.Empty;
     public long ResultRevision { get; init; }
+    public string? TurnId { get; init; }
+    public string? CanonicalInputSha256 { get; init; }
 }
 
 public sealed record ComposerQueueRecord
 {
-    public const int CurrentSchemaVersion = 1;
+    public const int CurrentSchemaVersion = 2;
 
     public int SchemaVersion { get; init; } = CurrentSchemaVersion;
     public string WorkspaceId { get; init; } = string.Empty;
     public string WorkspaceRootIdentity { get; init; } = string.Empty;
     public string ThreadId { get; init; } = string.Empty;
     public long Revision { get; init; }
+    public string Lifecycle { get; init; } = ComposerQueueLifecycle.Empty;
     public PendingComposerIntentRecord? PendingIntent { get; init; }
+    public ComposerIntentClaimRecord? Claim { get; init; }
     public IReadOnlyList<ComposerMutationReceiptRecord> MutationReceipts { get; init; } = [];
 }
 
@@ -125,7 +150,7 @@ public static class ComposerIntentContractValidator
         ArgumentNullException.ThrowIfNull(record);
         if (record.SchemaVersion != ComposerQueueRecord.CurrentSchemaVersion ||
             string.IsNullOrWhiteSpace(record.WorkspaceId) || string.IsNullOrWhiteSpace(record.WorkspaceRootIdentity) ||
-            !ThreadIdentity.IsThreadId(record.ThreadId) || record.Revision < 0 ||
+            !ThreadIdentity.IsThreadId(record.ThreadId) || record.Revision < 0 || !ComposerQueueLifecycle.IsKnown(record.Lifecycle) ||
             record.MutationReceipts.Count > ComposerIntentLimits.MaxMutationReceipts)
         {
             throw Corrupt("Composer queue envelope is invalid.");
@@ -142,15 +167,48 @@ public static class ComposerIntentContractValidator
             }
         }
 
+
+        if ((record.Lifecycle == ComposerQueueLifecycle.Empty) != (record.PendingIntent is null) ||
+            (record.Lifecycle == ComposerQueueLifecycle.Claimed) != (record.Claim is not null) ||
+            (record.Lifecycle == ComposerQueueLifecycle.Pending && record.Claim is not null))
+        {
+            throw Corrupt("Composer queue lifecycle is inconsistent.");
+        }
+
+        if (record.Claim is not null)
+        {
+            ValidateClaim(record.Claim);
+            if (record.PendingIntent is null || record.Claim.IntentId != record.PendingIntent.IntentId ||
+                record.Claim.SourceQueueRevision < 0 || record.Claim.SourceQueueRevision >= record.Revision)
+            {
+                throw Corrupt("Composer claim binding is invalid.");
+            }
+        }
+
         var ids = new HashSet<string>(StringComparer.Ordinal);
         foreach (ComposerMutationReceiptRecord receipt in record.MutationReceipts)
         {
             if (!IsSafeMutationId(receipt.MutationId) || !ids.Add(receipt.MutationId) ||
-                !IsSha256(receipt.PayloadSha256) || receipt.Operation is not ("enqueue" or "clear") ||
-                receipt.ResultRevision < 0 || receipt.ResultRevision > record.Revision)
+                !IsSha256(receipt.PayloadSha256) || receipt.Operation is not ("enqueue" or "clear" or "claim" or "finalize") ||
+                receipt.ResultRevision < 0 || receipt.ResultRevision > record.Revision ||
+                ((receipt.TurnId is null) != (receipt.CanonicalInputSha256 is null)) ||
+                (receipt.TurnId is not null && (!ThreadIdentity.IsTurnId(receipt.TurnId) || !IsSha256(receipt.CanonicalInputSha256))))
             {
                 throw Corrupt("Composer mutation receipt is invalid.");
             }
+        }
+    }
+
+
+    public static void ValidateClaim(ComposerIntentClaimRecord claim)
+    {
+        ArgumentNullException.ThrowIfNull(claim);
+        if (!IsOpaqueId(claim.ClaimId, "claim_") || !IsOpaqueId(claim.IntentId, "intent_") ||
+            !ThreadIdentity.IsTurnId(claim.TurnId) || !IsSha256(claim.CanonicalInputSha256) ||
+            !IsSafeMutationId(claim.StartMutationId) || claim.SourceQueueRevision < 0 ||
+            claim.ClaimedAtUtc == default || claim.ClaimedAtUtc.Offset != TimeSpan.Zero)
+        {
+            throw Invalid("Composer intent claim is invalid.");
         }
     }
 
@@ -206,6 +264,22 @@ public static class ComposerIntentContractValidator
         Utf8(value) <= ComposerIntentLimits.MaxRelativePathBytes && !Path.IsPathRooted(value) &&
         value != ".." && !value.StartsWith(".." + Path.DirectorySeparatorChar, StringComparison.Ordinal) &&
         !value.StartsWith("../", StringComparison.Ordinal);
+
+    public static string ComputeCanonicalInputSha256(PendingComposerIntentRecord intent)
+    {
+        ArgumentNullException.ThrowIfNull(intent);
+        ValidateIntent(intent);
+        byte[] canonical = System.Text.Json.JsonSerializer.SerializeToUtf8Bytes(intent, new System.Text.Json.JsonSerializerOptions(System.Text.Json.JsonSerializerDefaults.Web));
+        return Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(canonical)).ToLowerInvariant();
+    }
+
+    public static string CreateDeterministicTurnId(string intentId, string canonicalInputSha256)
+    {
+        if (!IsOpaqueId(intentId, "intent_") || !IsSha256(canonicalInputSha256))
+            throw Invalid("Deterministic turn binding is invalid.");
+        byte[] digest = System.Security.Cryptography.SHA256.HashData(Encoding.UTF8.GetBytes(intentId + "\0" + canonicalInputSha256));
+        return "turn_" + Convert.ToHexString(digest).ToLowerInvariant()[..24];
+    }
 
     private static bool IsOpaqueId(string? value, string prefix) => value is { Length: <= 96 } &&
         value.StartsWith(prefix, StringComparison.Ordinal) && value[prefix.Length..].All(char.IsAsciiLetterOrDigit);

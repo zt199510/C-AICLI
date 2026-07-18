@@ -88,6 +88,15 @@ button:focus-visible { outline:2px solid #2176c7; outline-offset:2px; }
 .timeline-payload { margin-top:8px; color:#555d62; font-size:12px; overflow-wrap:anywhere; }.timeline-payload summary { cursor:pointer; }.timeline-payload pre,.review-section pre { max-width:100%; overflow:auto; white-space:pre-wrap; overflow-wrap:anywhere; font:11px/1.45 Consolas,monospace; background:#f5f6f7; padding:8px; border-radius:5px; }
 .source-pointer { margin-top:8px; color:#747c81; font:10px/1.4 Consolas,monospace; overflow-wrap:anywhere; }
 .empty-timeline { display:grid; place-items:center; min-height:180px; color:#7b8287; }.load-more { display:flex; justify-content:center; padding:14px; }
+.task-controls { display:grid; gap:8px; border-top:1px solid #d8dadd; background:#fbfcfd; padding:8px clamp(8px,2vw,18px); }
+.task-control-row,.approval-panel,.recovery-actions { min-width:0; display:flex; align-items:center; justify-content:space-between; gap:10px; }
+.task-control-summary { min-width:0; display:flex; align-items:center; gap:8px; color:#33383c; font-size:13px; }
+.approval-panel,.recovery-actions { border:1px solid #e0d5bd; border-radius:6px; background:#fff8e6; padding:8px 10px; }
+.approval-copy { min-width:0; display:grid; gap:3px; font-size:12px; }
+.approval-copy strong,.approval-copy span,.recovery-actions span { min-width:0; overflow-wrap:anywhere; }
+.approval-copy span,.recovery-actions span { color:#675b42; }
+.approval-actions { flex:0 0 auto; display:flex; align-items:center; gap:6px; }
+.danger-command { border-color:#cda3a3; color:#853535; }
 .composer { position:relative; z-index:2; min-width:0; border-top:1px solid #d8dadd; background:#fff; padding:9px clamp(8px,2vw,18px) 8px; box-shadow:0 -5px 18px #1c28300b; }
 .queued-intent { display:flex; align-items:center; justify-content:space-between; gap:10px; border:1px solid #b8d6c4; border-radius:7px; background:#eef8f2; padding:8px 10px; color:#285e3e; font-size:12px; }
 .queued-intent>div { min-width:0; display:flex; flex-direction:column; gap:2px; }.queued-intent button,.composer-tools button { display:inline-flex; align-items:center; gap:5px; border:1px solid #c9cdd1; border-radius:5px; background:#fff; color:#41484d; padding:5px 8px; cursor:pointer; }
@@ -141,6 +150,8 @@ button:focus-visible { outline:2px solid #2176c7; outline-offset:2px; }
   .runtime-status span:last-child { max-width:150px; overflow:hidden; text-overflow:ellipsis; }
   .task-toolbar { padding-inline:8px; }
   .command-button { padding-inline:8px; }
+  .task-control-row,.approval-panel,.recovery-actions,.approval-actions { align-items:stretch; flex-direction:column; }
+  .approval-actions { width:100%; }
   .composer { padding-inline:7px; }.composer-footer { align-items:stretch; flex-direction:column; }.composer-tools,.composer-summary { justify-content:space-between; width:100%; }.composer textarea { min-height:52px; max-height:20vh; }.composer-summary>span { max-width:58vw; }
 }
 @media (prefers-reduced-motion:reduce) { .spin { animation:none; } }

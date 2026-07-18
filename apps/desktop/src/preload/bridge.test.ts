@@ -16,6 +16,7 @@ describe("preload bridge", () => {
     expect(Object.isFrozen(bridge)).toBe(true);
     expect(Object.keys(bridge).sort()).toEqual([
       "archiveThread",
+      "cancelTurn",
       "clearComposer",
       "createThread",
       "enqueueComposer",
@@ -36,8 +37,12 @@ describe("preload bridge", () => {
       "pickFile",
       "pickFolder",
       "renameThread",
+      "resolveApproval",
       "restartRuntime",
+      "restartTurn",
+      "resumeTurn",
       "searchContext",
+      "startTurn",
     ]);
   });
 

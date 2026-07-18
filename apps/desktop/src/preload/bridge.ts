@@ -4,6 +4,7 @@ import {
   isChangesGetResult,
   isCatalogListResult,
   isComposerStateResult,
+  isTurnExecutionStateResult,
   isContextSearchResult,
   isReportGetResult,
   isReportListResult,
@@ -32,6 +33,11 @@ import {
   isGetThreadCommand,
   isRenameThreadCommand,
   isRuntimeStatus,
+  isStartTurnCommand,
+  isCancelTurnCommand,
+  isResolveApprovalCommand,
+  isResumeTurnCommand,
+  isRestartTurnCommand,
   type ArchiveThreadCommand,
   type CreateThreadCommand,
   type DesktopBridge,
@@ -46,6 +52,11 @@ import {
   type SearchContextCommand,
   type RenameThreadCommand,
   type RuntimeStatus,
+  type StartTurnCommand,
+  type CancelTurnCommand,
+  type ResolveApprovalCommand,
+  type ResumeTurnCommand,
+  type RestartTurnCommand,
 } from "../shared/bridge-contract";
 
 export interface IpcRendererAdapter {
@@ -130,6 +141,26 @@ export function createDesktopBridge(ipc: IpcRendererAdapter): DesktopBridge {
     clearComposer(command: ClearComposerCommand) {
       if (!isClearComposerCommand(command)) return Promise.reject(new Error("Invalid composer clear command."));
       return validated(IPC_CHANNELS.clearComposer, isComposerStateResult, command);
+    },
+    startTurn(command: StartTurnCommand) {
+      if (!isStartTurnCommand(command)) return Promise.reject(new Error("Invalid turn start command."));
+      return validated(IPC_CHANNELS.startTurn, isTurnExecutionStateResult, command);
+    },
+    cancelTurn(command: CancelTurnCommand) {
+      if (!isCancelTurnCommand(command)) return Promise.reject(new Error("Invalid turn cancel command."));
+      return validated(IPC_CHANNELS.cancelTurn, isTurnExecutionStateResult, command);
+    },
+    resolveApproval(command: ResolveApprovalCommand) {
+      if (!isResolveApprovalCommand(command)) return Promise.reject(new Error("Invalid approval command."));
+      return validated(IPC_CHANNELS.resolveApproval, isTurnExecutionStateResult, command);
+    },
+    resumeTurn(command: ResumeTurnCommand) {
+      if (!isResumeTurnCommand(command)) return Promise.reject(new Error("Invalid turn resume command."));
+      return validated(IPC_CHANNELS.resumeTurn, isTurnExecutionStateResult, command);
+    },
+    restartTurn(command: RestartTurnCommand) {
+      if (!isRestartTurnCommand(command)) return Promise.reject(new Error("Invalid turn restart command."));
+      return validated(IPC_CHANNELS.restartTurn, isTurnExecutionStateResult, command);
     },
     onRuntimeStatus(listener: (status: RuntimeStatus) => void) {
       const wrapped = (_event: unknown, value: unknown) => {

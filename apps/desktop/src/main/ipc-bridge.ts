@@ -5,6 +5,7 @@ import {
   isChangesGetResult,
   isCatalogListResult,
   isComposerStateResult,
+  isTurnExecutionStateResult,
   isContextResolveResult,
   isContextSearchResult,
   isReportGetResult,
@@ -30,6 +31,11 @@ import {
   isListCatalogCommand,
   isSearchContextCommand,
   isRuntimeStatus,
+  isStartTurnCommand,
+  isCancelTurnCommand,
+  isResolveApprovalCommand,
+  isResumeTurnCommand,
+  isRestartTurnCommand,
 } from "../shared/bridge-contract";
 import type { AppHostRuntime } from "./apphost-runtime";
 import { isRuntimeWindowAvailable } from "./window-lifecycle";
@@ -47,7 +53,8 @@ export interface DesktopIpcOptions {
     "getStatus" | "restart" | "openWorkspace" | "getWorkspaceSnapshot" |
     "listThreads" | "getThread" | "createThread" | "renameThread" | "archiveThread" |
     "getChanges" | "listReports" | "getReport" | "listArtifacts" | "getArtifact" |
-    "listCatalog" | "searchContext" | "resolveContext" | "getComposer" | "enqueueComposer" | "clearComposer">;
+    "listCatalog" | "searchContext" | "resolveContext" | "getComposer" | "enqueueComposer" | "clearComposer" |
+    "startTurn" | "cancelTurn" | "resolveApproval" | "resumeTurn" | "restartTurn">;
   dialog: DialogAdapter;
   getWindow(): BrowserWindow | null;
   isAllowedSender(event: IpcMainInvokeEvent): boolean;
@@ -179,6 +186,36 @@ export function registerDesktopIpc(options: DesktopIpcOptions): () => void {
     if (!isComposerStateResult(value)) throw new Error("Invalid composer result.");
     return value;
   });
+  options.ipcMain.handle(IPC_CHANNELS.startTurn, async (event, ...args) => {
+    const command = assertOne(event, args, isStartTurnCommand);
+    const value = await options.runtime.startTurn(command);
+    if (!isTurnExecutionStateResult(value)) throw new Error("Invalid turn start result.");
+    return value;
+  });
+  options.ipcMain.handle(IPC_CHANNELS.cancelTurn, async (event, ...args) => {
+    const command = assertOne(event, args, isCancelTurnCommand);
+    const value = await options.runtime.cancelTurn(command);
+    if (!isTurnExecutionStateResult(value)) throw new Error("Invalid turn cancel result.");
+    return value;
+  });
+  options.ipcMain.handle(IPC_CHANNELS.resolveApproval, async (event, ...args) => {
+    const command = assertOne(event, args, isResolveApprovalCommand);
+    const value = await options.runtime.resolveApproval(command);
+    if (!isTurnExecutionStateResult(value)) throw new Error("Invalid approval result.");
+    return value;
+  });
+  options.ipcMain.handle(IPC_CHANNELS.resumeTurn, async (event, ...args) => {
+    const command = assertOne(event, args, isResumeTurnCommand);
+    const value = await options.runtime.resumeTurn(command);
+    if (!isTurnExecutionStateResult(value)) throw new Error("Invalid turn resume result.");
+    return value;
+  });
+  options.ipcMain.handle(IPC_CHANNELS.restartTurn, async (event, ...args) => {
+    const command = assertOne(event, args, isRestartTurnCommand);
+    const value = await options.runtime.restartTurn(command);
+    if (!isTurnExecutionStateResult(value)) throw new Error("Invalid turn restart result.");
+    return value;
+  });
   options.ipcMain.handle(IPC_CHANNELS.getChanges, async (event, ...args) => {
     const command = assertOne(event, args, isGetChangesCommand);
     const value = await options.runtime.getChanges(command.sessionName);
@@ -228,6 +265,11 @@ export function registerDesktopIpc(options: DesktopIpcOptions): () => void {
       IPC_CHANNELS.getComposer,
       IPC_CHANNELS.enqueueComposer,
       IPC_CHANNELS.clearComposer,
+      IPC_CHANNELS.startTurn,
+      IPC_CHANNELS.cancelTurn,
+      IPC_CHANNELS.resolveApproval,
+      IPC_CHANNELS.resumeTurn,
+      IPC_CHANNELS.restartTurn,
       IPC_CHANNELS.getChanges,
       IPC_CHANNELS.listReports,
       IPC_CHANNELS.getReport,

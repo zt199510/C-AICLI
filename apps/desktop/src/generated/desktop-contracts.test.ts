@@ -134,7 +134,7 @@ async function validateFixture(source: JsonObject) {
 }
 
 describe("desktop-v1 contract source", () => {
-  it("freezes the Week 72 method and notification allowlists", async () => {
+  it("freezes the Week 73 method and notification allowlists", async () => {
     const contract = await readContract();
 
     expect(contract.protocolVersion).toBe("desktop-v1");
@@ -156,6 +156,11 @@ describe("desktop-v1 contract source", () => {
       "composer.get",
       "composer.enqueue",
       "composer.clear",
+      "turn.start",
+      "turn.cancel",
+      "approval.resolve",
+      "turn.resume",
+      "turn.restart",
       "changes.get",
       "report.list",
       "report.get",
@@ -171,6 +176,11 @@ describe("desktop-v1 contract source", () => {
       "thread.delete",
       "composer.enqueue",
       "composer.clear",
+      "turn.start",
+      "turn.cancel",
+      "approval.resolve",
+      "turn.resume",
+      "turn.restart",
     ]);
     expect(contract.methods.filter(({ timeout }) => timeout === "mutation").map(({ name }) => name))
       .toEqual(contract.methods.filter(({ mutation }) => mutation).map(({ name }) => name));
@@ -191,6 +201,7 @@ describe("desktop-v1 contract source", () => {
       { name: "application-outcome", required: true },
       { name: "composer.controlled-context", required: false },
       { name: "thread.changed", required: false },
+      { name: "turn.write-path", required: false },
     ]);
     expect(contract.errors.map(({ code }) => code)).toEqual([
       "parse-error",
@@ -247,6 +258,7 @@ describe("desktop-v1 contract source", () => {
       maxPromptBytes: 65_536,
       maxContextSelections: 32,
       maxCatalogSelections: 16,
+      maxExecutionInputBytes: 262_144,
       maxSingleFileBytes: 10_485_760,
       maxTotalFileBytes: 33_554_432,
       maxFolderFiles: 500,
@@ -256,6 +268,12 @@ describe("desktop-v1 contract source", () => {
       maxContextSearchQueryBytes: 256,
       maxRelativePathBytes: 4_096,
       maxQueueMutationIdBytes: 128,
+      maxTimelineAppendItems: 32,
+      maxTimelineAppendBytes: 262_144,
+      maxAssistantPreviewBytes: 8_192,
+      maxApprovalSummaryBytes: 4_096,
+      approvalLifetimeMs: 1_800_000,
+      cancelAcknowledgementMs: 5_000,
     });
   });
 
@@ -536,6 +554,7 @@ describe("desktop-v1 contract source", () => {
       workspaceId: "ws_0123456789abcdef01234567",
       threadId: "thread_0123456789abcdef01234567",
       revision: 0,
+      committedSequence: 0,
       changeKind: "created",
       emittedAtUtc: "2026-07-16T12:00:00+00:00",
     };

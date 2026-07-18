@@ -5,6 +5,44 @@ namespace CSharpAiCli.AppHost.Protocol;
 
 internal static class DesktopProtocolMapper
 {
+    public static TurnExecutionStateResult Map(ApplicationResult<TurnExecutionStateProjection> value) => new()
+    {
+        SchemaVersion = DesktopProtocolDefinition.SchemaVersion,
+        Succeeded = value.Succeeded,
+        Data = value.Data is null ? null : new TurnExecutionStateData
+        {
+            WorkspaceId = value.Data.WorkspaceId,
+            ThreadId = value.Data.ThreadId,
+            TurnId = value.Data.TurnId,
+            ThreadRevision = value.Data.ThreadRevision,
+            TurnRevision = value.Data.TurnRevision,
+            Status = value.Data.Status,
+            CommittedSequence = value.Data.CommittedSequence,
+            RecoveryRequired = value.Data.RecoveryRequired,
+            Idempotent = value.Data.Idempotent,
+            Approval = value.Data.Approval is null ? null : new ApprovalRequestData
+            {
+                RequestId = value.Data.Approval.RequestId,
+                WorkspaceId = value.Data.Approval.WorkspaceId,
+                ThreadId = value.Data.Approval.ThreadId,
+                TurnId = value.Data.Approval.TurnId,
+                TurnRevision = value.Data.Approval.TurnRevision,
+                ApprovalRevision = value.Data.Approval.ApprovalRevision,
+                PolicyIdentity = value.Data.Approval.PolicyIdentity,
+                PolicyRevision = value.Data.Approval.PolicyRevision,
+                Risk = value.Data.Approval.Risk,
+                Operation = value.Data.Approval.Operation,
+                TargetClass = value.Data.Approval.TargetClass,
+                SafeSummary = value.Data.Approval.SafeSummary,
+                CreatedAtUtc = value.Data.Approval.CreatedAtUtc,
+                ExpiresAtUtc = value.Data.Approval.ExpiresAtUtc
+            }
+        },
+        Error = Map(value.Error),
+        Diagnostics = Map(value.Diagnostics),
+        Truncated = value.Truncated
+    };
+
     public static ThreadListResult Map(ApplicationResult<ThreadListProjection> value) => new()
     {
         SchemaVersion = DesktopProtocolDefinition.SchemaVersion,
@@ -284,7 +322,9 @@ internal static class DesktopProtocolMapper
             SourcePointers = turn.SourcePointers.Select(Map).ToArray(),
             TimelineFirstSequence = turn.TimelineFirstSequence,
             TimelineLastSequence = turn.TimelineLastSequence,
-            TimelineItemCount = turn.TimelineItemCount
+            TimelineItemCount = turn.TimelineItemCount,
+            RecoveryRequired = turn.RecoveryRequired,
+            Approval = turn.Approval is null ? null : Map(turn.Approval)
         }).ToArray(),
         Timeline = value.Timeline.Select(item => new TimelineItemData
         {
@@ -312,6 +352,24 @@ internal static class DesktopProtocolMapper
         NextSequence = value.NextSequence,
         TimelineTruncated = value.TimelineTruncated,
         RecoveryRequired = value.RecoveryRequired
+    };
+
+    private static ApprovalRequestData Map(DurableApprovalProjection value) => new()
+    {
+        RequestId = value.RequestId,
+        WorkspaceId = value.WorkspaceId,
+        ThreadId = value.ThreadId,
+        TurnId = value.TurnId,
+        TurnRevision = value.TurnRevision,
+        ApprovalRevision = value.ApprovalRevision,
+        PolicyIdentity = value.PolicyIdentity,
+        PolicyRevision = value.PolicyRevision,
+        Risk = value.Risk,
+        Operation = value.Operation,
+        TargetClass = value.TargetClass,
+        SafeSummary = value.SafeSummary,
+        CreatedAtUtc = value.CreatedAtUtc,
+        ExpiresAtUtc = value.ExpiresAtUtc
     };
 
     private static ThreadSourcePointerData Map(ThreadSourcePointerProjection value) => new()

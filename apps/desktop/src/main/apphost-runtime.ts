@@ -6,6 +6,12 @@ import {
   type CatalogListResult,
   type ComposerCatalogSelectionData,
   type ComposerStateResult,
+  type TurnExecutionStateResult,
+  type TurnStartParams,
+  type TurnCancelParams,
+  type ApprovalResolveParams,
+  type TurnResumeParams,
+  type TurnRestartParams,
   type ContextResolveResult,
   type ContextSearchResult,
   type InitializeResult,
@@ -40,6 +46,11 @@ import {
   THREAD_LIST_REQUEST,
   THREAD_RENAME_REQUEST,
   TIMELINE_PAGE_SIZE,
+  TURN_START_REQUEST,
+  TURN_CANCEL_REQUEST,
+  APPROVAL_RESOLVE_REQUEST,
+  TURN_RESUME_REQUEST,
+  TURN_RESTART_REQUEST,
   type DesktopRequestDescriptor,
 } from "./desktop-requests";
 
@@ -200,6 +211,26 @@ export class AppHostRuntime {
 
   clearComposer(threadId: string, expectedQueueRevision: number, clientMutationId: string): Promise<ComposerStateResult> {
     return this.query(COMPOSER_CLEAR_REQUEST, { schemaVersion: SCHEMA_VERSION, threadId, expectedQueueRevision, clientMutationId });
+  }
+
+  startTurn(command: Omit<TurnStartParams, "schemaVersion">): Promise<TurnExecutionStateResult> {
+    return this.query(TURN_START_REQUEST, { schemaVersion: SCHEMA_VERSION, ...command });
+  }
+
+  cancelTurn(command: Omit<TurnCancelParams, "schemaVersion">): Promise<TurnExecutionStateResult> {
+    return this.query(TURN_CANCEL_REQUEST, { schemaVersion: SCHEMA_VERSION, ...command });
+  }
+
+  resolveApproval(command: Omit<ApprovalResolveParams, "schemaVersion">): Promise<TurnExecutionStateResult> {
+    return this.query(APPROVAL_RESOLVE_REQUEST, { schemaVersion: SCHEMA_VERSION, ...command });
+  }
+
+  resumeTurn(command: Omit<TurnResumeParams, "schemaVersion">): Promise<TurnExecutionStateResult> {
+    return this.query(TURN_RESUME_REQUEST, { schemaVersion: SCHEMA_VERSION, ...command });
+  }
+
+  restartTurn(command: Omit<TurnRestartParams, "schemaVersion">): Promise<TurnExecutionStateResult> {
+    return this.query(TURN_RESTART_REQUEST, { schemaVersion: SCHEMA_VERSION, ...command });
   }
 
   getChanges(sessionName?: string): Promise<ChangesGetResult> {

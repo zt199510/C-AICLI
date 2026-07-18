@@ -601,7 +601,14 @@ public sealed class ThreadApplicationService
         turn.SourcePointers.Select(pointer => Hydrate(pointer, snapshot, diagnostics, cancellationToken)).ToArray(),
         turn.TimelineFirstSequence,
         turn.TimelineLastSequence,
-        turn.TimelineItemCount);
+        turn.TimelineItemCount,
+        turn.RecoveryRequired,
+        turn.ActiveApproval is null ? null : ProjectApproval(turn.ActiveApproval));
+
+    private static DurableApprovalProjection ProjectApproval(DurableApprovalRequestRecord value) => new(
+        value.RequestId, value.WorkspaceId, value.ThreadId, value.TurnId, value.TurnRevision, value.ApprovalRevision,
+        value.PolicyIdentity, value.PolicyRevision, value.Risk, value.Operation, value.TargetClass, value.SafeSummary,
+        value.CreatedAtUtc, value.ExpiresAtUtc);
 
     private TimelineItemProjection ProjectItem(
         TimelineItemRecord item,

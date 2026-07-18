@@ -7,7 +7,8 @@
     { "name": "workspace-session", "required": true },
     { "name": "application-outcome", "required": true },
     { "name": "composer.controlled-context", "required": false },
-    { "name": "thread.changed", "required": false }
+    { "name": "thread.changed", "required": false },
+    { "name": "turn.write-path", "required": false }
   ],
   "errors": [
     { "code": "parse-error", "rpcCode": -32700 },
@@ -72,7 +73,14 @@
     "maxContextScannedEntries": 5000,
     "maxContextSearchQueryBytes": 256,
     "maxRelativePathBytes": 4096,
-    "maxQueueMutationIdBytes": 128
+    "maxQueueMutationIdBytes": 128,
+    "maxExecutionInputBytes": 262144,
+    "maxTimelineAppendItems": 32,
+    "maxTimelineAppendBytes": 262144,
+    "maxAssistantPreviewBytes": 8192,
+    "maxApprovalSummaryBytes": 4096,
+    "approvalLifetimeMs": 1800000,
+    "cancelAcknowledgementMs": 5000
   },
   "methods": [
     {
@@ -222,6 +230,51 @@
       "timeout": "mutation"
     },
     {
+      "constant": "TurnStartMethod",
+      "name": "turn.start",
+      "params": "TurnStartParams",
+      "result": "TurnExecutionStateResult",
+      "requiresWorkspace": true,
+      "mutation": true,
+      "timeout": "mutation"
+    },
+    {
+      "constant": "TurnCancelMethod",
+      "name": "turn.cancel",
+      "params": "TurnCancelParams",
+      "result": "TurnExecutionStateResult",
+      "requiresWorkspace": true,
+      "mutation": true,
+      "timeout": "mutation"
+    },
+    {
+      "constant": "ApprovalResolveMethod",
+      "name": "approval.resolve",
+      "params": "ApprovalResolveParams",
+      "result": "TurnExecutionStateResult",
+      "requiresWorkspace": true,
+      "mutation": true,
+      "timeout": "mutation"
+    },
+    {
+      "constant": "TurnResumeMethod",
+      "name": "turn.resume",
+      "params": "TurnResumeParams",
+      "result": "TurnExecutionStateResult",
+      "requiresWorkspace": true,
+      "mutation": true,
+      "timeout": "mutation"
+    },
+    {
+      "constant": "TurnRestartMethod",
+      "name": "turn.restart",
+      "params": "TurnRestartParams",
+      "result": "TurnExecutionStateResult",
+      "requiresWorkspace": true,
+      "mutation": true,
+      "timeout": "mutation"
+    },
+    {
       "constant": "ChangesGetMethod",
       "name": "changes.get",
       "params": "ChangesGetParams",
@@ -319,7 +372,14 @@
         { "jsonName": "maxContextScannedEntries", "type": "int32", "min": 5000, "max": 5000 },
         { "jsonName": "maxContextSearchQueryBytes", "type": "int32", "min": 256, "max": 256 },
         { "jsonName": "maxRelativePathBytes", "type": "int32", "min": 4096, "max": 4096 },
-        { "jsonName": "maxQueueMutationIdBytes", "type": "int32", "min": 128, "max": 128 }
+        { "jsonName": "maxQueueMutationIdBytes", "type": "int32", "min": 128, "max": 128 },
+        { "jsonName": "maxExecutionInputBytes", "type": "int32", "min": 262144, "max": 262144 },
+        { "jsonName": "maxTimelineAppendItems", "type": "int32", "min": 32, "max": 32 },
+        { "jsonName": "maxTimelineAppendBytes", "type": "int32", "min": 262144, "max": 262144 },
+        { "jsonName": "maxAssistantPreviewBytes", "type": "int32", "min": 8192, "max": 8192 },
+        { "jsonName": "maxApprovalSummaryBytes", "type": "int32", "min": 4096, "max": 4096 },
+        { "jsonName": "approvalLifetimeMs", "type": "int32", "min": 1800000, "max": 1800000 },
+        { "jsonName": "cancelAcknowledgementMs", "type": "int32", "min": 5000, "max": 5000 }
       ]
     },
     {
@@ -508,7 +568,7 @@
         { "jsonName": "revision", "type": "int64", "min": 0, "max": 9007199254740991 },
         { "jsonName": "workspaceId", "type": "string", "maxUtf8Bytes": 64 },
         { "jsonName": "title", "type": "string", "maxUtf8Bytes": 512 },
-        { "jsonName": "status", "type": "string", "maxUtf8Bytes": 32, "enum": ["idle", "running", "waiting-for-approval", "failed", "completed", "archived"] },
+        { "jsonName": "status", "type": "string", "maxUtf8Bytes": 32, "enum": ["idle", "running", "waiting-for-approval", "canceling", "canceled", "failed", "completed", "archived"] },
         { "jsonName": "createdAtUtc", "type": "datetime" },
         { "jsonName": "updatedAtUtc", "type": "datetime" },
         { "jsonName": "archivedAtUtc", "type": "datetime", "nullable": true },
@@ -551,7 +611,9 @@
         { "jsonName": "sourcePointers", "type": "array", "items": "ThreadSourcePointerData", "maxItems": 200 },
         { "jsonName": "timelineFirstSequence", "type": "int64", "min": 1, "max": 9007199254740991, "nullable": true },
         { "jsonName": "timelineLastSequence", "type": "int64", "min": 1, "max": 9007199254740991, "nullable": true },
-        { "jsonName": "timelineItemCount", "type": "int32", "min": 0, "max": 10000 }
+        { "jsonName": "timelineItemCount", "type": "int32", "min": 0, "max": 10000 },
+        { "jsonName": "recoveryRequired", "type": "boolean" },
+        { "jsonName": "approval", "type": "ApprovalRequestData", "nullable": true }
       ]
     },
     {
@@ -574,7 +636,7 @@
         { "jsonName": "turnId", "type": "string", "maxUtf8Bytes": 64 },
         { "jsonName": "sequence", "type": "int64", "min": 1, "max": 9007199254740991 },
         { "jsonName": "timestampUtc", "type": "datetime" },
-        { "jsonName": "type", "type": "string", "maxUtf8Bytes": 64, "enum": ["user.message", "assistant.message", "plan.updated", "tool.started", "tool.completed", "command.started", "command.completed", "approval.requested", "approval.resolved", "changes.updated", "report.available", "artifact.available", "warning.raised", "turn.completed"] },
+        { "jsonName": "type", "type": "string", "maxUtf8Bytes": 64, "enum": ["user.message", "assistant.message", "assistant.final", "plan.updated", "tool.started", "tool.completed", "command.started", "command.completed", "approval.requested", "approval.resolved", "verification.completed", "changes.updated", "report.available", "artifact.available", "warning.raised", "turn.completed"] },
         { "jsonName": "source", "type": "ThreadSourcePointerData", "nullable": true },
         { "jsonName": "status", "type": "string", "maxUtf8Bytes": 64 },
         { "jsonName": "summary", "type": "string", "maxUtf8Bytes": 4096 },
@@ -652,7 +714,8 @@
         { "jsonName": "workspaceId", "type": "string", "maxUtf8Bytes": 64 },
         { "jsonName": "threadId", "type": "string", "maxUtf8Bytes": 64 },
         { "jsonName": "revision", "type": "int64", "min": 0, "max": 9007199254740991 },
-        { "jsonName": "changeKind", "type": "string", "maxUtf8Bytes": 16, "enum": ["created", "renamed", "archived", "deleted"] },
+        { "jsonName": "committedSequence", "type": "int64", "min": 0, "max": 9007199254740991 },
+        { "jsonName": "changeKind", "type": "string", "maxUtf8Bytes": 16, "enum": ["created", "renamed", "archived", "deleted", "updated"] },
         { "jsonName": "emittedAtUtc", "type": "datetime" }
       ]
     },
@@ -822,6 +885,110 @@
         { "jsonName": "schemaVersion", "type": "int32", "min": 1, "max": 1 },
         { "jsonName": "succeeded", "type": "boolean" },
         { "jsonName": "data", "type": "ComposerStateData", "nullable": true },
+        { "jsonName": "error", "type": "ApplicationErrorData", "nullable": true },
+        { "jsonName": "diagnostics", "type": "array", "items": "ApplicationDiagnosticData", "maxItems": 100 },
+        { "jsonName": "truncated", "type": "boolean" }
+      ]
+    },
+    {
+      "name": "TurnStartParams",
+      "properties": [
+        { "jsonName": "schemaVersion", "type": "int32", "min": 1, "max": 1 },
+        { "jsonName": "threadId", "type": "string", "maxUtf8Bytes": 64 },
+        { "jsonName": "expectedThreadRevision", "type": "int64", "min": 0, "max": 9007199254740991 },
+        { "jsonName": "expectedQueueRevision", "type": "int64", "min": 0, "max": 9007199254740991 },
+        { "jsonName": "clientMutationId", "type": "string", "maxUtf8Bytes": 128 }
+      ]
+    },
+    {
+      "name": "TurnCancelParams",
+      "properties": [
+        { "jsonName": "schemaVersion", "type": "int32", "min": 1, "max": 1 },
+        { "jsonName": "threadId", "type": "string", "maxUtf8Bytes": 64 },
+        { "jsonName": "turnId", "type": "string", "maxUtf8Bytes": 64 },
+        { "jsonName": "expectedThreadRevision", "type": "int64", "min": 0, "max": 9007199254740991 },
+        { "jsonName": "expectedTurnRevision", "type": "int64", "min": 0, "max": 9007199254740991 },
+        { "jsonName": "clientMutationId", "type": "string", "maxUtf8Bytes": 128 }
+      ]
+    },
+    {
+      "name": "ApprovalResolveParams",
+      "properties": [
+        { "jsonName": "schemaVersion", "type": "int32", "min": 1, "max": 1 },
+        { "jsonName": "threadId", "type": "string", "maxUtf8Bytes": 64 },
+        { "jsonName": "turnId", "type": "string", "maxUtf8Bytes": 64 },
+        { "jsonName": "requestId", "type": "string", "maxUtf8Bytes": 128 },
+        { "jsonName": "decision", "type": "string", "maxUtf8Bytes": 16, "enum": ["approve", "deny"] },
+        { "jsonName": "expectedThreadRevision", "type": "int64", "min": 0, "max": 9007199254740991 },
+        { "jsonName": "expectedTurnRevision", "type": "int64", "min": 0, "max": 9007199254740991 },
+        { "jsonName": "expectedApprovalRevision", "type": "int64", "min": 1, "max": 9007199254740991 },
+        { "jsonName": "clientMutationId", "type": "string", "maxUtf8Bytes": 128 }
+      ]
+    },
+    {
+      "name": "TurnResumeParams",
+      "properties": [
+        { "jsonName": "schemaVersion", "type": "int32", "min": 1, "max": 1 },
+        { "jsonName": "threadId", "type": "string", "maxUtf8Bytes": 64 },
+        { "jsonName": "turnId", "type": "string", "maxUtf8Bytes": 64 },
+        { "jsonName": "expectedThreadRevision", "type": "int64", "min": 0, "max": 9007199254740991 },
+        { "jsonName": "expectedTurnRevision", "type": "int64", "min": 0, "max": 9007199254740991 },
+        { "jsonName": "checkpointId", "type": "string", "maxUtf8Bytes": 128 },
+        { "jsonName": "clientMutationId", "type": "string", "maxUtf8Bytes": 128 }
+      ]
+    },
+    {
+      "name": "TurnRestartParams",
+      "properties": [
+        { "jsonName": "schemaVersion", "type": "int32", "min": 1, "max": 1 },
+        { "jsonName": "threadId", "type": "string", "maxUtf8Bytes": 64 },
+        { "jsonName": "sourceTurnId", "type": "string", "maxUtf8Bytes": 64 },
+        { "jsonName": "expectedThreadRevision", "type": "int64", "min": 0, "max": 9007199254740991 },
+        { "jsonName": "expectedSourceTurnRevision", "type": "int64", "min": 0, "max": 9007199254740991 },
+        { "jsonName": "confirmed", "type": "boolean" },
+        { "jsonName": "clientMutationId", "type": "string", "maxUtf8Bytes": 128 }
+      ]
+    },
+    {
+      "name": "ApprovalRequestData",
+      "properties": [
+        { "jsonName": "requestId", "type": "string", "maxUtf8Bytes": 128 },
+        { "jsonName": "workspaceId", "type": "string", "maxUtf8Bytes": 64 },
+        { "jsonName": "threadId", "type": "string", "maxUtf8Bytes": 64 },
+        { "jsonName": "turnId", "type": "string", "maxUtf8Bytes": 64 },
+        { "jsonName": "turnRevision", "type": "int64", "min": 0, "max": 9007199254740991 },
+        { "jsonName": "approvalRevision", "type": "int64", "min": 1, "max": 9007199254740991 },
+        { "jsonName": "policyIdentity", "type": "string", "maxUtf8Bytes": 256 },
+        { "jsonName": "policyRevision", "type": "string", "maxUtf8Bytes": 256 },
+        { "jsonName": "risk", "type": "string", "maxUtf8Bytes": 64 },
+        { "jsonName": "operation", "type": "string", "maxUtf8Bytes": 1024 },
+        { "jsonName": "targetClass", "type": "string", "maxUtf8Bytes": 1024 },
+        { "jsonName": "safeSummary", "type": "string", "maxUtf8Bytes": 4096 },
+        { "jsonName": "createdAtUtc", "type": "datetime" },
+        { "jsonName": "expiresAtUtc", "type": "datetime" }
+      ]
+    },
+    {
+      "name": "TurnExecutionStateData",
+      "properties": [
+        { "jsonName": "workspaceId", "type": "string", "maxUtf8Bytes": 64 },
+        { "jsonName": "threadId", "type": "string", "maxUtf8Bytes": 64 },
+        { "jsonName": "turnId", "type": "string", "maxUtf8Bytes": 64 },
+        { "jsonName": "threadRevision", "type": "int64", "min": 0, "max": 9007199254740991 },
+        { "jsonName": "turnRevision", "type": "int64", "min": 0, "max": 9007199254740991 },
+        { "jsonName": "status", "type": "string", "maxUtf8Bytes": 32, "enum": ["queued", "running", "waiting-for-approval", "canceling", "canceled", "failed", "completed"] },
+        { "jsonName": "committedSequence", "type": "int64", "min": 0, "max": 9007199254740991 },
+        { "jsonName": "recoveryRequired", "type": "boolean" },
+        { "jsonName": "idempotent", "type": "boolean" },
+        { "jsonName": "approval", "type": "ApprovalRequestData", "nullable": true }
+      ]
+    },
+    {
+      "name": "TurnExecutionStateResult",
+      "properties": [
+        { "jsonName": "schemaVersion", "type": "int32", "min": 1, "max": 1 },
+        { "jsonName": "succeeded", "type": "boolean" },
+        { "jsonName": "data", "type": "TurnExecutionStateData", "nullable": true },
         { "jsonName": "error", "type": "ApplicationErrorData", "nullable": true },
         { "jsonName": "diagnostics", "type": "array", "items": "ApplicationDiagnosticData", "maxItems": 100 },
         { "jsonName": "truncated", "type": "boolean" }

@@ -25,9 +25,12 @@ public sealed class DesktopRpcServer : IDisposable
 
     private readonly DesktopApplicationSessionFactory sessionFactory;
     private readonly DesktopThreadNotificationSequencer notificationSequencer = new(TimeProvider.System);
+    private DesktopWriteExecutionSupervisor writeSupervisor;
+    private DesktopRpcOutputQueue? liveOutput;
     private DesktopApplicationSession? applicationSession;
     private Func<long, bool>? cancelRequest;
     private bool threadNotificationsNegotiated;
+    private bool turnWritePathNegotiated;
     private SessionState state;
 
     public DesktopRpcServer()
@@ -38,6 +41,7 @@ public sealed class DesktopRpcServer : IDisposable
     public DesktopRpcServer(DesktopApplicationSessionFactory sessionFactory)
     {
         this.sessionFactory = sessionFactory ?? throw new ArgumentNullException(nameof(sessionFactory));
+        writeSupervisor = new DesktopWriteExecutionSupervisor(NotifyCommittedAsync);
     }
 
     public async Task RunAsync(Stream input, Stream output, CancellationToken cancellationToken)
@@ -50,6 +54,7 @@ public sealed class DesktopRpcServer : IDisposable
         using DesktopRpcOutputQueue outputQueue = new(
             DesktopProtocolDefinition.MaxOutputQueueFrames,
             DesktopProtocolDefinition.MaxOutputQueueBytes);
+        liveOutput = outputQueue;
         using DesktopRpcRuntime runtime = new(
             DesktopProtocolDefinition.MaxInFlight,
             outputQueue,
@@ -150,6 +155,7 @@ public sealed class DesktopRpcServer : IDisposable
         }
         finally
         {
+            liveOutput = null;
             cancelRequest = null;
             sessionCancellation.Cancel();
             if (active.Count > 0)
@@ -241,6 +247,12 @@ public sealed class DesktopRpcServer : IDisposable
                     DesktopProtocolDefinition.WorkspaceRequiredError, "An active workspace is required.");
             }
 
+            if (IsTurnWritePathMethod(method) && !turnWritePathNegotiated)
+            {
+                return Error(id, DesktopProtocolDefinition.MethodNotFoundRpcCode,
+                    DesktopProtocolDefinition.MethodNotFoundError, "Desktop protocol method is not available.");
+            }
+
             return method switch
             {
                 DesktopProtocolDefinition.InitializeMethod => Initialize(id, parameters, requestCancellation),
@@ -259,6 +271,11 @@ public sealed class DesktopRpcServer : IDisposable
                 DesktopProtocolDefinition.ComposerGetMethod => GetComposer(id, parameters, requestCancellation),
                 DesktopProtocolDefinition.ComposerEnqueueMethod => EnqueueComposer(id, parameters, requestCancellation),
                 DesktopProtocolDefinition.ComposerClearMethod => ClearComposer(id, parameters, requestCancellation),
+                DesktopProtocolDefinition.TurnStartMethod => StartTurn(id, parameters, requestCancellation),
+                DesktopProtocolDefinition.TurnCancelMethod => CancelTurn(id, parameters),
+                DesktopProtocolDefinition.ApprovalResolveMethod => ResolveApproval(id, parameters),
+                DesktopProtocolDefinition.TurnResumeMethod => ResumeTurn(id, parameters, requestCancellation),
+                DesktopProtocolDefinition.TurnRestartMethod => RestartTurn(id, parameters, requestCancellation),
                 DesktopProtocolDefinition.ChangesGetMethod => GetChanges(id, parameters, requestCancellation),
                 DesktopProtocolDefinition.ReportListMethod => ListReports(id, parameters, requestCancellation),
                 DesktopProtocolDefinition.ReportGetMethod => GetReport(id, parameters, requestCancellation),
@@ -320,6 +337,7 @@ public sealed class DesktopRpcServer : IDisposable
 
         state = SessionState.Initialized;
         threadNotificationsNegotiated = requested.Contains(DesktopProtocolDefinition.ThreadChangedCapability);
+        turnWritePathNegotiated = requested.Contains(DesktopProtocolDefinition.TurnWritePathCapability);
         InitializeResult result = new()
         {
             SchemaVersion = DesktopProtocolDefinition.SchemaVersion,
@@ -328,7 +346,9 @@ public sealed class DesktopRpcServer : IDisposable
             ServerVersion = Assembly.GetExecutingAssembly().GetName().Version?.ToString() ?? "0.0.0",
             ServerInstanceId = "server_" + Guid.NewGuid().ToString("N")[..24],
             NegotiatedCapabilities = DesktopProtocolDefinition.Capabilities.Where(requested.Contains).ToArray(),
-            Methods = DesktopProtocolDefinition.Methods,
+            Methods = DesktopProtocolDefinition.Methods
+                .Where(method => turnWritePathNegotiated || !IsTurnWritePathMethod(method))
+                .ToArray(),
             Notifications = requested.Contains(DesktopProtocolDefinition.ThreadChangedCapability)
                 ? DesktopProtocolDefinition.Notifications
                 : [],
@@ -374,6 +394,9 @@ public sealed class DesktopRpcServer : IDisposable
         }
 
         DesktopApplicationSession? previous = applicationSession;
+        writeSupervisor.Stop();
+        writeSupervisor.Dispose();
+        writeSupervisor = new DesktopWriteExecutionSupervisor(NotifyCommittedAsync);
         applicationSession = opened.Session;
         state = SessionState.WorkspaceReady;
         previous?.Dispose();
@@ -561,6 +584,66 @@ public sealed class DesktopRpcServer : IDisposable
             request.ThreadId, request.ExpectedQueueRevision, request.ClientMutationId, cancellationToken)));
     }
 
+    private byte[] StartTurn(long? id, JsonElement parameters, CancellationToken cancellationToken)
+    {
+        if (!TryDeserialize(parameters, out TurnStartParams? request) || request is null ||
+            !DesktopProtocolValidation.TryValidate(request, out _))
+            return InvalidParams(id, "Turn start parameters are invalid.");
+        if (writeSupervisor.IsBusy)
+            return Success(id, DesktopProtocolMapper.Map(TurnFailure("write-execution-busy", "A write execution is already active.")));
+        ApplicationResult<TurnExecutionStateProjection> result = applicationSession!.StartTurn(
+            request.ThreadId, request.ExpectedThreadRevision, request.ExpectedQueueRevision,
+            request.ClientMutationId, cancellationToken);
+        if (result.Succeeded && result.Data is not null && !writeSupervisor.TryStart(applicationSession, result.Data))
+            return Success(id, DesktopProtocolMapper.Map(TurnFailure("write-execution-busy", "A write execution is already active.")));
+        return Success(id, DesktopProtocolMapper.Map(result));
+    }
+
+    private byte[] CancelTurn(long? id, JsonElement parameters)
+    {
+        if (!TryDeserialize(parameters, out TurnCancelParams? request) || request is null ||
+            !DesktopProtocolValidation.TryValidate(request, out _))
+            return InvalidParams(id, "Turn cancel parameters are invalid.");
+        ApplicationResult<TurnExecutionStateProjection> result = writeSupervisor.Cancel(applicationSession!, new TurnCancelRequest(
+            default!, request.ThreadId, request.TurnId, request.ExpectedThreadRevision, request.ExpectedTurnRevision, request.ClientMutationId));
+        return Success(id, DesktopProtocolMapper.Map(result));
+    }
+
+    private byte[] ResolveApproval(long? id, JsonElement parameters)
+    {
+        if (!TryDeserialize(parameters, out ApprovalResolveParams? request) || request is null ||
+            !DesktopProtocolValidation.TryValidate(request, out _))
+            return InvalidParams(id, "Approval resolve parameters are invalid.");
+        ApplicationResult<TurnExecutionStateProjection> result = writeSupervisor.ResolveApproval(applicationSession!, new ApprovalResolveRequest(
+            default!, request.ThreadId, request.TurnId, request.RequestId, request.Decision,
+            request.ExpectedThreadRevision, request.ExpectedTurnRevision, request.ExpectedApprovalRevision, request.ClientMutationId));
+        return Success(id, DesktopProtocolMapper.Map(result));
+    }
+
+    private byte[] ResumeTurn(long? id, JsonElement parameters, CancellationToken cancellationToken)
+    {
+        if (!TryDeserialize(parameters, out TurnResumeParams? request) || request is null ||
+            !DesktopProtocolValidation.TryValidate(request, out _))
+            return InvalidParams(id, "Turn resume parameters are invalid.");
+        return Success(id, DesktopProtocolMapper.Map(applicationSession!.ResumeTurn(
+            request.ThreadId, request.TurnId, request.ExpectedThreadRevision, request.ExpectedTurnRevision,
+            request.CheckpointId, request.ClientMutationId, cancellationToken)));
+    }
+
+    private byte[] RestartTurn(long? id, JsonElement parameters, CancellationToken cancellationToken)
+    {
+        if (!TryDeserialize(parameters, out TurnRestartParams? request) || request is null ||
+            !DesktopProtocolValidation.TryValidate(request, out _))
+            return InvalidParams(id, "Turn restart parameters are invalid.");
+        if (writeSupervisor.IsBusy)
+            return Success(id, DesktopProtocolMapper.Map(TurnFailure("write-execution-busy", "A write execution is already active.")));
+        ApplicationResult<TurnExecutionStateProjection> result = applicationSession!.RestartTurn(
+            request.ThreadId, request.SourceTurnId, request.ExpectedThreadRevision, request.ExpectedSourceTurnRevision,
+            request.Confirmed, request.ClientMutationId, cancellationToken);
+        if (result.Succeeded && result.Data is not null) writeSupervisor.TryStart(applicationSession, result.Data);
+        return Success(id, DesktopProtocolMapper.Map(result));
+    }
+
     private byte[] ListReports(long? id, JsonElement parameters, CancellationToken cancellationToken)
     {
         if (!TryDeserialize(parameters, out ReportListParams? request) || request is null ||
@@ -661,7 +744,14 @@ public sealed class DesktopRpcServer : IDisposable
         MaxContextScannedEntries = DesktopProtocolDefinition.MaxContextScannedEntries,
         MaxContextSearchQueryBytes = DesktopProtocolDefinition.MaxContextSearchQueryBytes,
         MaxRelativePathBytes = DesktopProtocolDefinition.MaxRelativePathBytes,
-        MaxQueueMutationIdBytes = DesktopProtocolDefinition.MaxQueueMutationIdBytes
+        MaxQueueMutationIdBytes = DesktopProtocolDefinition.MaxQueueMutationIdBytes,
+        MaxExecutionInputBytes = DesktopProtocolDefinition.MaxExecutionInputBytes,
+        MaxTimelineAppendItems = DesktopProtocolDefinition.MaxTimelineAppendItems,
+        MaxTimelineAppendBytes = DesktopProtocolDefinition.MaxTimelineAppendBytes,
+        MaxAssistantPreviewBytes = DesktopProtocolDefinition.MaxAssistantPreviewBytes,
+        MaxApprovalSummaryBytes = DesktopProtocolDefinition.MaxApprovalSummaryBytes,
+        ApprovalLifetimeMs = DesktopProtocolDefinition.ApprovalLifetimeMs,
+        CancelAcknowledgementMs = DesktopProtocolDefinition.CancelAcknowledgementMs
     };
 
     private static WorkspaceSnapshotData Map(WorkspaceSnapshotProjection value) => new()
@@ -768,6 +858,13 @@ public sealed class DesktopRpcServer : IDisposable
 
     private static bool IsWorkspaceMethod(string method) =>
         DesktopProtocolDefinition.RequiresWorkspace(method);
+
+    private static bool IsTurnWritePathMethod(string method) => method is
+        DesktopProtocolDefinition.TurnStartMethod or
+        DesktopProtocolDefinition.TurnCancelMethod or
+        DesktopProtocolDefinition.ApprovalResolveMethod or
+        DesktopProtocolDefinition.TurnResumeMethod or
+        DesktopProtocolDefinition.TurnRestartMethod;
 
     private static bool TryReadRequestId(JsonElement root, out long id)
     {
@@ -961,6 +1058,22 @@ public sealed class DesktopRpcServer : IDisposable
                 responsePayload)
             : null;
 
+    private ValueTask NotifyCommittedAsync(TurnExecutionStateProjection state)
+    {
+        DesktopRpcOutputQueue? output = liveOutput;
+        if (threadNotificationsNegotiated && output is not null)
+        {
+            byte[] notification = notificationSequencer.CreateDirty(
+                state.WorkspaceId, state.ThreadId, state.ThreadRevision, state.CommittedSequence);
+            _ = output.TryEnqueueNotification(notification);
+        }
+        return ValueTask.CompletedTask;
+    }
+
+    private static ApplicationResult<TurnExecutionStateProjection> TurnFailure(string code, string safeMessage) =>
+        ApplicationResult<TurnExecutionStateProjection>.Failure(new ApplicationError(
+            code, ApplicationErrorCategory.Conflict, safeMessage, false));
+
     private void Close(IReadOnlyCollection<Task>? pending = null)
     {
         if (state == SessionState.Closed)
@@ -969,6 +1082,9 @@ public sealed class DesktopRpcServer : IDisposable
         }
 
         state = SessionState.Closed;
+        threadNotificationsNegotiated = false;
+        turnWritePathNegotiated = false;
+        writeSupervisor.Dispose();
         DesktopApplicationSession? session = applicationSession;
         applicationSession = null;
         if (session is null)

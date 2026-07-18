@@ -102,6 +102,7 @@ public sealed class DesktopProtocolTests
                 DesktopProtocolDefinition.FramedJsonRpcCapability,
                 DesktopProtocolDefinition.WorkspaceSessionCapability,
                 DesktopProtocolDefinition.ApplicationOutcomeCapability,
+                DesktopProtocolDefinition.TurnWritePathCapability,
                 DesktopProtocolDefinition.ThreadChangedCapability
             }
         });
@@ -174,6 +175,11 @@ public sealed class DesktopProtocolTests
                 DesktopProtocolDefinition.ComposerGetMethod,
                 DesktopProtocolDefinition.ComposerEnqueueMethod,
                 DesktopProtocolDefinition.ComposerClearMethod,
+                DesktopProtocolDefinition.TurnStartMethod,
+                DesktopProtocolDefinition.TurnCancelMethod,
+                DesktopProtocolDefinition.ApprovalResolveMethod,
+                DesktopProtocolDefinition.TurnResumeMethod,
+                DesktopProtocolDefinition.TurnRestartMethod,
                 DesktopProtocolDefinition.ChangesGetMethod,
                 DesktopProtocolDefinition.ReportListMethod,
                 DesktopProtocolDefinition.ReportGetMethod,
@@ -295,6 +301,37 @@ public sealed class DesktopProtocolTests
         using JsonDocument repeat = Initialize(repeatServer, 2);
         Assert.True(initialized.RootElement.TryGetProperty("result", out _));
         Assert.Equal(DesktopProtocolDefinition.AlreadyInitializedError, ErrorCode(repeat));
+    }
+
+    [Fact]
+    public void Server_hides_turn_write_path_without_negotiated_capability()
+    {
+        using TempDirectory temp = TempDirectory.Create();
+        using DesktopRpcServer server = new();
+        using JsonDocument initialized = HandleRequest(
+            server,
+            1,
+            DesktopProtocolDefinition.InitializeMethod,
+            InitializeParameters(turnWritePath: false));
+
+        string[] methods = initialized.RootElement.GetProperty("result").GetProperty("methods")
+            .EnumerateArray()
+            .Select(method => method.GetString()!)
+            .ToArray();
+        Assert.DoesNotContain(DesktopProtocolDefinition.TurnStartMethod, methods);
+
+        using JsonDocument workspace = OpenWorkspace(server, 2, temp.Path);
+        Assert.True(workspace.RootElement.GetProperty("result").GetProperty("succeeded").GetBoolean());
+
+        using JsonDocument start = HandleRequest(server, 3, DesktopProtocolDefinition.TurnStartMethod, new
+        {
+            schemaVersion = DesktopProtocolDefinition.SchemaVersion,
+            threadId = "thread_0123456789abcdef01234567",
+            expectedThreadRevision = 1,
+            expectedQueueRevision = 1,
+            clientMutationId = "turn-start-test"
+        });
+        Assert.Equal(DesktopProtocolDefinition.MethodNotFoundError, ErrorCode(start));
     }
 
     [Fact]
@@ -506,7 +543,7 @@ public sealed class DesktopProtocolTests
         await DesktopProtocolFraming.WriteFrameAsync(output, payload);
     }
 
-    private static Dictionary<string, object?> InitializeParameters() => new()
+    private static Dictionary<string, object?> InitializeParameters(bool turnWritePath = true) => new()
     {
         ["schemaVersion"] = DesktopProtocolDefinition.SchemaVersion,
         ["protocolVersion"] = DesktopProtocolDefinition.Version,
@@ -514,12 +551,20 @@ public sealed class DesktopProtocolTests
         ["clientName"] = "desktop-tests",
         ["clientVersion"] = "1.0.0",
         ["clientInstanceId"] = "test-client-1",
-        ["requestedCapabilities"] = new[]
-        {
-            DesktopProtocolDefinition.FramedJsonRpcCapability,
-            DesktopProtocolDefinition.WorkspaceSessionCapability,
-            DesktopProtocolDefinition.ApplicationOutcomeCapability
-        }
+        ["requestedCapabilities"] = turnWritePath
+            ? new[]
+            {
+                DesktopProtocolDefinition.FramedJsonRpcCapability,
+                DesktopProtocolDefinition.WorkspaceSessionCapability,
+                DesktopProtocolDefinition.ApplicationOutcomeCapability,
+                DesktopProtocolDefinition.TurnWritePathCapability
+            }
+            : new[]
+            {
+                DesktopProtocolDefinition.FramedJsonRpcCapability,
+                DesktopProtocolDefinition.WorkspaceSessionCapability,
+                DesktopProtocolDefinition.ApplicationOutcomeCapability
+            }
     };
 
     private static JsonDocument Initialize(DesktopRpcServer server, long id) =>

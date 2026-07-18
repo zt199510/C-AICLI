@@ -461,6 +461,95 @@ public sealed class ThreadStore
         });
     }
 
+    public ThreadStoreMutationResult StartTurnFromIntent(
+        string threadId,
+        long expectedRevision,
+        string mutationId,
+        ComposerIntentClaimRecord claim,
+        PendingComposerIntentRecord input,
+        TurnRecord turn,
+        TimelineItemRecord userMessage)
+    {
+        ArgumentNullException.ThrowIfNull(claim);
+        ArgumentNullException.ThrowIfNull(input);
+        ArgumentNullException.ThrowIfNull(turn);
+        ArgumentNullException.ThrowIfNull(userMessage);
+        if (!ThreadContractValidator.IsSafeMutationId(mutationId))
+            return ThreadStoreMutationResult.Failure(ThreadErrorCode.TimelineAppendConflict, "Turn start mutation is invalid.", threadId);
+        try
+        {
+            ComposerIntentContractValidator.ValidateClaim(claim);
+            ComposerIntentContractValidator.ValidateIntent(input);
+            ThreadContractValidator.ValidateTurn(turn);
+            ThreadContractValidator.ValidateTimelineItem(userMessage);
+        }
+        catch (Exception exception) when (exception is ThreadContractException or ComposerIntentContractException)
+        {
+            string code = exception is ThreadContractException threadException ? threadException.ErrorCode : ((ComposerIntentContractException)exception).ErrorCode;
+            return ThreadStoreMutationResult.Failure(code, exception.Message, threadId);
+        }
+
+        string payloadHash = HashCanonical(new { claim.IntentId, claim.TurnId, claim.CanonicalInputSha256, Input = input, Turn = turn, UserMessage = userMessage });
+        return Mutate(threadId, expectedRevision, (layout, aggregate) =>
+        {
+            ThreadMutationReceiptRecord? existing = aggregate.Record.MutationReceipts.SingleOrDefault(receipt => receipt.MutationId == mutationId);
+            if (existing is not null)
+            {
+                if (existing.PayloadSha256 != payloadHash)
+                    throw new ThreadContractException(ThreadErrorCode.TimelineAppendConflict, "Turn start mutation id was reused with different content.");
+                TurnRecord? committed = aggregate.Turns.SingleOrDefault(candidate => candidate.TurnId == claim.TurnId);
+                if (committed?.CanonicalInputSha256 != claim.CanonicalInputSha256)
+                    throw new ThreadContractException(ThreadErrorCode.ThreadRecordCorrupt, "Turn start receipt does not match its claimed input.");
+                return aggregate;
+            }
+            if (aggregate.Record.Revision != expectedRevision || aggregate.Record.Status == ThreadStatus.Archived || aggregate.Record.ActiveTurnId is not null)
+                throw new ThreadContractException(ThreadErrorCode.ThreadActiveTurnConflict, "Thread cannot start the claimed turn.");
+            if (aggregate.Record.Turns.Count >= ThreadPersistenceLimits.MaxTurnsPerThread)
+                throw new ThreadContractException(ThreadErrorCode.TurnLimitExceeded, "Thread turn limit was exceeded.");
+            if (claim.IntentId != input.IntentId || claim.TurnId != turn.TurnId || claim.CanonicalInputSha256 != ComposerIntentContractValidator.ComputeCanonicalInputSha256(input) ||
+                turn.ThreadId != threadId || turn.Ordinal != aggregate.Record.Turns.Count + 1 || turn.Revision != 0 || turn.Status != TurnStatus.Queued ||
+                turn.ExecutionInput is null || ComposerIntentContractValidator.ComputeCanonicalInputSha256(turn.ExecutionInput) != claim.CanonicalInputSha256 ||
+                turn.CanonicalInputSha256 != claim.CanonicalInputSha256 || turn.TimelineItemCount != 0 ||
+                userMessage.ThreadId != threadId || userMessage.TurnId != turn.TurnId || userMessage.Type != TimelineItemType.UserMessage ||
+                userMessage.Sequence != aggregate.Record.CommittedSequence + 1 || userMessage.TimestampUtc < turn.CreatedAtUtc)
+                throw new ThreadContractException(ThreadErrorCode.TurnRecordCorrupt, "Claimed turn start binding is invalid.");
+
+            TurnRecord committedTurn = turn with
+            {
+                TimelineFirstSequence = userMessage.Sequence,
+                TimelineLastSequence = userMessage.Sequence,
+                TimelineItemCount = 1
+            };
+            SerializedRecord<TurnRecord> serializedTurn = SerializeRecord(committedTurn, ThreadPersistenceLimits.MaxTurnSnapshotBytes, ThreadErrorCode.TurnLimitExceeded);
+            SerializedRecord<TimelineItemRecord> serializedItem = SerializeRecord(userMessage, ThreadPersistenceLimits.MaxTimelineItemBytes, ThreadErrorCode.TimelineLimitExceeded);
+            WriteImmutableJson(GetTurnPath(layout, committedTurn.TurnId, committedTurn.Revision), serializedTurn.Json);
+            WriteImmutableJson(GetTimelinePath(layout, userMessage), serializedItem.Json);
+            ThreadMutationReceiptRecord receipt = new()
+            {
+                MutationId = mutationId,
+                PayloadSha256 = payloadHash,
+                ResultRevision = aggregate.Record.Revision + 1,
+                FirstSequence = userMessage.Sequence,
+                LastSequence = userMessage.Sequence,
+                ItemIds = [userMessage.ItemId]
+            };
+            ThreadRecord record = aggregate.Record with
+            {
+                Revision = aggregate.Record.Revision + 1,
+                Status = ThreadStatus.Running,
+                UpdatedAtUtc = userMessage.TimestampUtc,
+                Turns = aggregate.Record.Turns.Append(CreateTurnReference(committedTurn, serializedTurn.Sha256)).ToArray(),
+                ActiveTurnId = committedTurn.TurnId,
+                CommittedSequence = userMessage.Sequence,
+                TimelineItemCount = aggregate.Record.TimelineItemCount + 1,
+                PersistedByteCount = aggregate.Record.PersistedByteCount + serializedTurn.ByteCount + serializedItem.ByteCount,
+                MutationReceipts = aggregate.Record.MutationReceipts.Append(receipt).ToArray()
+            };
+            WriteManifest(layout, record);
+            return new ThreadAggregate(record, aggregate.Turns.Append(committedTurn).ToArray());
+        }, allowIdempotentRevisionMismatch: true, mutationId: mutationId, payloadHash: payloadHash);
+    }
+
     public ThreadStoreMutationResult TransitionTurn(
         string threadId,
         string turnId,
@@ -501,11 +590,116 @@ public sealed class ThreadStore
                 StartedAtUtc = nextStatus == TurnStatus.Running && current.StartedAtUtc is null ? changedAtUtc : current.StartedAtUtc,
                 CompletedAtUtc = TurnStatus.IsTerminal(nextStatus) ? changedAtUtc : null,
                 StopReason = TurnStatus.IsTerminal(nextStatus) ? stopReason : null,
-                ErrorCode = nextStatus == TurnStatus.Failed ? errorCode : null
+                ErrorCode = nextStatus == TurnStatus.Failed ? errorCode : null,
+                ActiveApproval = nextStatus == TurnStatus.WaitingForApproval ? current.ActiveApproval : null,
+                RecoveryRequired = nextStatus == TurnStatus.Canceling || current.RecoveryRequired && !TurnStatus.IsTerminal(nextStatus)
             };
             ThreadContractValidator.ValidateTurn(updated);
             return CommitTurnRevision(layout, aggregate, current, updated);
         });
+    }
+
+    public ThreadStoreMutationResult RequestApproval(
+        string threadId,
+        string turnId,
+        long expectedRevision,
+        string mutationId,
+        DurableApprovalRequestRecord request,
+        TimelineItemRecord timelineItem)
+    {
+        ArgumentNullException.ThrowIfNull(request);
+        ArgumentNullException.ThrowIfNull(timelineItem);
+        if (!ThreadContractValidator.IsSafeMutationId(mutationId))
+            return ThreadStoreMutationResult.Failure(ThreadErrorCode.TimelineAppendConflict, "Approval request mutation is invalid.", threadId);
+        string payloadHash = HashCanonical(new { Request = request, Timeline = timelineItem });
+        return Mutate(threadId, expectedRevision, (layout, aggregate) =>
+        {
+            TurnRecord current = aggregate.Turns.SingleOrDefault(turn => turn.TurnId == turnId)
+                ?? throw new ThreadContractException(ThreadErrorCode.TurnNotFound, "Turn was not found.");
+            if (current.Status != TurnStatus.Running || current.ActiveApproval is not null)
+                throw new ThreadContractException(ThreadErrorCode.TurnTransitionInvalid, "Turn cannot request approval in its current state.");
+            DurableApprovalRequestRecord bound = request with
+            {
+                ThreadId = threadId,
+                TurnId = turnId,
+                TurnRevision = current.Revision + 1,
+                ApprovalRevision = current.ApprovalRevision + 1
+            };
+            TurnRecord updated = current with
+            {
+                Revision = current.Revision + 1,
+                Status = TurnStatus.WaitingForApproval,
+                ActiveApproval = bound,
+                ApprovalRevision = bound.ApprovalRevision
+            };
+            return CommitTurnRevisionWithTimeline(layout, aggregate, current, updated, timelineItem, mutationId, payloadHash);
+        }, allowIdempotentRevisionMismatch: true, mutationId: mutationId, payloadHash: payloadHash);
+    }
+
+    public ThreadStoreMutationResult ResolveApproval(
+        string threadId,
+        string turnId,
+        long expectedRevision,
+        string requestId,
+        string decision,
+        long expectedTurnRevision,
+        long expectedApprovalRevision,
+        string mutationId,
+        DateTimeOffset decidedAtUtc,
+        TimelineItemRecord timelineItem)
+    {
+        if (decision is not ("approve" or "deny") || !ThreadContractValidator.IsSafeMutationId(mutationId))
+            return ThreadStoreMutationResult.Failure(ThreadErrorCode.TurnTransitionInvalid, "Approval decision is invalid.", threadId);
+        ArgumentNullException.ThrowIfNull(timelineItem);
+        string payloadHash = HashCanonical(new { requestId, decision, expectedTurnRevision, expectedApprovalRevision, Timeline = timelineItem });
+        return Mutate(threadId, expectedRevision, (layout, aggregate) =>
+        {
+            TurnRecord current = aggregate.Turns.SingleOrDefault(turn => turn.TurnId == turnId)
+                ?? throw new ThreadContractException(ThreadErrorCode.TurnNotFound, "Turn was not found.");
+            DurableApprovalRequestRecord approval = current.ActiveApproval ??
+                throw new ThreadContractException(ThreadErrorCode.TurnTransitionInvalid, "Approval request is no longer active.");
+            if (current.Status != TurnStatus.WaitingForApproval || current.Revision != expectedTurnRevision ||
+                current.ApprovalRevision != expectedApprovalRevision || approval.RequestId != requestId || decidedAtUtc >= approval.ExpiresAtUtc)
+                throw new ThreadContractException(ThreadErrorCode.ThreadRevisionConflict, "Approval request is stale or expired.");
+            TurnRecord updated = current with
+            {
+                Revision = current.Revision + 1,
+                Status = TurnStatus.Running,
+                ActiveApproval = null
+            };
+            return CommitTurnRevisionWithTimeline(layout, aggregate, current, updated, timelineItem, mutationId, payloadHash);
+        }, allowIdempotentRevisionMismatch: true, mutationId: mutationId, payloadHash: payloadHash);
+    }
+
+    public ThreadStoreMutationResult RequestCancel(
+        string threadId,
+        string turnId,
+        long expectedRevision,
+        long expectedTurnRevision,
+        string mutationId,
+        DateTimeOffset requestedAtUtc,
+        TimelineItemRecord timelineItem)
+    {
+        if (!ThreadContractValidator.IsSafeMutationId(mutationId))
+            return ThreadStoreMutationResult.Failure(ThreadErrorCode.TurnTransitionInvalid, "Cancel mutation is invalid.", threadId);
+        ArgumentNullException.ThrowIfNull(timelineItem);
+        string payloadHash = HashCanonical(new { turnId, expectedTurnRevision, Timeline = timelineItem });
+        return Mutate(threadId, expectedRevision, (layout, aggregate) =>
+        {
+            TurnRecord current = aggregate.Turns.SingleOrDefault(turn => turn.TurnId == turnId)
+                ?? throw new ThreadContractException(ThreadErrorCode.TurnNotFound, "Turn was not found.");
+            if (current.Revision != expectedTurnRevision || current.Status is not (TurnStatus.Queued or TurnStatus.Running or TurnStatus.WaitingForApproval))
+                throw new ThreadContractException(ThreadErrorCode.ThreadRevisionConflict, "Turn cancel request is stale.");
+            TurnRecord updated = current with
+            {
+                Revision = current.Revision + 1,
+                Status = TurnStatus.Canceling,
+                StartedAtUtc = current.StartedAtUtc ?? requestedAtUtc,
+                ActiveApproval = null,
+                RecoveryRequired = true
+            };
+            return CommitTurnRevisionWithTimeline(layout, aggregate, current, updated, timelineItem, mutationId, payloadHash);
+        }, allowIdempotentRevisionMismatch: true, mutationId: mutationId, payloadHash: payloadHash);
     }
 
     public ThreadStoreMutationResult AppendTimeline(
@@ -974,7 +1168,8 @@ public sealed class ThreadStore
         ThreadStoreLayout layout,
         ThreadAggregate aggregate,
         TurnRecord current,
-        TurnRecord updated)
+        TurnRecord updated,
+        ThreadMutationReceiptRecord? receipt = null)
     {
         SerializedRecord<TurnRecord> serialized = SerializeRecord(updated, ThreadPersistenceLimits.MaxTurnSnapshotBytes, ThreadErrorCode.TurnLimitExceeded);
         WriteImmutableJson(GetTurnPath(layout, updated.TurnId, updated.Revision), serialized.Json);
@@ -986,7 +1181,60 @@ public sealed class ThreadStore
             UpdatedAtUtc = Max(aggregate.Record.UpdatedAtUtc, updated.CompletedAtUtc ?? updated.StartedAtUtc ?? updated.CreatedAtUtc),
             Status = ThreadStateMachine.DeriveThreadStatus(turns, archived: false),
             ActiveTurnId = TurnStatus.IsActive(updated.Status) ? updated.TurnId : null,
-            PersistedByteCount = aggregate.Record.PersistedByteCount - oldBytes + serialized.ByteCount
+            PersistedByteCount = aggregate.Record.PersistedByteCount - oldBytes + serialized.ByteCount,
+            MutationReceipts = receipt is null ? aggregate.Record.MutationReceipts : aggregate.Record.MutationReceipts.Append(receipt).ToArray()
+        };
+        WriteManifest(layout, record);
+        TryDeleteFile(GetTurnPath(layout, current.TurnId, current.Revision));
+        return new ThreadAggregate(record, turns);
+    }
+
+    private static ThreadAggregate CommitTurnRevisionWithTimeline(
+        ThreadStoreLayout layout,
+        ThreadAggregate aggregate,
+        TurnRecord current,
+        TurnRecord updated,
+        TimelineItemRecord item,
+        string mutationId,
+        string payloadHash)
+    {
+        long nextSequence = aggregate.Record.CommittedSequence + 1;
+        if (item.ThreadId != aggregate.Record.ThreadId || item.TurnId != current.TurnId || item.Sequence != nextSequence ||
+            item.TimestampUtc < aggregate.Record.UpdatedAtUtc)
+            throw new ThreadContractException(ThreadErrorCode.TimelineAppendConflict, "Turn lifecycle timeline binding is invalid.");
+        ThreadContractValidator.ValidateTimelineItem(item);
+        TurnRecord committedTurn = updated with
+        {
+            TimelineFirstSequence = current.TimelineFirstSequence ?? item.Sequence,
+            TimelineLastSequence = item.Sequence,
+            TimelineItemCount = current.TimelineItemCount + 1
+        };
+        ThreadContractValidator.ValidateTurn(committedTurn);
+        SerializedRecord<TurnRecord> serializedTurn = SerializeRecord(committedTurn, ThreadPersistenceLimits.MaxTurnSnapshotBytes, ThreadErrorCode.TurnLimitExceeded);
+        SerializedRecord<TimelineItemRecord> serializedItem = SerializeRecord(item, ThreadPersistenceLimits.MaxTimelineItemBytes, ThreadErrorCode.TimelineLimitExceeded);
+        WriteImmutableJson(GetTurnPath(layout, committedTurn.TurnId, committedTurn.Revision), serializedTurn.Json);
+        WriteImmutableJson(GetTimelinePath(layout, item), serializedItem.Json);
+        long oldTurnBytes = new FileInfo(GetTurnPath(layout, current.TurnId, current.Revision)).Length;
+        ThreadMutationReceiptRecord receipt = new()
+        {
+            MutationId = mutationId,
+            PayloadSha256 = payloadHash,
+            ResultRevision = aggregate.Record.Revision + 1,
+            FirstSequence = item.Sequence,
+            LastSequence = item.Sequence,
+            ItemIds = [item.ItemId]
+        };
+        TurnRecord[] turns = ReplaceTurn(aggregate.Turns, committedTurn);
+        ThreadRecord record = UpdateTurnManifest(aggregate.Record, committedTurn, serializedTurn.Sha256) with
+        {
+            Revision = aggregate.Record.Revision + 1,
+            UpdatedAtUtc = item.TimestampUtc,
+            Status = ThreadStateMachine.DeriveThreadStatus(turns, archived: false),
+            ActiveTurnId = TurnStatus.IsActive(committedTurn.Status) ? committedTurn.TurnId : null,
+            CommittedSequence = item.Sequence,
+            TimelineItemCount = aggregate.Record.TimelineItemCount + 1,
+            PersistedByteCount = aggregate.Record.PersistedByteCount - oldTurnBytes + serializedTurn.ByteCount + serializedItem.ByteCount,
+            MutationReceipts = aggregate.Record.MutationReceipts.Append(receipt).ToArray()
         };
         WriteManifest(layout, record);
         TryDeleteFile(GetTurnPath(layout, current.TurnId, current.Revision));

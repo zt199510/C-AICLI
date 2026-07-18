@@ -8,6 +8,11 @@ import {
   isComposerGetParams,
   isContextSearchParams,
   isContextResolveResult,
+  isTurnStartParams,
+  isTurnCancelParams,
+  isApprovalResolveParams,
+  isTurnResumeParams,
+  isTurnRestartParams,
   isReportGetParams,
   isThreadArchiveParams,
   isThreadCreateParams,
@@ -29,6 +34,7 @@ import {
   type ThreadSummaryResult,
   type WorkspaceOpenResult,
   type WorkspaceSnapshotData,
+  type TurnExecutionStateResult,
 } from "../generated/desktop-contracts";
 
 export const IPC_CHANNELS = Object.freeze({
@@ -54,6 +60,11 @@ export const IPC_CHANNELS = Object.freeze({
   getComposer: "composer:get",
   enqueueComposer: "composer:enqueue",
   clearComposer: "composer:clear",
+  startTurn: "turn:start",
+  cancelTurn: "turn:cancel",
+  resolveApproval: "approval:resolve",
+  resumeTurn: "turn:resume",
+  restartTurn: "turn:restart",
   runtimeStatus: "runtime:status",
 });
 
@@ -81,6 +92,11 @@ export interface ClearComposerCommand {
   readonly expectedQueueRevision: number;
   readonly clientMutationId: string;
 }
+export interface StartTurnCommand { readonly threadId: string; readonly expectedThreadRevision: number; readonly expectedQueueRevision: number; readonly clientMutationId: string; }
+export interface CancelTurnCommand { readonly threadId: string; readonly turnId: string; readonly expectedThreadRevision: number; readonly expectedTurnRevision: number; readonly clientMutationId: string; }
+export interface ResolveApprovalCommand { readonly threadId: string; readonly turnId: string; readonly requestId: string; readonly decision: "approve" | "deny"; readonly expectedThreadRevision: number; readonly expectedTurnRevision: number; readonly expectedApprovalRevision: number; readonly clientMutationId: string; }
+export interface ResumeTurnCommand { readonly threadId: string; readonly turnId: string; readonly expectedThreadRevision: number; readonly expectedTurnRevision: number; readonly checkpointId: string; readonly clientMutationId: string; }
+export interface RestartTurnCommand { readonly threadId: string; readonly sourceTurnId: string; readonly expectedThreadRevision: number; readonly expectedSourceTurnRevision: number; readonly confirmed: boolean; readonly clientMutationId: string; }
 export interface ContextPickResult {
   readonly schemaVersion: 1;
   readonly canceled: boolean;
@@ -137,6 +153,11 @@ export interface DesktopBridge {
   getComposer(command: GetComposerCommand): Promise<ComposerStateResult>;
   enqueueComposer(command: EnqueueComposerCommand): Promise<ComposerStateResult>;
   clearComposer(command: ClearComposerCommand): Promise<ComposerStateResult>;
+  startTurn(command: StartTurnCommand): Promise<TurnExecutionStateResult>;
+  cancelTurn(command: CancelTurnCommand): Promise<TurnExecutionStateResult>;
+  resolveApproval(command: ResolveApprovalCommand): Promise<TurnExecutionStateResult>;
+  resumeTurn(command: ResumeTurnCommand): Promise<TurnExecutionStateResult>;
+  restartTurn(command: RestartTurnCommand): Promise<TurnExecutionStateResult>;
   onRuntimeStatus(listener: (status: RuntimeStatus) => void): () => void;
   onThreadChanged(listener: (event: ThreadChangedParams) => void): () => void;
 }
@@ -257,6 +278,27 @@ export function isEnqueueComposerCommand(value: unknown): value is EnqueueCompos
 export function isClearComposerCommand(value: unknown): value is ClearComposerCommand {
   return hasExactKeys(value, ["threadId", "expectedQueueRevision", "clientMutationId"]) &&
     isComposerClearParams({ schemaVersion: SCHEMA_VERSION, ...value });
+}
+
+export function isStartTurnCommand(value: unknown): value is StartTurnCommand {
+  return hasExactKeys(value, ["threadId", "expectedThreadRevision", "expectedQueueRevision", "clientMutationId"]) &&
+    isTurnStartParams({ schemaVersion: SCHEMA_VERSION, ...value });
+}
+export function isCancelTurnCommand(value: unknown): value is CancelTurnCommand {
+  return hasExactKeys(value, ["threadId", "turnId", "expectedThreadRevision", "expectedTurnRevision", "clientMutationId"]) &&
+    isTurnCancelParams({ schemaVersion: SCHEMA_VERSION, ...value });
+}
+export function isResolveApprovalCommand(value: unknown): value is ResolveApprovalCommand {
+  return hasExactKeys(value, ["threadId", "turnId", "requestId", "decision", "expectedThreadRevision", "expectedTurnRevision", "expectedApprovalRevision", "clientMutationId"]) &&
+    isApprovalResolveParams({ schemaVersion: SCHEMA_VERSION, ...value });
+}
+export function isResumeTurnCommand(value: unknown): value is ResumeTurnCommand {
+  return hasExactKeys(value, ["threadId", "turnId", "expectedThreadRevision", "expectedTurnRevision", "checkpointId", "clientMutationId"]) &&
+    isTurnResumeParams({ schemaVersion: SCHEMA_VERSION, ...value });
+}
+export function isRestartTurnCommand(value: unknown): value is RestartTurnCommand {
+  return hasExactKeys(value, ["threadId", "sourceTurnId", "expectedThreadRevision", "expectedSourceTurnRevision", "confirmed", "clientMutationId"]) &&
+    isTurnRestartParams({ schemaVersion: SCHEMA_VERSION, ...value });
 }
 
 export function isContextPickResult(value: unknown): value is ContextPickResult {

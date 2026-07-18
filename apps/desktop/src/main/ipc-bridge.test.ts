@@ -3,7 +3,7 @@ import { createRuntimeStatus, IPC_CHANNELS } from "../shared/bridge-contract";
 import { registerDesktopIpc } from "./ipc-bridge";
 
 describe("desktop IPC registry", () => {
-  it("registers exactly twenty-one invoke handlers and disposes them", () => {
+  it("registers exactly twenty-six invoke handlers and disposes them", () => {
     const handlers = new Map<string, (...args: unknown[]) => unknown>();
     const removeHandler = vi.fn((channel: string) => handlers.delete(channel));
     const ipcMain = {
@@ -40,6 +40,11 @@ describe("desktop IPC registry", () => {
       IPC_CHANNELS.getComposer,
       IPC_CHANNELS.enqueueComposer,
       IPC_CHANNELS.clearComposer,
+      IPC_CHANNELS.startTurn,
+      IPC_CHANNELS.cancelTurn,
+      IPC_CHANNELS.resolveApproval,
+      IPC_CHANNELS.resumeTurn,
+      IPC_CHANNELS.restartTurn,
       IPC_CHANNELS.getChanges,
       IPC_CHANNELS.listReports,
       IPC_CHANNELS.getReport,
@@ -47,7 +52,7 @@ describe("desktop IPC registry", () => {
       IPC_CHANNELS.getArtifact,
     ]);
     dispose();
-    expect(removeHandler).toHaveBeenCalledTimes(21);
+    expect(removeHandler).toHaveBeenCalledTimes(26);
   });
 
   it("rejects untrusted senders and unexpected arguments", async () => {
@@ -99,5 +104,10 @@ function readOnlyRuntime() {
     getComposer: unused,
     enqueueComposer: unused,
     clearComposer: unused,
+    startTurn: unused,
+    cancelTurn: unused,
+    resolveApproval: unused,
+    resumeTurn: unused,
+    restartTurn: unused,
   };
 }

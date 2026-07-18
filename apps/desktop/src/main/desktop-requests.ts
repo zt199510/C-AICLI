@@ -8,6 +8,12 @@ import {
   isComposerEnqueueParams,
   isComposerGetParams,
   isComposerStateResult,
+  isTurnStartParams,
+  isTurnCancelParams,
+  isApprovalResolveParams,
+  isTurnResumeParams,
+  isTurnRestartParams,
+  isTurnExecutionStateResult,
   isContextResolveParams,
   isContextResolveResult,
   isContextSearchParams,
@@ -46,6 +52,12 @@ import {
   type ComposerEnqueueParams,
   type ComposerGetParams,
   type ComposerStateResult,
+  type TurnStartParams,
+  type TurnCancelParams,
+  type ApprovalResolveParams,
+  type TurnResumeParams,
+  type TurnRestartParams,
+  type TurnExecutionStateResult,
   type ContextResolveParams,
   type ContextResolveResult,
   type ContextSearchParams,
@@ -175,6 +187,21 @@ export const COMPOSER_CLEAR_REQUEST = descriptor<ComposerClearParams, ComposerSt
   DESKTOP_METHOD_METADATA.ComposerClearMethod.timeout,
   isComposerClearParams,
   isComposerStateResult,
+);
+export const TURN_START_REQUEST = descriptor<TurnStartParams, TurnExecutionStateResult>(
+  DESKTOP_METHODS.TurnStartMethod, DESKTOP_METHOD_METADATA.TurnStartMethod.timeout, isTurnStartParams, isTurnExecutionStateResult,
+);
+export const TURN_CANCEL_REQUEST = descriptor<TurnCancelParams, TurnExecutionStateResult>(
+  DESKTOP_METHODS.TurnCancelMethod, DESKTOP_METHOD_METADATA.TurnCancelMethod.timeout, isTurnCancelParams, isTurnExecutionStateResult,
+);
+export const APPROVAL_RESOLVE_REQUEST = descriptor<ApprovalResolveParams, TurnExecutionStateResult>(
+  DESKTOP_METHODS.ApprovalResolveMethod, DESKTOP_METHOD_METADATA.ApprovalResolveMethod.timeout, isApprovalResolveParams, isTurnExecutionStateResult,
+);
+export const TURN_RESUME_REQUEST = descriptor<TurnResumeParams, TurnExecutionStateResult>(
+  DESKTOP_METHODS.TurnResumeMethod, DESKTOP_METHOD_METADATA.TurnResumeMethod.timeout, isTurnResumeParams, isTurnExecutionStateResult,
+);
+export const TURN_RESTART_REQUEST = descriptor<TurnRestartParams, TurnExecutionStateResult>(
+  DESKTOP_METHODS.TurnRestartMethod, DESKTOP_METHOD_METADATA.TurnRestartMethod.timeout, isTurnRestartParams, isTurnExecutionStateResult,
 );
 export const CHANGES_GET_REQUEST = descriptor<ChangesGetParams, ChangesGetResult>(
   DESKTOP_METHODS.ChangesGetMethod,

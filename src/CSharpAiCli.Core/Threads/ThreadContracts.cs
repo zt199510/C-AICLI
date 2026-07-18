@@ -42,7 +42,7 @@ public static class ThreadErrorCode
 public static class ThreadPersistenceLimits
 {
     public const int MaxThreadManifestBytes = 1024 * 1024;
-    public const int MaxTurnSnapshotBytes = 128 * 1024;
+    public const int MaxTurnSnapshotBytes = 256 * 1024;
     public const int MaxTimelineItemBytes = 16 * 1024;
     public const int MaxTitleBytes = 512;
     public const int MaxTaskSummaryBytes = 4 * 1024;
@@ -62,11 +62,13 @@ public static class ThreadStatus
     public const string Idle = "idle";
     public const string Running = "running";
     public const string WaitingForApproval = "waiting-for-approval";
+    public const string Canceling = "canceling";
+    public const string Canceled = "canceled";
     public const string Failed = "failed";
     public const string Completed = "completed";
     public const string Archived = "archived";
 
-    public static bool IsKnown(string? value) => value is Idle or Running or WaitingForApproval or Failed or Completed or Archived;
+    public static bool IsKnown(string? value) => value is Idle or Running or WaitingForApproval or Canceling or Canceled or Failed or Completed or Archived;
 }
 
 public static class TurnStatus
@@ -97,6 +99,8 @@ public static class TimelineItemType
     public const string CommandCompleted = "command.completed";
     public const string ApprovalRequested = "approval.requested";
     public const string ApprovalResolved = "approval.resolved";
+    public const string VerificationCompleted = "verification.completed";
+    public const string AssistantFinal = "assistant.final";
     public const string ChangesUpdated = "changes.updated";
     public const string ReportAvailable = "report.available";
     public const string ArtifactAvailable = "artifact.available";
@@ -105,7 +109,7 @@ public static class TimelineItemType
 
     public static bool IsKnown(string? value) => value is UserMessage or AssistantMessage or PlanUpdated
         or ToolStarted or ToolCompleted or CommandStarted or CommandCompleted
-        or ApprovalRequested or ApprovalResolved or ChangesUpdated or ReportAvailable
+        or ApprovalRequested or ApprovalResolved or VerificationCompleted or AssistantFinal or ChangesUpdated or ReportAvailable
         or ArtifactAvailable or WarningRaised or TurnCompleted;
 }
 
@@ -264,10 +268,45 @@ public sealed record TurnRecord
     public string? ErrorCode { get; init; }
     public string Mode { get; init; } = "projection";
     public string? SourceCorrelation { get; init; }
+    public PendingComposerIntentRecord? ExecutionInput { get; init; }
+    public string? CanonicalInputSha256 { get; init; }
+    public bool RecoveryRequired { get; init; }
+    public TurnCheckpointRecord? Checkpoint { get; init; }
+    public DurableApprovalRequestRecord? ActiveApproval { get; init; }
+    public long ApprovalRevision { get; init; }
     public IReadOnlyList<ThreadSourcePointerRecord> SourcePointers { get; init; } = [];
     public long? TimelineFirstSequence { get; init; }
     public long? TimelineLastSequence { get; init; }
     public int TimelineItemCount { get; init; }
+}
+
+public sealed record TurnCheckpointRecord
+{
+    public string CheckpointId { get; init; } = string.Empty;
+    public string CanonicalInputSha256 { get; init; } = string.Empty;
+    public long EventSequence { get; init; }
+    public string WorkspaceRootIdentity { get; init; } = string.Empty;
+    public bool UnknownWriteBoundary { get; init; }
+    public DateTimeOffset CreatedAtUtc { get; init; }
+}
+
+public sealed record DurableApprovalRequestRecord
+{
+    public string RequestId { get; init; } = string.Empty;
+    public string WorkspaceId { get; init; } = string.Empty;
+    public string ThreadId { get; init; } = string.Empty;
+    public string TurnId { get; init; } = string.Empty;
+    public long TurnRevision { get; init; }
+    public long ApprovalRevision { get; init; }
+    public string PolicyIdentity { get; init; } = string.Empty;
+    public string PolicyRevision { get; init; } = string.Empty;
+    public string Risk { get; init; } = string.Empty;
+    public string Operation { get; init; } = string.Empty;
+    public string TargetClass { get; init; } = string.Empty;
+    public string CanonicalActionSha256 { get; init; } = string.Empty;
+    public string SafeSummary { get; init; } = string.Empty;
+    public DateTimeOffset CreatedAtUtc { get; init; }
+    public DateTimeOffset ExpiresAtUtc { get; init; }
 }
 
 public sealed record TimelineMessagePayloadRecord(string Preview);
@@ -330,7 +369,7 @@ public static class ThreadStateMachine
 {
     public static bool CanTransitionTurn(string current, string next) => (current, next) switch
     {
-        (TurnStatus.Queued, TurnStatus.Running or TurnStatus.Canceled) => true,
+        (TurnStatus.Queued, TurnStatus.Running or TurnStatus.Canceling or TurnStatus.Canceled) => true,
         (TurnStatus.Running, TurnStatus.WaitingForApproval or TurnStatus.Canceling or TurnStatus.Failed or TurnStatus.Completed) => true,
         (TurnStatus.WaitingForApproval, TurnStatus.Running or TurnStatus.Canceling or TurnStatus.Failed) => true,
         (TurnStatus.Canceling, TurnStatus.Canceled or TurnStatus.Failed) => true,
@@ -349,7 +388,9 @@ public static class ThreadStateMachine
         {
             null => ThreadStatus.Idle,
             TurnStatus.WaitingForApproval => ThreadStatus.WaitingForApproval,
-            TurnStatus.Canceled or TurnStatus.Failed => ThreadStatus.Failed,
+            TurnStatus.Canceling => ThreadStatus.Canceling,
+            TurnStatus.Canceled => ThreadStatus.Canceled,
+            TurnStatus.Failed => ThreadStatus.Failed,
             TurnStatus.Completed => ThreadStatus.Completed,
             _ => ThreadStatus.Running
         };
@@ -506,10 +547,26 @@ public static class ThreadContractValidator
             (turn.Status != TurnStatus.Queued && turn.StartedAtUtc is null) ||
             TurnStatus.IsTerminal(turn.Status) != turn.CompletedAtUtc.HasValue ||
             Utf8Bytes(turn.TaskSummary) > ThreadPersistenceLimits.MaxTaskSummaryBytes ||
-            Utf8Bytes(turn.Mode) > 256 || Utf8Bytes(turn.SourceCorrelation) > ThreadPersistenceLimits.MaxPointerValueBytes)
+            Utf8Bytes(turn.Mode) > 256 || Utf8Bytes(turn.SourceCorrelation) > ThreadPersistenceLimits.MaxPointerValueBytes ||
+            turn.ApprovalRevision < 0)
         {
             throw TurnCorrupt("Turn metadata is invalid.");
         }
+
+
+        if ((turn.ExecutionInput is null) != (turn.CanonicalInputSha256 is null))
+        {
+            throw TurnCorrupt("Turn execution input identity is incomplete.");
+        }
+        if (turn.ExecutionInput is not null)
+        {
+            ComposerIntentContractValidator.ValidateIntent(turn.ExecutionInput);
+            if (turn.ExecutionInput.ThreadId != turn.ThreadId ||
+                ComposerIntentContractValidator.ComputeCanonicalInputSha256(turn.ExecutionInput) != turn.CanonicalInputSha256)
+                throw TurnCorrupt("Turn execution input hash is invalid.");
+        }
+        ValidateCheckpoint(turn.Checkpoint, turn);
+        ValidateApproval(turn.ActiveApproval, turn);
 
         ValidatePointers(turn.SourcePointers);
         if (turn.TimelineItemCount < 0 || turn.TimelineItemCount > ThreadPersistenceLimits.MaxTimelineItemsPerThread ||
@@ -520,6 +577,33 @@ public static class ThreadContractValidator
         {
             throw TurnCorrupt("Turn timeline range is invalid.");
         }
+    }
+
+    private static void ValidateCheckpoint(TurnCheckpointRecord? checkpoint, TurnRecord turn)
+    {
+        if (checkpoint is null) return;
+        if (string.IsNullOrWhiteSpace(checkpoint.CheckpointId) || Utf8Bytes(checkpoint.CheckpointId) > 128 ||
+            !IsSha256(checkpoint.CanonicalInputSha256) || checkpoint.CanonicalInputSha256 != turn.CanonicalInputSha256 ||
+            checkpoint.EventSequence < 0 || string.IsNullOrWhiteSpace(checkpoint.WorkspaceRootIdentity) ||
+            Utf8Bytes(checkpoint.WorkspaceRootIdentity) > ThreadPersistenceLimits.MaxPointerValueBytes)
+            throw TurnCorrupt("Turn checkpoint is invalid.");
+        ValidateUtc(checkpoint.CreatedAtUtc, "checkpoint.createdAtUtc");
+    }
+
+    private static void ValidateApproval(DurableApprovalRequestRecord? approval, TurnRecord turn)
+    {
+        if (approval is null) return;
+        if (turn.Status != TurnStatus.WaitingForApproval || approval.ThreadId != turn.ThreadId || approval.TurnId != turn.TurnId ||
+            approval.TurnRevision != turn.Revision || approval.ApprovalRevision != turn.ApprovalRevision ||
+            string.IsNullOrWhiteSpace(approval.RequestId) || Utf8Bytes(approval.RequestId) > 128 ||
+            string.IsNullOrWhiteSpace(approval.WorkspaceId) || string.IsNullOrWhiteSpace(approval.PolicyIdentity) ||
+            Utf8Bytes(approval.PolicyIdentity) > 256 || Utf8Bytes(approval.PolicyRevision) > 256 ||
+            Utf8Bytes(approval.Risk) > 64 || Utf8Bytes(approval.Operation) > 1024 || Utf8Bytes(approval.TargetClass) > 1024 ||
+            !IsSha256(approval.CanonicalActionSha256) || Utf8Bytes(approval.SafeSummary) > 4 * 1024)
+            throw TurnCorrupt("Turn approval request is invalid.");
+        ValidateUtc(approval.CreatedAtUtc, "approval.createdAtUtc");
+        ValidateUtc(approval.ExpiresAtUtc, "approval.expiresAtUtc");
+        if (approval.ExpiresAtUtc <= approval.CreatedAtUtc) throw TurnCorrupt("Turn approval expiry is invalid.");
     }
 
     public static void ValidateTimelineItem(TimelineItemRecord item)
@@ -627,9 +711,9 @@ public static class ThreadContractValidator
             payload.Reference, payload.Warning, payload.TurnCompleted }.Count(value => value is not null);
         bool matching = type switch
         {
-            TimelineItemType.UserMessage or TimelineItemType.AssistantMessage => payload.Message is not null,
+            TimelineItemType.UserMessage or TimelineItemType.AssistantMessage or TimelineItemType.AssistantFinal => payload.Message is not null,
             TimelineItemType.PlanUpdated => payload.Plan is not null,
-            TimelineItemType.ToolStarted or TimelineItemType.ToolCompleted or TimelineItemType.CommandStarted or TimelineItemType.CommandCompleted => payload.Operation is not null,
+            TimelineItemType.ToolStarted or TimelineItemType.ToolCompleted or TimelineItemType.CommandStarted or TimelineItemType.CommandCompleted or TimelineItemType.VerificationCompleted => payload.Operation is not null,
             TimelineItemType.ApprovalRequested or TimelineItemType.ApprovalResolved => payload.Approval is not null,
             TimelineItemType.ChangesUpdated => payload.Changes is not null && payload.Changes.ChangedFileCount >= 0,
             TimelineItemType.ReportAvailable or TimelineItemType.ArtifactAvailable => payload.Reference is not null,

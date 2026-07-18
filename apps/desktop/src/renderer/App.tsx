@@ -2,6 +2,7 @@ import { FolderOpen, PanelLeft, PanelLeftClose, PanelRight, RefreshCw, X } from 
 import { useEffect, useState } from "react";
 import { ReviewInspector } from "./ReviewInspector";
 import { Composer } from "./Composer";
+import { TaskControls } from "./TaskControls";
 import { ThreadSidebar } from "./ThreadSidebar";
 import { TimelineView } from "./TimelineView";
 import { useDesktopController } from "./use-desktop-controller";
@@ -88,6 +89,13 @@ export function App() {
               <TimelineView detail={state.detail} status={state.detailStatus} error={state.detailError} onLoadMore={controller.loadMore} />
             )}
           </section>
+          <TaskControls
+            detail={state.detail}
+            onCancel={controller.cancelTurn}
+            onApproval={controller.resolveApproval}
+            onResume={controller.resumeTurn}
+            onRestart={controller.restartTurn}
+          />
           <Composer
             draft={controller.composerDraft}
             composer={controller.composer}

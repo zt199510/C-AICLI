@@ -61,6 +61,7 @@ public sealed class ComposerIntentStore
             cancellationToken.ThrowIfCancellationRequested();
             ComposerQueueRecord queue = JsonSerializer.Deserialize<ComposerQueueRecord>(json, JsonOptions) ??
                 throw new JsonException();
+            queue = Upgrade(queue);
             ComposerIntentContractValidator.ValidateQueue(queue);
             if (queue.WorkspaceId != workspaceId || queue.WorkspaceRootIdentity != workspaceRootIdentity || queue.ThreadId != threadId)
             {
@@ -90,8 +91,79 @@ public sealed class ComposerIntentStore
         {
             if (queue.PendingIntent is not null)
                 throw new ComposerIntentContractException(ComposerIntentErrorCode.AlreadyPending, "Thread already has a pending composer intent.");
-            return queue with { PendingIntent = intent };
+            return queue with { Lifecycle = ComposerQueueLifecycle.Pending, PendingIntent = intent, Claim = null };
         });
+    }
+
+    public ComposerIntentStoreResult Claim(
+        string workspaceId,
+        string workspaceRootIdentity,
+        string threadId,
+        long expectedRevision,
+        string mutationId,
+        string startMutationId,
+        DateTimeOffset claimedAtUtc)
+    {
+        if (claimedAtUtc.Offset != TimeSpan.Zero)
+            return ComposerIntentStoreResult.Failure(ComposerIntentErrorCode.Invalid, "Composer claim timestamp is invalid.");
+        ComposerIntentStoreResult read = Get(workspaceId, workspaceRootIdentity, threadId);
+        if (!read.Succeeded || read.Queue?.PendingIntent is null) return read.Succeeded
+            ? ComposerIntentStoreResult.Failure(ComposerIntentErrorCode.NotFound, "Thread has no pending composer intent.")
+            : read;
+        PendingComposerIntentRecord intent = read.Queue.PendingIntent;
+        string inputHash = ComposerIntentContractValidator.ComputeCanonicalInputSha256(intent);
+        ComposerIntentClaimRecord claim = new()
+        {
+            ClaimId = "claim_" + Guid.NewGuid().ToString("N"),
+            IntentId = intent.IntentId,
+            TurnId = ComposerIntentContractValidator.CreateDeterministicTurnId(intent.IntentId, inputHash),
+            CanonicalInputSha256 = inputHash,
+            StartMutationId = startMutationId,
+            SourceQueueRevision = expectedRevision,
+            ClaimedAtUtc = claimedAtUtc
+        };
+        return Mutate(workspaceId, workspaceRootIdentity, threadId, expectedRevision, mutationId, "claim", intent, queue =>
+        {
+            if (queue.PendingIntent is null)
+                throw new ComposerIntentContractException(ComposerIntentErrorCode.NotFound, "Thread has no pending composer intent.");
+            if (queue.Claim is not null)
+            {
+                if (queue.Claim.IntentId == claim.IntentId && queue.Claim.CanonicalInputSha256 == claim.CanonicalInputSha256 &&
+                    queue.Claim.StartMutationId == startMutationId) return queue;
+                throw new ComposerIntentContractException(ComposerIntentErrorCode.MutationConflict, "Composer intent is already claimed differently.");
+            }
+            return queue with { Lifecycle = ComposerQueueLifecycle.Claimed, Claim = claim };
+        });
+    }
+
+    public ComposerIntentStoreResult FinalizeClaim(
+        string workspaceId,
+        string workspaceRootIdentity,
+        string threadId,
+        long expectedRevision,
+        string mutationId,
+        string claimId,
+        string turnId,
+        string canonicalInputSha256)
+    {
+        var identity = new PendingComposerIntentRecord
+        {
+            IntentId = "intent_" + Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(claimId + turnId + canonicalInputSha256))).ToLowerInvariant()[..32],
+            WorkspaceId = workspaceId,
+            WorkspaceRootIdentity = workspaceRootIdentity,
+            ThreadId = threadId,
+            Prompt = "finalize-claim",
+            EffectiveModel = "internal",
+            CreatedAtUtc = DateTimeOffset.UnixEpoch
+        };
+        return Mutate(workspaceId, workspaceRootIdentity, threadId, expectedRevision, mutationId, "finalize", identity, queue =>
+        {
+            ComposerIntentClaimRecord claim = queue.Claim ??
+                throw new ComposerIntentContractException(ComposerIntentErrorCode.NotFound, "Composer intent claim was not found.");
+            if (claim.ClaimId != claimId || claim.TurnId != turnId || claim.CanonicalInputSha256 != canonicalInputSha256)
+                throw new ComposerIntentContractException(ComposerIntentErrorCode.MutationConflict, "Composer claim identity does not match the committed turn.");
+            return queue with { Lifecycle = ComposerQueueLifecycle.Empty, PendingIntent = null, Claim = null };
+        }, turnId, canonicalInputSha256);
     }
 
     public ComposerIntentStoreResult Clear(
@@ -105,7 +177,9 @@ public sealed class ComposerIntentStore
         {
             if (queue.PendingIntent is null)
                 throw new ComposerIntentContractException(ComposerIntentErrorCode.NotFound, "Thread has no pending composer intent.");
-            return queue with { PendingIntent = null };
+            if (queue.Claim is not null)
+                throw new ComposerIntentContractException(ComposerIntentErrorCode.MutationConflict, "A claimed composer intent cannot be cleared.");
+            return queue with { Lifecycle = ComposerQueueLifecycle.Empty, PendingIntent = null, Claim = null };
         });
     }
 
@@ -117,7 +191,9 @@ public sealed class ComposerIntentStore
         string mutationId,
         string operation,
         PendingComposerIntentRecord? intent,
-        Func<ComposerQueueRecord, ComposerQueueRecord> mutation)
+        Func<ComposerQueueRecord, ComposerQueueRecord> mutation,
+        string? turnId = null,
+        string? canonicalInputSha256 = null)
     {
         try
         {
@@ -151,7 +227,9 @@ public sealed class ComposerIntentStore
                     MutationId = mutationId,
                     PayloadSha256 = payloadHash,
                     Operation = operation,
-                    ResultRevision = current.Revision + 1
+                    ResultRevision = current.Revision + 1,
+                    TurnId = turnId,
+                    CanonicalInputSha256 = canonicalInputSha256
                 }).TakeLast(ComposerIntentLimits.MaxMutationReceipts).ToArray()
             };
             ComposerIntentContractValidator.ValidateQueue(updated);
@@ -172,6 +250,20 @@ public sealed class ComposerIntentStore
         WorkspaceRootIdentity = rootIdentity,
         ThreadId = threadId
     };
+
+    private static ComposerQueueRecord Upgrade(ComposerQueueRecord queue)
+    {
+        if (queue.SchemaVersion == 1)
+        {
+            return queue with
+            {
+                SchemaVersion = ComposerQueueRecord.CurrentSchemaVersion,
+                Lifecycle = queue.PendingIntent is null ? ComposerQueueLifecycle.Empty : ComposerQueueLifecycle.Pending,
+                Claim = null
+            };
+        }
+        return queue;
+    }
 
     private string GetPath(string threadId)
     {

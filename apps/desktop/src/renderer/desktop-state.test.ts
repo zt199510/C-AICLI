@@ -67,5 +67,5 @@ function item(sequence: number, itemId: string): TimelineItemData {
 }
 
 function event(eventSequence: number) {
-  return { schemaVersion: 1, eventSequence, workspaceId: "workspace-1", threadId: "thread-1", revision: 2, changeKind: "renamed", emittedAtUtc: "2026-07-17T00:00:00.000Z" } as const;
+  return { schemaVersion: 1, eventSequence, workspaceId: "workspace-1", threadId: "thread-1", revision: 2, committedSequence: 0, changeKind: "renamed", emittedAtUtc: "2026-07-17T00:00:00.000Z" } as const;
 }

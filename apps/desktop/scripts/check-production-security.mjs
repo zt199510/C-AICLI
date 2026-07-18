@@ -43,7 +43,7 @@ const productionSourceFiles = (await walk(path.join(desktopRoot, "src"))).filter
   /\.(ts|tsx)$/.test(file) && !file.includes(`${path.sep}generated${path.sep}`) && !file.endsWith(".test.ts") && !file.endsWith(".test.tsx"),
 );
 const productionSource = (await Promise.all(productionSourceFiles.map((file) => readFile(file, "utf8")))).join("\n");
-for (const value of ["catalog.list", "thread.delete", "app.cancel", "turn.start", "desktop:request", "query(method"]) {
+for (const value of ["catalog.list", "thread.delete", "app.cancel", "desktop:request", "query(method"]) {
   if (productionSource.includes(value)) throw new Error(`Production source contains unreviewed surface: ${value}`);
 }
 
@@ -54,11 +54,12 @@ const reviewedChannels = [
   "changes:get", "report:list", "report:get", "artifact:list", "artifact:get",
   "catalog:list", "context:search", "context:pick-file", "context:pick-folder",
   "composer:get", "composer:enqueue", "composer:clear",
+  "turn:start", "turn:cancel", "approval:resolve", "turn:resume", "turn:restart",
 ];
 for (const channel of reviewedChannels) {
   if (!preload.includes(channel)) throw new Error(`Preload bundle is missing reviewed channel: ${channel}`);
 }
-for (const value of ["desktop:initialize", "desktop:request", "shell.openExternal", "node:fs", "child_process", "thread:delete", "context:resolve", "turn:start", "approval:resolve", "terminal:"]) {
+for (const value of ["desktop:initialize", "desktop:request", "shell.openExternal", "node:fs", "child_process", "thread:delete", "context:resolve", "terminal:"]) {
   if (preload.includes(value)) throw new Error(`Preload bundle contains forbidden surface: ${value}`);
 }
 

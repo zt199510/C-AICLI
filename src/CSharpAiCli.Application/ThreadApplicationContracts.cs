@@ -93,7 +93,9 @@ public sealed record TurnSummaryProjection(
     IReadOnlyList<ThreadSourcePointerProjection> SourcePointers,
     long? TimelineFirstSequence,
     long? TimelineLastSequence,
-    int TimelineItemCount);
+    int TimelineItemCount,
+    bool RecoveryRequired,
+    DurableApprovalProjection? Approval);
 
 public sealed record TimelinePayloadProjection(
     string Kind,

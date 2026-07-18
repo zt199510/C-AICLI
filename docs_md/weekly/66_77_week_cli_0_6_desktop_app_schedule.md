@@ -2,7 +2,7 @@
 
 更新时间：2026-07-17
 
-状态：Week 66-72 已完成并通过技术 Gate；Week 73 待执行
+状态：Week 66-73 核心实现已完成；Week 73 packaged E2E 因 Electron 下载 `ECONNRESET` 待重试
 
 详细产品与技术边界统一以 `docs_md/spec/desktop_app_development_framework_0_6_0.md` 为准。本排期负责把该框架拆成 Week 66-77 的依赖顺序、周末验收和发布 Gate，不扩展产品范围。
 
@@ -192,6 +192,8 @@ open workspace
 
 详细计划：`72_week_composer_catalog_controlled_context.plan.md`
 
+执行结论：Passed；证据见 `72_week_review.md`。
+
 主要交付：
 
 - 完成多行 composer、draft、发送状态、模型和 approval policy 摘要。
@@ -203,6 +205,10 @@ open workspace
 周末 Gate：Renderer 不直接读取附件；越界、reparse、超限、stale catalog 和 workspace 切换竞态均被稳定拒绝。
 
 ### Week 73：Task Chat、Streaming、Approval 与 Cancel
+
+详细计划：`73_week_task_chat_streaming_approval_cancel.plan.md`
+
+执行结论：核心实现 Passed；证据见 `73_week_review.md`。.NET 全量、Desktop Vitest、unpacked E2E 与 Desktop build/security 已通过；`package:dir` 在 Electron packager 下载阶段因 `ECONNRESET` 中断，packaged E2E 待网络恢复后重试。
 
 主要交付：
 

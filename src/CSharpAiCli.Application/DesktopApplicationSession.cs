@@ -148,6 +148,7 @@ public sealed class DesktopApplicationSession : IDisposable
     private readonly ArtifactApplicationService artifactService = new();
     private readonly ControlledContextApplicationService contextService;
     private readonly ComposerApplicationService composerService;
+    private readonly TurnExecutionApplicationService turnExecutionService = new();
 
     internal DesktopApplicationSession(
         CliEnvironmentSnapshot snapshot,
@@ -267,6 +268,74 @@ public sealed class DesktopApplicationSession : IDisposable
         CancellationToken cancellationToken = default) => Execute(
             token => composerService.Clear(new ComposerClearRequest(
                 snapshot, threadId, expectedQueueRevision, clientMutationId), token), cancellationToken);
+
+    public ApplicationResult<TurnExecutionStateProjection> StartTurn(
+        string threadId,
+        long expectedThreadRevision,
+        long expectedQueueRevision,
+        string clientMutationId,
+        CancellationToken cancellationToken = default) => Execute(
+            token => turnExecutionService.Start(new TurnStartRequest(snapshot, threadId, expectedThreadRevision,
+                expectedQueueRevision, clientMutationId), token), cancellationToken);
+
+    public ApplicationResult<TurnExecutionStateProjection> CancelTurn(
+        string threadId,
+        string turnId,
+        long expectedThreadRevision,
+        long expectedTurnRevision,
+        string clientMutationId,
+        CancellationToken cancellationToken = default) => Execute(
+            _ => turnExecutionService.Cancel(new TurnCancelRequest(snapshot, threadId, turnId,
+                expectedThreadRevision, expectedTurnRevision, clientMutationId)), cancellationToken);
+
+    public ApplicationResult<TurnExecutionStateProjection> ResolveApproval(
+        string threadId,
+        string turnId,
+        string requestId,
+        string decision,
+        long expectedThreadRevision,
+        long expectedTurnRevision,
+        long expectedApprovalRevision,
+        string clientMutationId,
+        CancellationToken cancellationToken = default) => Execute(
+            _ => turnExecutionService.ResolveApproval(new ApprovalResolveRequest(snapshot, threadId, turnId,
+                requestId, decision, expectedThreadRevision, expectedTurnRevision, expectedApprovalRevision, clientMutationId)), cancellationToken);
+
+    public ApplicationResult<TurnExecutionStateProjection> ResumeTurn(
+        string threadId,
+        string turnId,
+        long expectedThreadRevision,
+        long expectedTurnRevision,
+        string checkpointId,
+        string clientMutationId,
+        CancellationToken cancellationToken = default) => Execute(_ =>
+            ApplicationResult<TurnExecutionStateProjection>.Failure(new ApplicationError(
+                "restart-required", ApplicationErrorCategory.Conflict,
+                "This runtime has no verified safe checkpoint; explicit restart is required.", false)), cancellationToken);
+
+    public ApplicationResult<TurnExecutionStateProjection> RestartTurn(
+        string threadId,
+        string sourceTurnId,
+        long expectedThreadRevision,
+        long expectedSourceTurnRevision,
+        bool confirmed,
+        string clientMutationId,
+        CancellationToken cancellationToken = default) => Execute(
+            _ => turnExecutionService.Restart(new TurnRestartRequest(snapshot, threadId, sourceTurnId,
+                expectedThreadRevision, expectedSourceTurnRevision, confirmed, clientMutationId)), cancellationToken);
+
+    public async Task<ApplicationResult<TurnExecutionStateProjection>> ExecuteTurnAsync(
+        string threadId,
+        string turnId,
+        ITurnExecutionRuntime runtime,
+        IInteractiveApprovalWaiter approvalWaiter,
+        Func<TurnExecutionStateProjection, ValueTask>? committed = null,
+        CancellationToken cancellationToken = default)
+    {
+        using CancellationTokenSource linked = CancellationTokenSource.CreateLinkedTokenSource(lifetime.Token, cancellationToken);
+        return await turnExecutionService.ExecuteAsync(snapshot, threadId, turnId, runtime, approvalWaiter,
+            committed, linked.Token).ConfigureAwait(false);
+    }
 
     public ApplicationResult<DesktopChangesProjection> GetChanges(
         string? sessionName,
