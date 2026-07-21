@@ -48,6 +48,7 @@ public sealed class DesktopReleaseCandidateScriptTests
     {
         string script = Read("apps", "desktop", "scripts", "measure-performance.mjs");
         string scenario = Read("apps", "desktop", "e2e", "long-session.spec.ts");
+        string baseline = Read("tools", "Measure-DesktopBaseline.ps1");
 
         Assert.Contains("schemaVersion: 2", script, StringComparison.Ordinal);
         Assert.Contains("week77-performance-gate-v2", script, StringComparison.Ordinal);
@@ -57,10 +58,15 @@ public sealed class DesktopReleaseCandidateScriptTests
         Assert.Contains("Performance evidence must remain under artifacts", script, StringComparison.Ordinal);
         Assert.Contains("warmBaselineSeconds", scenario, StringComparison.Ordinal);
         Assert.Contains("postWorkloadIdleSeconds", scenario, StringComparison.Ordinal);
-        Assert.Contains("rendererMedian", scenario, StringComparison.Ordinal);
+        Assert.Contains("median-of-settled-suffix", scenario, StringComparison.Ordinal);
+        Assert.Contains("rendererSettledMedian", scenario, StringComparison.Ordinal);
         Assert.Contains("processes", scenario, StringComparison.Ordinal);
         Assert.Contains("processDelta", scenario, StringComparison.Ordinal);
         Assert.Contains("tempDelta", scenario, StringComparison.Ordinal);
+        Assert.Contains("schemaVersion = 2", baseline, StringComparison.Ordinal);
+        Assert.Contains("week77-cold-start-idle-v2", baseline, StringComparison.Ordinal);
+        Assert.Contains("status = if ([string]::IsNullOrWhiteSpace($safeFailure))", baseline, StringComparison.Ordinal);
+        Assert.Contains("if (-not $allRunsPassed) { exit 1 }", baseline, StringComparison.Ordinal);
     }
 
     [Fact]

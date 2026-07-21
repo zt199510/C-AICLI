@@ -93,7 +93,8 @@ function main() {
   const asarGrowthPercent = percentChange(2175389, asarBytes);
   const appHostBytes = fs.statSync(appHostPath).size;
   const appHostGrowthPercent = percentChange(79563784, appHostBytes);
-  const packageGatePassed = packageBaselineExit === 0 && packageGrowthPercent <= 15 && asarGrowthPercent <= 15 && appHostGrowthPercent <= 15;
+  const packageBaselineComplete = packageBaseline !== null && ["Passed", "Measured"].includes(packageBaseline.status) && packageBaseline.runs?.length === 5 && packageBaseline.processCleanupPassed === true;
+  const packageGatePassed = packageBaselineExit === 0 && packageBaselineComplete && packageGrowthPercent <= 15 && asarGrowthPercent <= 15 && appHostGrowthPercent <= 15;
   const gatePassed = unexpectedFailure === null && playwrightExit === 0 && profileGate.passed && packageGatePassed;
   const status = gatePassed ? (sourceDirty ? "Measured" : "Passed") : "Failed";
   const result = {
@@ -116,7 +117,7 @@ function main() {
     },
     packageBaseline,
     profiles,
-    gates: { packageBaselineExit, playwrightExit, packageGatePassed, profileGatePassed: profileGate.passed, profileGateReason: profileGate.reason },
+    gates: { packageBaselineExit, packageBaselineComplete, playwrightExit, packageGatePassed, profileGatePassed: profileGate.passed, profileGateReason: profileGate.reason },
     failure: unexpectedFailure,
   };
   fs.mkdirSync(path.dirname(outputPath), { recursive: true });

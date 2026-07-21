@@ -23,6 +23,8 @@ describe("user terminal panel", () => {
     expect(cancelTerminal).toHaveBeenCalledOnce();
     await userEvent.click(screen.getByRole("button", { name: "Close terminal" }));
     expect(closeTerminal).toHaveBeenCalledOnce();
+    expect(screen.queryByText(/terminal-user-sentinel/)).toBeNull();
+    expect(screen.getByText("Closed")).toBeTruthy();
   });
 
   it("does not open without a workspace", () => {

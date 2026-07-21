@@ -49,8 +49,13 @@ export function TerminalPanel({ workspaceReady }: { workspaceReady: boolean }) {
       const command = { sessionId: terminal.sessionId, clientMutationId: mutation(close ? "close" : "cancel") };
       const result = close ? await bridge.closeTerminal(command) : await bridge.cancelTerminal(command);
       if (!result.succeeded || !result.data) throw new Error(result.error?.safeMessage ?? "Terminal action failed.");
-      setTerminal(result.data);
-      if (close) setExpanded(false);
+      if (close) {
+        setTerminal(null);
+        setInput("");
+        setExpanded(false);
+      } else {
+        setTerminal(result.data);
+      }
     } catch (value) { setError(value instanceof Error ? value.message : "Terminal action failed."); }
     finally { setBusy(false); }
   }

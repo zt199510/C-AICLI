@@ -6,6 +6,7 @@ import path from "node:path";
 const desktopRoot = path.resolve(import.meta.dirname, "..");
 const idleRecoverySeconds = 30;
 const sampleIntervalSeconds = 5;
+const settledSampleCount = 3;
 
 test("long timeline, bounded diff, and terminal output survive repeated reloads", async ({ browserName }, testInfo) => {
   if (browserName !== "chromium") throw new Error("Electron tests require Chromium.");
@@ -107,7 +108,7 @@ test("long timeline, bounded diff, and terminal output survive repeated reloads"
     diffFiles: 50,
     terminalProducedBytes: 70 * 1024,
     terminalRetainedBytes: 64 * 1024,
-    sampling: { warmBaselineSeconds: idleRecoverySeconds, postWorkloadIdleSeconds: idleRecoverySeconds, sampleIntervalSeconds, statistic: "median" },
+    sampling: { warmBaselineSeconds: idleRecoverySeconds, postWorkloadIdleSeconds: idleRecoverySeconds, sampleIntervalSeconds, settleSeconds: idleRecoverySeconds - ((settledSampleCount - 1) * sampleIntervalSeconds), settledSampleCount, statistic: "median-of-settled-suffix" },
     retention,
     warmBaseline,
     reloadSamples,
@@ -116,10 +117,13 @@ test("long timeline, bounded diff, and terminal output survive repeated reloads"
     failure: primaryError === null && cleanupError === null ? null : safeError(primaryError ?? cleanupError),
   };
   const evidenceBody = JSON.stringify(evidence, null, 2);
-  const evidenceDirectory = process.env.CAICLI_WEEK77_EVIDENCE_DIR;
+  const evidenceDirectory = process.env.CAICLI_WEEK77_EVIDENCE_DIR ?? path.resolve(desktopRoot, "..", "..", "artifacts", "desktop-performance", "week77-single-profiles");
   if (evidenceDirectory) {
     fs.mkdirSync(evidenceDirectory, { recursive: true });
-    fs.writeFileSync(path.join(evidenceDirectory, `long-session-${testInfo.repeatEachIndex + 1}.json`), evidenceBody, "utf8");
+    const evidenceName = process.env.CAICLI_WEEK77_EVIDENCE_DIR
+      ? `long-session-${testInfo.repeatEachIndex + 1}.json`
+      : `long-session-${new Date().toISOString().replaceAll(":", "-")}-${process.pid}.json`;
+    fs.writeFileSync(path.join(evidenceDirectory, evidenceName), evidenceBody, "utf8");
   }
   await testInfo.attach("week77-long-session-metrics.json", { body: Buffer.from(evidenceBody), contentType: "application/json" });
   if (primaryError && cleanupError) throw new AggregateError([primaryError, cleanupError], "Long-session scenario and cleanup both failed.", { cause: cleanupError });
@@ -130,7 +134,7 @@ test("long timeline, bounded diff, and terminal output survive repeated reloads"
 interface ProcessMetric { readonly pid: number; readonly role: string; readonly workingSetBytes: number; readonly privateBytes: number }
 interface RoleSnapshot { readonly role: string; readonly processCount: number; readonly workingSetBytes: number; readonly privateBytes: number }
 interface ProcessSnapshot { readonly capturedAtUtc: string; readonly processes: readonly ProcessMetric[]; readonly roles: readonly RoleSnapshot[] }
-interface SamplingWindow { readonly durationSeconds: number; readonly sampleIntervalSeconds: number; readonly samples: readonly ProcessSnapshot[]; readonly rendererMedian: { readonly workingSetBytes: number; readonly privateBytes: number } }
+interface SamplingWindow { readonly durationSeconds: number; readonly sampleIntervalSeconds: number; readonly settleSeconds: number; readonly settledSampleCount: number; readonly samples: readonly ProcessSnapshot[]; readonly rendererSettledMedian: { readonly workingSetBytes: number; readonly privateBytes: number } }
 interface RetentionResult { readonly reloadTransientPeakWorkingSetPercent: number; readonly idleWorkingSetPercent: number; readonly idlePrivateBytesPercent: number }
 
 async function processSnapshot(application: ElectronApplication): Promise<ProcessSnapshot> {
@@ -167,13 +171,16 @@ async function captureSamplingWindow(application: ElectronApplication, durationS
     await new Promise((resolve) => setTimeout(resolve, intervalSeconds * 1000));
     samples.push(await processSnapshot(application));
   }
+  const settledSamples = samples.slice(-settledSampleCount);
   return {
     durationSeconds,
     sampleIntervalSeconds: intervalSeconds,
+    settleSeconds: durationSeconds - ((settledSampleCount - 1) * intervalSeconds),
+    settledSampleCount,
     samples,
-    rendererMedian: {
-      workingSetBytes: median(samples.map((sample) => roleBytes(sample, "Tab", "workingSetBytes"))),
-      privateBytes: median(samples.map((sample) => roleBytes(sample, "Tab", "privateBytes"))),
+    rendererSettledMedian: {
+      workingSetBytes: median(settledSamples.map((sample) => roleBytes(sample, "Tab", "workingSetBytes"))),
+      privateBytes: median(settledSamples.map((sample) => roleBytes(sample, "Tab", "privateBytes"))),
     },
   };
 }
@@ -185,9 +192,9 @@ async function waitForStableRenderer(application: ElectronApplication): Promise<
 function calculateRetention(baseline: SamplingWindow, idle: SamplingWindow, reloads: readonly ProcessSnapshot[]): RetentionResult {
   const reloadPeak = Math.max(...reloads.map((sample) => roleBytes(sample, "Tab", "workingSetBytes")));
   return {
-    reloadTransientPeakWorkingSetPercent: percentChange(baseline.rendererMedian.workingSetBytes, reloadPeak),
-    idleWorkingSetPercent: percentChange(baseline.rendererMedian.workingSetBytes, idle.rendererMedian.workingSetBytes),
-    idlePrivateBytesPercent: percentChange(baseline.rendererMedian.privateBytes, idle.rendererMedian.privateBytes),
+    reloadTransientPeakWorkingSetPercent: percentChange(baseline.rendererSettledMedian.workingSetBytes, reloadPeak),
+    idleWorkingSetPercent: percentChange(baseline.rendererSettledMedian.workingSetBytes, idle.rendererSettledMedian.workingSetBytes),
+    idlePrivateBytesPercent: percentChange(baseline.rendererSettledMedian.privateBytes, idle.rendererSettledMedian.privateBytes),
   };
 }
 

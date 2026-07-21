@@ -109,6 +109,9 @@ for ($run = 1; $run -le $Runs; $run++) {
     $stopwatch = [System.Diagnostics.Stopwatch]::StartNew()
     $samples = @()
     $ownedIds = @()
+    $desktopProcess = $null
+    $runFailure = $null
+    $cleanupFailures = @()
     try {
         $env:APPDATA = Join-Path $profileRoot "appdata"
         $env:LOCALAPPDATA = Join-Path $profileRoot "localappdata"
@@ -126,7 +129,16 @@ for ($run = 1; $run -le $Runs; $run++) {
         $ownedIds = @((Get-ProcessTree $desktopProcess.Id) | ForEach-Object { [int]$_.ProcessId })
         Wait-Process -Id $desktopProcess.Id -Timeout ([Math]::Ceiling($autoExitMilliseconds / 1000) + 10)
     }
+    catch {
+        $runFailure = $_.Exception.Message
+    }
     finally {
+        if ($null -ne $desktopProcess -and -not $desktopProcess.HasExited) {
+            $ownedIds = @((Get-ProcessTree $desktopProcess.Id) | ForEach-Object { [int]$_.ProcessId })
+            foreach ($ownedId in @($ownedIds | Sort-Object -Descending)) {
+                Stop-Process -Id $ownedId -Force -ErrorAction SilentlyContinue
+            }
+        }
         $stopwatch.Stop()
         $env:APPDATA = $previousAppData
         $env:LOCALAPPDATA = $previousLocalAppData
@@ -134,22 +146,30 @@ for ($run = 1; $run -le $Runs; $run++) {
     }
     Start-Sleep -Milliseconds 500
     $remaining = @($ownedIds | Where-Object { $null -ne (Get-Process -Id $_ -ErrorAction SilentlyContinue) })
-    if ($remaining.Count -ne 0) { throw "Performance run left owned processes behind: $($remaining -join ', ')." }
-    Remove-Item -LiteralPath $profileRoot -Recurse -Force
-    if (Test-Path -LiteralPath $profileRoot) { throw "Performance run temp profile could not be released." }
+    if ($remaining.Count -ne 0) { $cleanupFailures += "Performance run left $($remaining.Count) owned process(es) behind." }
+    try { Remove-Item -LiteralPath $profileRoot -Recurse -Force }
+    catch { $cleanupFailures += "Performance run temp profile cleanup failed." }
+    $tempDelta = if (Test-Path -LiteralPath $profileRoot) { 1 } else { 0 }
+    if ($tempDelta -ne 0) { $cleanupFailures += "Performance run temp profile could not be released." }
+    $safeFailure = @(@($runFailure) + $cleanupFailures | Where-Object { -not [string]::IsNullOrWhiteSpace($_) } | ForEach-Object {
+        ([string]$_).Replace($repoRoot, "[repository]").Replace($profileRoot, "[profile]")
+    }) -join "; "
     $runEvidence += [PSCustomObject]@{
         run = $run
+        status = if ([string]::IsNullOrWhiteSpace($safeFailure)) { "Passed" } else { "Failed" }
         lifecycleMilliseconds = $stopwatch.ElapsedMilliseconds
-        processDelta = 0
-        tempDelta = 0
+        processDelta = $remaining.Count
+        tempDelta = $tempDelta
+        failure = if ([string]::IsNullOrWhiteSpace($safeFailure)) { $null } else { $safeFailure }
         samples = $samples
     }
 }
 
+$allRunsPassed = @($runEvidence | Where-Object { $_.status -ne "Passed" }).Count -eq 0
 $result = [ordered]@{
-    schemaVersion = 1
-    status = "Measured"
-    workload = "week76-cold-start-idle-v1"
+    schemaVersion = 2
+    status = if (-not $allRunsPassed) { "Failed" } elseif ($sourceDirty) { "Measured" } else { "Passed" }
+    workload = "week77-cold-start-idle-v2"
     sourceRevision = $sourceRevision
     appHostSha256 = (Get-FileHash -LiteralPath $appHost -Algorithm SHA256).Hash
     source = [ordered]@{ revision = $sourceRevision; dirty = $sourceDirty }
@@ -163,7 +183,7 @@ $result = [ordered]@{
     }
     settings = [ordered]@{ runs = $Runs; readySampleMilliseconds = $ReadySampleMilliseconds; idleSeconds = $IdleSeconds; sampleIntervalSeconds = $SampleIntervalSeconds }
     baselines = [ordered]@{ week66PackageBytes = 437851431; week66AppAsarBytes = 2175389; week66WorkingSetBytes = 406470656; week66PrivateBytes = 242315264 }
-    processCleanupPassed = $true
+    processCleanupPassed = @($runEvidence | Where-Object { $_.processDelta -ne 0 -or $_.tempDelta -ne 0 }).Count -eq 0
     runs = $runEvidence
 }
 
@@ -171,3 +191,4 @@ $outputDirectory = Split-Path -Parent $resolvedOutput
 New-Item -ItemType Directory -Path $outputDirectory -Force | Out-Null
 $result | ConvertTo-Json -Depth 10 | Set-Content -LiteralPath $resolvedOutput -Encoding UTF8
 $result | ConvertTo-Json -Depth 10
+if (-not $allRunsPassed) { exit 1 }

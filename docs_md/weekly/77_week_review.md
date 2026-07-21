@@ -8,14 +8,18 @@
 
 ## 当前结论
 
-Week 77 已开始执行，尚未形成 release decision。版本/文档与 source-freeze 前修复正在工作树中；未获得用户 source-freeze 确认，未生成 RC，未创建 tag，未推送或发布制品。
+Week 77 已开始执行，尚未形成 release decision。用户曾确认第一版 source freeze，并形成提交 `b03fb987954ae7c8955ef546491d85101f747e2e`；该 revision 的 clean-source 回归发现必须修复的 performance evidence 与 renderer retention 问题，因此其 evidence/candidate 资格已废弃。修复后的新 revision 尚待再次 source freeze；未生成 RC，未创建 tag，未推送或发布制品。
 
 ## 首次失败与修复
 
 - Week 76 保留失败：renderer private-bytes retention 曾为 `17.72%` 与 `17.11%`，不能由后续重跑覆盖。
-- 诊断确认 Week 76 long-session 使用“第一次 reload 后单点”对“完整 workload 后 30 秒单点”的非对称口径，且 role 聚合丢失 PID。Week 77 改为 warm/post 两侧相同 30 秒窗口、5 秒原始采样、renderer median、逐 PID/role 记录；阈值仍为 15%，retries 仍为 0。
+- 诊断确认 Week 76 long-session 使用“第一次 reload 后单点”对“完整 workload 后 30 秒单点”的非对称口径，且 role 聚合丢失 PID。Week 77 改为 warm/post 两侧相同 30 秒窗口、5 秒原始采样、稳定后 renderer median、逐 PID/role 记录；阈值仍为 15%，retries 仍为 0。
 - .NET 定向脚本测试首次被 Windows Defender 短暂锁住 `CSharpAiCli.AgentFramework.dll` 的 Release obj 输出；记录首败后关闭 build server，受影响 `4/4` 测试通过。
 - 连续执行 `verify → package:dir` 时，首次 package build 被 Windows 短暂拒绝重写已生成的 `desktop-contracts.ts`（Node `UNKNOWN`）；没有修改源码或 Gate，单独重跑 `package:dir` 后成功。最终 AppHost SHA-256 更新为 `08E83C05AC42347BA30A2013CA1EEE9758D79B4A42D80132E5B88340E859983A`。
+- 第一版 freeze 的 clean-source 回归中，首次 `npm ci` 停在 Electron postinstall；只终止该次安装拥有的 npm/cmd/node 进程树后，使用仓库 `.electron-cache` 作为显式 cache 重跑成功，`npm audit` 为 0 vulnerability。该环境失败保留在 review，不视为首轮成功。
+- 同一 revision 的 clean `npm run test:e2e:performance` 首轮 private-bytes retention 为 `21.54%`，随后完整单命令 5-profile Gate 的 profile 1 为 `18.16%`，其余 4 个通过；packaged baseline 子进程也曾非零退出且旧脚本未保存该轮 JSON。该 revision 的 performance evidence 判定失败，不以重跑覆盖。
+- 修复把固定 30 秒窗口明确拆成 20 秒 settle 加末 3 个固定采样点的中位数，warm/post 两侧完全对称，保留全部 7 个原始样本、阈值 `15%` 与 retries `0` 不变；直接运行也会写入唯一命名的失败 JSON。packaged baseline schema 升至 v2，每轮无论成功或失败都先记录 status、原始 samples、process/temp delta 与安全化 failure，再决定命令退出码。
+- 产品侧修复在 `closeTerminal` 成功后释放 renderer 中已关闭终端的完整 scrollback 投影并补回归断言，避免面板隐藏后继续持有大输出。新 bundle 的单 profile 为 working set `8.63%`、private bytes `7.62%`、cleanup `0/0`。
 
 ## Pre-freeze Performance 结果
 
@@ -23,11 +27,11 @@ Week 77 已开始执行，尚未形成 release decision。版本/文档与 sourc
 
 | Profile | Idle working set | Idle private bytes | Reload transient peak |
 |---|---:|---:|---:|
-| 1 | `+8.25%` | `+7.82%` | `+26.78%` |
-| 2 | `+6.90%` | `+4.97%` | `+25.09%` |
-| 3 | `+8.40%` | `+10.39%` | `+27.80%` |
-| 4 | `+9.53%` | `+8.69%` | `+28.16%` |
-| 5 | `+7.45%` | `+8.50%` | `+27.27%` |
+| 1 | `+8.66%` | `+7.87%` | `+27.31%` |
+| 2 | `+7.38%` | `+8.23%` | `+27.93%` |
+| 3 | `+9.86%` | `+10.73%` | `+27.53%` |
+| 4 | `+7.53%` | `+8.68%` | `+26.79%` |
+| 5 | `+9.99%` | `+10.22%` | `+27.75%` |
 
 全部 idle retention 低于不变的 15% Gate。由于 source dirty，聚合证据状态正确为 `Measured`；clean source revision 后必须原命令全量重跑为 `Passed`。
 
@@ -41,7 +45,7 @@ Week 77 已开始执行，尚未形成 release decision。版本/文档与 sourc
 ## Pending
 
 - 在最终 package 上由人工执行 Windows Narrator 7 步 checklist。
-- 用户确认 source-freeze commit。
+- 用户确认修复后的新 source-freeze commit；第一版 freeze revision 不再用于 acceptance。
 - clean revision 全量 .NET/Desktop/CLI/security/accessibility/performance/protocol 回归。
 - 两份独立 RC build、逐文件/manifest/archive comparison 与各自 packaged acceptance smoke。
 - 最终 `Accepted` 或 `Blocked` 决定。

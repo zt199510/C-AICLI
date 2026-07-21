@@ -31,7 +31,7 @@
 | G6 Review/Preview/Narrator/accessibility | Pending manual Gate | 自动矩阵需从 clean revision 重跑；7 步 Narrator 人工结果尚未执行。 |
 | G7 CLI regression/version | Pending | 源码元数据已统一到 0.6.0；Release suite/default smoke 待重跑。 |
 | G8 Identity/reproducibility/payload | Pending | 双构建 manifest/inventory/notices/checksums/archive comparison 待生成。 |
-| Performance hard Gate | Pre-freeze method passed; release evidence pending | 对称窗口 5 profile 首轮为 working set `6.90%–9.53%`、private bytes `4.97%–10.39%`，cleanup 0；dirty source 下状态保持 `Measured`。 |
+| Performance hard Gate | Fixed pre-freeze method passed; release evidence pending | 第一版 freeze revision 的 clean Gate 已失败并废弃；修复后对称 30 秒窗口 5 profile 为 working set `7.38%–9.99%`、private bytes `7.87%–10.73%`，cleanup 0；新 revision 尚未 freeze，状态保持 `Measured`。 |
 
 ## Accepted / Preview / Deferred / Skipped 边界
 
