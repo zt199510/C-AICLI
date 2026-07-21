@@ -22,6 +22,7 @@ Week 77 已开始执行，尚未形成 release decision。用户曾确认第一�
 - 产品侧修复在 `closeTerminal` 成功后释放 renderer 中已关闭终端的完整 scrollback 投影并补回归断言，避免面板隐藏后继续持有大输出。新 bundle 的单 profile 为 working set `8.63%`、private bytes `7.62%`、cleanup `0/0`。
 - 第二版 freeze `27c4abecba3c04e40d48378061dcaeed8bb07704` 的 clean-source `.NET` 首轮为 `1398/1399`：未修改的原子文件替换并发测试一次返回 “Thread could not be updated”；该单测随后连续 `5/5`、全量矩阵 `1399/1399` 通过，按瞬时 Windows 文件争用记录首败，不覆盖。
 - 同一 revision 的 clean performance 中，5 个 long-session profile 全部通过，但 packaged baseline 第 4/5 轮在根进程退出后固定 500ms 检查点仍见 1 个 owned child，稍后系统检查已无残留，聚合 Gate 正确为 `Failed`。该 revision 的 evidence/candidate 资格已废弃；baseline cleanup 改为最多 10 秒、每 250ms 检查已知 owned PID，最终 Gate 仍要求 delta 为 0，并在超时时保存剩余 PID/role。
+- 第三版 freeze `a44c12724569b661e7c8484e1f03ce86426695f7` 的 clean 自动化矩阵全部通过，但 Candidate A 在 staging 的绝对路径/secret 扫描处被 Windows PowerShell 5.1 拒绝：脚本使用了仅较新运行时支持的 `string.Contains(value, StringComparison)` 重载。候选尚未移动到 final root，staging 已清理，Candidate B 未启动；该 revision 的 candidate 资格废弃。修复改用 PowerShell 5.1/.NET Framework 支持的 `IndexOf(value, StringComparison) -ge 0`，安全检查语义不变。
 
 ## Pre-freeze Performance 结果
 

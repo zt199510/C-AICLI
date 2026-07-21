@@ -33,6 +33,8 @@ public sealed class DesktopReleaseCandidateScriptTests
         Assert.Contains("appHostSha256", script, StringComparison.Ordinal);
         Assert.Contains("contractSha256", script, StringComparison.Ordinal);
         Assert.Contains("Get-FileHash", script, StringComparison.Ordinal);
+        Assert.Contains("IndexOf($repoRoot, [System.StringComparison]::OrdinalIgnoreCase)", script, StringComparison.Ordinal);
+        Assert.DoesNotContain("Contains($repoRoot, [System.StringComparison]::OrdinalIgnoreCase)", script, StringComparison.Ordinal);
         Assert.Contains("week77-performance-gate-v2", script, StringComparison.Ordinal);
         Assert.Contains("five consecutive independent profiles", script, StringComparison.Ordinal);
         Assert.Contains("15 percent idle retention gate", script, StringComparison.Ordinal);

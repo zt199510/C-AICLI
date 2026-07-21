@@ -242,7 +242,7 @@ try {
 
     foreach ($textFile in @(Get-ChildItem -LiteralPath $stageRoot -File | Where-Object { $_.Extension -in @(".json", ".md") })) {
         $content = Get-Content -Raw -LiteralPath $textFile.FullName
-        if ($content.Contains($repoRoot, [System.StringComparison]::OrdinalIgnoreCase) -or $content -match 'sk-[A-Za-z0-9_-]{16,}') {
+        if ($content.IndexOf($repoRoot, [System.StringComparison]::OrdinalIgnoreCase) -ge 0 -or $content -match 'sk-[A-Za-z0-9_-]{16,}') {
             throw "RC evidence contains a forbidden absolute path or secret sentinel: $($textFile.Name)"
         }
     }

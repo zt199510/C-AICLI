@@ -30,7 +30,7 @@
 | G5 Deny/cancel/crash/restart/cleanup | Pending | 两份 candidate matrix 尚未运行。 |
 | G6 Review/Preview/Narrator/accessibility | Pending manual Gate | 自动矩阵需从 clean revision 重跑；7 步 Narrator 人工结果尚未执行。 |
 | G7 CLI regression/version | Pending | 源码元数据已统一到 0.6.0；Release suite/default smoke 待重跑。 |
-| G8 Identity/reproducibility/payload | Pending | 双构建 manifest/inventory/notices/checksums/archive comparison 待生成。 |
+| G8 Identity/reproducibility/payload | Pending new clean revision | 第三版 freeze 的 Candidate A 在 Windows PowerShell 5.1 兼容性检查处 fail closed，未形成候选；RC 脚本修复后需新 revision 全量重来。 |
 | Performance hard Gate | Fixed pre-freeze method passed; release evidence pending | 前两版 freeze revision 的 clean Gate 已失败并废弃；最新一版 5 个 long-session profile 均通过，但 packaged baseline 500ms cleanup check 出现一次短暂 owned child，已改为固定 10 秒有界退出等待并保留最终 PID/role；新 revision 尚未 freeze。 |
 
 ## Accepted / Preview / Deferred / Skipped 边界
