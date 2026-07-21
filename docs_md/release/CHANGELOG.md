@@ -1,5 +1,21 @@
 # Changelog
 
+## 0.6.0 - Release acceptance in progress
+
+Added:
+- Windows-first Electron/React Desktop task surface backed by the .NET Application/AppHost boundary: workspace and thread management, Composer/catalog context, task chat, approval/cancel/recovery, Changes, terminal, reports, managed artifacts, and bounded Gerber/TIFF Preview review.
+- Frozen `desktop-v1` contract with exact `39 invoke + 2 event` reviewed preload surface, schema/bounds/corrupt-state/fuzz coverage, package inventory/notices/checksums, and clean-source RC orchestration.
+- Keyboard, focus restoration, ARIA/live-region, contrast, reduced-motion, forced-colors, viewport and 200% zoom automation, plus a required seven-step Windows Narrator manual acceptance Gate.
+- Versioned Week 77 performance evidence with five consecutive isolated long-session profiles, per-PID/role samples, symmetric 30-second warm/idle windows, and zero process/temp cleanup requirements.
+
+Changed:
+- CLI assembly, file, informational and package metadata are unified at `0.6.0`; Desktop package metadata remains exact `0.6.0`.
+- Desktop write actions reuse .NET Application policies and typed AppHost RPC; Renderer does not parse CLI text or gain Node, arbitrary file, or arbitrary process access.
+- Default acceptance remains credential-free, network-free, real-model-free, real-MCP-free, and real-Gerber/TIFF-tool-free. Those opt-in correctness checks remain `Skipped/Unproven` unless separately executed.
+
+Release boundary:
+- This entry records the 0.6.0 source-freeze target, not an Accepted decision. Acceptance still requires a user-confirmed clean revision, all source-bound evidence, two reproducible Desktop candidates, packaged smoke on both candidates, Windows Narrator manual evidence, and the final Week 77 decision. No tag, push, artifact upload, or GitHub Release is authorized by this document.
+
 ## 0.5.0 - 2026-07-15
 
 Added:

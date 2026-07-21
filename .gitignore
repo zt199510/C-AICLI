@@ -13,6 +13,7 @@ apps/desktop/out/
 apps/desktop/.vite/
 apps/desktop/.electron-cache/
 apps/desktop/resources/apphost/
+apps/desktop/test-results/
 
 # User-specific IDE files
 .vs/

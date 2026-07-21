@@ -1,5 +1,7 @@
 # Final Acceptance
 
+0.6.0 source metadata and Desktop implementation are in Week 77 release acceptance. The draft boundary is recorded in `final_acceptance_0.6.0.md`; it is not an Accepted decision until the clean-source, dual-candidate, packaged smoke, performance and manual Narrator Gates close. The current accepted decision remains 0.5.0 below.
+
 Current release acceptance is recorded in:
 
 - `docs_md/release/final_acceptance_0.5.0.md`

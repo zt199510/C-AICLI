@@ -2,7 +2,7 @@
 
 更新时间：2026-07-18
 
-状态：Week 66-75 已完成；Week 75 recovery/long-session unpacked 与 packaged Gate 已通过；Week 76 Blocked
+状态：Week 66-75 已完成；Week 75 recovery/long-session unpacked 与 packaged Gate 已通过；Week 76 Blocked；Week 77 Ready（必须先关闭 Week 76 blockers）
 
 详细产品与技术边界统一以 `docs_md/spec/desktop_app_development_framework_0_6_0.md` 为准。本排期负责把该框架拆成 Week 66-77 的依赖顺序、周末验收和发布 Gate，不扩展产品范围。
 
@@ -271,6 +271,8 @@ open workspace
 周末 Gate：高风险安全问题为 0；性能超预算必须有修复或明确 Blocked 决定；candidate smoke 不依赖凭据、网络或真实外部工具。
 
 ### Week 77：0.6.0 Release Acceptance
+
+状态：Ready（执行任务：`77_week_cli_0_6_release_acceptance.plan.md`；G6 未关闭前不得进入 Accepted）
 
 主要交付：
 

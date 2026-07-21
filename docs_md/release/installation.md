@@ -2,7 +2,7 @@
 
 ## Supported Package
 
-The `0.5.0` Windows `win-x64` self-contained package is the current accepted release. Reproducible packaging from a recorded clean source revision uses:
+The source tree targets CLI/Desktop `0.6.0`. The 0.6.0 Windows `win-x64` candidate is still in release acceptance; `0.5.0` remains the last accepted CLI package until `final_acceptance_0.6.0.md` records a completed decision. Reproducible CLI packaging from a recorded clean source revision uses:
 
 ```powershell
 powershell -NoProfile -ExecutionPolicy Bypass -File tools/Build-Release.ps1 -ReleaseAcceptance
@@ -11,10 +11,12 @@ powershell -NoProfile -ExecutionPolicy Bypass -File tools/Build-Release.ps1 -Rel
 The script writes the executable to:
 
 ```text
-artifacts/release/caicli-0.5.0-win-x64/caicli.exe
+artifacts/release/caicli-0.6.0-win-x64/caicli.exe
 ```
 
 The package also includes `release-manifest.json`, which records version, runtime, framework, clean source revision, locked SDK, PDB policy, acceptance mode, and payload inventory. The adjacent checksums JSON records publish and ZIP SHA256 values. Gerbv and ImageMagick are not bundled; configure reviewed local executable paths before using the Gerber/TIFF pack.
+
+The Desktop candidate is produced separately from `apps/desktop` with `npm run package:dir` and the clean-source RC orchestrator. It is Windows x64 only, bundles the source-bound AppHost, and must not be treated as accepted until both candidate smokes and the Narrator manual checklist pass.
 
 ## Prerequisites
 

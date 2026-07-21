@@ -1,5 +1,18 @@
 # C# AI CLI Capability Status
 
+## 0.6.0 Release Candidate Scope
+
+The CLI/runtime capabilities accepted in 0.5.0 remain the stable foundation. Source metadata now targets 0.6.0. Desktop is implemented behind the reviewed Electron/Main/Preload/AppHost boundary, but its final status remains `Candidate / acceptance pending` until Week 77 closes the clean-source dual-build, packaged smoke, performance, package/security, cleanup, and manual Narrator Gates.
+
+| Capability | Status | Notes |
+|---|---|---|
+| CLI 0.5 behavior under 0.6 metadata | Candidate / regression pending | Version metadata is 0.6.0; full Release suite and default credential-free CLI smoke must still run from the confirmed clean revision. |
+| Desktop task chat and review shell | Candidate / acceptance pending | Workspace/thread/composer, approval/cancel/recovery, Changes, terminal, reports, artifacts and bounded Preview use typed AppHost RPC. No CLI text parsing or second write policy. |
+| Desktop security and contract | Automated evidence available | Exact `39 invoke + 2 event`, no Renderer Node/file/process authority, package denylist/notices, protocol bounds/fuzz/corrupt-state and navigation/permission denial are automated. Clean-revision evidence must be regenerated. |
+| Desktop accessibility | Manual Gate pending | Keyboard/ARIA/focus/contrast/reduced-motion/forced-colors/viewport/200% zoom automation exists. Seven-step Windows Narrator evidence on the final package is mandatory and cannot be replaced by automation. |
+| Performance stability | Measurement fix validated | Five pre-freeze isolated profiles passed the unchanged 15% retention threshold with zero cleanup delta; clean-revision source-bound evidence is still required. |
+| Real model, real MCP, real Gerber/TIFF tools | Skipped / Unproven | Credential-free acceptance does not claim provider, server, decoder, toolchain, image or manufacturing correctness. |
+
 ## 0.5.0 Accepted Capabilities
 
 The bounded Week 58-64 vertical workflow is accepted in 0.5.0. Project Pack v1 list/doctor/plan, bounded Gerber/TIFF inventory, approval-gated typed conversion, isolated staging/checkpoint, TIFF verification/preview, explicit human accept/reject, safe resume/new-attempt restart, and managed artifact list/show/verify/export/prune are current release behavior. External Gerbv/ImageMagick binaries remain user-configured and are not redistributed. Current-source exact-tool smoke was not run; it is an optional environment validation rather than a release Gate.
@@ -98,4 +111,4 @@ Status meaning:
 
 ## Release Decision
 
-Release `0.5.0` is the current accepted package, as documented by `final_acceptance_0.5.0.md`. The local API/daemon remains Preview and default-off. The exact-tool opt-in smoke remains optional and was not run for this release decision. Deferred capabilities are not current behavior and must not be presented as implied by local automation, CI artifacts, Project Pack contracts, or the read-only Preview.
+Release `0.5.0` remains the current accepted CLI package, as documented by `final_acceptance_0.5.0.md`, until the separate 0.6.0 decision completes. The local API/daemon remains Preview and default-off. The exact-tool opt-in smoke remains optional and was not run for the 0.5.0 decision. Deferred capabilities are not current behavior and must not be presented as implied by local automation, CI artifacts, Project Pack contracts, Desktop source, or the read-only Preview.

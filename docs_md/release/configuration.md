@@ -1,5 +1,9 @@
 # C# AI CLI Configuration
 
+## 0.6.0 Desktop Boundary
+
+The Desktop application uses the same user/workspace configuration and .NET Application policies as the CLI through typed `desktop-v1` AppHost RPC. It does not introduce Renderer-readable API keys, a second approval policy, CLI text parsing, an unauthenticated localhost control API, or Desktop-only model/MCP/tool configuration. Keep secrets in `OPENAI_API_KEY` or user config; never place them in Desktop screenshots, Narrator evidence, release manifests, or workspace config.
+
 ## Configuration Sources
 
 The CLI reads configuration from environment variables, user config, and workspace config.

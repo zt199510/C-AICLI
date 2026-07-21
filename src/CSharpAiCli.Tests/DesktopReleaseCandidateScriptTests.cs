@@ -33,22 +33,34 @@ public sealed class DesktopReleaseCandidateScriptTests
         Assert.Contains("appHostSha256", script, StringComparison.Ordinal);
         Assert.Contains("contractSha256", script, StringComparison.Ordinal);
         Assert.Contains("Get-FileHash", script, StringComparison.Ordinal);
+        Assert.Contains("week77-performance-gate-v2", script, StringComparison.Ordinal);
+        Assert.Contains("five consecutive independent profiles", script, StringComparison.Ordinal);
+        Assert.Contains("15 percent idle retention gate", script, StringComparison.Ordinal);
+        Assert.Contains("process or temp cleanup delta", script, StringComparison.Ordinal);
+        Assert.Contains("week77-accessibility-automation-v1", script, StringComparison.Ordinal);
+        Assert.Contains("unpacked and packaged hardening passes", script, StringComparison.Ordinal);
+        Assert.Contains("week77-packaged-smoke-v1", script, StringComparison.Ordinal);
+        Assert.Contains("all eight packaged scenarios to pass", script, StringComparison.Ordinal);
     }
 
     [Fact]
     public void Performance_script_records_per_role_versioned_samples_and_cleanup()
     {
-        string script = Read("tools", "Measure-DesktopBaseline.ps1");
+        string script = Read("apps", "desktop", "scripts", "measure-performance.mjs");
+        string scenario = Read("apps", "desktop", "e2e", "long-session.spec.ts");
 
-        Assert.Contains("schemaVersion = 1", script, StringComparison.Ordinal);
-        Assert.Contains("week76-cold-start-idle-v1", script, StringComparison.Ordinal);
-        Assert.Contains("renderer", script, StringComparison.Ordinal);
-        Assert.Contains("apphost", script, StringComparison.Ordinal);
-        Assert.Contains("workingSetBytes", script, StringComparison.Ordinal);
-        Assert.Contains("privateBytes", script, StringComparison.Ordinal);
-        Assert.Contains("processDelta = 0", script, StringComparison.Ordinal);
-        Assert.Contains("tempDelta = 0", script, StringComparison.Ordinal);
+        Assert.Contains("schemaVersion: 2", script, StringComparison.Ordinal);
+        Assert.Contains("week77-performance-gate-v2", script, StringComparison.Ordinal);
+        Assert.Contains("--repeat-each=5", script, StringComparison.Ordinal);
+        Assert.Contains("--workers=1", script, StringComparison.Ordinal);
+        Assert.Contains("--retries=0", script, StringComparison.Ordinal);
         Assert.Contains("Performance evidence must remain under artifacts", script, StringComparison.Ordinal);
+        Assert.Contains("warmBaselineSeconds", scenario, StringComparison.Ordinal);
+        Assert.Contains("postWorkloadIdleSeconds", scenario, StringComparison.Ordinal);
+        Assert.Contains("rendererMedian", scenario, StringComparison.Ordinal);
+        Assert.Contains("processes", scenario, StringComparison.Ordinal);
+        Assert.Contains("processDelta", scenario, StringComparison.Ordinal);
+        Assert.Contains("tempDelta", scenario, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -64,6 +76,21 @@ public sealed class DesktopReleaseCandidateScriptTests
         Assert.Contains("framesPerSecond", script, StringComparison.Ordinal);
         Assert.Contains("peakWorkingSetBytes", script, StringComparison.Ordinal);
         Assert.Contains("processDelta: 0", script, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Candidate_comparison_requires_identical_payload_two_smokes_and_manual_narrator()
+    {
+        string script = Read("tools", "Compare-DesktopReleaseCandidates.ps1");
+
+        Assert.Contains("Candidate comparison requires the confirmed clean source revision", script, StringComparison.Ordinal);
+        Assert.Contains("Candidate payloads differ", script, StringComparison.Ordinal);
+        Assert.Contains("week77-packaged-smoke-v1", script, StringComparison.Ordinal);
+        Assert.Contains("all eight packaged scenarios", script, StringComparison.Ordinal);
+        Assert.Contains("week77-narrator-manual-v1", script, StringComparison.Ordinal);
+        Assert.Contains("all seven manual steps to pass", script, StringComparison.Ordinal);
+        Assert.Contains("packageSha256", script, StringComparison.Ordinal);
+        Assert.Contains("archiveSha256", script, StringComparison.Ordinal);
     }
 
     private static string Read(params string[] parts) => File.ReadAllText(Path.Combine(Root(), Path.Combine(parts)));

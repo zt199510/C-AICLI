@@ -27,8 +27,10 @@
     "test:e2e:packaged": "playwright test --project=packaged",
     "test:e2e:hardening": "playwright test week76-hardening.spec.ts",
     "test:e2e:performance": "playwright test long-session.spec.ts --project=unpacked",
-    "measure:performance": "powershell -NoProfile -ExecutionPolicy Bypass -File ../../tools/Measure-DesktopBaseline.ps1",
+    "measure:performance": "node scripts/measure-performance.mjs",
     "measure:protocol": "powershell -NoProfile -ExecutionPolicy Bypass -File ../../tools/Measure-DesktopProtocol.ps1",
+    "measure:accessibility": "node scripts/run-desktop-evidence.mjs --kind accessibility",
+    "measure:smoke": "node scripts/run-desktop-evidence.mjs --kind smoke",
     "release:rc": "powershell -NoProfile -ExecutionPolicy Bypass -File ../../tools/Build-DesktopReleaseCandidate.ps1"
   },
   "dependencies": {

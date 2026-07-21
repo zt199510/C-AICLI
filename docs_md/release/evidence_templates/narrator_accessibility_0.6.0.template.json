@@ -1,0 +1,33 @@
+{
+  "schemaVersion": 2,
+  "type": "week77-narrator-manual-v1",
+  "status": "Pending",
+  "manualNarratorRun": false,
+  "sourceRevision": "0000000000000000000000000000000000000000",
+  "packageSha256": "0000000000000000000000000000000000000000000000000000000000000000",
+  "desktopSha256": "0000000000000000000000000000000000000000000000000000000000000000",
+  "appHostSha256": "0000000000000000000000000000000000000000000000000000000000000000",
+  "operator": "",
+  "startedAtUtc": null,
+  "completedAtUtc": null,
+  "environment": {
+    "windowsProduct": "Windows 10/11",
+    "windowsDisplayVersion": "",
+    "windowsBuild": "",
+    "narratorVersion": "",
+    "displayScalePercent": 100,
+    "applicationZoomPercent": 100,
+    "forcedColorsChecked": false,
+    "reducedMotionChecked": false
+  },
+  "steps": [
+    { "id": "N1", "name": "startup-runtime-status", "status": "Pending", "observation": "", "issues": [], "evidence": [] },
+    { "id": "N2", "name": "workspace-thread-focus", "status": "Pending", "observation": "", "issues": [], "evidence": [] },
+    { "id": "N3", "name": "composer-mentions-queue", "status": "Pending", "observation": "", "issues": [], "evidence": [] },
+    { "id": "N4", "name": "approval-deny-restart", "status": "Pending", "observation": "", "issues": [], "evidence": [] },
+    { "id": "N5", "name": "review-tabs-preview", "status": "Pending", "observation": "", "issues": [], "evidence": [] },
+    { "id": "N6", "name": "error-recovery-terminal", "status": "Pending", "observation": "", "issues": [], "evidence": [] },
+    { "id": "N7", "name": "zoom-forced-colors-motion", "status": "Pending", "observation": "", "issues": [], "evidence": [] }
+  ],
+  "declaration": "Pending: replace with a statement that the named operator personally completed all seven Narrator steps on the identified unmodified package."
+}

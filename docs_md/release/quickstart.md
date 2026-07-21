@@ -3,13 +3,13 @@
 ## 1. Verify The Release
 
 ```powershell
-artifacts\release\caicli-0.5.0-win-x64\caicli.exe version
+artifacts\release\caicli-0.6.0-win-x64\caicli.exe version
 ```
 
 Expected shape:
 
 ```text
-caicli 0.5.0
+caicli 0.6.0
 target framework: net9.0
 release runtime: win-x64
 ```
@@ -17,7 +17,7 @@ release runtime: win-x64
 ## 2. Run Doctor
 
 ```powershell
-artifacts\release\caicli-0.5.0-win-x64\caicli.exe doctor
+artifacts\release\caicli-0.6.0-win-x64\caicli.exe doctor
 ```
 
 Without a configured key, `doctor` should still succeed and report:
@@ -28,6 +28,8 @@ agent backend: direct (default)
 approval mode: on-request (default)
 agent backend status: available
 ```
+
+The CLI metadata is frozen at 0.6.0, but the Desktop package remains a release candidate until `final_acceptance_0.6.0.md` records all Gates. Credential-free quickstart checks do not prove real model, MCP server, Gerber, TIFF, or manufacturing correctness.
 
 ## 3. Inspect Diagnostics And Logs
 

@@ -1,6 +1,6 @@
 # C-AICLI 产品定位与路线护栏
 
-更新时间：2026-07-15
+更新时间：2026-07-21
 
 ## 一句话定位
 
@@ -190,7 +190,7 @@ C-AICLI 的价值在于可控性和工程化：
 
 ### 0.6.0：本地工程 Agent Desktop App Preview
 
-状态：方向已确认，进入排期与实现准备。
+状态：Week 66-76 实现与自动化收口完成；Week 77 正在执行 0.6.0 clean-source release acceptance。Desktop 在双构建、packaged smoke、performance 与 Windows Narrator Gate 全部关闭前仍为 Candidate，不提前宣称 Accepted。
 
 目标：在 0.5.0 已验收的本地 Agent Runtime、任务编排、审批、报告、artifact 和 Gerber/TIFF 工作流之上，提供 Windows-first 的任务聊天与结果复核界面。
 

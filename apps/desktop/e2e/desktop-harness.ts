@@ -5,7 +5,10 @@ import path from "node:path";
 import { spawnSync } from "node:child_process";
 
 const desktopRoot = path.resolve(import.meta.dirname, "..");
-const packagedExecutable = path.join(desktopRoot, "out", "C-AICLI Desktop-win32-x64", "caicli-desktop.exe");
+const packagedRoot = process.env.CAICLI_DESKTOP_PACKAGE_ROOT
+  ? path.resolve(process.env.CAICLI_DESKTOP_PACKAGE_ROOT)
+  : path.join(desktopRoot, "out", "C-AICLI Desktop-win32-x64");
+const packagedExecutable = path.join(packagedRoot, "caicli-desktop.exe");
 
 export interface DesktopCase {
   readonly id: string;

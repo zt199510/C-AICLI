@@ -6,6 +6,8 @@ C# AI CLI is a local developer tool. It operates on the selected workspace and w
 
 Model providers are outside the local trust boundary. `chat`, `review`, and real agentic `exec` send prompts and selected context to the configured provider. Agent tool calls returned by the provider are treated as requests, not authority: the CLI validates the tool name, disabled-tool settings, workspace path boundary, approval mode, shell policy, dangerous-command rules, loop limits, and timeouts before execution.
 
+For Desktop 0.6.0, Renderer is an untrusted presentation boundary with no Node integration, arbitrary file access, or arbitrary process access. The exact reviewed preload surface is `39 invoke + 2 event`; Main transports typed `desktop-v1` messages and the .NET Application/AppHost layer remains authoritative for workspace, approval, mutation, terminal, artifact, and recovery policy. Desktop does not parse CLI output, duplicate write policy, or expose a localhost control route.
+
 ## Workspace Guard
 
 File and command tools resolve paths before use and require paths to stay inside the active workspace. Tests cover:
@@ -467,7 +469,7 @@ Users can disable tools through `disabledTools` in user or workspace config. Dis
   and managed artifact lifecycle are accepted 0.5.0 capabilities. Current-source exact-tool smoke is an optional
   environment validation and was not run for the release decision; this does not establish general CAM/EDA correctness.
 
-The remaining deferred capabilities stay outside the accepted `0.5.0` release boundary.
+The remaining deferred capabilities stay outside the 0.6.0 candidate boundary. The inherited CLI behavior was accepted in 0.5.0; Desktop acceptance is tracked separately by `final_acceptance_0.6.0.md` and must not be inferred from source presence or fake-runtime smoke.
 
 ## Current Limitations
 

@@ -61,6 +61,44 @@ function Read-PassedEvidence([string]$Path, [string]$Kind, [string]$Revision, [s
     if ([string]$value.status -ne "Passed") { throw "$Kind evidence status is not Passed." }
     if ([string]$value.sourceRevision -ne $Revision) { throw "$Kind evidence source revision does not match." }
     if ($null -ne $value.appHostSha256 -and [string]$value.appHostSha256 -ne $AppHostHash) { throw "$Kind evidence AppHost identity does not match." }
+    if ($Kind -eq "Performance") {
+        if ([int]$value.schemaVersion -ne 2 -or [string]$value.workload -ne "week77-performance-gate-v2") {
+            throw "Performance evidence schema or workload is unsupported."
+        }
+        $profiles = @($value.profiles)
+        if ($profiles.Count -ne 5) { throw "Performance evidence must contain five consecutive independent profiles." }
+        foreach ($profile in $profiles) {
+            if ([string]$profile.status -ne "Passed") { throw "Performance evidence retained a failed profile." }
+            if ([double]$profile.retention.idleWorkingSetPercent -gt 15 -or [double]$profile.retention.idlePrivateBytesPercent -gt 15) {
+                throw "Performance evidence exceeded the 15 percent idle retention gate."
+            }
+            if ([int]$profile.cleanup.processDelta -ne 0 -or [int]$profile.cleanup.tempDelta -ne 0) {
+                throw "Performance evidence contains a process or temp cleanup delta."
+            }
+        }
+    }
+    if ($Kind -eq "Accessibility") {
+        if ([int]$value.schemaVersion -ne 2 -or [string]$value.type -ne "week77-accessibility-automation-v1") {
+            throw "Accessibility evidence schema or type is unsupported."
+        }
+        if ([int]$value.results.expectedCount -ne 2 -or [int]$value.results.passedCount -ne 2 -or [int]$value.results.failedCount -ne 0) {
+            throw "Accessibility automation evidence requires unpacked and packaged hardening passes."
+        }
+        if ([int]$value.cleanup.processDelta -ne 0 -or [int]$value.cleanup.tempDelta -ne 0) {
+            throw "Accessibility automation evidence contains a process or temp cleanup delta."
+        }
+    }
+    if ($Kind -eq "Smoke") {
+        if ([int]$value.schemaVersion -ne 2 -or [string]$value.type -ne "week77-packaged-smoke-v1") {
+            throw "Smoke evidence schema or type is unsupported."
+        }
+        if ([int]$value.results.expectedCount -ne 8 -or [int]$value.results.passedCount -ne 8 -or [int]$value.results.failedCount -ne 0) {
+            throw "Smoke evidence requires all eight packaged scenarios to pass."
+        }
+        if ([int]$value.cleanup.processDelta -ne 0 -or [int]$value.cleanup.tempDelta -ne 0) {
+            throw "Smoke evidence contains a process or temp cleanup delta."
+        }
+    }
     return $resolved
 }
 

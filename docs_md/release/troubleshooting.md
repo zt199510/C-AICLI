@@ -5,7 +5,7 @@
 Run `doctor` first:
 
 ```powershell
-artifacts\release\caicli-0.5.0-win-x64\caicli.exe doctor --verbose
+artifacts\release\caicli-0.6.0-win-x64\caicli.exe doctor --verbose
 ```
 
 Common model setup failures:
@@ -16,6 +16,14 @@ Common model setup failures:
 - Workspace `apiKey` is ignored by design. Move the key to `OPENAI_API_KEY` or user config.
 
 Use `models --workspace .` to inspect the effective model and base URL without making a network call.
+
+## Desktop 0.6.0 Candidate
+
+- `AppHost stopped unexpectedly`: use the in-app restart action, then reopen the workspace. Do not reuse an approval from the interrupted turn.
+- Package fails to start: verify `resources/apphost/CSharpAiCli.AppHost.exe`, `resources/app.asar`, `release-manifest.json`, inventory and checksums belong to the same candidate; do not copy files between candidates.
+- Renderer content is blank after a source build: run `npm ci`, `npm run verify`, and `npm run package:dir` from the locked source. Do not enable Node integration or relax CSP/navigation policy as a workaround.
+- Narrator repeats status or reads a local path/diagnostic: record the affected manual step as `Failed`; do not substitute an ARIA snapshot or screenshot for the failed auditory observation.
+- Performance evidence says `Measured`: the source tree was dirty. Confirm and commit the source freeze, rebuild the package, then run `npm run measure:performance` once; do not edit the JSON status manually.
 
 ## Agent Exec
 

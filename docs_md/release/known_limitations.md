@@ -2,9 +2,11 @@
 
 ## Release Scope
 
-- Version `0.5.0` is the current accepted local Windows release. Its current-revision exact-tool opt-in smoke was not run and is not a release Gate; users who configure reviewed Gerbv/ImageMagick executables can run it as an optional environment validation.
+- Source and product metadata target `0.6.0`, while final CLI/Desktop 0.6.0 acceptance is still pending. Version `0.5.0` remains the last accepted CLI package until the Week 77 clean-source, dual-build, packaged smoke, performance, and Narrator Gates close.
+- Desktop 0.6.0 is Windows x64 and package-bound. It is not a browser UI, remote-control surface, team workspace, IDE, scheduler, concurrent write worker, plugin marketplace, or office workbench.
+- Desktop fake-runtime and metadata/preview evidence do not prove real model, real MCP, Gerber/TIFF decoding, toolchain, manufacturing, or image correctness. Those paths remain `Skipped/Unproven` unless separately executed with authorized inputs and tools.
 - The primary supported artifact is the `win-x64` self-contained single-file package.
-- Dotnet tool packaging is not part of the `0.5.0` release package.
+- Dotnet tool packaging is not part of the `0.6.0` release package.
 - Project Pack is a deterministic domain-tool flow, not a skill. The model cannot generate or extend real Gerbv/ImageMagick arguments. Only the frozen single-layer authorized fixture/toolchain path has real conversion and strict verification evidence; this is not general CAM/EDA manufacturing correctness.
 - Gerbv and ImageMagick are not redistributed. Missing or changed tools fail closed through `packs doctor/plan/run`; approval is invocation-local, and resume/restart revalidate tool/input/output/policy and require fresh approval.
 - Release packages require clean `-ReleaseAcceptance` builds. PDBs are excluded by policy; revision/SDK/inventory/checksums prove build provenance and reproducibility, not semantic correctness.

@@ -12,7 +12,10 @@ test("read-only thread timeline review survives renderer reload", async ({ brows
   const packaged = testInfo.project.name === "packaged";
   if (packaged) testInfo.setTimeout(60_000);
   const root = fs.mkdtempSync(path.join(os.tmpdir(), "caicli-week75-read-only-"));
-  const executablePath = path.join(desktopRoot, "out", "C-AICLI Desktop-win32-x64", "caicli-desktop.exe");
+  const packageRoot = process.env.CAICLI_DESKTOP_PACKAGE_ROOT
+    ? path.resolve(process.env.CAICLI_DESKTOP_PACKAGE_ROOT)
+    : path.join(desktopRoot, "out", "C-AICLI Desktop-win32-x64");
+  const executablePath = path.join(packageRoot, "caicli-desktop.exe");
   const environment = { ...process.env, APPDATA: path.join(root, "appdata"), CAICLI_USER_PROFILE: path.join(root, "profile"), CAICLI_E2E_ROOT: root };
   const application = packaged
     ? await electron.launch({ executablePath, args: ["--disable-gpu"], env: environment })
