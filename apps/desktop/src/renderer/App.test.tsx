@@ -32,6 +32,16 @@ describe("desktop shell", () => {
     expect(screen.getByRole("button", { name: "Show review inspector" })).toBeTruthy();
   });
 
+  it("closes drawers with Escape and restores the shell trigger", async () => {
+    render(<App />);
+    const collapse = screen.getByRole("button", { name: "Collapse threads" });
+    collapse.focus();
+    await userEvent.keyboard("{Escape}");
+    const show = screen.getByRole("button", { name: "Show threads" });
+    expect(document.activeElement).toBe(show);
+    expect(show.getAttribute("aria-controls")).toBe("threads-panel");
+  });
+
   it("keeps narrow drawers closed and mutually exclusive", async () => {
     window.innerWidth = 760;
     render(<App />);

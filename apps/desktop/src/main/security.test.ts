@@ -1,6 +1,7 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { IPC_CHANNELS, createRuntimeStatus, isRuntimeStatus } from "../shared/bridge-contract";
-import { createWebPreferences } from "./security";
+import type { App, Session, WebContents } from "electron";
+import { applyNavigationPolicy, createWebPreferences, installSessionPolicy } from "./security";
 
 describe("desktop security baseline", () => {
   it("keeps renderer isolated from Node and process APIs", () => {
@@ -58,5 +59,47 @@ describe("desktop security baseline", () => {
     expect(isRuntimeStatus({ ...ready, message: "x".repeat(257) })).toBe(false);
     expect(isRuntimeStatus({ ...ready, state: "failed" })).toBe(false);
     expect(isRuntimeStatus({ ...ready, canRestart: true })).toBe(false);
+  });
+
+  it("denies new windows, cross-document navigation and webviews", () => {
+    const handlers = new Map<string, (...args: unknown[]) => void>();
+    const contents = {
+      getURL: () => "file:///app/dist/renderer/index.html",
+      setWindowOpenHandler: (handler: () => unknown) => handlers.set("window-open", handler),
+      on: (name: string, handler: (...args: unknown[]) => void) => handlers.set(name, handler),
+    } as unknown as WebContents;
+    applyNavigationPolicy(contents);
+    expect(handlers.get("window-open")?.()).toEqual({ action: "deny" });
+    const external = { preventDefault: vi.fn() };
+    handlers.get("will-navigate")?.(external, "https://example.invalid/");
+    expect(external.preventDefault).toHaveBeenCalledOnce();
+    const sameDocument = { preventDefault: vi.fn() };
+    handlers.get("will-navigate")?.(sameDocument, "file:///app/dist/renderer/index.html");
+    expect(sameDocument.preventDefault).not.toHaveBeenCalled();
+    const webview = { preventDefault: vi.fn() };
+    handlers.get("will-attach-webview")?.(webview);
+    expect(webview.preventDefault).toHaveBeenCalledOnce();
+  });
+
+  it("denies permission requests, checks and downloads", () => {
+    let requestPermission: ((...args: unknown[]) => void) | undefined;
+    let checkPermission: ((...args: unknown[]) => boolean) | undefined;
+    let download: ((...args: unknown[]) => void) | undefined;
+    const session = {
+      setPermissionRequestHandler: (handler: (...args: unknown[]) => void) => { requestPermission = handler; },
+      setPermissionCheckHandler: (handler: (...args: unknown[]) => boolean) => { checkPermission = handler; },
+      on: (_name: string, handler: (...args: unknown[]) => void) => { download = handler; },
+    } as unknown as Session;
+    const app = { on: vi.fn() } as unknown as App;
+    installSessionPolicy(session, app);
+    const permissionCallback = vi.fn();
+    requestPermission?.({}, "clipboard-read", permissionCallback);
+    expect(permissionCallback).toHaveBeenCalledWith(false);
+    expect(checkPermission?.()).toBe(false);
+    const event = { preventDefault: vi.fn() };
+    const item = { cancel: vi.fn() };
+    download?.(event, item);
+    expect(event.preventDefault).toHaveBeenCalledOnce();
+    expect(item.cancel).toHaveBeenCalledOnce();
   });
 });

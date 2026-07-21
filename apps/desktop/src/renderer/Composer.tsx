@@ -1,5 +1,5 @@
 import { FilePlus2, FolderPlus, Send, Trash2, X } from "lucide-react";
-import { useRef, useState, type KeyboardEvent } from "react";
+import { useEffect, useMemo, useRef, useState, type KeyboardEvent } from "react";
 import type { CatalogItemData, ContextDescriptorData } from "../generated/desktop-contracts";
 import type { ComposerDraft, ComposerCatalogKind, ComposerUiState, SelectedCatalogItem } from "./composer-state";
 import { MentionMenu } from "./MentionMenu";
@@ -23,10 +23,20 @@ interface ComposerProps {
 
 export function Composer(props: ComposerProps) {
   const [composing, setComposing] = useState(false);
+  const [activeMentionIndex, setActiveMentionIndex] = useState(0);
   const textarea = useRef<HTMLTextAreaElement>(null);
   const pending = props.composer.snapshot?.pendingIntent;
   const busy = props.draft.status === "validating" || props.draft.status === "enqueueing";
   const disabled = Boolean(props.disabledReason) || busy || Boolean(pending);
+  const mentionOptions = useMemo(() => [
+    ...props.composer.mentions.context.map((item) => ({ id: `mention-context-${item.selectionId}`, select: () => props.onContext(item) })),
+    ...props.composer.mentions.skills.map((item) => ({ id: `mention-skill-${item.id}`, select: () => props.onCatalog("skill", item, props.composer.mentions.revisions.skills) })),
+    ...props.composer.mentions.experts.map((item) => ({ id: `mention-expert-${item.id}`, select: () => props.onCatalog("expert", item, props.composer.mentions.revisions.experts) })),
+    ...props.composer.mentions.automations.map((item) => ({ id: `mention-automation-${item.id}`, select: () => props.onCatalog("automation", item, props.composer.mentions.revisions.automations) })),
+  ], [props.composer.mentions, props.onCatalog, props.onContext]);
+  const mentionsOpen = props.composer.mentions.loading || Boolean(props.composer.mentions.error) || mentionOptions.length > 0;
+
+  useEffect(() => { setActiveMentionIndex(0); }, [props.composer.mentions]);
 
   function change(text: string) {
     props.onText(text);
@@ -34,7 +44,27 @@ export function Composer(props: ComposerProps) {
     if (match) props.onSearch(match[1] ?? ""); else props.onCloseMentions();
   }
   function keyDown(event: KeyboardEvent<HTMLTextAreaElement>) {
-    if (event.key === "Escape") { props.onCloseMentions(); return; }
+    if (mentionsOpen && ["ArrowDown", "ArrowUp", "Home", "End"].includes(event.key)) {
+      event.preventDefault();
+      if (mentionOptions.length === 0) return;
+      if (event.key === "Home") setActiveMentionIndex(0);
+      else if (event.key === "End") setActiveMentionIndex(mentionOptions.length - 1);
+      else setActiveMentionIndex((current) => (current + (event.key === "ArrowDown" ? 1 : -1) + mentionOptions.length) % mentionOptions.length);
+      return;
+    }
+    if (event.key === "Escape" && mentionsOpen) {
+      event.preventDefault();
+      props.onCloseMentions();
+      textarea.current?.focus();
+      return;
+    }
+    if (event.key === "Enter" && mentionsOpen && mentionOptions[activeMentionIndex]) {
+      event.preventDefault();
+      mentionOptions[activeMentionIndex].select();
+      props.onCloseMentions();
+      textarea.current?.focus();
+      return;
+    }
     if (event.key === "Enter" && !event.shiftKey && !composing && !event.nativeEvent.isComposing) {
       event.preventDefault();
       if (!disabled && props.draft.text.trim()) props.onSend();
@@ -49,8 +79,8 @@ export function Composer(props: ComposerProps) {
         {props.draft.catalogSelections.map(item => <span className="composer-chip catalog-chip" key={`${item.kind}:${item.id}`}>{item.label}<button type="button" aria-label={`Remove ${item.label}`} onClick={() => props.onRemoveCatalog(item)}><X size={13} /></button></span>)}
       </div>}
       <div className="composer-input-wrap">
-        <textarea ref={textarea} value={props.draft.text} onChange={(event) => change(event.target.value)} onKeyDown={keyDown} onCompositionStart={() => setComposing(true)} onCompositionEnd={() => setComposing(false)} placeholder="Ask about this workspace… Use @ to add context" aria-label="Composer prompt" aria-describedby="composer-help composer-status" disabled={Boolean(pending) || Boolean(props.disabledReason)} />
-        {props.composer.mentions.loading || props.composer.mentions.error || props.composer.mentions.context.length + props.composer.mentions.skills.length + props.composer.mentions.experts.length + props.composer.mentions.automations.length > 0 ? <MentionMenu value={props.composer.mentions} onContext={props.onContext} onCatalog={props.onCatalog} onClose={props.onCloseMentions} /> : null}
+        <textarea ref={textarea} value={props.draft.text} onChange={(event) => change(event.target.value)} onKeyDown={keyDown} onCompositionStart={() => setComposing(true)} onCompositionEnd={() => setComposing(false)} placeholder="Ask about this workspace… Use @ to add context" aria-label="Composer prompt" aria-describedby="composer-help composer-status" aria-autocomplete="list" aria-controls={mentionsOpen ? "composer-mentions" : undefined} aria-expanded={mentionsOpen} aria-activedescendant={mentionsOpen ? mentionOptions[activeMentionIndex]?.id : undefined} disabled={Boolean(pending) || Boolean(props.disabledReason)} />
+        {mentionsOpen ? <MentionMenu id="composer-mentions" value={props.composer.mentions} activeId={mentionOptions[activeMentionIndex]?.id ?? null} onActive={(id) => setActiveMentionIndex(Math.max(0, mentionOptions.findIndex((option) => option.id === id)))} onContext={props.onContext} onCatalog={props.onCatalog} onClose={() => { props.onCloseMentions(); textarea.current?.focus(); }} /> : null}
       </div>
       <div className="composer-footer">
         <div className="composer-tools"><button type="button" onClick={props.onPickFile} disabled={disabled} aria-label="Attach workspace file"><FilePlus2 size={16} /> File</button><button type="button" onClick={props.onPickFolder} disabled={disabled} aria-label="Attach workspace folder"><FolderPlus size={16} /> Folder</button></div>

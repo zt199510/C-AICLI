@@ -39,7 +39,7 @@ export default defineConfig(({ command }) => ({
         test: {
           name: "main-preload",
           environment: "node",
-          include: ["src/**/*.test.ts"],
+          include: ["src/**/*.test.ts", "scripts/**/*.test.mjs"],
         },
       },
       {

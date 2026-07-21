@@ -26,6 +26,10 @@ public sealed class DesktopProtocolTests
 
     [Theory]
     [InlineData("Content-Length: nope\r\n\r\n", "frame-content-length-invalid")]
+    [InlineData("Content-Length: -1\r\n\r\n", "frame-content-length-invalid")]
+    [InlineData("Content-Length: +1\r\n\r\nx", "frame-content-length-invalid")]
+    [InlineData("Content-Length: 999999999999999999999\r\n\r\n", "frame-content-length-invalid")]
+    [InlineData("Content-Length: 0x10\r\n\r\n", "frame-content-length-invalid")]
     [InlineData("Content-Type: application/json\r\n\r\n", "frame-header-invalid")]
     [InlineData("Content-Length: 1048577\r\n\r\n", "frame-body-too-large")]
     [InlineData("Content-Length: 0\r\n\r\n", "frame-body-empty")]

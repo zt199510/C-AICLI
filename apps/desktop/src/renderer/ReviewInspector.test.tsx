@@ -20,6 +20,17 @@ describe("read-only review inspector", () => {
     expect(screen.getByText(/do not prove manufacturing or image correctness/i)).toBeTruthy();
     expect(screen.getByText("verified", { selector: "dd" })).toBeTruthy();
   });
+
+  it("connects tabs to their panel and supports arrow-key navigation", async () => {
+    const onTab = vi.fn();
+    render(<ReviewInspector review={review} workspaceReady onTab={onTab} onReport={vi.fn()} onArtifact={vi.fn()} />);
+    const changesTab = screen.getByRole("tab", { name: "Changes" });
+    changesTab.focus();
+    await userEvent.keyboard("{ArrowRight}");
+    expect(onTab).toHaveBeenCalledWith("reports");
+    expect(changesTab.getAttribute("aria-controls")).toBe("review-panel-changes");
+    expect(screen.getByRole("tabpanel").getAttribute("aria-labelledby")).toBe("review-tab-changes");
+  });
 });
 
 const artifact: ArtifactMetadataData = {

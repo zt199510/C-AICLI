@@ -1579,7 +1579,13 @@ public sealed class ThreadStore
 
     internal static string ReadTextBounded(string path, int maxBytes)
     {
-        using FileStream stream = new(path, FileMode.Open, FileAccess.Read, FileShare.Read, 64 * 1024, FileOptions.SequentialScan);
+        using FileStream stream = new(
+            path,
+            FileMode.Open,
+            FileAccess.Read,
+            FileShare.ReadWrite | FileShare.Delete,
+            64 * 1024,
+            FileOptions.SequentialScan);
         if (stream.Length <= 0 || stream.Length > maxBytes)
         {
             throw new ThreadContractException(ThreadErrorCode.ThreadLimitExceeded, "Persisted thread record exceeds its read bound.");

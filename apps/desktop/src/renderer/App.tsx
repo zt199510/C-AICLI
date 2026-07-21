@@ -1,5 +1,5 @@
 import { FolderOpen, PanelLeft, PanelLeftClose, PanelRight, RefreshCw, X } from "lucide-react";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { ReviewInspector } from "./ReviewInspector";
 import { Composer } from "./Composer";
 import { TaskControls } from "./TaskControls";
@@ -16,6 +16,10 @@ export function App() {
   const [workspaceError, setWorkspaceError] = useState<string | null>(null);
   const [leftOpen, setLeftOpen] = useState(() => window.innerWidth >= 900);
   const [inspectorOpen, setInspectorOpen] = useState(() => window.innerWidth > 1120);
+  const showThreadsTrigger = useRef<HTMLButtonElement>(null);
+  const showInspectorTrigger = useRef<HTMLButtonElement>(null);
+  const restoreThreadsFocus = useRef(false);
+  const restoreInspectorFocus = useRef(false);
 
   useEffect(() => {
     const updateLayout = () => {
@@ -31,8 +35,30 @@ export function App() {
     if (state.workspace) controller.setReviewTab("changes");
   }, [state.workspace?.workspaceId]);
 
+  useEffect(() => {
+    if (!leftOpen && restoreThreadsFocus.current) {
+      restoreThreadsFocus.current = false;
+      showThreadsTrigger.current?.focus();
+    }
+  }, [leftOpen]);
+
+  useEffect(() => {
+    if (!inspectorOpen && restoreInspectorFocus.current) {
+      restoreInspectorFocus.current = false;
+      showInspectorTrigger.current?.focus();
+    }
+  }, [inspectorOpen]);
+
   function showThreads() { setLeftOpen(true); if (window.innerWidth < 900) setInspectorOpen(false); }
   function showInspector() { setInspectorOpen(true); if (window.innerWidth < 900) setLeftOpen(false); }
+  function closeThreads(restoreFocus = true) {
+    restoreThreadsFocus.current = restoreFocus;
+    setLeftOpen(false);
+  }
+  function closeInspector(restoreFocus = true) {
+    restoreInspectorFocus.current = restoreFocus;
+    setInspectorOpen(false);
+  }
 
   async function openWorkspace() {
     setOpening(true);
@@ -53,12 +79,12 @@ export function App() {
       <header className="titlebar">
         <div className="brand">C-AICLI Desktop</div>
         <div className="workspace-title" title={workspacePath ?? "No workspace"}>{workspacePath ?? "No workspace"}</div>
-        <div className={`runtime-status runtime-${state.runtime.state}`} aria-live="polite"><span className="status-dot" aria-hidden="true" /><span>{statusMessage}</span></div>
+        <div className={`runtime-status runtime-${state.runtime.state}`} role="status" aria-live="polite" aria-atomic="true"><span className="status-dot" aria-hidden="true" /><span>{statusMessage}</span></div>
       </header>
 
       <div className="workspace-layout">
-        <aside className={`thread-sidebar drawer ${leftOpen ? "drawer-open" : ""}`} aria-label="Threads panel">
-          <div className="panel-heading"><span>Threads</span><button className="icon-button" type="button" title="Collapse threads" aria-label="Collapse threads" onClick={() => setLeftOpen(false)}><PanelLeftClose size={17} aria-hidden="true" /></button></div>
+        <aside id="threads-panel" className={`thread-sidebar drawer ${leftOpen ? "drawer-open" : ""}`} aria-label="Threads panel" aria-hidden={!leftOpen} onKeyDown={(event) => { if (event.key === "Escape") { event.preventDefault(); closeThreads(); } }}>
+          <div className="panel-heading"><span>Threads</span><button className="icon-button" type="button" title="Collapse threads" aria-label="Collapse threads" onClick={() => closeThreads()}><PanelLeftClose size={17} aria-hidden="true" /></button></div>
           <ThreadSidebar
             threads={state.threads}
             status={state.threadsStatus}
@@ -74,10 +100,10 @@ export function App() {
 
         <main className="task-surface">
           <div className="task-toolbar">
-            <div className="toolbar-group">{!leftOpen && <button className="icon-button" type="button" title="Show threads" aria-label="Show threads" onClick={showThreads}><PanelLeft size={17} aria-hidden="true" /></button>}<span className="task-label">{state.detail?.thread.title ?? "Workspace review"}</span>{state.refreshing && <span className="refreshing" aria-live="polite">Refreshing…</span>}</div>
+            <div className="toolbar-group">{!leftOpen && <button ref={showThreadsTrigger} className="icon-button" type="button" title="Show threads" aria-label="Show threads" aria-controls="threads-panel" aria-expanded={leftOpen} onClick={showThreads}><PanelLeft size={17} aria-hidden="true" /></button>}<span className="task-label">{state.detail?.thread.title ?? "Workspace review"}</span>{state.refreshing && <span className="refreshing" role="status" aria-live="polite">Refreshing…</span>}</div>
             <div className="toolbar-group">
               <button className="command-button" type="button" onClick={() => void openWorkspace()} disabled={opening || state.runtime.state !== "ready"}>{opening ? <RefreshCw className="spin" size={16} aria-hidden="true" /> : <FolderOpen size={16} aria-hidden="true" />}{opening ? "Opening" : "Open workspace"}</button>
-              {!inspectorOpen && <button className="icon-button" type="button" title="Show review inspector" aria-label="Show review inspector" onClick={showInspector}><PanelRight size={17} aria-hidden="true" /></button>}
+              {!inspectorOpen && <button ref={showInspectorTrigger} className="icon-button" type="button" title="Show review inspector" aria-label="Show review inspector" aria-controls="review-inspector-panel" aria-expanded={inspectorOpen} onClick={showInspector}><PanelRight size={17} aria-hidden="true" /></button>}
             </div>
           </div>
 
@@ -116,8 +142,8 @@ export function App() {
           />
         </main>
 
-        <aside className={`inspector drawer ${inspectorOpen ? "drawer-open" : ""}`} aria-label="Review inspector">
-          <div className="panel-heading"><span>Review</span><button className="icon-button" type="button" title="Close review inspector" aria-label="Close review inspector" onClick={() => setInspectorOpen(false)}><X size={17} aria-hidden="true" /></button></div>
+        <aside id="review-inspector-panel" className={`inspector drawer ${inspectorOpen ? "drawer-open" : ""}`} aria-label="Review inspector" aria-hidden={!inspectorOpen} onKeyDown={(event) => { if (event.key === "Escape") { event.preventDefault(); closeInspector(); } }}>
+          <div className="panel-heading"><span>Review</span><button className="icon-button" type="button" title="Close review inspector" aria-label="Close review inspector" onClick={() => closeInspector()}><X size={17} aria-hidden="true" /></button></div>
           <ReviewInspector review={state.review} workspaceReady={Boolean(state.workspace)} onTab={controller.setReviewTab} onReport={(id) => void controller.selectReport(id)} onArtifact={(id) => void controller.selectArtifact(id)} />
         </aside>
       </div>

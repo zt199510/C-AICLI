@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useRef, useState, type KeyboardEvent } from "react";
 import type { ArtifactMetadataData, GerberReviewData } from "../generated/desktop-contracts";
 import type { ReviewState } from "./desktop-state";
 
@@ -13,12 +13,24 @@ export interface ReviewInspectorProps {
 }
 
 export function ReviewInspector({ review, workspaceReady, onTab, onReport, onArtifact }: ReviewInspectorProps) {
+  const tabRefs = useRef<Array<HTMLButtonElement | null>>([]);
+  function navigateTabs(event: KeyboardEvent<HTMLButtonElement>, index: number) {
+    let next: number;
+    if (event.key === "ArrowRight" || event.key === "ArrowDown") next = (index + 1) % tabs.length;
+    else if (event.key === "ArrowLeft" || event.key === "ArrowUp") next = (index - 1 + tabs.length) % tabs.length;
+    else if (event.key === "Home") next = 0;
+    else if (event.key === "End") next = tabs.length - 1;
+    else return;
+    event.preventDefault();
+    onTab(tabs[next]!);
+    tabRefs.current[next]?.focus();
+  }
   return (
     <div className="review-inspector">
       <div className="review-tabs" role="tablist" aria-label="Read-only review panels">
-        {tabs.map((tab) => <button key={tab} type="button" role="tab" aria-selected={review.activeTab === tab} onClick={() => onTab(tab)}>{title(tab)}</button>)}
+        {tabs.map((tab, index) => <button id={`review-tab-${tab}`} aria-controls={`review-panel-${tab}`} ref={(value) => { tabRefs.current[index] = value; }} tabIndex={review.activeTab === tab ? 0 : -1} key={tab} type="button" role="tab" aria-selected={review.activeTab === tab} onKeyDown={(event) => navigateTabs(event, index)} onClick={() => onTab(tab)}>{title(tab)}</button>)}
       </div>
-      <div className="review-content" role="tabpanel">
+      <div id={`review-panel-${review.activeTab}`} aria-labelledby={`review-tab-${review.activeTab}`} className="review-content" role="tabpanel" tabIndex={0}>
         {!workspaceReady ? <div className="empty-list">Open a workspace to review results.</div> : null}
         {workspaceReady && review.status === "loading" ? <div className="empty-list">Loading review data…</div> : null}
         {workspaceReady && review.status === "error" ? <div className="inline-error" role="alert">{review.error}</div> : null}

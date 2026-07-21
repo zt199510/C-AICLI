@@ -72,8 +72,9 @@ for (const scenario of scenarios) {
         await openWorkspace(page);
         await page.getByText(title, { exact: true }).first().click();
         await expect(page.getByText("This turn needs recovery before it can continue.")).toBeVisible();
-        page.once("dialog", (dialog) => void dialog.accept());
         await page.getByRole("button", { name: "Restart", exact: true }).click();
+        await expect(page.getByRole("alertdialog", { name: "Restart this turn?" })).toBeVisible();
+        await page.getByRole("button", { name: "Restart turn", exact: true }).click();
         await expect.poll(async () => {
           const turns = await readTurns(page, threadId);
           const requestId = turns[1]?.approval?.requestId;

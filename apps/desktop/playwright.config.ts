@@ -10,7 +10,7 @@ export default defineConfig({
   reporter: [["list"]],
   use: { trace: "retain-on-failure", screenshot: "only-on-failure" },
   projects: [
-    { name: "unpacked", testMatch: /(?:read-only-shell|desktop-recovery|long-session)\.spec\.ts/ },
-    { name: "packaged", testMatch: /(?:read-only-shell|desktop-recovery)\.spec\.ts/ },
+    { name: "unpacked", testMatch: /(?:read-only-shell|desktop-recovery|long-session|week76-hardening)\.spec\.ts/ },
+    { name: "packaged", testMatch: /(?:read-only-shell|desktop-recovery|week76-hardening)\.spec\.ts/ },
   ],
 });

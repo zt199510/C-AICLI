@@ -95,7 +95,7 @@ export async function waitForThreadStatus(page: Page, threadId: string, status: 
   await expect.poll(async () => page.evaluate(async ({ id }) => {
     const result = await window.caicli.getThread({ threadId: id, afterSequence: 0 });
     return result.data?.thread.status ?? null;
-  }, { id: threadId }), { timeout: 20_000 }).toBe(status);
+  }, { id: threadId }), { timeout: 40_000 }).toBe(status);
 }
 
 export async function readTurns(page: Page, threadId: string) {

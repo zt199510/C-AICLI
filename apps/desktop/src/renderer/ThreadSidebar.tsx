@@ -1,5 +1,5 @@
 import { Archive, Check, Pencil, Plus, X } from "lucide-react";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import type { ThreadSummaryData } from "../generated/desktop-contracts";
 import type { QueryStatus } from "./desktop-state";
 
@@ -26,6 +26,10 @@ export function ThreadSidebar(props: ThreadSidebarProps) {
   const [confirmArchive, setConfirmArchive] = useState<string | null>(null);
   const [pending, setPending] = useState(false);
   const [commandError, setCommandError] = useState<string | null>(null);
+  const createTrigger = useRef<HTMLButtonElement>(null);
+  const renameTriggers = useRef(new Map<string, HTMLButtonElement>());
+  const archiveTriggers = useRef(new Map<string, HTMLButtonElement>());
+  const pendingFocus = useRef<(() => HTMLElement | null) | null>(null);
   const visible = useMemo(() => props.threads.filter((thread) => matchesFilter(thread, filter)), [filter, props.threads]);
 
   async function submit(operation: () => Promise<string | null>, complete: () => void) {
@@ -37,6 +41,17 @@ export function ThreadSidebar(props: ThreadSidebarProps) {
     else complete();
   }
 
+  useEffect(() => {
+    const resolve = pendingFocus.current;
+    if (!resolve) return;
+    pendingFocus.current = null;
+    resolve()?.focus();
+  }, [creating, editing, confirmArchive]);
+
+  function closeCreate() { pendingFocus.current = () => createTrigger.current; setCreating(false); }
+  function closeRename(threadId: string) { pendingFocus.current = () => renameTriggers.current.get(threadId) ?? null; setEditing(null); }
+  function closeArchive(threadId: string) { pendingFocus.current = () => archiveTriggers.current.get(threadId) ?? null; setConfirmArchive(null); }
+
   return (
     <div className="thread-navigation">
       <div className="thread-actions">
@@ -44,20 +59,20 @@ export function ThreadSidebar(props: ThreadSidebarProps) {
           <option value="all">All</option><option value="active">Active</option><option value="completed">Completed</option>
           <option value="failed">Failed</option><option value="archived">Archived</option>
         </select>
-        <button className="icon-button" type="button" aria-label="Create thread" title="Create thread" onClick={() => setCreating(true)}>
+        <button ref={createTrigger} className="icon-button" type="button" aria-label="Create thread" title="Create thread" onClick={() => setCreating(true)}>
           <Plus size={16} aria-hidden="true" />
         </button>
       </div>
       {creating && (
-        <form className="thread-form" onSubmit={(event) => {
+        <form className="thread-form" onKeyDown={(event) => { if (event.key === "Escape") { event.preventDefault(); event.stopPropagation(); closeCreate(); } }} onSubmit={(event) => {
           event.preventDefault();
           if (!createTitle.trim() || pending) return;
-          void submit(() => props.onCreate(createTitle.trim()), () => { setCreating(false); setCreateTitle(""); });
+          void submit(() => props.onCreate(createTitle.trim()), () => { setCreateTitle(""); closeCreate(); });
         }}>
           <label htmlFor="create-thread-title">Thread title</label>
           <input id="create-thread-title" autoFocus maxLength={512} value={createTitle} onChange={(event) => setCreateTitle(event.target.value)} />
           <span className="byte-count">{new TextEncoder().encode(createTitle).length}/512 bytes</span>
-          <div className="form-actions"><button type="submit" disabled={pending || !createTitle.trim()}><Check size={14} />Create</button><button type="button" onClick={() => setCreating(false)}><X size={14} />Cancel</button></div>
+          <div className="form-actions"><button type="submit" disabled={pending || !createTitle.trim()}><Check size={14} aria-hidden="true" />Create</button><button type="button" onClick={closeCreate}><X size={14} aria-hidden="true" />Cancel</button></div>
         </form>
       )}
       {commandError && <div className="inline-error" role="alert">{commandError}</div>}
@@ -69,14 +84,14 @@ export function ThreadSidebar(props: ThreadSidebarProps) {
         {visible.map((entry) => (
           <div className={`thread-row ${props.selectedThreadId === entry.threadId ? "selected" : ""}`} role="listitem" key={entry.threadId}>
             {editing === entry.threadId ? (
-              <form className="thread-form compact" onSubmit={(event) => {
+              <form className="thread-form compact" onKeyDown={(event) => { if (event.key === "Escape") { event.preventDefault(); event.stopPropagation(); closeRename(entry.threadId); } }} onSubmit={(event) => {
                 event.preventDefault();
                 if (!editTitle.trim() || pending) return;
-                void submit(() => props.onRename(entry.threadId, entry.revision, editTitle.trim()), () => setEditing(null));
+                void submit(() => props.onRename(entry.threadId, entry.revision, editTitle.trim()), () => closeRename(entry.threadId));
               }}>
                 <label className="sr-only" htmlFor={`rename-${entry.threadId}`}>Rename thread</label>
                 <input id={`rename-${entry.threadId}`} autoFocus value={editTitle} maxLength={512} onChange={(event) => setEditTitle(event.target.value)} />
-                <div className="form-actions"><button type="submit" aria-label="Save thread title"><Check size={14} /></button><button type="button" aria-label="Cancel rename" onClick={() => setEditing(null)}><X size={14} /></button></div>
+                <div className="form-actions"><button type="submit" aria-label="Save thread title"><Check size={14} aria-hidden="true" /></button><button type="button" aria-label="Cancel rename" onClick={() => closeRename(entry.threadId)}><X size={14} aria-hidden="true" /></button></div>
               </form>
             ) : (
               <>
@@ -85,16 +100,16 @@ export function ThreadSidebar(props: ThreadSidebarProps) {
                   <span className="thread-meta"><span className={`status-chip status-${safeStatus(entry.status)}`}>{entry.status}</span><span>{entry.timelineItemCount} items</span></span>
                 </button>
                 <div className="row-actions">
-                  <button className="icon-button" type="button" title="Rename thread" aria-label={`Rename ${entry.title}`} onClick={() => { setEditing(entry.threadId); setEditTitle(entry.title); }}><Pencil size={14} /></button>
-                  {!entry.archivedAtUtc && <button className="icon-button" type="button" title="Archive thread" aria-label={`Archive ${entry.title}`} onClick={() => setConfirmArchive(entry.threadId)}><Archive size={14} /></button>}
+                  <button ref={(value) => { if (value) renameTriggers.current.set(entry.threadId, value); else renameTriggers.current.delete(entry.threadId); }} className="icon-button" type="button" title="Rename thread" aria-label={`Rename ${entry.title}`} onClick={() => { setEditing(entry.threadId); setEditTitle(entry.title); }}><Pencil size={14} aria-hidden="true" /></button>
+                  {!entry.archivedAtUtc && <button ref={(value) => { if (value) archiveTriggers.current.set(entry.threadId, value); else archiveTriggers.current.delete(entry.threadId); }} className="icon-button" type="button" title="Archive thread" aria-label={`Archive ${entry.title}`} onClick={() => setConfirmArchive(entry.threadId)}><Archive size={14} aria-hidden="true" /></button>}
                 </div>
               </>
             )}
             {confirmArchive === entry.threadId && (
-              <div className="archive-confirm" role="alertdialog" aria-label="Confirm archive">
-                <span>Archive this thread?</span>
-                <button type="button" disabled={pending} onClick={() => void submit(() => props.onArchive(entry.threadId, entry.revision), () => setConfirmArchive(null))}>Archive</button>
-                <button type="button" onClick={() => setConfirmArchive(null)}>Cancel</button>
+              <div className="archive-confirm" role="alertdialog" aria-modal="true" aria-labelledby={`archive-title-${entry.threadId}`} onKeyDown={(event) => { if (event.key === "Escape") { event.preventDefault(); event.stopPropagation(); closeArchive(entry.threadId); } }}>
+                <span id={`archive-title-${entry.threadId}`}>Archive this thread?</span>
+                <button autoFocus type="button" disabled={pending} onClick={() => void submit(() => props.onArchive(entry.threadId, entry.revision), () => closeArchive(entry.threadId))}>Archive</button>
+                <button type="button" onClick={() => closeArchive(entry.threadId)}>Cancel</button>
               </div>
             )}
           </div>

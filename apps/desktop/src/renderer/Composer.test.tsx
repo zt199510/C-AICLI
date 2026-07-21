@@ -52,6 +52,25 @@ describe("Composer", () => {
     expect(props.onClear).toHaveBeenCalledOnce();
     expect((screen.getByRole("textbox", { name: "Composer prompt" }) as HTMLTextAreaElement).disabled).toBe(true);
   });
+
+  it("navigates mention options with a roving active descendant and restores the prompt", async () => {
+    const props = makeProps({ composer: { ...initialComposerUiState, mentions: {
+      loading: false, error: null, truncated: false,
+      context: [
+        { selectionId: "first", relativePath: "src/first.ts", kind: "file", byteCount: 10, fileCount: 1, availability: "available" },
+        { selectionId: "second", relativePath: "src/second.ts", kind: "file", byteCount: 20, fileCount: 1, availability: "available" },
+      ], skills: [], experts: [], automations: [], revisions: { skills: "", experts: "", automations: "" },
+    } } });
+    render(<Composer {...props} />);
+    const prompt = screen.getByRole("textbox", { name: "Composer prompt" });
+    expect(prompt.getAttribute("aria-activedescendant")).toBe("mention-context-first");
+    fireEvent.keyDown(prompt, { key: "End" });
+    expect(prompt.getAttribute("aria-activedescendant")).toBe("mention-context-second");
+    fireEvent.keyDown(prompt, { key: "Enter" });
+    expect(props.onContext).toHaveBeenCalledWith(expect.objectContaining({ selectionId: "second" }));
+    expect(props.onCloseMentions).toHaveBeenCalledOnce();
+    expect(document.activeElement).toBe(prompt);
+  });
 });
 
 function makeProps(overrides: Record<string, unknown> = {}) {

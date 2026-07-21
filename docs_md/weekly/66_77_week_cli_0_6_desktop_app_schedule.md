@@ -2,7 +2,7 @@
 
 更新时间：2026-07-18
 
-状态：Week 66-75 已完成；Week 75 recovery/long-session unpacked 与 packaged Gate 已通过
+状态：Week 66-75 已完成；Week 75 recovery/long-session unpacked 与 packaged Gate 已通过；Week 76 Blocked
 
 详细产品与技术边界统一以 `docs_md/spec/desktop_app_development_framework_0_6_0.md` 为准。本排期负责把该框架拆成 Week 66-77 的依赖顺序、周末验收和发布 Gate，不扩展产品范围。
 
@@ -255,6 +255,10 @@ open workspace
 周末 Gate：成功、deny、cancel、crash、restart、corrupt-state 六条闭环均有稳定自动化证据，终态无 AppHost/shell/MCP/terminal/external-tool orphan。
 
 ### Week 76：Security、Accessibility、Performance 与 Release Candidate
+
+详细计划：`76_week_security_accessibility_performance_release_candidate.plan.md`
+
+状态：Blocked（自动化 security/accessibility/package 收口完成；performance stability、Narrator 与 clean-source RC Gate 未关闭；review：`76_week_review.md`）
 
 主要交付：
 

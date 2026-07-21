@@ -59,6 +59,7 @@ const reviewedChannels = [
   "composer:get", "composer:enqueue", "composer:clear",
   "turn:start", "turn:cancel", "approval:resolve", "turn:resume", "turn:restart",
 ];
+if (new Set(reviewedChannels).size !== 41) throw new Error("Reviewed bridge inventory must remain exact 39 invoke + 2 event channels.");
 for (const channel of reviewedChannels) {
   if (!preload.includes(channel)) throw new Error(`Preload bundle is missing reviewed channel: ${channel}`);
 }

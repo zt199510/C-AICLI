@@ -23,9 +23,19 @@ describe("thread metadata navigation", () => {
     await userEvent.click(screen.getByRole("button", { name: /^Create$/ }));
     expect(create).toHaveBeenCalledWith("New review");
     await userEvent.click(screen.getByRole("button", { name: "Archive Review thread" }));
-    expect(screen.getByRole("alertdialog", { name: "Confirm archive" })).toBeTruthy();
+    expect(screen.getByRole("alertdialog", { name: "Archive this thread?" })).toBeTruthy();
     await userEvent.click(screen.getByRole("button", { name: /^Archive$/ }));
     expect(archive).toHaveBeenCalledWith("thread-1", 1);
+  });
+
+  it("closes confirmations with Escape and restores focus to the trigger", async () => {
+    renderSidebar({ threads: [thread("completed", null)] });
+    const archive = screen.getByRole("button", { name: "Archive Review thread" });
+    await userEvent.click(archive);
+    expect(screen.getByRole("alertdialog", { name: "Archive this thread?" })).toBeTruthy();
+    await userEvent.keyboard("{Escape}");
+    expect(screen.queryByRole("alertdialog")).toBeNull();
+    expect(document.activeElement).toBe(archive);
   });
 });
 

@@ -1,72 +1,173 @@
+[CmdletBinding()]
 param(
     [string]$PackageRoot,
-    [int]$SampleAfterMilliseconds = 3000,
-    [int]$AutoExitMilliseconds = 6000
+    [string]$OutputPath,
+    [ValidateRange(1, 20)][int]$Runs = 5,
+    [ValidateRange(250, 30000)][int]$ReadySampleMilliseconds = 3000,
+    [ValidateRange(0, 120)][int]$IdleSeconds = 30,
+    [ValidateRange(1, 30)][int]$SampleIntervalSeconds = 5
 )
 
+Set-StrictMode -Version Latest
 $ErrorActionPreference = "Stop"
-$repoRoot = Split-Path -Parent $PSScriptRoot
+$repoRoot = [System.IO.Path]::GetFullPath((Split-Path -Parent $PSScriptRoot))
+$artifactsRoot = [System.IO.Path]::GetFullPath((Join-Path $repoRoot "artifacts"))
 if ([string]::IsNullOrWhiteSpace($PackageRoot)) {
     $PackageRoot = Join-Path $repoRoot "apps\desktop\out\C-AICLI Desktop-win32-x64"
+}
+if ([string]::IsNullOrWhiteSpace($OutputPath)) {
+    $OutputPath = Join-Path $artifactsRoot "desktop-performance\week76-performance.json"
+}
+
+function Test-PathWithin([string]$Root, [string]$Candidate) {
+    $separators = [char[]]@([System.IO.Path]::DirectorySeparatorChar, [System.IO.Path]::AltDirectorySeparatorChar)
+    $rootPath = [System.IO.Path]::GetFullPath($Root).TrimEnd($separators)
+    $candidatePath = [System.IO.Path]::GetFullPath($Candidate).TrimEnd($separators)
+    return $candidatePath.Equals($rootPath, [System.StringComparison]::OrdinalIgnoreCase) -or
+        $candidatePath.StartsWith($rootPath + [System.IO.Path]::DirectorySeparatorChar, [System.StringComparison]::OrdinalIgnoreCase)
 }
 
 $resolvedPackage = [System.IO.Path]::GetFullPath($PackageRoot)
 $desktopOut = [System.IO.Path]::GetFullPath((Join-Path $repoRoot "apps\desktop\out"))
-if (-not $resolvedPackage.StartsWith($desktopOut + [System.IO.Path]::DirectorySeparatorChar, [System.StringComparison]::OrdinalIgnoreCase)) {
-    throw "Desktop package must remain under apps\desktop\out."
-}
+$resolvedOutput = [System.IO.Path]::GetFullPath($OutputPath)
+if (-not (Test-PathWithin $desktopOut $resolvedPackage)) { throw "Desktop package must remain under apps\desktop\out." }
+if (-not (Test-PathWithin $artifactsRoot $resolvedOutput)) { throw "Performance evidence must remain under artifacts." }
 
 $desktopExe = Join-Path $resolvedPackage "caicli-desktop.exe"
-if (-not (Test-Path -LiteralPath $desktopExe -PathType Leaf)) {
-    throw "Packaged Desktop executable is missing."
+$asar = Join-Path $resolvedPackage "resources\app.asar"
+$appHost = Join-Path $resolvedPackage "resources\apphost\CSharpAiCli.AppHost.exe"
+foreach ($required in @($desktopExe, $asar, $appHost)) {
+    if (-not (Test-Path -LiteralPath $required -PathType Leaf)) { throw "Packaged Desktop payload is missing: $required" }
 }
 
-$packageFiles = @(Get-ChildItem -LiteralPath $resolvedPackage -Recurse -File)
-$beforeAppHost = @(Get-Process -Name "CSharpAiCli.AppHost" -ErrorAction SilentlyContinue).Count
-$previousAutoExit = $env:CAICLI_DESKTOP_AUTO_EXIT_MS
-$stopwatch = [System.Diagnostics.Stopwatch]::StartNew()
-try {
-    $env:CAICLI_DESKTOP_AUTO_EXIT_MS = $AutoExitMilliseconds.ToString([System.Globalization.CultureInfo]::InvariantCulture)
-    $desktopProcess = Start-Process -FilePath $desktopExe -PassThru -WindowStyle Hidden
-    Start-Sleep -Milliseconds $SampleAfterMilliseconds
-    if ($desktopProcess.HasExited) {
-        throw "Desktop exited before the memory sample."
-    }
-
-    $allProcesses = @(Get-CimInstance Win32_Process)
-    $processIds = @([int]$desktopProcess.Id)
+function Get-ProcessTree([int]$RootPid) {
+    $all = @(Get-CimInstance Win32_Process)
+    $ids = [System.Collections.Generic.HashSet[int]]::new()
+    [void]$ids.Add($RootPid)
     do {
-        $children = @($allProcesses | Where-Object {
-            $processIds -contains [int]$_.ParentProcessId -and $processIds -notcontains [int]$_.ProcessId
-        } | ForEach-Object { [int]$_.ProcessId })
-        $newChildren = @($children | Where-Object { $processIds -notcontains $_ })
-        $processIds += $newChildren
-    } while ($newChildren.Count -gt 0)
-
-    $liveProcesses = @($processIds | ForEach-Object { Get-Process -Id $_ -ErrorAction SilentlyContinue })
-    $workingSetBytes = ($liveProcesses | Measure-Object WorkingSet64 -Sum).Sum
-    $privateBytes = ($liveProcesses | Measure-Object PrivateMemorySize64 -Sum).Sum
-    Wait-Process -Id $desktopProcess.Id -Timeout ([Math]::Ceiling($AutoExitMilliseconds / 1000) + 10)
-}
-finally {
-    $stopwatch.Stop()
-    $env:CAICLI_DESKTOP_AUTO_EXIT_MS = $previousAutoExit
+        $added = $false
+        foreach ($item in $all) {
+            if ($ids.Contains([int]$item.ParentProcessId) -and $ids.Add([int]$item.ProcessId)) { $added = $true }
+        }
+    } while ($added)
+    return @($all | Where-Object { $ids.Contains([int]$_.ProcessId) })
 }
 
-Start-Sleep -Milliseconds 500
-$afterAppHost = @(Get-Process -Name "CSharpAiCli.AppHost" -ErrorAction SilentlyContinue).Count
-if ($afterAppHost -ne $beforeAppHost) {
-    throw "Desktop baseline measurement left an AppHost process behind."
+function Get-Role($ProcessRow, [int]$RootPid) {
+    if ([int]$ProcessRow.ProcessId -eq $RootPid) { return "main" }
+    if ($ProcessRow.Name -like "CSharpAiCli.AppHost*") { return "apphost" }
+    $command = [string]$ProcessRow.CommandLine
+    if ($command -match '--type=renderer') { return "renderer" }
+    if ($command -match '--type=gpu-process') { return "gpu" }
+    if ($command -match '--type=utility') { return "utility" }
+    return "electron-child"
 }
 
-[PSCustomObject]@{
-    packageFileCount = $packageFiles.Count
-    packageBytes = ($packageFiles | Measure-Object Length -Sum).Sum
-    appAsarBytes = (Get-Item -LiteralPath (Join-Path $resolvedPackage "resources\app.asar")).Length
-    appHostBytes = (Get-Item -LiteralPath (Join-Path $resolvedPackage "resources\apphost\CSharpAiCli.AppHost.exe")).Length
-    processCountAtSample = $liveProcesses.Count
-    workingSetBytesAtSample = $workingSetBytes
-    privateBytesAtSample = $privateBytes
-    lifecycleMilliseconds = $stopwatch.ElapsedMilliseconds
-    orphanAppHostDelta = $afterAppHost - $beforeAppHost
-} | ConvertTo-Json
+function Get-Sample([int]$RootPid, [int64]$ElapsedMilliseconds) {
+    $rows = foreach ($item in @(Get-ProcessTree $RootPid)) {
+        $process = Get-Process -Id ([int]$item.ProcessId) -ErrorAction SilentlyContinue
+        if ($null -ne $process) {
+            [PSCustomObject]@{
+                pid = [int]$item.ProcessId
+                role = Get-Role $item $RootPid
+                workingSetBytes = [int64]$process.WorkingSet64
+                privateBytes = [int64]$process.PrivateMemorySize64
+            }
+        }
+    }
+    $byRole = @($rows | Group-Object role | ForEach-Object {
+        [PSCustomObject]@{
+            role = $_.Name
+            processCount = $_.Count
+            workingSetBytes = [int64](($_.Group | Measure-Object workingSetBytes -Sum).Sum)
+            privateBytes = [int64](($_.Group | Measure-Object privateBytes -Sum).Sum)
+        }
+    } | Sort-Object role)
+    return [PSCustomObject]@{
+        elapsedMilliseconds = $ElapsedMilliseconds
+        processCount = @($rows).Count
+        workingSetBytes = [int64](($rows | Measure-Object workingSetBytes -Sum).Sum)
+        privateBytes = [int64](($rows | Measure-Object privateBytes -Sum).Sum)
+        roles = $byRole
+    }
+}
+
+$sourceRevision = (& git -C $repoRoot rev-parse --verify HEAD 2>&1 | Out-String).Trim().ToLowerInvariant()
+$sourceDirty = -not [string]::IsNullOrWhiteSpace((& git -C $repoRoot status --porcelain=v1 --untracked-files=all 2>&1 | Out-String).Trim())
+$packageFiles = @(Get-ChildItem -LiteralPath $resolvedPackage -Recurse -File)
+$runEvidence = @()
+$tempParent = Join-Path $artifactsRoot ".desktop-performance-temp"
+New-Item -ItemType Directory -Path $tempParent -Force | Out-Null
+
+for ($run = 1; $run -le $Runs; $run++) {
+    $profileRoot = Join-Path $tempParent ([Guid]::NewGuid().ToString("N"))
+    New-Item -ItemType Directory -Path $profileRoot | Out-Null
+    $previousAppData = $env:APPDATA
+    $previousLocalAppData = $env:LOCALAPPDATA
+    $previousAutoExit = $env:CAICLI_DESKTOP_AUTO_EXIT_MS
+    $autoExitMilliseconds = $ReadySampleMilliseconds + ($IdleSeconds * 1000) + 10000
+    $stopwatch = [System.Diagnostics.Stopwatch]::StartNew()
+    $samples = @()
+    $ownedIds = @()
+    try {
+        $env:APPDATA = Join-Path $profileRoot "appdata"
+        $env:LOCALAPPDATA = Join-Path $profileRoot "localappdata"
+        $env:CAICLI_DESKTOP_AUTO_EXIT_MS = $autoExitMilliseconds.ToString([System.Globalization.CultureInfo]::InvariantCulture)
+        $desktopProcess = Start-Process -FilePath $desktopExe -PassThru -WindowStyle Hidden
+        Start-Sleep -Milliseconds $ReadySampleMilliseconds
+        if ($desktopProcess.HasExited) { throw "Desktop exited before the ready sample on run $run." }
+        $samples += Get-Sample $desktopProcess.Id $stopwatch.ElapsedMilliseconds
+        $iterations = [Math]::Floor($IdleSeconds / $SampleIntervalSeconds)
+        for ($sample = 0; $sample -lt $iterations; $sample++) {
+            Start-Sleep -Seconds $SampleIntervalSeconds
+            if ($desktopProcess.HasExited) { throw "Desktop exited before idle sampling completed on run $run." }
+            $samples += Get-Sample $desktopProcess.Id $stopwatch.ElapsedMilliseconds
+        }
+        $ownedIds = @((Get-ProcessTree $desktopProcess.Id) | ForEach-Object { [int]$_.ProcessId })
+        Wait-Process -Id $desktopProcess.Id -Timeout ([Math]::Ceiling($autoExitMilliseconds / 1000) + 10)
+    }
+    finally {
+        $stopwatch.Stop()
+        $env:APPDATA = $previousAppData
+        $env:LOCALAPPDATA = $previousLocalAppData
+        $env:CAICLI_DESKTOP_AUTO_EXIT_MS = $previousAutoExit
+    }
+    Start-Sleep -Milliseconds 500
+    $remaining = @($ownedIds | Where-Object { $null -ne (Get-Process -Id $_ -ErrorAction SilentlyContinue) })
+    if ($remaining.Count -ne 0) { throw "Performance run left owned processes behind: $($remaining -join ', ')." }
+    Remove-Item -LiteralPath $profileRoot -Recurse -Force
+    if (Test-Path -LiteralPath $profileRoot) { throw "Performance run temp profile could not be released." }
+    $runEvidence += [PSCustomObject]@{
+        run = $run
+        lifecycleMilliseconds = $stopwatch.ElapsedMilliseconds
+        processDelta = 0
+        tempDelta = 0
+        samples = $samples
+    }
+}
+
+$result = [ordered]@{
+    schemaVersion = 1
+    status = "Measured"
+    workload = "week76-cold-start-idle-v1"
+    sourceRevision = $sourceRevision
+    appHostSha256 = (Get-FileHash -LiteralPath $appHost -Algorithm SHA256).Hash
+    source = [ordered]@{ revision = $sourceRevision; dirty = $sourceDirty }
+    package = [ordered]@{
+        fileCount = $packageFiles.Count
+        bytes = [int64](($packageFiles | Measure-Object Length -Sum).Sum)
+        appAsarBytes = [int64](Get-Item -LiteralPath $asar).Length
+        appHostBytes = [int64](Get-Item -LiteralPath $appHost).Length
+        desktopSha256 = (Get-FileHash -LiteralPath $desktopExe -Algorithm SHA256).Hash
+        appHostSha256 = (Get-FileHash -LiteralPath $appHost -Algorithm SHA256).Hash
+    }
+    settings = [ordered]@{ runs = $Runs; readySampleMilliseconds = $ReadySampleMilliseconds; idleSeconds = $IdleSeconds; sampleIntervalSeconds = $SampleIntervalSeconds }
+    baselines = [ordered]@{ week66PackageBytes = 437851431; week66AppAsarBytes = 2175389; week66WorkingSetBytes = 406470656; week66PrivateBytes = 242315264 }
+    processCleanupPassed = $true
+    runs = $runEvidence
+}
+
+$outputDirectory = Split-Path -Parent $resolvedOutput
+New-Item -ItemType Directory -Path $outputDirectory -Force | Out-Null
+$result | ConvertTo-Json -Depth 10 | Set-Content -LiteralPath $resolvedOutput -Encoding UTF8
+$result | ConvertTo-Json -Depth 10

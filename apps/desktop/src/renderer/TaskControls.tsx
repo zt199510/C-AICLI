@@ -1,5 +1,5 @@
 import { RefreshCw, RotateCcw, ShieldCheck, ShieldX, Square } from "lucide-react";
-import { useMemo, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import type { ThreadDetailData, TurnSummaryData } from "../generated/desktop-contracts";
 
 export interface TaskControlsProps {
@@ -15,6 +15,8 @@ const terminal = new Set(["completed", "failed", "canceled"]);
 export function TaskControls(props: TaskControlsProps) {
   const [busy, setBusy] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
+  const [confirmRestart, setConfirmRestart] = useState(false);
+  const restartTrigger = useRef<HTMLButtonElement>(null);
   const turn = useMemo(() => activeTurn(props.detail), [props.detail]);
   const recovery = useMemo(() => recoveryTurn(props.detail), [props.detail]);
   const approval = turn?.approval ?? recovery?.approval ?? null;
@@ -28,6 +30,7 @@ export function TaskControls(props: TaskControlsProps) {
     try {
       const result = await action();
       setMessage(result);
+      if (!result) window.requestAnimationFrame(() => document.querySelector<HTMLTextAreaElement>('[aria-label="Composer prompt"]')?.focus());
     } finally {
       setBusy(null);
     }
@@ -70,13 +73,17 @@ export function TaskControls(props: TaskControlsProps) {
           <button className="command-button" type="button" disabled={busy !== null} onClick={() => void run("resume", () => props.onResume(recovery.turnId, recovery.revision))}>
             <RefreshCw size={15} aria-hidden="true" />Resume
           </button>
-          <button className="command-button danger-command" type="button" disabled={busy !== null} onClick={() => {
-            if (window.confirm("Restart this turn from its original queued input?")) void run("restart", () => props.onRestart(recovery.turnId, recovery.revision));
-          }}>
+          <button ref={restartTrigger} className="command-button danger-command" type="button" disabled={busy !== null} onClick={() => setConfirmRestart(true)}>
             <RotateCcw size={15} aria-hidden="true" />Restart
           </button>
         </div>
       )}
+
+      {confirmRestart && recovery && <div className="restart-confirm" role="alertdialog" aria-modal="true" aria-labelledby="restart-confirm-title" aria-describedby="restart-confirm-description" onKeyDown={(event) => { if (event.key === "Escape") { event.preventDefault(); setConfirmRestart(false); window.requestAnimationFrame(() => restartTrigger.current?.focus()); } }}>
+        <strong id="restart-confirm-title">Restart this turn?</strong>
+        <span id="restart-confirm-description">The original queued input starts a new attempt. Completed writes are not replayed.</span>
+        <div className="form-actions"><button autoFocus className="command-button danger-command" type="button" onClick={() => { setConfirmRestart(false); void run("restart", () => props.onRestart(recovery.turnId, recovery.revision)); }}>Restart turn</button><button className="command-button" type="button" onClick={() => { setConfirmRestart(false); window.requestAnimationFrame(() => restartTrigger.current?.focus()); }}>Cancel</button></div>
+      </div>}
 
       {message && <div className="inline-error" role="alert">{message}</div>}
     </section>
