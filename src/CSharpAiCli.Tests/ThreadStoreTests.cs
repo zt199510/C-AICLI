@@ -270,7 +270,7 @@ public sealed class ThreadStoreTests
     }
 
     [Fact]
-    public async Task Manifest_replace_retries_a_bounded_transient_windows_reader_lock()
+    public void Manifest_replace_retries_a_bounded_transient_windows_reader_lock()
     {
         if (!OperatingSystem.IsWindows()) return;
 
@@ -278,15 +278,23 @@ public sealed class ThreadStoreTests
         Assert.True(test.Store.Create(test.NewThread()).Succeeded);
         string manifest = test.Store.GetLayout(test.ThreadId).ManifestPath;
         FileStream held = new(manifest, FileMode.Open, FileAccess.Read, FileShare.Read);
-        Task release = Task.Run(async () =>
+        var release = new Thread(() =>
         {
-            await Task.Delay(75);
+            Thread.Sleep(75);
             held.Dispose();
         });
+        release.Start();
 
-        ThreadStoreMutationResult result = test.Store.Rename(
-            test.ThreadId, 0, "Retried", test.Now.AddSeconds(1));
-        await release;
+        ThreadStoreMutationResult result;
+        try
+        {
+            result = test.Store.Rename(test.ThreadId, 0, "Retried", test.Now.AddSeconds(1));
+        }
+        finally
+        {
+            release.Join();
+            held.Dispose();
+        }
 
         Assert.True(result.Succeeded, result.Diagnostic?.SafeMessage);
         Assert.Equal("Retried", result.Aggregate?.Record.Title);
