@@ -66,6 +66,8 @@ public sealed class DesktopReleaseCandidateScriptTests
         Assert.Contains("schemaVersion = 2", baseline, StringComparison.Ordinal);
         Assert.Contains("week77-cold-start-idle-v2", baseline, StringComparison.Ordinal);
         Assert.Contains("status = if ([string]::IsNullOrWhiteSpace($safeFailure))", baseline, StringComparison.Ordinal);
+        Assert.Contains("cleanupExitTimeoutMilliseconds = 10000", baseline, StringComparison.Ordinal);
+        Assert.Contains("remainingProcesses = $remainingProcesses", baseline, StringComparison.Ordinal);
         Assert.Contains("if (-not $allRunsPassed) { exit 1 }", baseline, StringComparison.Ordinal);
     }
 

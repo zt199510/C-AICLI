@@ -109,6 +109,7 @@ for ($run = 1; $run -le $Runs; $run++) {
     $stopwatch = [System.Diagnostics.Stopwatch]::StartNew()
     $samples = @()
     $ownedIds = @()
+    $ownedProcessRoles = @()
     $desktopProcess = $null
     $runFailure = $null
     $cleanupFailures = @()
@@ -126,7 +127,11 @@ for ($run = 1; $run -le $Runs; $run++) {
             if ($desktopProcess.HasExited) { throw "Desktop exited before idle sampling completed on run $run." }
             $samples += Get-Sample $desktopProcess.Id $stopwatch.ElapsedMilliseconds
         }
-        $ownedIds = @((Get-ProcessTree $desktopProcess.Id) | ForEach-Object { [int]$_.ProcessId })
+        $ownedProcesses = @(Get-ProcessTree $desktopProcess.Id)
+        $ownedIds = @($ownedProcesses | ForEach-Object { [int]$_.ProcessId })
+        $ownedProcessRoles = @($ownedProcesses | ForEach-Object {
+            [PSCustomObject]@{ pid = [int]$_.ProcessId; role = Get-Role $_ $desktopProcess.Id }
+        })
         Wait-Process -Id $desktopProcess.Id -Timeout ([Math]::Ceiling($autoExitMilliseconds / 1000) + 10)
     }
     catch {
@@ -134,7 +139,11 @@ for ($run = 1; $run -le $Runs; $run++) {
     }
     finally {
         if ($null -ne $desktopProcess -and -not $desktopProcess.HasExited) {
-            $ownedIds = @((Get-ProcessTree $desktopProcess.Id) | ForEach-Object { [int]$_.ProcessId })
+            $ownedProcesses = @(Get-ProcessTree $desktopProcess.Id)
+            $ownedIds = @($ownedProcesses | ForEach-Object { [int]$_.ProcessId })
+            $ownedProcessRoles = @($ownedProcesses | ForEach-Object {
+                [PSCustomObject]@{ pid = [int]$_.ProcessId; role = Get-Role $_ $desktopProcess.Id }
+            })
             foreach ($ownedId in @($ownedIds | Sort-Object -Descending)) {
                 Stop-Process -Id $ownedId -Force -ErrorAction SilentlyContinue
             }
@@ -144,8 +153,14 @@ for ($run = 1; $run -le $Runs; $run++) {
         $env:LOCALAPPDATA = $previousLocalAppData
         $env:CAICLI_DESKTOP_AUTO_EXIT_MS = $previousAutoExit
     }
-    Start-Sleep -Milliseconds 500
-    $remaining = @($ownedIds | Where-Object { $null -ne (Get-Process -Id $_ -ErrorAction SilentlyContinue) })
+    $cleanupWait = [Diagnostics.Stopwatch]::StartNew()
+    do {
+        $remaining = @($ownedIds | Where-Object { $null -ne (Get-Process -Id $_ -ErrorAction SilentlyContinue) })
+        if ($remaining.Count -eq 0) { break }
+        Start-Sleep -Milliseconds 250
+    } while ($cleanupWait.ElapsedMilliseconds -lt 10000)
+    $cleanupWait.Stop()
+    $remainingProcesses = @($ownedProcessRoles | Where-Object { $remaining -contains $_.pid })
     if ($remaining.Count -ne 0) { $cleanupFailures += "Performance run left $($remaining.Count) owned process(es) behind." }
     try { Remove-Item -LiteralPath $profileRoot -Recurse -Force }
     catch { $cleanupFailures += "Performance run temp profile cleanup failed." }
@@ -158,7 +173,9 @@ for ($run = 1; $run -le $Runs; $run++) {
         run = $run
         status = if ([string]::IsNullOrWhiteSpace($safeFailure)) { "Passed" } else { "Failed" }
         lifecycleMilliseconds = $stopwatch.ElapsedMilliseconds
+        cleanupWaitMilliseconds = $cleanupWait.ElapsedMilliseconds
         processDelta = $remaining.Count
+        remainingProcesses = $remainingProcesses
         tempDelta = $tempDelta
         failure = if ([string]::IsNullOrWhiteSpace($safeFailure)) { $null } else { $safeFailure }
         samples = $samples
@@ -181,7 +198,7 @@ $result = [ordered]@{
         desktopSha256 = (Get-FileHash -LiteralPath $desktopExe -Algorithm SHA256).Hash
         appHostSha256 = (Get-FileHash -LiteralPath $appHost -Algorithm SHA256).Hash
     }
-    settings = [ordered]@{ runs = $Runs; readySampleMilliseconds = $ReadySampleMilliseconds; idleSeconds = $IdleSeconds; sampleIntervalSeconds = $SampleIntervalSeconds }
+    settings = [ordered]@{ runs = $Runs; readySampleMilliseconds = $ReadySampleMilliseconds; idleSeconds = $IdleSeconds; sampleIntervalSeconds = $SampleIntervalSeconds; cleanupExitTimeoutMilliseconds = 10000 }
     baselines = [ordered]@{ week66PackageBytes = 437851431; week66AppAsarBytes = 2175389; week66WorkingSetBytes = 406470656; week66PrivateBytes = 242315264 }
     processCleanupPassed = @($runEvidence | Where-Object { $_.processDelta -ne 0 -or $_.tempDelta -ne 0 }).Count -eq 0
     runs = $runEvidence
