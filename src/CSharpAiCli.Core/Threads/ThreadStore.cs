@@ -1563,7 +1563,7 @@ public sealed class ThreadStore
                 stream.Flush(flushToDisk: true);
             }
 
-            File.Move(temporaryPath, path, overwrite);
+            MoveAtomically(temporaryPath, path, overwrite);
         }
         finally
         {
@@ -1576,6 +1576,31 @@ public sealed class ThreadStore
             }
         }
     }
+
+    private static void MoveAtomically(string temporaryPath, string path, bool overwrite)
+    {
+        const int maxAttempts = 8;
+        for (int attempt = 1; ; attempt++)
+        {
+            try
+            {
+                File.Move(temporaryPath, path, overwrite);
+                return;
+            }
+            catch (Exception exception) when (
+                overwrite &&
+                OperatingSystem.IsWindows() &&
+                attempt < maxAttempts &&
+                IsTransientAtomicReplaceFailure(exception))
+            {
+                Thread.Sleep(TimeSpan.FromMilliseconds(25 * attempt));
+            }
+        }
+    }
+
+    private static bool IsTransientAtomicReplaceFailure(Exception exception) =>
+        exception is UnauthorizedAccessException ||
+        exception is IOException ioException && (ioException.HResult & 0xFFFF) is 5 or 32 or 33;
 
     internal static string ReadTextBounded(string path, int maxBytes)
     {

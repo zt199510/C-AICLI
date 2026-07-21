@@ -23,6 +23,7 @@ Week 77 已开始执行，尚未形成 release decision。用户曾确认第一�
 - 第二版 freeze `27c4abecba3c04e40d48378061dcaeed8bb07704` 的 clean-source `.NET` 首轮为 `1398/1399`：未修改的原子文件替换并发测试一次返回 “Thread could not be updated”；该单测随后连续 `5/5`、全量矩阵 `1399/1399` 通过，按瞬时 Windows 文件争用记录首败，不覆盖。
 - 同一 revision 的 clean performance 中，5 个 long-session profile 全部通过，但 packaged baseline 第 4/5 轮在根进程退出后固定 500ms 检查点仍见 1 个 owned child，稍后系统检查已无残留，聚合 Gate 正确为 `Failed`。该 revision 的 evidence/candidate 资格已废弃；baseline cleanup 改为最多 10 秒、每 250ms 检查已知 owned PID，最终 Gate 仍要求 delta 为 0，并在超时时保存剩余 PID/role。
 - 第三版 freeze `a44c12724569b661e7c8484e1f03ce86426695f7` 的 clean 自动化矩阵全部通过，但 Candidate A 在 staging 的绝对路径/secret 扫描处被 Windows PowerShell 5.1 拒绝：脚本使用了仅较新运行时支持的 `string.Contains(value, StringComparison)` 重载。候选尚未移动到 final root，staging 已清理，Candidate B 未启动；该 revision 的 candidate 资格废弃。修复改用 PowerShell 5.1/.NET Framework 支持的 `IndexOf(value, StringComparison) -ge 0`，安全检查语义不变。
+- 第四版 freeze `e6c374c6e80e7d8c3b0bb217b629e498c08bb5c6` 的 `.NET` 首轮再次在相同 `Concurrent_reads_reconcile_atomic_manifest_and_turn_replacements` 测试失败（`1398/1399`），因此不再归类为单次环境噪声。产品修复仅在 Windows manifest overwrite 原子替换遇到 sharing/access-denied 时做最多 8 次、递增 25ms 的有界重试；不可变记录写入、路径错误和其他 I/O 错误仍立即 fail closed，并新增真实短暂 reader lock 回归测试。
 
 ## Pre-freeze Performance 结果
 

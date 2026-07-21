@@ -270,6 +270,29 @@ public sealed class ThreadStoreTests
     }
 
     [Fact]
+    public async Task Manifest_replace_retries_a_bounded_transient_windows_reader_lock()
+    {
+        if (!OperatingSystem.IsWindows()) return;
+
+        using TestThreadStore test = TestThreadStore.Create();
+        Assert.True(test.Store.Create(test.NewThread()).Succeeded);
+        string manifest = test.Store.GetLayout(test.ThreadId).ManifestPath;
+        FileStream held = new(manifest, FileMode.Open, FileAccess.Read, FileShare.Read);
+        Task release = Task.Run(async () =>
+        {
+            await Task.Delay(75);
+            held.Dispose();
+        });
+
+        ThreadStoreMutationResult result = test.Store.Rename(
+            test.ThreadId, 0, "Retried", test.Now.AddSeconds(1));
+        await release;
+
+        Assert.True(result.Succeeded, result.Diagnostic?.SafeMessage);
+        Assert.Equal("Retried", result.Aggregate?.Record.Title);
+    }
+
+    [Fact]
     public void Unsupported_oversize_and_duplicate_committed_sequence_fail_closed()
     {
         using TestThreadStore schema = TestThreadStore.Create();
