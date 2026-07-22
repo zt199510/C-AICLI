@@ -31,10 +31,14 @@ function Resolve-ArtifactDirectory([string]$Path, [string]$Name) {
     return $resolved
 }
 
+function Read-Utf8Json([string]$Path) {
+    return [System.IO.File]::ReadAllText($Path, [System.Text.Encoding]::UTF8) | ConvertFrom-Json
+}
+
 function Read-JsonArtifact([string]$Path, [string]$Name) {
     $resolved = [System.IO.Path]::GetFullPath($Path)
     if (-not (Test-PathWithin $artifactsRoot $resolved) -or -not (Test-Path -LiteralPath $resolved -PathType Leaf)) { throw "$Name must be a JSON file under artifacts." }
-    return Get-Content -Raw -LiteralPath $resolved | ConvertFrom-Json
+    return Read-Utf8Json $resolved
 }
 
 function Get-Candidate([string]$Root, [string]$Name) {
@@ -42,7 +46,7 @@ function Get-Candidate([string]$Root, [string]$Name) {
     $inventoryPath = Join-Path $Root "payload-inventory.json"
     $archive = @(Get-ChildItem -LiteralPath $Root -File -Filter "0.6.0-rc.*-windows-x64.zip")
     if (-not (Test-Path -LiteralPath $manifestPath -PathType Leaf) -or -not (Test-Path -LiteralPath $inventoryPath -PathType Leaf) -or $archive.Count -ne 1) { throw "$Name is missing its manifest, inventory, or unique archive." }
-    $manifest = Get-Content -Raw -LiteralPath $manifestPath | ConvertFrom-Json
+    $manifest = Read-Utf8Json $manifestPath
     if ([string]$manifest.candidateId -ne "0.6.0-rc.1" -or [string]$manifest.productVersion -ne "0.6.0" -or -not [bool]$manifest.releaseCandidate -or [bool]$manifest.sourceDirty) { throw "$Name manifest is not a clean 0.6.0-rc.1 candidate." }
     $payloadRoot = Join-Path $Root "payload\C-AICLI Desktop-win32-x64"
     $desktopPath = Join-Path $payloadRoot "caicli-desktop.exe"
@@ -53,8 +57,8 @@ function Get-Candidate([string]$Root, [string]$Name) {
         name = $Name
         root = $Root
         manifest = $manifest
-        inventoryJson = (Get-Content -Raw -LiteralPath $inventoryPath | ConvertFrom-Json | ConvertTo-Json -Depth 6 -Compress)
-        inventory = @(Get-Content -Raw -LiteralPath $inventoryPath | ConvertFrom-Json)
+        inventoryJson = (Read-Utf8Json $inventoryPath | ConvertTo-Json -Depth 6 -Compress)
+        inventory = @(Read-Utf8Json $inventoryPath)
         archiveSha256 = (Get-FileHash -LiteralPath $archive[0].FullName -Algorithm SHA256).Hash
         archiveBytes = [int64]$archive[0].Length
         desktopSha256 = (Get-FileHash -LiteralPath $desktopPath -Algorithm SHA256).Hash

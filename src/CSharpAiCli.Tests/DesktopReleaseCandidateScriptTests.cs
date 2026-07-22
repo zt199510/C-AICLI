@@ -103,6 +103,7 @@ public sealed class DesktopReleaseCandidateScriptTests
         Assert.Contains("archiveSha256", script, StringComparison.Ordinal);
         Assert.DoesNotContain("[System.IO.Path]::GetRelativePath", script, StringComparison.Ordinal);
         Assert.Contains("candidatePath.StartsWith", script, StringComparison.Ordinal);
+        Assert.Contains("[System.IO.File]::ReadAllText($Path, [System.Text.Encoding]::UTF8)", script, StringComparison.Ordinal);
     }
 
     private static string Read(params string[] parts) => File.ReadAllText(Path.Combine(Root(), Path.Combine(parts)));
