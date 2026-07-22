@@ -1,6 +1,6 @@
 # Week 77 执行任务：CLI/Desktop 0.6.0 Release Acceptance
 
-状态：Ready（先关闭 Week 76 G6 blockers；未关闭则最终决定必须为 Blocked）
+状态：Blocked（2026-07-22 收尾；Windows Narrator 人工 Gate 未执行）
 
 **Goal:** 在固定、可引用的 clean source revision 上关闭 Week 76 遗留的 renderer memory stability、Windows Narrator 与 Release Candidate 证据缺口，统一 CLI/Desktop 版本与发布文档，完成两次相同源码的可复现 Desktop 构建、默认 packaged acceptance smoke、CLI regression 和 0.6.0 最终发布决定。Week 77 不以重跑掩盖失败，不降低 8 项关键验收 Gate。
 
@@ -155,4 +155,4 @@ Week 77 只能标记 `Accepted`，当且仅当：
 - `docs_md/release/final_acceptance_0.6.0.md`。
 - `docs_md/weekly/77_week_review.md`。
 
-本文件只创建 Week 77 执行任务，不在本次操作中修改版本、运行 acceptance、生成 RC、创建 tag 或发布制品。
+执行结果见 `docs_md/weekly/77_week_review.md` 与 `docs_md/release/final_acceptance_0.6.0.md`。本轮已运行 acceptance 并生成两份 RC candidate，但因 Narrator 为 `Skipped/Unproven`，最终决定为 `Blocked`；未创建 tag、未推送、未上传或发布制品。

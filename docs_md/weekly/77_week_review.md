@@ -1,14 +1,16 @@
 # Week 77 执行回顾：CLI/Desktop 0.6.0 Release Acceptance
 
-状态：In Progress
+状态：Blocked
 
-日期：2026-07-21
+日期：2026-07-22
 
 起点提交：`ed5822e6858023fabc5376b48f573dd684ee777f`
 
 ## 当前结论
 
-Week 77 已开始执行，尚未形成 release decision。用户曾确认第一版 source freeze，并形成提交 `b03fb987954ae7c8955ef546491d85101f747e2e`；该 revision 的 clean-source 回归发现必须修复的 performance evidence 与 renderer retention 问题，因此其 evidence/candidate 资格已废弃。修复后的新 revision 尚待再次 source freeze；未生成 RC，未创建 tag，未推送或发布制品。
+Week 77 已按 `Blocked` 收尾。最终冻结 source revision 为 `c74f93f45b0cae4a06cd70ee6dbca1b333a5973e`；clean-source 自动化、两份独立 RC build、两份 packaged smoke 和 payload reproducibility 已完成。用户明确放弃 Windows Narrator 人工验收，因此 N1-N7 保持 `Skipped/Unproven`，G6 未关闭，0.6.0 不得声明 `Accepted`。
+
+正式双候选比较按设计 fail closed，最终 evidence 为 `Failed`，原因是 `Narrator evidence is not a Passed manual run.`。没有创建或推送 tag，没有上传制品，也没有发布 GitHub Release。
 
 ## 首次失败与修复
 
@@ -47,10 +49,52 @@ Week 77 已开始执行，尚未形成 release decision。用户曾确认第一�
 - `npm run measure:smoke`：packaged success/deny/cancel/crash/restart/corrupt-state/read-only/hardening `8/8`，process/temp delta `0/0`；dirty source 状态 `Measured`。
 - 新增 candidate-root 参数化 packaged runner 与双候选 comparison validator；后者要求逐文件 inventory、archive、Desktop/AppHost/ASAR、notices 一致，两份 `8/8` smoke 分别绑定 archive hash，并校验具名人工 Narrator `7/7` evidence。
 
-## Pending
+## 最终冻结 revision 与 clean-source 结果
 
-- 在最终 package 上由人工执行 Windows Narrator 7 步 checklist。
-- 用户确认修复后的新 source-freeze commit；第一版 freeze revision 不再用于 acceptance。
-- clean revision 全量 .NET/Desktop/CLI/security/accessibility/performance/protocol 回归。
-- 两份独立 RC build、逐文件/manifest/archive comparison 与各自 packaged acceptance smoke。
-- 最终 `Accepted` 或 `Blocked` 决定。
+最终 source freeze 为 `c74f93f45b0cae4a06cd70ee6dbca1b333a5973e`（branch `week-02-cli-commands-doctor-config`）。以下 evidence 均绑定该 revision：
+
+- `.NET` 首次全量为 `1397/1400`。三个首次失败分别为 fake-driver timeout 后仍见 live PID、MCP 临时 root 瞬时 in-use，以及 detached child cleanup timing；这些失败不以重跑覆盖。受影响定向矩阵随后 `3/3`，diagnostic 全量为 `1400/1400`。测试留下一个空的 test-owned 临时目录；确认无存活进程，但删除动作被执行策略拒绝，因此不声明已删除。
+- `npm run verify`：Desktop `23 files / 102 tests`，contracts/notices/accessibility/typecheck/lint/security/build 全部通过；`npm audit` 为 0 vulnerability。
+- Desktop E2E：unpacked `9/9`、packaged `8/8`。
+- `npm run measure:accessibility`：unpacked + packaged hardening `2/2`，process/temp delta `0/0`。
+- `npm run measure:smoke`：packaged success/deny/cancel/crash/restart/corrupt-state/read-only/hardening `8/8`，process/temp delta `0/0`。
+- Protocol evidence：`3/3` 通过；每轮 `48/48` response，process/temp delta `0/0`。
+- CLI ReleaseAcceptance build 和默认 smoke 通过；win-x64 archive SHA-256 为 `C99DC3893B80642FCAB629115985A37716B8D093024A03E63A22974BA5FB23C6`。
+- real model、daemon/API、real Gerber/TIFF 未执行，保持 `Skipped/Unproven`。
+
+## 最终 Performance hard Gate
+
+`artifacts/desktop-performance/week77-performance.json` 为 `Passed`：packaged baseline 5/5、long-session profile 5/5，package Gate 为 true，所有 process/temp delta 为 0。package 相对 Week 66 增长 `6.13%`，`app.asar` `-73.53%`，AppHost `+0.45%`。
+
+| Profile | Idle working set | Idle private bytes |
+|---|---:|---:|
+| 1 | `-3.794%` | `-6.200%` |
+| 2 | `+2.900%` | `+1.653%` |
+| 3 | `+9.228%` | `+8.999%` |
+| 4 | `+9.158%` | `+8.593%` |
+| 5 | `-3.829%` | `-8.782%` |
+
+5 个 profile 均低于不变的 15% hard Gate，workers 为 1、retries 为 0。
+
+## 双候选 identity、smoke 与 comparison
+
+- Candidate A：`artifacts/desktop-rc-week77-c74-a/0.6.0-rc.1`
+- Candidate B：`artifacts/desktop-rc-week77-c74-b/0.6.0-rc.1`
+- 两份 archive SHA-256：`1A258F9412B47D3199B2BFA2072AB37DC97412ABC38A2A6DE2AAB1E58746EF3B`
+- Desktop SHA-256：`2D7B6598352665B64527F16D006B4818AFD5EC9DE43FB00693B5AE5A86F93FEA`
+- AppHost SHA-256：`C69CF9DCA3BFFBFE95E38568642FDEA7C438EFD0D7D3D3F47F59FDC3434C9EC2`
+
+Candidate A/B 各自 packaged smoke 均为 `8/8`，cleanup `0/0`，并分别绑定相同 archive hash。两份 payload inventory 均为 `78/78`，逐文件无差异；除预期的 `buildTimestampUtc` 外 manifest identity 一致，archive、Desktop、AppHost、ASAR 与 notices 一致。
+
+Blocked 收尾时，正式 comparison 工具先暴露两个工具兼容性问题：Windows PowerShell 5.1 不支持 `[IO.Path]::GetRelativePath`，以及默认 ANSI 读取会破坏 UTF-8 evidence。分别以提交 `8a9ce9b` 和 `e00cff1` 修复并补脚本测试；这些是 closeout tooling 修正，不改变两份 candidate 的冻结 source revision。最终 comparison 通过 identity、payload 和两份 smoke 校验后，在 Narrator Gate fail closed：
+
+```text
+status: Failed
+failure: Narrator evidence is not a Passed manual run.
+```
+
+## Narrator 与最终决定
+
+用户明确放弃 Narrator 环节。`artifacts/desktop-acceptance/narrator-accessibility.json` 如实记录 `status: Skipped`、`manualNarratorRun: false`，N1-N7 全部为 `Skipped`；没有填写人工通过时间，也没有把自动 accessibility 结果冒充 Narrator 结果。
+
+最终决定：**Blocked**。自动化与双候选结果保留，但 G6 未关闭，不生成或推广最终 release；后续若重新启动 Narrator 验收，必须以当时明确授权和可验证的人工 evidence 重新作决定。
