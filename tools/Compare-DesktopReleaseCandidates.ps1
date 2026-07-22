@@ -15,8 +15,11 @@ $artifactsRoot = [System.IO.Path]::GetFullPath((Join-Path $repoRoot "artifacts")
 if ([string]::IsNullOrWhiteSpace($OutputPath)) { $OutputPath = Join-Path $artifactsRoot "desktop-acceptance\week77-candidate-comparison.json" }
 
 function Test-PathWithin([string]$Root, [string]$Candidate) {
-    $relative = [System.IO.Path]::GetRelativePath([System.IO.Path]::GetFullPath($Root), [System.IO.Path]::GetFullPath($Candidate))
-    return $relative -eq "." -or (-not $relative.StartsWith("..$([System.IO.Path]::DirectorySeparatorChar)") -and $relative -ne ".." -and -not [System.IO.Path]::IsPathRooted($relative))
+    $separators = [char[]]@([System.IO.Path]::DirectorySeparatorChar, [System.IO.Path]::AltDirectorySeparatorChar)
+    $rootPath = [System.IO.Path]::GetFullPath($Root).TrimEnd($separators)
+    $candidatePath = [System.IO.Path]::GetFullPath($Candidate).TrimEnd($separators)
+    return $candidatePath.Equals($rootPath, [System.StringComparison]::OrdinalIgnoreCase) -or
+        $candidatePath.StartsWith($rootPath + [System.IO.Path]::DirectorySeparatorChar, [System.StringComparison]::OrdinalIgnoreCase)
 }
 
 function Resolve-ArtifactDirectory([string]$Path, [string]$Name) {

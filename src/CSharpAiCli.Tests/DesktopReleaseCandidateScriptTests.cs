@@ -101,6 +101,8 @@ public sealed class DesktopReleaseCandidateScriptTests
         Assert.Contains("all seven manual steps to pass", script, StringComparison.Ordinal);
         Assert.Contains("packageSha256", script, StringComparison.Ordinal);
         Assert.Contains("archiveSha256", script, StringComparison.Ordinal);
+        Assert.DoesNotContain("[System.IO.Path]::GetRelativePath", script, StringComparison.Ordinal);
+        Assert.Contains("candidatePath.StartsWith", script, StringComparison.Ordinal);
     }
 
     private static string Read(params string[] parts) => File.ReadAllText(Path.Combine(Root(), Path.Combine(parts)));
