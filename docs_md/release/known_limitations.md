@@ -2,7 +2,7 @@
 
 ## Release Scope
 
-- Source and product metadata target `0.6.0`, while final CLI/Desktop 0.6.0 acceptance is still pending. Version `0.5.0` remains the last accepted CLI package until the Week 77 clean-source, dual-build, packaged smoke, performance, and Narrator Gates close.
+- Source and product metadata target `0.6.0`, but Week 77 CLI/Desktop release acceptance completed as `Blocked`: the automated clean-source, dual-build, packaged smoke, performance, package/security, and cleanup Gates passed, while the required Windows Narrator manual Gate was skipped. Version `0.5.0` remains the last Accepted CLI package; 0.6.0 remains a Preview candidate.
 - Desktop 0.6.0 is Windows x64 and package-bound. It is not a browser UI, remote-control surface, team workspace, IDE, scheduler, concurrent write worker, plugin marketplace, or office workbench.
 - Desktop fake-runtime and metadata/preview evidence do not prove real model, real MCP, Gerber/TIFF decoding, toolchain, manufacturing, or image correctness. Those paths remain `Skipped/Unproven` unless separately executed with authorized inputs and tools.
 - The primary supported artifact is the `win-x64` self-contained single-file package.

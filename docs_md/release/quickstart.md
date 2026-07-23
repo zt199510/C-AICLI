@@ -1,6 +1,6 @@
 # C# AI CLI Quickstart
 
-## 1. Verify The Release
+## 1. Verify A Local 0.6.0 Preview Candidate
 
 ```powershell
 artifacts\release\caicli-0.6.0-win-x64\caicli.exe version
@@ -29,7 +29,7 @@ approval mode: on-request (default)
 agent backend status: available
 ```
 
-The CLI metadata is frozen at 0.6.0, but the Desktop package remains a release candidate until `final_acceptance_0.6.0.md` records all Gates. Credential-free quickstart checks do not prove real model, MCP server, Gerber, TIFF, or manufacturing correctness.
+The CLI metadata is frozen at 0.6.0, but Week 77 release acceptance completed as `Blocked` because the required Windows Narrator manual Gate was skipped. Version `0.5.0` remains the last Accepted CLI package; the 0.6.0 CLI/Desktop artifacts used here are Preview candidates only. Credential-free quickstart checks do not prove real model, MCP server, Gerber, TIFF, or manufacturing correctness.
 
 ## 3. Inspect Diagnostics And Logs
 

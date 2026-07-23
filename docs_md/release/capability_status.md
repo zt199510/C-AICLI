@@ -1,16 +1,16 @@
 # C# AI CLI Capability Status
 
-## 0.6.0 Release Candidate Scope
+## 0.6.0 Blocked Preview Candidate Scope
 
-The CLI/runtime capabilities accepted in 0.5.0 remain the stable foundation. Source metadata now targets 0.6.0. Desktop is implemented behind the reviewed Electron/Main/Preload/AppHost boundary, but its final status remains `Candidate / acceptance pending` until Week 77 closes the clean-source dual-build, packaged smoke, performance, package/security, cleanup, and manual Narrator Gates.
+The CLI/runtime capabilities accepted in 0.5.0 remain the stable foundation. Source metadata now targets 0.6.0. Week 77 release acceptance is complete: clean-source automation, dual-build reproducibility, packaged smoke, performance, package/security, and cleanup passed, but the required Windows Narrator manual Gate was skipped. The 0.6.0 Desktop decision is therefore `Blocked / Preview`, not Accepted.
 
 | Capability | Status | Notes |
 |---|---|---|
-| CLI 0.5 behavior under 0.6 metadata | Candidate / regression pending | Version metadata is 0.6.0; full Release suite and default credential-free CLI smoke must still run from the confirmed clean revision. |
-| Desktop task chat and review shell | Candidate / acceptance pending | Workspace/thread/composer, approval/cancel/recovery, Changes, terminal, reports, artifacts and bounded Preview use typed AppHost RPC. No CLI text parsing or second write policy. |
-| Desktop security and contract | Automated evidence available | Exact `39 invoke + 2 event`, no Renderer Node/file/process authority, package denylist/notices, protocol bounds/fuzz/corrupt-state and navigation/permission denial are automated. Clean-revision evidence must be regenerated. |
-| Desktop accessibility | Manual Gate pending | Keyboard/ARIA/focus/contrast/reduced-motion/forced-colors/viewport/200% zoom automation exists. Seven-step Windows Narrator evidence on the final package is mandatory and cannot be replaced by automation. |
-| Performance stability | Measurement fix validated | Five pre-freeze isolated profiles passed the unchanged 15% retention threshold with zero cleanup delta; clean-revision source-bound evidence is still required. |
+| CLI 0.5 behavior under 0.6 metadata | Preview candidate / regression passed | Version metadata is 0.6.0; the Week 77 clean-source Release suite and default credential-free CLI smoke passed. This does not replace the 0.5.0 Accepted package decision. |
+| Desktop task chat and review shell | Blocked / Preview | Workspace/thread/composer, approval/cancel/recovery, Changes, terminal, reports, artifacts and bounded Preview use typed AppHost RPC. No CLI text parsing or second write policy. |
+| Desktop security and contract | Automated Gate passed | Exact `39 invoke + 2 event`, no Renderer Node/file/process authority, package denylist/notices, protocol bounds/fuzz/corrupt-state and navigation/permission denial passed on the Week 77 source-bound candidate. |
+| Desktop accessibility | Blocked: Narrator skipped | Keyboard/ARIA/focus/contrast/reduced-motion/forced-colors/viewport/200% zoom automation passed. The seven-step Windows Narrator run was skipped and automation cannot replace it. |
+| Performance stability | Automated Gate passed | Five isolated packaged baseline and five long-session profiles passed the unchanged 15% retention threshold with zero process/temp cleanup delta. |
 | Real model, real MCP, real Gerber/TIFF tools | Skipped / Unproven | Credential-free acceptance does not claim provider, server, decoder, toolchain, image or manufacturing correctness. |
 
 ## 0.5.0 Accepted Capabilities
@@ -111,4 +111,4 @@ Status meaning:
 
 ## Release Decision
 
-Release `0.5.0` remains the current accepted CLI package, as documented by `final_acceptance_0.5.0.md`, until the separate 0.6.0 decision completes. The local API/daemon remains Preview and default-off. The exact-tool opt-in smoke remains optional and was not run for the 0.5.0 decision. Deferred capabilities are not current behavior and must not be presented as implied by local automation, CI artifacts, Project Pack contracts, Desktop source, or the read-only Preview.
+Release `0.5.0` remains the current accepted CLI package, as documented by `final_acceptance_0.5.0.md`. The separate 0.6.0 decision completed as `Blocked`; its Desktop artifacts remain Preview candidates only. The local API/daemon remains Preview and default-off. The exact-tool opt-in smoke remains optional and was not run for the 0.5.0 decision. Deferred capabilities are not current behavior and must not be presented as implied by local automation, CI artifacts, Project Pack contracts, Desktop source, or the read-only Preview.

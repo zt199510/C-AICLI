@@ -17,7 +17,9 @@ Common model setup failures:
 
 Use `models --workspace .` to inspect the effective model and base URL without making a network call.
 
-## Desktop 0.6.0 Candidate
+## Desktop 0.6.0 Blocked Preview Candidate
+
+Week 77 release acceptance is complete with a `Blocked` decision because the required Windows Narrator manual Gate was skipped. The troubleshooting steps below apply to internal Preview/dogfooding only; they do not make 0.6.0 an Accepted release.
 
 - `AppHost stopped unexpectedly`: use the in-app restart action, then reopen the workspace. Do not reuse an approval from the interrupted turn.
 - Package fails to start: verify `resources/apphost/CSharpAiCli.AppHost.exe`, `resources/app.asar`, `release-manifest.json`, inventory and checksums belong to the same candidate; do not copy files between candidates.

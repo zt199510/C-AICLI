@@ -1,8 +1,8 @@
 # C# AI CLI Installation
 
-## Supported Package
+## Accepted Package And Preview Candidate
 
-The source tree targets CLI/Desktop `0.6.0`. The 0.6.0 Windows `win-x64` candidate is still in release acceptance; `0.5.0` remains the last accepted CLI package until `final_acceptance_0.6.0.md` records a completed decision. Reproducible CLI packaging from a recorded clean source revision uses:
+The source tree targets CLI/Desktop `0.6.0`, but Week 77 release acceptance completed with a `Blocked` decision because the required Windows Narrator manual Gate was skipped. Version `0.5.0` remains the last Accepted CLI package; 0.6.0 Windows `win-x64` artifacts are Preview candidates only. Reproducible CLI candidate packaging from a recorded clean source revision uses:
 
 ```powershell
 powershell -NoProfile -ExecutionPolicy Bypass -File tools/Build-Release.ps1 -ReleaseAcceptance
@@ -16,7 +16,7 @@ artifacts/release/caicli-0.6.0-win-x64/caicli.exe
 
 The package also includes `release-manifest.json`, which records version, runtime, framework, clean source revision, locked SDK, PDB policy, acceptance mode, and payload inventory. The adjacent checksums JSON records publish and ZIP SHA256 values. Gerbv and ImageMagick are not bundled; configure reviewed local executable paths before using the Gerber/TIFF pack.
 
-The Desktop candidate is produced separately from `apps/desktop` with `npm run package:dir` and the clean-source RC orchestrator. It is Windows x64 only, bundles the source-bound AppHost, and must not be treated as accepted until both candidate smokes and the Narrator manual checklist pass.
+The Desktop candidate is produced separately from `apps/desktop` with `npm run package:dir` and the clean-source RC orchestrator. It is Windows x64 only, bundles the source-bound AppHost, and must not be treated as an Accepted release. Reopening release acceptance and running the Narrator checklist require separate user authorization and new source-bound evidence.
 
 ## Prerequisites
 

@@ -1,6 +1,6 @@
 # Week 78 执行计划：0.6.0 Preview 状态收口与真实项目试用
 
-状态：Ready
+状态：In Progress
 
 创建日期：2026-07-23
 
@@ -268,7 +268,7 @@ Week 78 最终只允许：
 
 ## Week 78 Critical Gates
 
-- [ ] W78-G0 当前状态型 release/roadmap/schedule 文档一致记录 0.6.0 `Blocked / Preview`，0.5.0 为最后 Accepted。
+- [x] W78-G0 当前状态型 release/roadmap/schedule 文档一致记录 0.6.0 `Blocked / Preview`，0.5.0 为最后 Accepted。
 - [ ] W78-G1 clean-source credential-free .NET/Desktop/CLI/E2E/security/package 回归通过，首败完整保留。
 - [ ] W78-G2 pilot workspace 全部 disposable/可回滚，允许修改范围、工具和停止条件预先冻结。
 - [ ] W78-G3 CLI 与 Desktop 真实模型只读路径通过，或因缺少用户授权明确 `Skipped` 并使本周结论 Blocked。

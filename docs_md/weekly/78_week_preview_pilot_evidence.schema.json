@@ -1,0 +1,66 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://caicli.local/schemas/week78-preview-pilot-v1.json",
+  "title": "C-AICLI Week 78 Preview Pilot Evidence",
+  "description": "Versioned, redacted evidence envelope for the Week 78 real-project pilot. Raw prompts, raw model responses, secrets, command environments, stderr, and absolute paths are forbidden by the companion validator.",
+  "type": "object",
+  "required": [
+    "schemaVersion",
+    "evidenceKind",
+    "capturedAtUtc",
+    "sourceRevision",
+    "status",
+    "summary"
+  ],
+  "properties": {
+    "schemaVersion": {
+      "const": "week78-preview-pilot/v1"
+    },
+    "evidenceKind": {
+      "enum": [
+        "pilot-manifest",
+        "credential-free-baseline",
+        "real-model-readonly",
+        "real-model-write",
+        "real-mcp",
+        "recovery",
+        "resource-summary",
+        "pilot-summary"
+      ]
+    },
+    "capturedAtUtc": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "sourceRevision": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{40}$"
+    },
+    "status": {
+      "enum": [
+        "NotRun",
+        "Running",
+        "Passed",
+        "Failed",
+        "Skipped",
+        "Unproven",
+        "Blocked"
+      ]
+    },
+    "summary": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 1000
+    },
+    "metrics": {
+      "type": "object"
+    },
+    "checks": {
+      "type": "array",
+      "items": {
+        "type": "object"
+      }
+    }
+  },
+  "additionalProperties": true
+}

@@ -190,7 +190,7 @@ C-AICLI 的价值在于可控性和工程化：
 
 ### 0.6.0：本地工程 Agent Desktop App Preview
 
-状态：Week 66-76 实现与自动化收口完成；Week 77 正在执行 0.6.0 clean-source release acceptance。Desktop 在双构建、packaged smoke、performance 与 Windows Narrator Gate 全部关闭前仍为 Candidate，不提前宣称 Accepted。
+状态：Week 66-77 主周期与 release acceptance 已完成。Clean-source、双构建、packaged smoke、performance、package/security 与 cleanup 自动化 Gate 已通过，但 Windows Narrator 人工 Gate 被跳过，因此 0.6.0 Desktop 的正式发布决定为 `Blocked`，只保留为内部 Preview candidate；0.5.0 仍是最后 Accepted CLI 版本。Week 78 进入受控真实项目 dogfooding，不改变该发布决定。
 
 目标：在 0.5.0 已验收的本地 Agent Runtime、任务编排、审批、报告、artifact 和 Gerber/TIFF 工作流之上，提供 Windows-first 的任务聊天与结果复核界面。
 
@@ -204,7 +204,7 @@ C-AICLI 的价值在于可控性和工程化：
 
 技术方向：Electron + React + TypeScript Desktop shell，连接新的 .NET Application/AppHost 层。App 不解析 CLI 文本，不通过无认证 localhost API 增加控制路由，并继续复用 approval、workspace guard、secret redaction、trace/session/report/job/artifact 和 release smoke 边界。
 
-详细开发框架统一维护在 `docs_md/spec/desktop_app_development_framework_0_6_0.md`。
+详细开发框架统一维护在 `docs_md/spec/desktop_app_development_framework_0_6_0.md`。主周期后的 Preview 状态收口与真实项目试用见 `docs_md/weekly/78_week_0_6_preview_real_project_pilot.plan.md`。
 
 0.6.0 不扩展到浏览器 Web UI、远程控制、团队权限、后台 scheduler、并发写 worker、插件市场、IDE 或办公套件。
 

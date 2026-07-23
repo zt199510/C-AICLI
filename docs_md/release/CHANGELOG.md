@@ -1,6 +1,6 @@
 # Changelog
 
-## 0.6.0 - Release acceptance in progress
+## 0.6.0 - Blocked Preview candidate (2026-07-22)
 
 Added:
 - Windows-first Electron/React Desktop task surface backed by the .NET Application/AppHost boundary: workspace and thread management, Composer/catalog context, task chat, approval/cancel/recovery, Changes, terminal, reports, managed artifacts, and bounded Gerber/TIFF Preview review.
@@ -14,7 +14,8 @@ Changed:
 - Default acceptance remains credential-free, network-free, real-model-free, real-MCP-free, and real-Gerber/TIFF-tool-free. Those opt-in correctness checks remain `Skipped/Unproven` unless separately executed.
 
 Release boundary:
-- This entry records the 0.6.0 source-freeze target, not an Accepted decision. Acceptance still requires a user-confirmed clean revision, all source-bound evidence, two reproducible Desktop candidates, packaged smoke on both candidates, Windows Narrator manual evidence, and the final Week 77 decision. No tag, push, artifact upload, or GitHub Release is authorized by this document.
+- Week 77 release acceptance is complete with a `Blocked` decision. Clean-source automation, two reproducible Desktop candidates, packaged smoke, performance, package/security, and cleanup evidence passed, but the required Windows Narrator manual run was explicitly skipped; the comparison therefore failed closed.
+- This entry records the 0.6.0 source-freeze and Preview candidate scope, not an Accepted release. Version `0.5.0` remains the last Accepted CLI package. No tag, push, artifact upload, or GitHub Release is authorized by this document.
 
 ## 0.5.0 - 2026-07-15
 

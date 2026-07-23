@@ -1,10 +1,12 @@
 # C-AICLI 0.6.0 Desktop App 12 周开发排期
 
-更新时间：2026-07-18
+更新时间：2026-07-23
 
-状态：Week 66-75 已完成；Week 75 recovery/long-session unpacked 与 packaged Gate 已通过；Week 76 Blocked；Week 77 Ready（必须先关闭 Week 76 blockers）
+状态：Week 66-77 主周期已结束；Week 77 release acceptance 最终为 `Blocked`（Windows Narrator 人工 Gate 跳过）；0.6.0 Desktop 仅保留为 Preview candidate，0.5.0 仍为最后 Accepted CLI 版本。
 
 详细产品与技术边界统一以 `docs_md/spec/desktop_app_development_framework_0_6_0.md` 为准。本排期负责把该框架拆成 Week 66-77 的依赖顺序、周末验收和发布 Gate，不扩展产品范围。
+
+本文件保留原 12 周计划与起点评估作为历史范围记录。主周期后的 Week 78 Preview 状态收口与真实项目试用是 post-cycle extension，见 `78_week_0_6_preview_real_project_pilot.plan.md`；它不重新开启正式 release acceptance。
 
 ## 排期结论
 
@@ -272,7 +274,7 @@ open workspace
 
 ### Week 77：0.6.0 Release Acceptance
 
-状态：Ready（执行任务：`77_week_cli_0_6_release_acceptance.plan.md`；G6 未关闭前不得进入 Accepted）
+状态：Blocked（2026-07-22 收尾；执行记录见 `77_week_cli_0_6_release_acceptance.plan.md` 与 `77_week_review.md`；Windows Narrator 人工 Gate 被跳过，G6 未关闭）
 
 主要交付：
 
