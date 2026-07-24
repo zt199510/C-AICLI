@@ -292,6 +292,7 @@ $oldUserProfile = $env:USERPROFILE
 $oldCaiCliUserProfile = $env:CAICLI_USER_PROFILE
 $oldOpenAiKey = $env:OPENAI_API_KEY
 $oldOpenAiModel = $env:OPENAI_MODEL
+$oldOpenAiBaseUrl = $env:OPENAI_BASE_URL
 $realModelSmokeOptIn = [System.String]::Equals($env:CAICLI_REAL_MODEL_SMOKE, "1", [System.StringComparison]::Ordinal)
 $daemonSmokeOptIn = [System.String]::Equals($env:CAICLI_DAEMON_SMOKE, "1", [System.StringComparison]::Ordinal)
 $gerberTiffToolSmokeOptIn = [System.String]::Equals($env:CAICLI_GERBER_TIFF_TOOL_SMOKE, "1", [System.StringComparison]::Ordinal)
@@ -352,6 +353,7 @@ Write-Output 'bugfix verification passed'
     $env:CAICLI_USER_PROFILE = $userProfile
     Remove-Item Env:OPENAI_API_KEY -ErrorAction SilentlyContinue
     Remove-Item Env:OPENAI_MODEL -ErrorAction SilentlyContinue
+    Remove-Item Env:OPENAI_BASE_URL -ErrorAction SilentlyContinue
 
     $version = Invoke-CaiCli -Arguments @("version")
     Assert-ExitCode $version 0 "version"
@@ -1545,6 +1547,9 @@ Write-Output 'bugfix verification passed'
             try {
                 $env:OPENAI_API_KEY = $oldOpenAiKey
                 $env:OPENAI_MODEL = $oldOpenAiModel
+                if (-not [string]::IsNullOrWhiteSpace($oldOpenAiBaseUrl)) {
+                    $env:OPENAI_BASE_URL = $oldOpenAiBaseUrl
+                }
 
                 $noteBeforeRealModelExec = Get-Content -LiteralPath (Join-Path $workspace "note.txt") -Raw
                 $realModelExec = Invoke-CaiCli -Arguments @(
@@ -1563,6 +1568,7 @@ Write-Output 'bugfix verification passed'
             finally {
                 Remove-Item Env:OPENAI_API_KEY -ErrorAction SilentlyContinue
                 Remove-Item Env:OPENAI_MODEL -ErrorAction SilentlyContinue
+                Remove-Item Env:OPENAI_BASE_URL -ErrorAction SilentlyContinue
             }
         }
     }
@@ -1825,6 +1831,12 @@ finally {
         Remove-Item Env:OPENAI_MODEL -ErrorAction SilentlyContinue
     } else {
         $env:OPENAI_MODEL = $oldOpenAiModel
+    }
+
+    if ($null -eq $oldOpenAiBaseUrl) {
+        Remove-Item Env:OPENAI_BASE_URL -ErrorAction SilentlyContinue
+    } else {
+        $env:OPENAI_BASE_URL = $oldOpenAiBaseUrl
     }
 
     if (-not $KeepTemp -and (Test-Path -LiteralPath $TempRoot)) {

@@ -64,6 +64,9 @@ public sealed class SmokeTestScriptTests
         Assert.Contains("CAICLI_REAL_MODEL_SMOKE", script, StringComparison.Ordinal);
         Assert.Contains("real model smoke skipped: set CAICLI_REAL_MODEL_SMOKE=1", script, StringComparison.Ordinal);
         Assert.Contains("requires caller $($missingRealModelSettings -join ' and ')", script, StringComparison.Ordinal);
+        Assert.Contains("$oldOpenAiBaseUrl = $env:OPENAI_BASE_URL", script, StringComparison.Ordinal);
+        Assert.Contains("$env:OPENAI_BASE_URL = $oldOpenAiBaseUrl", script, StringComparison.Ordinal);
+        Assert.Contains("Remove-Item Env:OPENAI_BASE_URL -ErrorAction SilentlyContinue", script, StringComparison.Ordinal);
         Assert.Contains("\"--approval\", \"never\"", script, StringComparison.Ordinal);
         Assert.Contains("Assert-ExitCode $realModelExec 0 \"real model read-only exec\"", script, StringComparison.Ordinal);
         Assert.Contains("Assert-Contains $realModelExec.Output \"result: success\" \"real model read-only exec\"", script, StringComparison.Ordinal);
