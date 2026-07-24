@@ -54,7 +54,9 @@ public sealed class SdkOpenAiResponsesGatewayAgentTests
         Assert.Equal(2, options.InputItems.Count);
 
         FunctionTool tool = Assert.IsType<FunctionTool>(Assert.Single(options.Tools));
-        Assert.Equal("workspace.read_text", tool.FunctionName);
+        Assert.Matches("^[a-zA-Z0-9_-]+$", tool.FunctionName);
+        Assert.StartsWith("workspace_read_text_", tool.FunctionName, StringComparison.Ordinal);
+        Assert.NotEqual("workspace.read_text", tool.FunctionName);
         Assert.Equal("Read a text file.", tool.FunctionDescription);
         Assert.Equal(
             """{"type":"object","properties":{"path":{"type":"string"}}}""",
@@ -75,6 +77,41 @@ public sealed class SdkOpenAiResponsesGatewayAgentTests
         Assert.False(output.GetProperty("retryable").GetBoolean());
         Assert.Equal("note.txt", output.GetProperty("structuredPayload").GetProperty("path").GetString());
         Assert.Equal(2, output.GetProperty("structuredPayload").GetProperty("lineCount").GetInt32());
+    }
+
+    [Fact]
+    public void Create_api_tool_name_map_preserves_valid_names_and_maps_invalid_names_uniquely()
+    {
+        OpenAiToolDefinition[] tools =
+        [
+            new("function", "valid_tool-1", "Valid.", """{"type":"object"}"""),
+            new("function", "workspace.read_text", "Read.", """{"type":"object"}"""),
+            new("function", "workspace/read_text", "Read slash.", """{"type":"object"}""")
+        ];
+
+        IReadOnlyDictionary<string, string> names =
+            SdkOpenAiResponsesGateway.CreateApiToolNameMap(tools);
+
+        Assert.Equal("valid_tool-1", names["valid_tool-1"]);
+        Assert.Matches("^[a-zA-Z0-9_-]+$", names["workspace.read_text"]);
+        Assert.Matches("^[a-zA-Z0-9_-]+$", names["workspace/read_text"]);
+        Assert.NotEqual(names["workspace.read_text"], names["workspace/read_text"]);
+        Assert.All(names.Values, name => Assert.InRange(name.Length, 1, 64));
+    }
+
+    [Fact]
+    public void Create_api_tool_name_map_rejects_duplicate_canonical_names()
+    {
+        OpenAiToolDefinition[] tools =
+        [
+            new("function", "workspace.read_text", "Read.", """{"type":"object"}"""),
+            new("function", "workspace.read_text", "Read duplicate.", """{"type":"object"}""")
+        ];
+
+        InvalidOperationException exception = Assert.Throws<InvalidOperationException>(
+            () => SdkOpenAiResponsesGateway.CreateApiToolNameMap(tools));
+
+        Assert.Equal("OpenAI tool definitions contain a duplicate name.", exception.Message);
     }
 
     [Fact]
@@ -123,6 +160,30 @@ public sealed class SdkOpenAiResponsesGatewayAgentTests
         Assert.Equal("call_read", toolCall.CallId);
         Assert.Equal("workspace.read_text", toolCall.Name);
         Assert.Equal("""{"path":"note.txt"}""", toolCall.ArgumentsJson);
+    }
+
+    [Fact]
+    public void To_envelope_restores_canonical_tool_name_from_api_alias()
+    {
+        ResponseResult response = new()
+        {
+            Id = "resp_tool",
+            Model = "gpt-test"
+        };
+        response.OutputItems.Add(ResponseItem.CreateFunctionCallItem(
+            "call_read",
+            "workspace_read_text_abc123",
+            BinaryData.FromString("""{"path":"note.txt"}""")));
+
+        OpenAiResponseEnvelope envelope = SdkOpenAiResponsesGateway.ToEnvelope(
+            response,
+            fallbackModel: "fallback-model",
+            new Dictionary<string, string>(StringComparer.Ordinal)
+            {
+                ["workspace_read_text_abc123"] = "workspace.read_text"
+            });
+
+        Assert.Equal("workspace.read_text", Assert.Single(envelope.ToolCalls).Name);
     }
 }
 

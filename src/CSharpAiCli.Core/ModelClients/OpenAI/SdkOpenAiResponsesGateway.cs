@@ -1,4 +1,5 @@
 using System.ClientModel;
+using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
 using OpenAI;
@@ -9,6 +10,9 @@ namespace CSharpAiCli.Core;
 #pragma warning disable OPENAI001
 public sealed class SdkOpenAiResponsesGateway : IOpenAiResponsesGateway
 {
+    private const int MaximumApiToolNameLength = 64;
+    private const int ToolNameHashLength = 12;
+
     private readonly ResponsesClient client;
 
     public SdkOpenAiResponsesGateway(string apiKey)
@@ -42,12 +46,15 @@ public sealed class SdkOpenAiResponsesGateway : IOpenAiResponsesGateway
     {
         ArgumentNullException.ThrowIfNull(request);
 
-        CreateResponseOptions options = CreateAgentOptions(request);
+        IReadOnlyDictionary<string, string> apiToolNames = CreateApiToolNameMap(request.Tools);
+        CreateResponseOptions options = CreateAgentOptions(request, apiToolNames);
         ClientResult<ResponseResult> result = client.CreateResponse(
             options,
             cancellationToken: cancellationToken);
 
-        return ToEnvelope(result.Value, request.Model);
+        IReadOnlyDictionary<string, string> canonicalToolNames = apiToolNames
+            .ToDictionary(pair => pair.Value, pair => pair.Key, StringComparer.Ordinal);
+        return ToEnvelope(result.Value, request.Model, canonicalToolNames);
     }
 
     public OpenAiResponseEnvelope CreateResponse(
@@ -122,8 +129,16 @@ public sealed class SdkOpenAiResponsesGateway : IOpenAiResponsesGateway
 
     internal static CreateResponseOptions CreateAgentOptions(OpenAiAgentRequest request)
     {
+        return CreateAgentOptions(request, CreateApiToolNameMap(request.Tools));
+    }
+
+    private static CreateResponseOptions CreateAgentOptions(
+        OpenAiAgentRequest request,
+        IReadOnlyDictionary<string, string> apiToolNames)
+    {
         ArgumentNullException.ThrowIfNull(request);
         ArgumentException.ThrowIfNullOrWhiteSpace(request.Model);
+        ArgumentNullException.ThrowIfNull(apiToolNames);
 
         CreateResponseOptions options = new()
         {
@@ -150,7 +165,7 @@ public sealed class SdkOpenAiResponsesGateway : IOpenAiResponsesGateway
         foreach (OpenAiToolDefinition tool in request.Tools)
         {
             options.Tools.Add(ResponseTool.CreateFunctionTool(
-                tool.Name,
+                apiToolNames[tool.Name],
                 BinaryData.FromString(tool.ParametersSchema),
                 strictModeEnabled: null,
                 functionDescription: tool.Description));
@@ -159,7 +174,10 @@ public sealed class SdkOpenAiResponsesGateway : IOpenAiResponsesGateway
         return options;
     }
 
-    internal static OpenAiResponseEnvelope ToEnvelope(ResponseResult response, string fallbackModel)
+    internal static OpenAiResponseEnvelope ToEnvelope(
+        ResponseResult response,
+        string fallbackModel,
+        IReadOnlyDictionary<string, string>? canonicalToolNames = null)
     {
         ArgumentNullException.ThrowIfNull(response);
 
@@ -167,7 +185,7 @@ public sealed class SdkOpenAiResponsesGateway : IOpenAiResponsesGateway
             .OfType<FunctionCallResponseItem>()
             .Select(toolCall => new OpenAiToolCall(
                 CallId: toolCall.CallId,
-                Name: toolCall.FunctionName,
+                Name: ResolveCanonicalToolName(toolCall.FunctionName, canonicalToolNames),
                 ArgumentsJson: toolCall.FunctionArguments?.ToString()))
             .ToArray();
 
@@ -176,6 +194,80 @@ public sealed class SdkOpenAiResponsesGateway : IOpenAiResponsesGateway
             Model: response.Model ?? fallbackModel,
             Text: response.GetOutputText(),
             ToolCalls: toolCalls);
+    }
+
+    internal static IReadOnlyDictionary<string, string> CreateApiToolNameMap(
+        IReadOnlyList<OpenAiToolDefinition> tools)
+    {
+        ArgumentNullException.ThrowIfNull(tools);
+
+        Dictionary<string, string> result = new(StringComparer.Ordinal);
+        HashSet<string> usedApiNames = new(StringComparer.Ordinal);
+        foreach (OpenAiToolDefinition tool in tools)
+        {
+            if (!result.TryAdd(tool.Name, CreateUniqueApiToolName(tool.Name, usedApiNames)))
+            {
+                throw new InvalidOperationException("OpenAI tool definitions contain a duplicate name.");
+            }
+        }
+
+        return result;
+    }
+
+    private static string CreateUniqueApiToolName(string canonicalName, ISet<string> usedApiNames)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(canonicalName);
+
+        if (canonicalName.Length <= MaximumApiToolNameLength
+            && canonicalName.All(IsApiToolNameCharacter)
+            && usedApiNames.Add(canonicalName))
+        {
+            return canonicalName;
+        }
+
+        string sanitizedPrefix = new(canonicalName
+            .Select(character => IsApiToolNameCharacter(character) ? character : '_')
+            .ToArray());
+        string hash = Convert.ToHexString(
+            SHA256.HashData(Encoding.UTF8.GetBytes(canonicalName)))
+            .ToLowerInvariant();
+
+        for (int hashLength = ToolNameHashLength; hashLength <= hash.Length; hashLength += 4)
+        {
+            string suffix = "_" + hash[..hashLength];
+            int prefixLength = Math.Min(
+                sanitizedPrefix.Length,
+                MaximumApiToolNameLength - suffix.Length);
+            string candidate = sanitizedPrefix[..prefixLength] + suffix;
+            if (usedApiNames.Add(candidate))
+            {
+                return candidate;
+            }
+        }
+
+        throw new InvalidOperationException("OpenAI tool names could not be mapped uniquely.");
+    }
+
+    private static string ResolveCanonicalToolName(
+        string apiToolName,
+        IReadOnlyDictionary<string, string>? canonicalToolNames)
+    {
+        if (canonicalToolNames is not null
+            && canonicalToolNames.TryGetValue(apiToolName, out string? canonicalToolName))
+        {
+            return canonicalToolName;
+        }
+
+        return apiToolName;
+    }
+
+    private static bool IsApiToolNameCharacter(char value)
+    {
+        return value is >= 'a' and <= 'z'
+            or >= 'A' and <= 'Z'
+            or >= '0' and <= '9'
+            or '_'
+            or '-';
     }
 
     internal static string CreateToolResultOutputJson(OpenAiToolResultInput toolResult)
