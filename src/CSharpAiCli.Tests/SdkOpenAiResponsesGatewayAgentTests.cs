@@ -23,7 +23,7 @@ public sealed class SdkOpenAiResponsesGatewayAgentTests
         OpenAiAgentRequest request = new(
             Model: "gpt-test",
             Prompt: "Inspect note.txt.",
-            PreviousResponseId: "resp_previous",
+            PreviousResponseId: null,
             Instructions: "Use local tools.",
             Tools:
             [
@@ -48,10 +48,10 @@ public sealed class SdkOpenAiResponsesGatewayAgentTests
         CreateResponseOptions options = SdkOpenAiResponsesGateway.CreateAgentOptions(request);
 
         Assert.Equal("gpt-test", options.Model);
-        Assert.Equal("resp_previous", options.PreviousResponseId);
+        Assert.Null(options.PreviousResponseId);
         Assert.Equal("Use local tools.", options.Instructions);
         Assert.False(options.StreamingEnabled);
-        Assert.Equal(2, options.InputItems.Count);
+        Assert.Equal(3, options.InputItems.Count);
 
         FunctionTool tool = Assert.IsType<FunctionTool>(Assert.Single(options.Tools));
         Assert.Matches("^[a-zA-Z0-9_-]+$", tool.FunctionName);
@@ -62,8 +62,14 @@ public sealed class SdkOpenAiResponsesGatewayAgentTests
             """{"type":"object","properties":{"path":{"type":"string"}}}""",
             tool.FunctionParameters.ToString());
 
+        FunctionCallResponseItem functionCall =
+            Assert.IsType<FunctionCallResponseItem>(options.InputItems[1]);
+        Assert.Equal("call_read", functionCall.CallId);
+        Assert.Equal(tool.FunctionName, functionCall.FunctionName);
+        Assert.Equal("{}", functionCall.FunctionArguments.ToString());
+
         FunctionCallOutputResponseItem toolOutput =
-            Assert.IsType<FunctionCallOutputResponseItem>(options.InputItems[1]);
+            Assert.IsType<FunctionCallOutputResponseItem>(options.InputItems[2]);
         Assert.Equal("call_read", toolOutput.CallId);
 
         using JsonDocument outputDocument = JsonDocument.Parse(toolOutput.FunctionOutput);

@@ -157,6 +157,13 @@ public sealed class SdkOpenAiResponsesGateway : IOpenAiResponsesGateway
 
         foreach (OpenAiToolResultInput toolResult in request.ToolResults)
         {
+            if (request.PreviousResponseId is null)
+            {
+                options.InputItems.Add(ResponseItem.CreateFunctionCallItem(
+                    toolResult.CallId,
+                    apiToolNames[toolResult.ToolName],
+                    BinaryData.FromString(toolResult.ArgumentsJson)));
+            }
             options.InputItems.Add(ResponseItem.CreateFunctionCallOutputItem(
                 toolResult.CallId,
                 CreateToolResultOutputJson(toolResult)));

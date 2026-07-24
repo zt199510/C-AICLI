@@ -10,4 +10,5 @@ public sealed record OpenAiToolResultInput(
     string? ErrorCode,
     string ApprovalStatus,
     bool Retryable = false,
-    IReadOnlyDictionary<string, JsonElement>? StructuredPayload = null);
+    IReadOnlyDictionary<string, JsonElement>? StructuredPayload = null,
+    string ArgumentsJson = "{}");

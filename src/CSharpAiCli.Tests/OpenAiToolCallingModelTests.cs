@@ -187,13 +187,14 @@ public sealed class OpenAiToolCallingModelTests
             ]);
 
         OpenAiAgentRequest sentRequest = gateway.AgentRequests[1];
-        Assert.Null(sentRequest.Prompt);
-        Assert.Equal("resp_tool", sentRequest.PreviousResponseId);
+        Assert.Equal("check status", sentRequest.Prompt);
+        Assert.Null(sentRequest.PreviousResponseId);
         Assert.Equal("Summarize tool output.", sentRequest.Instructions);
         Assert.Equal("workspace.git_status", Assert.Single(sentRequest.Tools).Name);
         OpenAiToolResultInput resultInput = Assert.Single(sentRequest.ToolResults);
         Assert.Equal("call_status", resultInput.CallId);
         Assert.Equal("workspace.git_status", resultInput.ToolName);
+        Assert.Equal("{}", resultInput.ArgumentsJson);
         Assert.True(resultInput.Succeeded);
         Assert.Equal("On branch main. nothing to commit.", resultInput.Summary);
         Assert.Null(resultInput.ErrorCode);
@@ -207,7 +208,7 @@ public sealed class OpenAiToolCallingModelTests
     }
 
     [Fact]
-    public void Continue_sends_previous_response_id_after_start_response()
+    public void Continue_replays_original_prompt_without_provider_response_state()
     {
         ToolRegistry registry = new();
         registry.Register(new StubTool("workspace.git_status", "Show git status.", """{"type":"object"}"""));
@@ -244,8 +245,10 @@ public sealed class OpenAiToolCallingModelTests
                     ToolExecutionResult.Success("clean"))
             ]);
 
+        Assert.Equal("check status", gateway.AgentRequests[0].Prompt);
+        Assert.Equal("check status", gateway.AgentRequests[1].Prompt);
         Assert.Null(gateway.AgentRequests[0].PreviousResponseId);
-        Assert.Equal("resp_start", gateway.AgentRequests[1].PreviousResponseId);
+        Assert.Null(gateway.AgentRequests[1].PreviousResponseId);
     }
 
     [Fact]
@@ -318,7 +321,9 @@ public sealed class OpenAiToolCallingModelTests
             ]);
         model.Start(CreateRequest("second run"));
 
-        Assert.Equal("resp_first_start", gateway.AgentRequests[1].PreviousResponseId);
+        Assert.Single(gateway.AgentRequests[1].ToolResults);
+        Assert.Empty(gateway.AgentRequests[2].ToolResults);
+        Assert.Null(gateway.AgentRequests[1].PreviousResponseId);
         Assert.Null(gateway.AgentRequests[2].PreviousResponseId);
         Assert.Equal("second run", gateway.AgentRequests[2].Prompt);
     }

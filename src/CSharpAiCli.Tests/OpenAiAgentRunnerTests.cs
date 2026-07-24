@@ -76,9 +76,11 @@ public sealed class OpenAiAgentRunnerTests
         Assert.Equal("gpt-test", firstRequest.Model);
         Assert.Equal("Use tools.", firstRequest.Instructions);
         Assert.Equal("test.echo", Assert.Single(firstRequest.Tools).Name);
-        Assert.Equal("resp_tool", secondRequest.PreviousResponseId);
+        Assert.Equal(firstRequest.Prompt, secondRequest.Prompt);
+        Assert.Null(secondRequest.PreviousResponseId);
         OpenAiToolResultInput toolResult = Assert.Single(secondRequest.ToolResults);
         Assert.Equal("call_echo", toolResult.CallId);
+        Assert.Equal("""{"text":"hello"}""", toolResult.ArgumentsJson);
         Assert.Equal("echo: hello", toolResult.Summary);
     }
 

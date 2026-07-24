@@ -6,7 +6,8 @@ public sealed class OpenAiToolCallingModel : IToolCallingModel
     private readonly string? instructions;
     private readonly IToolRegistry registry;
     private readonly IOpenAiResponsesGateway gateway;
-    private string? previousResponseId;
+    private readonly List<OpenAiToolResultInput> toolResultHistory = [];
+    private string? currentPrompt;
 
     public OpenAiToolCallingModel(
         string model,
@@ -30,7 +31,6 @@ public sealed class OpenAiToolCallingModel : IToolCallingModel
     {
         ArgumentNullException.ThrowIfNull(request);
 
-        previousResponseId = null;
         string prompt = request.TranscriptContext is null
             ? request.Prompt
             : ConversationTranscriptContextFormatter.FormatWithCurrentPrompt(
@@ -50,6 +50,8 @@ public sealed class OpenAiToolCallingModel : IToolCallingModel
                 prompt);
         }
 
+        currentPrompt = prompt;
+        toolResultHistory.Clear();
         OpenAiAgentRequest agentRequest = new(
             Model: model,
             Prompt: prompt,
@@ -61,7 +63,6 @@ public sealed class OpenAiToolCallingModel : IToolCallingModel
         OpenAiResponseEnvelope response = gateway.CreateAgentResponse(
             agentRequest,
             cancellationToken);
-        previousResponseId = response.ResponseId;
         return OpenAiResponseParser.ToAgentModelTurn(response);
     }
 
@@ -73,24 +74,24 @@ public sealed class OpenAiToolCallingModel : IToolCallingModel
         ArgumentNullException.ThrowIfNull(request);
         ArgumentNullException.ThrowIfNull(toolResults);
 
-        if (previousResponseId is null)
+        if (currentPrompt is null)
         {
             throw new InvalidOperationException(
                 "OpenAI tool calling model must be started before continuing.");
         }
 
+        toolResultHistory.AddRange(toolResults.Select(ToToolResultInput));
         OpenAiAgentRequest agentRequest = new(
             Model: model,
-            Prompt: null,
-            PreviousResponseId: previousResponseId,
+            Prompt: currentPrompt,
+            PreviousResponseId: null,
             Instructions: request.Instructions ?? instructions,
             Tools: OpenAiToolDefinitionMapper.FromRegistry(registry),
-            ToolResults: toolResults.Select(ToToolResultInput).ToArray());
+            ToolResults: toolResultHistory.ToArray());
 
         OpenAiResponseEnvelope response = gateway.CreateAgentResponse(
             agentRequest,
             cancellationToken);
-        previousResponseId = response.ResponseId;
         return OpenAiResponseParser.ToAgentModelTurn(response);
     }
 
@@ -104,6 +105,7 @@ public sealed class OpenAiToolCallingModel : IToolCallingModel
             ErrorCode: toolResult.Result.ErrorCode,
             ApprovalStatus: toolResult.Result.ApprovalStatus,
             Retryable: toolResult.Result.Retryable,
-            StructuredPayload: toolResult.Result.StructuredPayload);
+            StructuredPayload: toolResult.Result.StructuredPayload,
+            ArgumentsJson: toolResult.Request.ArgumentsJson);
     }
 }
