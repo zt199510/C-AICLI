@@ -269,15 +269,15 @@ Week 78 最终只允许：
 ## Week 78 Critical Gates
 
 - [x] W78-G0 当前状态型 release/roadmap/schedule 文档一致记录 0.6.0 `Blocked / Preview`，0.5.0 为最后 Accepted。
-- [ ] W78-G1 clean-source credential-free .NET/Desktop/CLI/E2E/security/package 回归通过，首败完整保留。
-- [ ] W78-G2 pilot workspace 全部 disposable/可回滚，允许修改范围、工具和停止条件预先冻结。
-- [ ] W78-G3 CLI 与 Desktop 真实模型只读路径通过，或因缺少用户授权明确 `Skipped` 并使本周结论 Blocked。
-- [ ] W78-G4 一个真实本地 MCP 读取调用和一个失败路径通过，server process/temp cleanup 为 0。
-- [ ] W78-G5 真实模型受控写任务只修改 allowlist 文件，approval、测试、diff、report 和磁盘事实一致。
-- [ ] W78-G6 crash/restart 不推断成功、不自动 replay，旧/新 attempt identity 分离，cleanup 为 0。
-- [ ] W78-G7 evidence 不含 secret、绝对用户路径、raw prompt/response 或未脱敏 diagnostics。
-- [ ] W78-G8 无 P0/P1，resource summary 无 unexplained process/temp/package/workspace delta。
-- [ ] `git diff --check` 通过；创建 `docs_md/weekly/78_week_review.md` 并记录最终 `Preview Ready` 或 `Blocked`。
+- [x] W78-G1 clean-source credential-free .NET/Desktop/CLI/E2E/security/package 回归通过，首败完整保留。
+- [x] W78-G2 pilot workspace 全部 disposable/可回滚，允许修改范围、工具和停止条件预先冻结。
+- [ ] W78-G3 CLI 真实模型只读通过；Desktop 生产 AppHost 固定使用 fake runtime，真实模型路径失败，本周结论 Blocked。
+- [x] W78-G4 一个真实本地 MCP 读取调用和越界/未知工具失败路径通过，server process/temp cleanup 为 0。
+- [ ] W78-G5 因 W78-G3 未通过，真实模型受控写任务按 Gate 未启动。
+- [ ] W78-G6 因缺少生产 Desktop 真实模型 runtime，真实模型 crash/restart 场景按 Gate 未启动；credential-free 回归不冒充真实试用。
+- [x] W78-G7 evidence 不含 secret、绝对用户路径、raw prompt/response 或未脱敏 diagnostics。
+- [ ] W78-G8 已执行场景 resource/process/temp/workspace delta 均为 0，但 Desktop 真实模型 runtime 缺口未关闭。
+- [x] `git diff --check` 通过；创建 `docs_md/weekly/78_week_review.md` 并记录最终 `Blocked`。
 
 ## 推荐执行顺序
 
