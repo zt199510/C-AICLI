@@ -1544,12 +1544,30 @@ Write-Output 'bugfix verification passed'
         if ($missingRealModelSettings.Count -gt 0) {
             Write-Host "real model smoke skipped: CAICLI_REAL_MODEL_SMOKE=1 requires caller $($missingRealModelSettings -join ' and ')."
         } else {
+            $realModelWorkspaceConfigPath = Join-Path $workspace ".caicli\config.json"
+            $realModelWorkspaceConfigExisted = Test-Path -LiteralPath $realModelWorkspaceConfigPath
+            $realModelWorkspaceConfigBytes = if ($realModelWorkspaceConfigExisted) {
+                [IO.File]::ReadAllBytes($realModelWorkspaceConfigPath)
+            } else {
+                $null
+            }
             try {
                 $env:OPENAI_API_KEY = $oldOpenAiKey
                 $env:OPENAI_MODEL = $oldOpenAiModel
                 if (-not [string]::IsNullOrWhiteSpace($oldOpenAiBaseUrl)) {
                     $env:OPENAI_BASE_URL = $oldOpenAiBaseUrl
                 }
+
+                @{
+                    disabledTools = @(
+                        "agent.plan",
+                        "git.diff",
+                        "git.status",
+                        "workspace.apply_patch",
+                        "workspace.run_shell",
+                        "workspace.search_text"
+                    )
+                } | ConvertTo-Json -Depth 4 | Set-Content -LiteralPath $realModelWorkspaceConfigPath -Encoding UTF8
 
                 $noteBeforeRealModelExec = Get-Content -LiteralPath (Join-Path $workspace "note.txt") -Raw
                 $realModelExec = Invoke-CaiCli -Arguments @(
@@ -1566,6 +1584,11 @@ Write-Output 'bugfix verification passed'
                 }
             }
             finally {
+                if ($realModelWorkspaceConfigExisted) {
+                    [IO.File]::WriteAllBytes($realModelWorkspaceConfigPath, $realModelWorkspaceConfigBytes)
+                } else {
+                    Remove-Item -LiteralPath $realModelWorkspaceConfigPath -Force -ErrorAction SilentlyContinue
+                }
                 Remove-Item Env:OPENAI_API_KEY -ErrorAction SilentlyContinue
                 Remove-Item Env:OPENAI_MODEL -ErrorAction SilentlyContinue
                 Remove-Item Env:OPENAI_BASE_URL -ErrorAction SilentlyContinue

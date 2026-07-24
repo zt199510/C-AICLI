@@ -67,6 +67,10 @@ public sealed class SmokeTestScriptTests
         Assert.Contains("$oldOpenAiBaseUrl = $env:OPENAI_BASE_URL", script, StringComparison.Ordinal);
         Assert.Contains("$env:OPENAI_BASE_URL = $oldOpenAiBaseUrl", script, StringComparison.Ordinal);
         Assert.Contains("Remove-Item Env:OPENAI_BASE_URL -ErrorAction SilentlyContinue", script, StringComparison.Ordinal);
+        Assert.Contains("$realModelWorkspaceConfigBytes", script, StringComparison.Ordinal);
+        Assert.Contains("\"agent.plan\"", script, StringComparison.Ordinal);
+        Assert.Contains("\"workspace.apply_patch\"", script, StringComparison.Ordinal);
+        Assert.Contains("[IO.File]::WriteAllBytes($realModelWorkspaceConfigPath, $realModelWorkspaceConfigBytes)", script, StringComparison.Ordinal);
         Assert.Contains("\"--approval\", \"never\"", script, StringComparison.Ordinal);
         Assert.Contains("Assert-ExitCode $realModelExec 0 \"real model read-only exec\"", script, StringComparison.Ordinal);
         Assert.Contains("Assert-Contains $realModelExec.Output \"result: success\" \"real model read-only exec\"", script, StringComparison.Ordinal);
