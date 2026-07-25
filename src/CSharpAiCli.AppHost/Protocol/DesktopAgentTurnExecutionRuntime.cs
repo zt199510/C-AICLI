@@ -55,7 +55,7 @@ internal sealed class DesktopAgentTurnExecutionRuntime : ITurnExecutionRuntime
             Workspace: input.Snapshot.Workspace,
             Instructions: input.Snapshot.Instructions.Instructions,
             Limits: input.Snapshot.Configuration.AgentRunLimits);
-        Channel<AgentRunEvent> channel = Channel.CreateBounded<AgentRunEvent>(
+        Channel<PendingAgentEvent> channel = Channel.CreateBounded<PendingAgentEvent>(
             new BoundedChannelOptions(TurnExecutionLimits.MaxEventBatchItems)
             {
                 SingleReader = true,
@@ -80,17 +80,26 @@ internal sealed class DesktopAgentTurnExecutionRuntime : ITurnExecutionRuntime
         try
         {
             long sequence = 1;
-            await foreach (AgentRunEvent agentEvent in channel.Reader.ReadAllAsync(
+            await foreach (PendingAgentEvent pending in channel.Reader.ReadAllAsync(
                 executionCancellation.Token).ConfigureAwait(false))
             {
-                if (sequence > MaxRuntimeEvents)
+                try
                 {
-                    throw new InvalidOperationException("Desktop runtime event limit was exceeded.");
+                    if (sequence > MaxRuntimeEvents)
+                    {
+                        throw new InvalidOperationException("Desktop runtime event limit was exceeded.");
+                    }
+                    TurnRuntimeEvent runtimeEvent = Map(pending.Event, sequence++);
+                    await eventSink.EmitAsync(
+                        runtimeEvent,
+                        executionCancellation.Token).ConfigureAwait(false);
+                    pending.Committed.TrySetResult();
                 }
-                TurnRuntimeEvent runtimeEvent = Map(agentEvent, sequence++);
-                await eventSink.EmitAsync(
-                    runtimeEvent,
-                    executionCancellation.Token).ConfigureAwait(false);
+                catch (Exception exception)
+                {
+                    pending.Committed.TrySetException(exception);
+                    throw;
+                }
             }
 
             AgentRunResult result = await producer.ConfigureAwait(false);
@@ -228,7 +237,7 @@ internal sealed class DesktopAgentTurnExecutionRuntime : ITurnExecutionRuntime
     }
 
     private sealed class ChannelEventObserver(
-        ChannelWriter<AgentRunEvent> writer,
+        ChannelWriter<PendingAgentEvent> writer,
         CancellationToken cancellationToken) : IAgentRunEventObserver
     {
         private readonly HashSet<string> observedIdentities = new(StringComparer.Ordinal);
@@ -244,10 +253,20 @@ internal sealed class DesktopAgentTurnExecutionRuntime : ITurnExecutionRuntime
             {
                 throw new InvalidOperationException("Agent event identity was observed more than once.");
             }
-            writer.WriteAsync(agentEvent, cancellationToken)
+            TaskCompletionSource committed = new(
+                TaskCreationOptions.RunContinuationsAsynchronously);
+            writer.WriteAsync(new PendingAgentEvent(agentEvent, committed), cancellationToken)
                 .AsTask()
+                .GetAwaiter()
+                .GetResult();
+            committed.Task
+                .WaitAsync(cancellationToken)
                 .GetAwaiter()
                 .GetResult();
         }
     }
+
+    private sealed record PendingAgentEvent(
+        AgentRunEvent Event,
+        TaskCompletionSource Committed);
 }

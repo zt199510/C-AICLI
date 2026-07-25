@@ -155,6 +155,38 @@ public sealed class Week79ProductionRuntimeTests
     }
 
     [Fact]
+    public async Task Runtime_commits_tool_started_before_requesting_write_approval()
+    {
+        using TestWorkspace workspace = new();
+        File.WriteAllText(Path.Combine(workspace.Root, "target.txt"), "before");
+        CliEnvironmentSnapshot snapshot = workspace.CreateSnapshot(
+            model: "gpt-test",
+            apiKey: "sk-test-value",
+            apiKeySource: "OPENAI_API_KEY");
+        PatchThenFinalGateway gateway = new();
+        DesktopAgentTurnExecutionRuntime runtime = new(
+            new OpenAiAgentRunnerFactory((_, _) => gateway));
+        BlockingToolStartedSink sink = new();
+        CapturingApprovalGateway approval = new("approve");
+
+        Task<TurnRuntimeResult> execution = runtime.ExecuteAsync(
+            CreateInput(snapshot),
+            sink,
+            approval,
+            CancellationToken.None);
+
+        await sink.ToolStartedEntered.Task.WaitAsync(TimeSpan.FromSeconds(5));
+        Assert.Empty(approval.Actions);
+
+        sink.ReleaseToolStarted.TrySetResult();
+        TurnRuntimeResult result = await execution.WaitAsync(TimeSpan.FromSeconds(5));
+
+        Assert.Equal("completed", result.Status);
+        Assert.Single(approval.Actions);
+        Assert.Equal("after", File.ReadAllText(Path.Combine(workspace.Root, "target.txt")));
+    }
+
+    [Fact]
     public async Task Runtime_honors_workspace_agent_turn_limit()
     {
         using TestWorkspace workspace = new();
@@ -410,6 +442,67 @@ public sealed class Week79ProductionRuntimeTests
             string? instructions = null,
             CancellationToken cancellationToken = default) =>
             throw new NotSupportedException();
+    }
+
+    private sealed class PatchThenFinalGateway : IOpenAiResponsesGateway
+    {
+        private int calls;
+
+        public OpenAiResponseEnvelope CreateAgentResponse(
+            OpenAiAgentRequest request,
+            CancellationToken cancellationToken = default)
+        {
+            calls++;
+            return calls == 1
+                ? new OpenAiResponseEnvelope(
+                    "response-patch",
+                    "gpt-test",
+                    string.Empty,
+                    [new OpenAiToolCall(
+                        "call-patch",
+                        "workspace.apply_patch",
+                        """{"path":"target.txt","find":"before","replace":"after"}""")])
+                : new OpenAiResponseEnvelope(
+                    "response-final",
+                    "gpt-test",
+                    "Patch completed.",
+                    []);
+        }
+
+        public OpenAiResponseEnvelope CreateResponse(
+            string model,
+            string prompt,
+            string? instructions = null,
+            CancellationToken cancellationToken = default) =>
+            throw new NotSupportedException();
+
+        public IEnumerable<OpenAiStreamingResponseUpdate> CreateResponseStreaming(
+            string model,
+            string prompt,
+            string? instructions = null,
+            CancellationToken cancellationToken = default) =>
+            throw new NotSupportedException();
+    }
+
+    private sealed class BlockingToolStartedSink : ITurnExecutionEventSink
+    {
+        public TaskCompletionSource ToolStartedEntered { get; } =
+            new(TaskCreationOptions.RunContinuationsAsynchronously);
+        public TaskCompletionSource ReleaseToolStarted { get; } =
+            new(TaskCreationOptions.RunContinuationsAsynchronously);
+
+        public async ValueTask EmitAsync(
+            TurnRuntimeEvent runtimeEvent,
+            CancellationToken cancellationToken)
+        {
+            if (runtimeEvent.Kind != TurnRuntimeEventKind.ToolStarted)
+            {
+                return;
+            }
+
+            ToolStartedEntered.TrySetResult();
+            await ReleaseToolStarted.Task.WaitAsync(cancellationToken);
+        }
     }
 
     private sealed class TestWorkspace : IDisposable
