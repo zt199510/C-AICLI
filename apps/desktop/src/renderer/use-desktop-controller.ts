@@ -13,6 +13,7 @@ export function useDesktopController(bridge: DesktopBridge | undefined) {
   composerRef.current = composer;
   const mentionRequest = useRef(0);
   const composerWorkspace = useRef<string | null>(null);
+  const detailRequest = useRef(0);
   const resyncRunning = useRef(false);
   const resyncDirty = useRef(false);
 
@@ -46,7 +47,8 @@ export function useDesktopController(bridge: DesktopBridge | undefined) {
     selectionEpoch = stateRef.current.selectionEpoch,
   ) => {
     if (!bridge) return;
-    dispatch({ type: "detail-loading", epoch, selectionEpoch, threadId });
+    const requestId = ++detailRequest.current;
+    dispatch({ type: "detail-loading", epoch, selectionEpoch, requestId, threadId });
     try {
       const result = await bridge.getThread({ threadId, afterSequence });
       if (!result.succeeded || !result.data) {
@@ -54,14 +56,15 @@ export function useDesktopController(bridge: DesktopBridge | undefined) {
           type: "detail-error",
           epoch,
           selectionEpoch,
+          requestId,
           message: safeFailure(result.error?.safeMessage),
           notFound: result.error?.code === "thread-not-found",
         });
         return;
       }
-      dispatch({ type: "detail-ready", epoch, selectionEpoch, detail: result.data, append });
+      dispatch({ type: "detail-ready", epoch, selectionEpoch, requestId, detail: result.data, append });
     } catch {
-      dispatch({ type: "detail-error", epoch, selectionEpoch, message: "Thread history could not be loaded." });
+      dispatch({ type: "detail-error", epoch, selectionEpoch, requestId, message: "Thread history could not be loaded." });
     }
   }, [bridge]);
 

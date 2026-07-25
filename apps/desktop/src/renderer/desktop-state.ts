@@ -35,6 +35,7 @@ export interface DesktopState {
   readonly threadsTruncated: boolean;
   readonly threadsError: string | null;
   readonly selectedThreadId: string | null;
+  readonly detailRequestId: number;
   readonly detailStatus: QueryStatus;
   readonly detail: ThreadDetailData | null;
   readonly detailError: string | null;
@@ -55,6 +56,7 @@ export const initialDesktopState: DesktopState = Object.freeze({
   threadsTruncated: false,
   threadsError: null,
   selectedThreadId: null,
+  detailRequestId: 0,
   detailStatus: "idle",
   detail: null,
   detailError: null,
@@ -72,9 +74,9 @@ export type DesktopAction =
   | { type: "threads-ready"; epoch: number; threads: readonly ThreadSummaryData[]; truncated: boolean; warning?: string | null }
   | { type: "threads-error"; epoch: number; message: string }
   | { type: "select"; threadId: string | null }
-  | { type: "detail-loading"; epoch: number; selectionEpoch: number; threadId: string }
-  | { type: "detail-ready"; epoch: number; selectionEpoch: number; detail: ThreadDetailData; append: boolean }
-  | { type: "detail-error"; epoch: number; selectionEpoch: number; message: string; notFound?: boolean }
+  | { type: "detail-loading"; epoch: number; selectionEpoch: number; requestId: number; threadId: string }
+  | { type: "detail-ready"; epoch: number; selectionEpoch: number; requestId: number; detail: ThreadDetailData; append: boolean }
+  | { type: "detail-error"; epoch: number; selectionEpoch: number; requestId: number; message: string; notFound?: boolean }
   | { type: "event"; event: ThreadChangedParams }
   | { type: "refresh-complete" }
   | { type: "review-tab"; tab: ReviewState["activeTab"] }
@@ -114,23 +116,28 @@ export function desktopReducer(state: DesktopState, action: DesktopAction): Desk
         ...state,
         selectedThreadId: action.threadId,
         selectionEpoch: state.selectionEpoch + 1,
+        detailRequestId: 0,
         detailStatus: action.threadId ? "loading" : "idle",
         detail: null,
         detailError: null,
       };
     case "detail-loading":
-      return matchesDetail(state, action) ? { ...state, detailStatus: "loading", detailError: null } : state;
+      return matchesDetail(state, action) && action.requestId > state.detailRequestId
+        ? { ...state, detailRequestId: action.requestId, detailStatus: "loading", detailError: null }
+        : state;
     case "detail-ready": {
-      if (!matchesDetail(state, action) || action.detail.thread.threadId !== state.selectedThreadId) return state;
+      if (!matchesDetail(state, action) || action.requestId !== state.detailRequestId ||
+          action.detail.thread.threadId !== state.selectedThreadId) return state;
       const detail = action.append && state.detail ? mergeDetail(state.detail, action.detail) : action.detail;
       return { ...state, detailStatus: "ready", detail, detailError: null };
     }
     case "detail-error":
-      if (!matchesDetail(state, action)) return state;
+      if (!matchesDetail(state, action) || action.requestId !== state.detailRequestId) return state;
       return action.notFound ? {
         ...state,
-        selectedThreadId: null,
-        selectionEpoch: state.selectionEpoch + 1,
+    selectedThreadId: null,
+    detailRequestId: 0,
+    selectionEpoch: state.selectionEpoch + 1,
         detailStatus: "idle",
         detail: null,
         detailError: null,

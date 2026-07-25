@@ -18,9 +18,33 @@ describe("desktop authoritative projection", () => {
     const selected = desktopReducer(opened, { type: "select", threadId: "thread-1" });
     const changed = desktopReducer(selected, { type: "select", threadId: "thread-2" });
     const staleList = desktopReducer(changed, { type: "threads-ready", epoch: 0, threads: [thread], truncated: false });
-    const staleDetail = desktopReducer(changed, { type: "detail-ready", epoch: opened.contextEpoch, selectionEpoch: selected.selectionEpoch, detail, append: false });
+    const staleDetail = desktopReducer(changed, { type: "detail-ready", epoch: opened.contextEpoch, selectionEpoch: selected.selectionEpoch, requestId: 1, detail, append: false });
     expect(staleList.threads).toEqual([]);
     expect(staleDetail.detail).toBeNull();
+  });
+
+  it("keeps the latest detail when same-selection requests resolve out of order", () => {
+    const opened = desktopReducer(initialDesktopState, { type: "workspace", workspace });
+    const selected = desktopReducer(opened, { type: "select", threadId: "thread-1" });
+    const first = desktopReducer(selected, {
+      type: "detail-loading", epoch: opened.contextEpoch, selectionEpoch: selected.selectionEpoch,
+      requestId: 1, threadId: "thread-1",
+    });
+    const second = desktopReducer(first, {
+      type: "detail-loading", epoch: opened.contextEpoch, selectionEpoch: selected.selectionEpoch,
+      requestId: 2, threadId: "thread-1",
+    });
+    const latest = desktopReducer(second, {
+      type: "detail-ready", epoch: opened.contextEpoch, selectionEpoch: selected.selectionEpoch,
+      requestId: 2, detail: { ...detail, thread: { ...thread, revision: 2 } }, append: false,
+    });
+    const stale = desktopReducer(latest, {
+      type: "detail-ready", epoch: opened.contextEpoch, selectionEpoch: selected.selectionEpoch,
+      requestId: 1, detail, append: false,
+    });
+
+    expect(stale.detail?.thread.revision).toBe(2);
+    expect(stale.detailRequestId).toBe(2);
   });
 
   it("deduplicates late notifications and ignores another workspace", () => {
