@@ -29,7 +29,22 @@ for (const scenario of scenarios) {
       const title = `Week75 ${scenario}`;
       const threadId = await createThread(page, title);
 
-      if (scenario === "success") {
+      if (packaged && ["success", "deny", "cancel", "restart"].includes(scenario)) {
+        await queuePrompt(page, `[approval] verify ${scenario} fails without model configuration`);
+        await waitForThreadStatus(page, threadId, "failed");
+        const detail = await page.evaluate(async (id) => {
+          const result = await window.caicli.getThread({ threadId: id, afterSequence: 0 });
+          if (!result.succeeded || !result.data) throw new Error(result.error?.code ?? "thread-unavailable");
+          return result.data;
+        }, threadId);
+        expect(detail.turns).toHaveLength(1);
+        expect(detail.turns[0]?.errorCode).toBe("missing-model");
+        expect(detail.turns[0]?.approval).toBeNull();
+        expect(detail.timeline.some((item) => item.type === "warning.raised" && item.payload.errorCode === "missing-model")).toBe(true);
+        expect(detail.timeline.some((item) => item.type === "assistant.final")).toBe(false);
+        expect(detail.timeline.some((item) => item.type === "approval.requested")).toBe(false);
+        expect(detail.timeline.some((item) => item.type === "tool.started" || item.type === "tool.completed")).toBe(false);
+      } else if (scenario === "success") {
         await queuePrompt(page, "[approval] complete one controlled write");
         await expect(page.getByRole("group", { name: "Approval request" })).toBeVisible();
         await page.getByRole("button", { name: "Approve" }).click();
