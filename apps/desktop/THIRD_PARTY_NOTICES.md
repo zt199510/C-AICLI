@@ -145,7 +145,7 @@ The packaged Electron runtime also carries Electron's `LICENSE` and Chromium's `
 | balanced-match | 4.0.4 | MIT |
 | base64-js | 1.5.1 | MIT |
 | boolean | 3.2.0 | MIT |
-| brace-expansion | 5.0.7 | MIT |
+| brace-expansion | 5.0.8 | MIT |
 | buffer-crc32 | 0.2.13 | MIT |
 | cacheable-lookup | 5.0.4 | MIT |
 | cacheable-request | 7.0.4 | MIT |

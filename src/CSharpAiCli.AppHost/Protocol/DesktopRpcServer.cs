@@ -24,6 +24,7 @@ public sealed class DesktopRpcServer : IDisposable
     };
 
     private readonly DesktopApplicationSessionFactory sessionFactory;
+    private readonly ITurnExecutionRuntime turnExecutionRuntime;
     private readonly DesktopThreadNotificationSequencer notificationSequencer = new(TimeProvider.System);
     private readonly DesktopUserTerminalSupervisor terminalSupervisor = new();
     private DesktopWriteExecutionSupervisor writeSupervisor;
@@ -38,15 +39,27 @@ public sealed class DesktopRpcServer : IDisposable
     private SessionState state;
 
     public DesktopRpcServer()
-        : this(new DesktopApplicationSessionFactory())
+        : this(new DesktopApplicationSessionFactory(), new DesktopAgentTurnExecutionRuntime())
     {
     }
 
     public DesktopRpcServer(DesktopApplicationSessionFactory sessionFactory)
+        : this(sessionFactory, new DesktopAgentTurnExecutionRuntime())
+    {
+    }
+
+    internal DesktopRpcServer(
+        DesktopApplicationSessionFactory sessionFactory,
+        ITurnExecutionRuntime runtime)
     {
         this.sessionFactory = sessionFactory ?? throw new ArgumentNullException(nameof(sessionFactory));
-        writeSupervisor = new DesktopWriteExecutionSupervisor(NotifyCommittedAsync);
+        turnExecutionRuntime = runtime ?? throw new ArgumentNullException(nameof(runtime));
+        writeSupervisor = new DesktopWriteExecutionSupervisor(
+            NotifyCommittedAsync,
+            turnExecutionRuntime);
     }
+
+    internal ITurnExecutionRuntime TurnExecutionRuntime => turnExecutionRuntime;
 
     public async Task RunAsync(Stream input, Stream output, CancellationToken cancellationToken)
     {
@@ -427,7 +440,9 @@ public sealed class DesktopRpcServer : IDisposable
         writeSupervisor.Stop();
         writeSupervisor.Dispose();
         terminalSupervisor.Reset();
-        writeSupervisor = new DesktopWriteExecutionSupervisor(NotifyCommittedAsync);
+        writeSupervisor = new DesktopWriteExecutionSupervisor(
+            NotifyCommittedAsync,
+            turnExecutionRuntime);
         applicationSession = opened.Session;
         state = SessionState.WorkspaceReady;
         previous?.Dispose();

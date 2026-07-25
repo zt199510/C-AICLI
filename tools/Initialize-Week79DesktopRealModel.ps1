@@ -155,9 +155,9 @@ $manifest.boundaries = [ordered]@{
     productionTools = @(
         'agent.plan',
         'workspace.read_text',
-        'workspace.search',
+        'workspace.search_text',
         'workspace.apply_patch',
-        'workspace.shell',
+        'workspace.run_shell',
         'git.status',
         'git.diff'
     )

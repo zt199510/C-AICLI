@@ -16,11 +16,13 @@ internal sealed class DesktopWriteExecutionSupervisor : IDisposable
 
     public DesktopWriteExecutionSupervisor(
         Func<TurnExecutionStateProjection, ValueTask> committed,
-        ITurnExecutionRuntime? runtime = null)
+        ITurnExecutionRuntime runtime)
     {
         this.committed = committed ?? throw new ArgumentNullException(nameof(committed));
-        this.runtime = runtime ?? new DeterministicFakeTurnExecutionRuntime();
+        this.runtime = runtime ?? throw new ArgumentNullException(nameof(runtime));
     }
+
+    internal ITurnExecutionRuntime Runtime => runtime;
 
     public bool IsBusy
     {
@@ -35,6 +37,7 @@ internal sealed class DesktopWriteExecutionSupervisor : IDisposable
             cancellation?.Dispose();
             cancellation = new CancellationTokenSource();
             approvalWaiter = new ApprovalWaiter();
+            decisions.Clear();
             threadId = state.ThreadId;
             turnId = state.TurnId;
             execution = RunAsync(session, state.ThreadId, state.TurnId, approvalWaiter, cancellation.Token);
@@ -94,6 +97,23 @@ internal sealed class DesktopWriteExecutionSupervisor : IDisposable
     public void Dispose()
     {
         Stop();
+        Task? pending;
+        lock (sync)
+        {
+            pending = execution;
+        }
+        if (pending is not null)
+        {
+            try
+            {
+                pending.Wait(TurnExecutionLimits.CancelAcknowledgementTarget);
+            }
+            catch (AggregateException exception) when (
+                exception.InnerExceptions.All(inner =>
+                    inner is OperationCanceledException or TaskCanceledException))
+            {
+            }
+        }
         lock (sync)
         {
             cancellation?.Dispose();

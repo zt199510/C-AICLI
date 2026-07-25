@@ -25,6 +25,7 @@ public static class TurnRuntimeEventKind
     public const string Changes = "changes";
     public const string Assistant = "assistant";
     public const string Final = "final";
+    public const string Warning = "warning";
 }
 
 public sealed record TurnRuntimeEvent(
@@ -96,6 +97,7 @@ public interface ITurnExecutionRuntime
 }
 
 public sealed record TurnExecutionInput(
+    CliEnvironmentSnapshot Snapshot,
     string WorkspaceId,
     string WorkspaceRootIdentity,
     string ThreadId,

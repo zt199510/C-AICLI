@@ -6308,56 +6308,12 @@ public static class CliCommandFactory
     private static IAgentRunner CreateDefaultExecAgentRunner(
         CliEnvironmentSnapshot snapshot,
         ToolRegistry registry,
-        IToolExecutor executor)
-    {
-        ArgumentNullException.ThrowIfNull(snapshot);
-        ArgumentNullException.ThrowIfNull(registry);
-        ArgumentNullException.ThrowIfNull(executor);
-
-        string model = snapshot.Configuration.Model;
-        if (string.IsNullOrWhiteSpace(model)
-            || string.Equals(model, "not configured", StringComparison.OrdinalIgnoreCase))
-        {
-            return new StaticAgentRunner(new AgentError(
-                "missing-model",
-                "Model is not configured. Set model in .caicli/config.json before running exec.",
-                Retryable: false));
-        }
-
-        SecretValue? apiKey = snapshot.Configuration.ApiKey;
-        if (apiKey is null)
-        {
-            return new StaticAgentRunner(new AgentError(
-                "missing-openai-api-key",
-                "OpenAI API key is missing. Set OPENAI_API_KEY or user config apiKey.",
-                Retryable: false));
-        }
-
-        if (!IsSupportedApiKeySource(snapshot.Configuration.ApiKeySource))
-        {
-            return new StaticAgentRunner(new AgentError(
-                "unsupported-api-key-source",
-                "Workspace config apiKey is not used for model calls. Set OPENAI_API_KEY or user config apiKey.",
-                Retryable: false));
-        }
-
-        SdkOpenAiResponsesGateway gateway = new(apiKey.Value, snapshot.Configuration.BaseUrl);
-        return new OpenAiAgentRunner(
-            model,
-            snapshot.Instructions.Instructions,
-            registry,
-            gateway,
-            executor);
-    }
+        IToolExecutor executor) =>
+        new OpenAiAgentRunnerFactory().Create(snapshot, registry, executor);
 
     private static bool IsExecCommand(ParseResult parseResult)
     {
         return string.Equals(parseResult.CommandResult.Command.Name, "exec", StringComparison.Ordinal);
-    }
-
-    private static bool IsSupportedApiKeySource(string apiKeySource)
-    {
-        return apiKeySource is "OPENAI_API_KEY" or "user config";
     }
 
     private static AgentTaskReviewGateReport RunReadOnlyReviewGate(
@@ -7714,30 +7670,4 @@ public static class CliCommandFactory
         return path;
     }
 
-    private sealed class StaticAgentRunner(AgentError error) : IAgentRunner
-    {
-        public AgentRunResult Run(
-            AgentRunRequest request,
-            ConversationTranscript? transcript = null,
-            CancellationToken cancellationToken = default)
-        {
-            ArgumentNullException.ThrowIfNull(request);
-            cancellationToken.ThrowIfCancellationRequested();
-
-            AgentRunEvent errorEvent = new(
-                Type: "agent.error",
-                Sequence: 0,
-                Timestamp: DateTimeOffset.UtcNow,
-                Message: error.SafeMessage,
-                ErrorCode: error.LocalErrorCode,
-                Status: "failure",
-                StopReason: AgentStopReason.FromErrorCode(error.LocalErrorCode));
-            return AgentRunResult.Failure(
-                error,
-                [],
-                [errorEvent],
-                stopReason: AgentStopReason.FromErrorCode(error.LocalErrorCode),
-                status: "failure");
-        }
-    }
 }

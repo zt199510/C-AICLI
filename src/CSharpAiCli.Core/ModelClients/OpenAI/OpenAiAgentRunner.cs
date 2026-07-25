@@ -5,21 +5,27 @@ namespace CSharpAiCli.Core;
 public sealed class OpenAiAgentRunner : IAgentRunner
 {
     private readonly IAgentRunner innerRunner;
+    private readonly IAgentRunEventObserver? eventObserver;
 
     public OpenAiAgentRunner(
         string model,
         string? instructions,
         IToolRegistry registry,
         IOpenAiResponsesGateway gateway,
-        IToolExecutor toolExecutor)
+        IToolExecutor toolExecutor,
+        IAgentRunEventObserver? eventObserver = null)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(model);
         ArgumentNullException.ThrowIfNull(registry);
         ArgumentNullException.ThrowIfNull(gateway);
         ArgumentNullException.ThrowIfNull(toolExecutor);
+        this.eventObserver = eventObserver;
 
         OpenAiToolCallingModel toolCallingModel = new(model, instructions, registry, gateway);
-        innerRunner = new OfflineAgentRunner(toolCallingModel, toolExecutor);
+        innerRunner = new OfflineAgentRunner(
+            toolCallingModel,
+            toolExecutor,
+            eventObserver: eventObserver);
     }
 
     public AgentRunResult Run(
@@ -66,7 +72,7 @@ public sealed class OpenAiAgentRunner : IAgentRunner
         }
     }
 
-    private static AgentRunResult CreateFailure(
+    private AgentRunResult CreateFailure(
         AgentError error,
         IReadOnlyDictionary<string, string>? payload = null)
     {
@@ -80,6 +86,7 @@ public sealed class OpenAiAgentRunner : IAgentRunner
             ErrorCode: error.LocalErrorCode,
             Status: DiagnosticEventStatus.Failure,
             StopReason: stopReason);
+        eventObserver?.OnEvent(errorEvent);
 
         return AgentRunResult.Failure(
             error,

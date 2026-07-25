@@ -42,6 +42,57 @@ public sealed class TurnExecutionApplicationServiceTests
     }
 
     [Fact]
+    public async Task Approval_denial_is_durable_and_terminal_without_retry()
+    {
+        using Harness test = new("[approval] deny the controlled fixture write");
+        TurnExecutionStateProjection started = test.Start("start-denial").Data!;
+        DenyingWaiter waiter = new(test);
+
+        ApplicationResult<TurnExecutionStateProjection> completed = await test.Service.ExecuteAsync(
+            test.Snapshot,
+            test.ThreadId,
+            started.TurnId,
+            new DeterministicFakeTurnExecutionRuntime(),
+            waiter);
+
+        Assert.True(completed.Succeeded, completed.Error?.SafeMessage);
+        Assert.Equal(TurnStatus.Failed, completed.Data!.Status);
+        TurnRecord turn = Assert.Single(test.Threads.Read(test.ThreadId).Aggregate!.Turns);
+        Assert.Equal("approval-denied", turn.StopReason);
+        Assert.Equal("approval-denied", turn.ErrorCode);
+        TimelineItemRecord[] timeline = test.Threads.ReadTimelinePage(test.ThreadId, 0, 100).Items.ToArray();
+        Assert.Single(timeline, item => item.Type == TimelineItemType.ApprovalRequested);
+        Assert.Single(timeline, item => item.Type == TimelineItemType.ApprovalResolved);
+        Assert.DoesNotContain(timeline, item => item.Type == TimelineItemType.ToolStarted);
+    }
+
+    [Theory]
+    [InlineData("gap")]
+    [InlineData("duplicate-correlation")]
+    public async Task Runtime_event_identity_violation_fails_turn_closed(string mode)
+    {
+        using Harness test = new("Reject invalid runtime event identity");
+        TurnExecutionStateProjection started = test.Start("start-invalid-event").Data!;
+
+        ApplicationResult<TurnExecutionStateProjection> completed = await test.Service.ExecuteAsync(
+            test.Snapshot,
+            test.ThreadId,
+            started.TurnId,
+            new InvalidEventRuntime(mode),
+            new RejectingWaiter());
+
+        Assert.True(completed.Succeeded, completed.Error?.SafeMessage);
+        Assert.Equal(TurnStatus.Failed, completed.Data!.Status);
+        ThreadAggregate aggregate = test.Threads.Read(test.ThreadId).Aggregate!;
+        TurnRecord turn = Assert.Single(aggregate.Turns);
+        Assert.Equal(TurnStatus.Failed, turn.Status);
+        Assert.Equal("turn-runtime-failed", turn.ErrorCode);
+        Assert.DoesNotContain(
+            test.Threads.ReadTimelinePage(test.ThreadId, 0, 100).Items,
+            item => item.Type == TimelineItemType.AssistantFinal);
+    }
+
+    [Fact]
     public async Task Cancel_PersistsCancelingBeforeCooperativeTokenAndConvergesCanceled()
     {
         using Harness test = new("pause for cancellation");
@@ -63,6 +114,33 @@ public sealed class TurnExecutionApplicationServiceTests
         ApplicationResult<TurnExecutionStateProjection> canceled = await execution;
         Assert.True(canceled.Succeeded, canceled.Error?.SafeMessage);
         Assert.Equal(TurnStatus.Canceled, canceled.Data!.Status);
+    }
+
+    [Fact]
+    public async Task Runtime_disconnect_releases_worker_and_fails_turn_interrupted()
+    {
+        using Harness test = new("pause until AppHost disconnect");
+        TurnExecutionStateProjection started = test.Start("start-disconnect").Data!;
+        BlockingRuntime runtime = new();
+        using CancellationTokenSource cancellation = new();
+        Task<ApplicationResult<TurnExecutionStateProjection>> execution = test.Service.ExecuteAsync(
+            test.Snapshot,
+            test.ThreadId,
+            started.TurnId,
+            runtime,
+            new RejectingWaiter(),
+            cancellationToken: cancellation.Token);
+        await runtime.Entered.Task.WaitAsync(TimeSpan.FromSeconds(5));
+
+        cancellation.Cancel();
+        ApplicationResult<TurnExecutionStateProjection> interrupted =
+            await execution.WaitAsync(TimeSpan.FromSeconds(5));
+
+        Assert.True(interrupted.Succeeded, interrupted.Error?.SafeMessage);
+        Assert.Equal(TurnStatus.Failed, interrupted.Data!.Status);
+        TurnRecord turn = Assert.Single(test.Threads.Read(test.ThreadId).Aggregate!.Turns);
+        Assert.Equal("interrupted", turn.StopReason);
+        Assert.Equal("turn-disconnected", turn.ErrorCode);
     }
 
     [Fact]
@@ -213,6 +291,33 @@ public sealed class TurnExecutionApplicationServiceTests
         }
     }
 
+    private sealed class DenyingWaiter(Harness test) : IInteractiveApprovalWaiter
+    {
+        public ValueTask<InteractiveApprovalDecision> WaitAsync(
+            DurableApprovalProjection request,
+            CancellationToken cancellationToken)
+        {
+            ThreadAggregate aggregate = test.Threads.Read(test.ThreadId).Aggregate!;
+            ApplicationResult<TurnExecutionStateProjection> resolved = test.Service.ResolveApproval(
+                new ApprovalResolveRequest(
+                    test.Snapshot,
+                    test.ThreadId,
+                    request.TurnId,
+                    request.RequestId,
+                    "deny",
+                    aggregate.Record.Revision,
+                    request.TurnRevision,
+                    request.ApprovalRevision,
+                    "deny-1"));
+            Assert.True(resolved.Succeeded, resolved.Error?.SafeMessage);
+            return ValueTask.FromResult(new InteractiveApprovalDecision(
+                "deny",
+                "deny-1",
+                request.TurnRevision,
+                request.ApprovalRevision));
+        }
+    }
+
     private sealed class BlockingRuntime : ITurnExecutionRuntime
     {
         public TaskCompletionSource Entered { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
@@ -223,6 +328,36 @@ public sealed class TurnExecutionApplicationServiceTests
             Entered.TrySetResult();
             await Task.Delay(Timeout.InfiniteTimeSpan, cancellationToken);
             return new TurnRuntimeResult("completed", "completed", null, "unreachable");
+        }
+    }
+
+    private sealed class InvalidEventRuntime(string mode) : ITurnExecutionRuntime
+    {
+        public async Task<TurnRuntimeResult> ExecuteAsync(
+            TurnExecutionInput input,
+            ITurnExecutionEventSink eventSink,
+            IInteractiveApprovalGateway approvalGateway,
+            CancellationToken cancellationToken)
+        {
+            long firstSequence = mode == "gap" ? 2 : 1;
+            await eventSink.EmitAsync(new TurnRuntimeEvent(
+                firstSequence,
+                "correlation-one",
+                TurnRuntimeEventKind.Model,
+                "success",
+                "First runtime event.",
+                DateTimeOffset.UtcNow), cancellationToken);
+            if (mode == "duplicate-correlation")
+            {
+                await eventSink.EmitAsync(new TurnRuntimeEvent(
+                    2,
+                    "correlation-one",
+                    TurnRuntimeEventKind.Model,
+                    "success",
+                    "Duplicated runtime correlation.",
+                    DateTimeOffset.UtcNow), cancellationToken);
+            }
+            return new TurnRuntimeResult("completed", "completed", null, "Invalid success.");
         }
     }
 }

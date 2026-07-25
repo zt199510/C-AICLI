@@ -29,7 +29,9 @@ public sealed class ApplicationArchitectureTests
         Assert.Equal(
             ["CSharpAiCli.Core", "CSharpAiCli.ProjectPacks"],
             application.Order(StringComparer.Ordinal));
-        Assert.Equal(["CSharpAiCli.Application"], appHost);
+        Assert.Equal(
+            ["CSharpAiCli.Application", "CSharpAiCli.Core"],
+            appHost.Order(StringComparer.Ordinal));
         Assert.Contains("CSharpAiCli.Application", cli);
         Assert.DoesNotContain("CSharpAiCli.Cli", appHost);
     }
@@ -90,10 +92,11 @@ public sealed class ApplicationArchitectureTests
         Assert.Contains("thread.list", contract, StringComparison.Ordinal);
         Assert.Contains("thread.changed", contract, StringComparison.Ordinal);
         Assert.DoesNotContain("ThreadStore", appHost, StringComparison.Ordinal);
-        Assert.DoesNotContain("CliEnvironmentSnapshot", appHost, StringComparison.Ordinal);
-        Assert.DoesNotContain("CSharpAiCli.Core", appHost, StringComparison.Ordinal);
         Assert.DoesNotContain("CSharpAiCli.ProjectPacks", appHost, StringComparison.Ordinal);
         Assert.DoesNotContain("CSharpAiCli.Cli", appHost, StringComparison.Ordinal);
+        Assert.Contains("DesktopAgentTurnExecutionRuntime", appHost, StringComparison.Ordinal);
+        Assert.Contains("BuiltInToolRegistryFactory", appHost, StringComparison.Ordinal);
+        Assert.DoesNotContain("new DeterministicFakeTurnExecutionRuntime", appHost, StringComparison.Ordinal);
         Assert.DoesNotContain(".caicli/threads", appHost, StringComparison.OrdinalIgnoreCase);
         Assert.DoesNotContain("Console.Write", appHost, StringComparison.Ordinal);
         Assert.Contains("Console.Error.WriteLine", appHost, StringComparison.Ordinal);

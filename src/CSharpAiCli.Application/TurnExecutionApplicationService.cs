@@ -131,7 +131,7 @@ public sealed class TurnExecutionApplicationService
         try
         {
             TurnRuntimeResult result = await runtime.ExecuteAsync(new TurnExecutionInput(
-                executionAggregate.Record.WorkspaceId, executionAggregate.Record.WorkspaceRootIdentity, threadId, turnId,
+                snapshot, executionAggregate.Record.WorkspaceId, executionAggregate.Record.WorkspaceRootIdentity, threadId, turnId,
                 executionInputHash, executionInput), sink, approval, cancellationToken).ConfigureAwait(false);
             ThreadStoreReadResult beforeTerminal = store.Read(threadId, CancellationToken.None);
             if (!beforeTerminal.Succeeded || beforeTerminal.Aggregate is null) return ThreadFailure(beforeTerminal.Diagnostic);
@@ -150,12 +150,57 @@ public sealed class TurnExecutionApplicationService
             if (!cancelRead.Succeeded || cancelRead.Aggregate is null) return ThreadFailure(cancelRead.Diagnostic);
             TurnRecord current = cancelRead.Aggregate.Turns.Single(candidate => candidate.TurnId == turnId);
             if (current.Status != TurnStatus.Canceling)
-                return Failure("turn-cancel-recovery-required", ApplicationErrorCategory.Conflict, "Execution stopped without a persisted cancel request.");
+            {
+                ThreadStoreMutationResult interrupted = store.TransitionTurn(
+                    threadId,
+                    turnId,
+                    cancelRead.Aggregate.Record.Revision,
+                    TurnStatus.Failed,
+                    NowAtLeast(cancelRead.Aggregate.Record.UpdatedAtUtc),
+                    "interrupted",
+                    "turn-disconnected");
+                if (!interrupted.Succeeded || interrupted.Aggregate is null)
+                    return Failure("turn-cancel-recovery-required", ApplicationErrorCategory.Conflict,
+                        "Execution stopped without a durable terminal state.");
+                TurnRecord interruptedTurn = interrupted.Aggregate.Turns.Single(candidate => candidate.TurnId == turnId);
+                TurnExecutionStateProjection interruptedProjection = Project(
+                    interrupted.Aggregate,
+                    interruptedTurn,
+                    false);
+                if (committed is not null) await committed(interruptedProjection).ConfigureAwait(false);
+                return ApplicationResult<TurnExecutionStateProjection>.Success(interruptedProjection);
+            }
             ThreadStoreMutationResult canceled = store.TransitionTurn(threadId, turnId, cancelRead.Aggregate.Record.Revision,
                 TurnStatus.Canceled, NowAtLeast(cancelRead.Aggregate.Record.UpdatedAtUtc), "canceled");
             if (!canceled.Succeeded || canceled.Aggregate is null) return ThreadFailure(canceled.Diagnostic);
             TurnRecord canceledTurn = canceled.Aggregate.Turns.Single(candidate => candidate.TurnId == turnId);
             TurnExecutionStateProjection projection = Project(canceled.Aggregate, canceledTurn, false);
+            if (committed is not null) await committed(projection).ConfigureAwait(false);
+            return ApplicationResult<TurnExecutionStateProjection>.Success(projection);
+        }
+        catch (Exception)
+        {
+            ThreadStoreReadResult failureRead = store.Read(threadId, CancellationToken.None);
+            if (!failureRead.Succeeded || failureRead.Aggregate is null)
+                return Failure("turn-runtime-recovery-required", ApplicationErrorCategory.CorruptState,
+                    "Turn execution failed and durable state requires recovery.");
+            TurnRecord current = failureRead.Aggregate.Turns.Single(candidate => candidate.TurnId == turnId);
+            if (TurnStatus.IsTerminal(current.Status))
+                return ApplicationResult<TurnExecutionStateProjection>.Success(
+                    Project(failureRead.Aggregate, current, false));
+            ThreadStoreMutationResult failed = store.TransitionTurn(
+                threadId,
+                turnId,
+                failureRead.Aggregate.Record.Revision,
+                TurnStatus.Failed,
+                NowAtLeast(failureRead.Aggregate.Record.UpdatedAtUtc),
+                "runtime-failure",
+                "turn-runtime-failed");
+            if (!failed.Succeeded || failed.Aggregate is null)
+                return Failure("turn-runtime-recovery-required", ApplicationErrorCategory.CorruptState,
+                    "Turn execution failed and durable state requires recovery.");
+            TurnRecord failedTurn = failed.Aggregate.Turns.Single(candidate => candidate.TurnId == turnId);
+            TurnExecutionStateProjection projection = Project(failed.Aggregate, failedTurn, false);
             if (committed is not null) await committed(projection).ConfigureAwait(false);
             return ApplicationResult<TurnExecutionStateProjection>.Success(projection);
         }
@@ -295,9 +340,18 @@ public sealed class TurnExecutionApplicationService
         string turnId,
         Func<TurnExecutionStateProjection, ValueTask>? committed) : ITurnExecutionEventSink
     {
+        private readonly HashSet<string> correlationIds = new(StringComparer.Ordinal);
+        private long nextEventSequence = 1;
+
         public async ValueTask EmitAsync(TurnRuntimeEvent runtimeEvent, CancellationToken cancellationToken)
         {
             cancellationToken.ThrowIfCancellationRequested();
+            if (runtimeEvent.EventSequence != nextEventSequence)
+                throw new InvalidOperationException("Runtime event sequence is not strictly monotonic.");
+            if (string.IsNullOrWhiteSpace(runtimeEvent.CorrelationId) ||
+                !correlationIds.Add(runtimeEvent.CorrelationId))
+                throw new InvalidOperationException("Runtime event correlation identity is invalid or duplicated.");
+            nextEventSequence++;
             ThreadStoreReadResult read = store.Read(threadId, cancellationToken);
             if (!read.Succeeded || read.Aggregate is null) throw new InvalidOperationException(read.Diagnostic?.SafeMessage);
             DateTimeOffset timestamp = runtimeEvent.TimestampUtc.ToUniversalTime();
@@ -351,7 +405,18 @@ public sealed class TurnExecutionApplicationService
             TurnRecord waitingTurn = requested.Aggregate.Turns.Single(turn => turn.TurnId == turnId);
             DurableApprovalProjection projection = ProjectApproval(waitingTurn.ActiveApproval!);
             if (committed is not null) await committed(Project(requested.Aggregate, waitingTurn, false)).ConfigureAwait(false);
-            InteractiveApprovalDecision decision = await waiter.WaitAsync(projection, cancellationToken).ConfigureAwait(false);
+            using CancellationTokenSource expiry =
+                CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+            expiry.CancelAfter(TurnExecutionLimits.ApprovalLifetime);
+            InteractiveApprovalDecision decision;
+            try
+            {
+                decision = await waiter.WaitAsync(projection, expiry.Token).ConfigureAwait(false);
+            }
+            catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
+            {
+                throw new TimeoutException("Durable approval request expired.");
+            }
             ThreadStoreReadResult resolved = store.Read(threadId, cancellationToken);
             TurnRecord? resolvedTurn = resolved.Aggregate?.Turns.SingleOrDefault(turn => turn.TurnId == turnId);
             if (!resolved.Succeeded || resolved.Aggregate is null || resolvedTurn is null ||
@@ -372,6 +437,7 @@ public sealed class TurnExecutionApplicationService
         TurnRuntimeEventKind.Verification => (TimelineItemType.VerificationCompleted, Operation(value)),
         TurnRuntimeEventKind.Changes => (TimelineItemType.ChangesUpdated, new TimelinePayloadRecord { Changes = new TimelineChangesPayloadRecord(value.ChangedFileCount ?? 0) }),
         TurnRuntimeEventKind.Final => (TimelineItemType.AssistantFinal, new TimelinePayloadRecord { Message = new TimelineMessagePayloadRecord(value.Summary) }),
+        TurnRuntimeEventKind.Warning => (TimelineItemType.WarningRaised, new TimelinePayloadRecord { Warning = new TimelineWarningPayloadRecord(value.ErrorCode ?? "runtime-warning") }),
         _ => (TimelineItemType.AssistantMessage, new TimelinePayloadRecord { Message = new TimelineMessagePayloadRecord(value.Summary) })
     };
 

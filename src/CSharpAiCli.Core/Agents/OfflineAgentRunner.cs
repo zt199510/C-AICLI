@@ -15,13 +15,15 @@ public sealed class OfflineAgentRunner : IAgentRunner
     private readonly Func<DateTimeOffset> utcNowProvider;
     private readonly DiagnosticDurationClock durationClock;
     private readonly int maxIterations;
+    private readonly IAgentRunEventObserver? eventObserver;
 
     public OfflineAgentRunner(
         IToolCallingModel model,
         IToolExecutor toolExecutor,
         Func<DateTimeOffset>? utcNowProvider = null,
         int maxIterations = 8,
-        Func<long>? timestampProvider = null)
+        Func<long>? timestampProvider = null,
+        IAgentRunEventObserver? eventObserver = null)
     {
         ArgumentNullException.ThrowIfNull(model);
         ArgumentNullException.ThrowIfNull(toolExecutor);
@@ -35,6 +37,7 @@ public sealed class OfflineAgentRunner : IAgentRunner
         this.utcNowProvider = utcNowProvider ?? (() => DateTimeOffset.UtcNow);
         durationClock = new DiagnosticDurationClock(timestampProvider);
         this.maxIterations = maxIterations;
+        this.eventObserver = eventObserver;
     }
 
     public AgentRunResult Run(
@@ -1306,6 +1309,12 @@ public sealed class OfflineAgentRunner : IAgentRunner
         ToolExecutionResult GitDiffResult,
         VerificationResultSummary VerificationResult);
 
+    private void AddEvent(List<AgentRunEvent> events, AgentRunEvent agentEvent)
+    {
+        events.Add(agentEvent);
+        eventObserver?.OnEvent(agentEvent);
+    }
+
     private void RecordModelTurn(
         List<AgentRunEvent> events,
         AgentModelTurn turn,
@@ -1318,7 +1327,7 @@ public sealed class OfflineAgentRunner : IAgentRunner
             ["isFinal"] = turn.IsFinal ? "true" : "false"
         };
 
-        events.Add(new AgentRunEvent(
+        AddEvent(events, new AgentRunEvent(
             Type: "model.turn",
             Sequence: events.Count,
             Timestamp: utcNowProvider(),
@@ -1359,7 +1368,7 @@ public sealed class OfflineAgentRunner : IAgentRunner
             payload["currentDirectoryErrorCode"] = taskContext.CurrentDirectoryErrorCode;
         }
 
-        events.Add(new AgentRunEvent(
+        AddEvent(events, new AgentRunEvent(
             Type: "context.workspace",
             Sequence: events.Count,
             Timestamp: utcNowProvider(),
@@ -1393,7 +1402,7 @@ public sealed class OfflineAgentRunner : IAgentRunner
             payload["warnings"] = string.Join(" | ", taskContext.InstructionWarnings);
         }
 
-        events.Add(new AgentRunEvent(
+        AddEvent(events, new AgentRunEvent(
             Type: "context.instructions",
             Sequence: events.Count,
             Timestamp: utcNowProvider(),
@@ -1421,7 +1430,7 @@ public sealed class OfflineAgentRunner : IAgentRunner
             payload["sessionName"] = taskContext.SessionName!;
         }
 
-        events.Add(new AgentRunEvent(
+        AddEvent(events, new AgentRunEvent(
             Type: "context.session",
             Sequence: events.Count,
             Timestamp: utcNowProvider(),
@@ -1445,7 +1454,7 @@ public sealed class OfflineAgentRunner : IAgentRunner
             ["summaryTruncated"] = git.StatusSummaryTruncated ? "true" : "false"
         };
 
-        events.Add(new AgentRunEvent(
+        AddEvent(events, new AgentRunEvent(
             Type: "context.git.status",
             Sequence: events.Count,
             Timestamp: utcNowProvider(),
@@ -1470,7 +1479,7 @@ public sealed class OfflineAgentRunner : IAgentRunner
             return;
         }
 
-        events.Add(WorkflowReferenceEventFactory.Create(
+        AddEvent(events, WorkflowReferenceEventFactory.Create(
             references,
             events.Count,
             utcNowProvider()));
@@ -1488,7 +1497,7 @@ public sealed class OfflineAgentRunner : IAgentRunner
             ["summaryTruncated"] = git.DiffSummaryTruncated ? "true" : "false"
         };
 
-        events.Add(new AgentRunEvent(
+        AddEvent(events, new AgentRunEvent(
             Type: "context.git.diff",
             Sequence: events.Count,
             Timestamp: utcNowProvider(),
@@ -1525,7 +1534,7 @@ public sealed class OfflineAgentRunner : IAgentRunner
             payload["expertBoundary"] = expert.ToolBoundary;
         }
 
-        events.Add(new AgentRunEvent(
+        AddEvent(events, new AgentRunEvent(
             Type: "plan",
             Sequence: events.Count,
             Timestamp: utcNowProvider(),
@@ -1540,7 +1549,7 @@ public sealed class OfflineAgentRunner : IAgentRunner
         AgentToolCallRequest toolCall,
         AgentStep? step)
     {
-        events.Add(new AgentRunEvent(
+        AddEvent(events, new AgentRunEvent(
             Type: "tool.call",
             Sequence: events.Count,
             Timestamp: utcNowProvider(),
@@ -1575,7 +1584,7 @@ public sealed class OfflineAgentRunner : IAgentRunner
         AddPayloadValue(payload, "toolName", attempt.ToolName);
         AddPayloadValue(payload, "verificationStatus", attempt.VerificationStatus);
 
-        events.Add(new AgentRunEvent(
+        AddEvent(events, new AgentRunEvent(
             Type: "retry.attempt",
             Sequence: events.Count,
             Timestamp: utcNowProvider(),
@@ -1605,7 +1614,7 @@ public sealed class OfflineAgentRunner : IAgentRunner
         AddPayloadValue(payload, "toolName", input.ToolName);
         AddPayloadValue(payload, "verificationStatus", input.Verification?.Status);
 
-        events.Add(new AgentRunEvent(
+        AddEvent(events, new AgentRunEvent(
             Type: "retry.exhausted",
             Sequence: events.Count,
             Timestamp: utcNowProvider(),
@@ -1639,7 +1648,7 @@ public sealed class OfflineAgentRunner : IAgentRunner
         AddStructuredDiagnosticPayload(payload, result.StructuredPayload, "changedFileCount");
         AddStructuredDiagnosticPayload(payload, result.StructuredPayload, "verificationStatus");
 
-        events.Add(new AgentRunEvent(
+        AddEvent(events, new AgentRunEvent(
             Type: "tool.result",
             Sequence: events.Count,
             Timestamp: utcNowProvider(),
@@ -1683,7 +1692,7 @@ public sealed class OfflineAgentRunner : IAgentRunner
 
         bool hasPreview = structuredPayload is not null &&
             structuredPayload.ContainsKey("dryRunPreview");
-        events.Add(new AgentRunEvent(
+        AddEvent(events, new AgentRunEvent(
             Type: "patch.preview",
             Sequence: events.Count,
             Timestamp: utcNowProvider(),
@@ -1703,7 +1712,7 @@ public sealed class OfflineAgentRunner : IAgentRunner
         }
 
         bool approved = string.Equals(result.ApprovalStatus, "approved", StringComparison.Ordinal);
-        events.Add(new AgentRunEvent(
+        AddEvent(events, new AgentRunEvent(
             Type: "patch.approval",
             Sequence: events.Count,
             Timestamp: utcNowProvider(),
@@ -1731,7 +1740,7 @@ public sealed class OfflineAgentRunner : IAgentRunner
         AddPayloadValue(applyPayload, "replacements", ReadRawText(structuredPayload, "replacements"));
         AddPayloadValue(applyPayload, "hasDiff", ReadRawText(structuredPayload, "hasDiff"));
 
-        events.Add(new AgentRunEvent(
+        AddEvent(events, new AgentRunEvent(
             Type: "patch.apply",
             Sequence: events.Count,
             Timestamp: utcNowProvider(),
@@ -1767,7 +1776,7 @@ public sealed class OfflineAgentRunner : IAgentRunner
         AddPayloadValue(payload, "gitDiffSummary", Bound(postPatch.GitDiffResult.Summary, MaxSummaryCharacters).Text);
 
         bool succeeded = postPatch.GitStatusResult.Succeeded && postPatch.GitDiffResult.Succeeded;
-        events.Add(new AgentRunEvent(
+        AddEvent(events, new AgentRunEvent(
             Type: "changed.files",
             Sequence: events.Count,
             Timestamp: utcNowProvider(),
@@ -1805,7 +1814,7 @@ public sealed class OfflineAgentRunner : IAgentRunner
         AddPayloadValue(payload, "stdout", verification.Stdout);
         AddPayloadValue(payload, "stderr", verification.Stderr);
 
-        events.Add(new AgentRunEvent(
+        AddEvent(events, new AgentRunEvent(
             Type: "verification.result",
             Sequence: events.Count,
             Timestamp: utcNowProvider(),
@@ -1837,7 +1846,7 @@ public sealed class OfflineAgentRunner : IAgentRunner
 
         bool truncated = payload.TryGetValue("truncated", out string? truncatedText) &&
             string.Equals(truncatedText, "true", StringComparison.OrdinalIgnoreCase);
-        events.Add(new AgentRunEvent(
+        AddEvent(events, new AgentRunEvent(
             Type: "plan",
             Sequence: events.Count,
             Timestamp: utcNowProvider(),
@@ -1854,7 +1863,7 @@ public sealed class OfflineAgentRunner : IAgentRunner
         long? durationMs,
         AgentStep? step)
     {
-        events.Add(new AgentRunEvent(
+        AddEvent(events, new AgentRunEvent(
             Type: "tool.result",
             Sequence: events.Count,
             Timestamp: utcNowProvider(),
@@ -1878,7 +1887,7 @@ public sealed class OfflineAgentRunner : IAgentRunner
         string finalText,
         AgentRunState state)
     {
-        events.Add(new AgentRunEvent(
+        AddEvent(events, new AgentRunEvent(
             Type: "final.response",
             Sequence: events.Count,
             Timestamp: utcNowProvider(),
@@ -1893,7 +1902,7 @@ public sealed class OfflineAgentRunner : IAgentRunner
         AgentStep? step,
         long? durationMs = null)
     {
-        events.Add(new AgentRunEvent(
+        AddEvent(events, new AgentRunEvent(
             Type: "agent.error",
             Sequence: events.Count,
             Timestamp: utcNowProvider(),
