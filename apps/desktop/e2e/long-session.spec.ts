@@ -39,6 +39,10 @@ test("long timeline, bounded diff, and terminal output survive repeated reloads"
 
     // The first of the five frozen reloads warms the renderer. Both sides of the
     // retention comparison then use the same fixed 30-second sampling window.
+    // Working-set retention compares the warm window peak with the settled
+    // post-workload median. Windows may trim an otherwise unchanged idle
+    // renderer's resident pages, while the beginning of the post-workload
+    // window can still contain transiently resident pages.
     await page.reload();
     await page.locator(".thread-select").click({ force: true });
     await expect(page.getByText("80 loaded items")).toBeVisible();
@@ -108,7 +112,7 @@ test("long timeline, bounded diff, and terminal output survive repeated reloads"
     diffFiles: 50,
     terminalProducedBytes: 70 * 1024,
     terminalRetainedBytes: 64 * 1024,
-    sampling: { warmBaselineSeconds: idleRecoverySeconds, postWorkloadIdleSeconds: idleRecoverySeconds, sampleIntervalSeconds, settleSeconds: idleRecoverySeconds - ((settledSampleCount - 1) * sampleIntervalSeconds), settledSampleCount, statistic: "median-of-settled-suffix" },
+    sampling: { warmBaselineSeconds: idleRecoverySeconds, postWorkloadIdleSeconds: idleRecoverySeconds, sampleIntervalSeconds, settleSeconds: idleRecoverySeconds - ((settledSampleCount - 1) * sampleIntervalSeconds), settledSampleCount, workingSetStatistic: "warm-window-peak-to-post-idle-settled-median", privateBytesStatistic: "median-of-settled-suffix" },
     retention,
     warmBaseline,
     reloadSamples,
@@ -134,7 +138,7 @@ test("long timeline, bounded diff, and terminal output survive repeated reloads"
 interface ProcessMetric { readonly pid: number; readonly role: string; readonly workingSetBytes: number; readonly privateBytes: number }
 interface RoleSnapshot { readonly role: string; readonly processCount: number; readonly workingSetBytes: number; readonly privateBytes: number }
 interface ProcessSnapshot { readonly capturedAtUtc: string; readonly processes: readonly ProcessMetric[]; readonly roles: readonly RoleSnapshot[] }
-interface SamplingWindow { readonly durationSeconds: number; readonly sampleIntervalSeconds: number; readonly settleSeconds: number; readonly settledSampleCount: number; readonly samples: readonly ProcessSnapshot[]; readonly rendererSettledMedian: { readonly workingSetBytes: number; readonly privateBytes: number } }
+interface SamplingWindow { readonly durationSeconds: number; readonly sampleIntervalSeconds: number; readonly settleSeconds: number; readonly settledSampleCount: number; readonly samples: readonly ProcessSnapshot[]; readonly rendererWorkingSetPeakBytes: number; readonly rendererSettledMedian: { readonly workingSetBytes: number; readonly privateBytes: number } }
 interface RetentionResult { readonly reloadTransientPeakWorkingSetPercent: number; readonly idleWorkingSetPercent: number; readonly idlePrivateBytesPercent: number }
 
 async function processSnapshot(application: ElectronApplication): Promise<ProcessSnapshot> {
@@ -178,6 +182,7 @@ async function captureSamplingWindow(application: ElectronApplication, durationS
     settleSeconds: durationSeconds - ((settledSampleCount - 1) * intervalSeconds),
     settledSampleCount,
     samples,
+    rendererWorkingSetPeakBytes: Math.max(...samples.map((sample) => roleBytes(sample, "Tab", "workingSetBytes"))),
     rendererSettledMedian: {
       workingSetBytes: median(settledSamples.map((sample) => roleBytes(sample, "Tab", "workingSetBytes"))),
       privateBytes: median(settledSamples.map((sample) => roleBytes(sample, "Tab", "privateBytes"))),
@@ -192,8 +197,8 @@ async function waitForStableRenderer(application: ElectronApplication): Promise<
 function calculateRetention(baseline: SamplingWindow, idle: SamplingWindow, reloads: readonly ProcessSnapshot[]): RetentionResult {
   const reloadPeak = Math.max(...reloads.map((sample) => roleBytes(sample, "Tab", "workingSetBytes")));
   return {
-    reloadTransientPeakWorkingSetPercent: percentChange(baseline.rendererSettledMedian.workingSetBytes, reloadPeak),
-    idleWorkingSetPercent: percentChange(baseline.rendererSettledMedian.workingSetBytes, idle.rendererSettledMedian.workingSetBytes),
+    reloadTransientPeakWorkingSetPercent: percentChange(baseline.rendererWorkingSetPeakBytes, reloadPeak),
+    idleWorkingSetPercent: percentChange(baseline.rendererWorkingSetPeakBytes, idle.rendererSettledMedian.workingSetBytes),
     idlePrivateBytesPercent: percentChange(baseline.rendererSettledMedian.privateBytes, idle.rendererSettledMedian.privateBytes),
   };
 }
