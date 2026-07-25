@@ -297,6 +297,45 @@ public sealed class Week79ProductionRuntimeTests
         Assert.Empty(gateway.Actions);
     }
 
+    [Fact]
+    public async Task Desktop_approval_waiter_rotates_identity_after_each_resolved_action()
+    {
+        DesktopWriteExecutionSupervisor.ApprovalWaiter waiter = new();
+        DurableApprovalProjection first = Approval("approval_first", 1);
+        DurableApprovalProjection second = Approval("approval_second", 2);
+
+        ValueTask<InteractiveApprovalDecision> firstPending =
+            waiter.WaitAsync(first, CancellationToken.None);
+        Assert.True(waiter.Matches(first.RequestId));
+        Assert.True(waiter.TryResolve(new InteractiveApprovalDecision(
+            "approve", "decision-first", first.TurnRevision, first.ApprovalRevision)));
+        Assert.Equal("decision-first", (await firstPending).ClientMutationId);
+
+        ValueTask<InteractiveApprovalDecision> secondPending =
+            waiter.WaitAsync(second, CancellationToken.None);
+        Assert.False(waiter.Matches(first.RequestId));
+        Assert.True(waiter.Matches(second.RequestId));
+        Assert.True(waiter.TryResolve(new InteractiveApprovalDecision(
+            "approve", "decision-second", second.TurnRevision, second.ApprovalRevision)));
+        Assert.Equal("decision-second", (await secondPending).ClientMutationId);
+    }
+
+    private static DurableApprovalProjection Approval(string requestId, long approvalRevision) => new(
+        requestId,
+        "workspace_test",
+        "thread_0123456789abcdef01234567",
+        "turn_0123456789abcdef0123456789abcdef",
+        approvalRevision,
+        approvalRevision,
+        "desktop-durable-approval",
+        new string('a', 64),
+        "write",
+        "workspace.apply_patch",
+        "workspace-file",
+        "operation=write; target=workspace-file",
+        DateTimeOffset.UtcNow,
+        DateTimeOffset.UtcNow.AddMinutes(30));
+
     private static TurnExecutionInput CreateInput(CliEnvironmentSnapshot snapshot) => new(
         snapshot,
         "workspace_test",

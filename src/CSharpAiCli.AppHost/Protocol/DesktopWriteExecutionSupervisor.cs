@@ -149,7 +149,7 @@ internal sealed class DesktopWriteExecutionSupervisor : IDisposable
         ApplicationResult<TurnExecutionStateProjection>.Failure(new ApplicationError(
             code, ApplicationErrorCategory.Conflict, message, false));
 
-    private sealed class ApprovalWaiter : IInteractiveApprovalWaiter
+    internal sealed class ApprovalWaiter : IInteractiveApprovalWaiter
     {
         private readonly object sync = new();
         private TaskCompletionSource<InteractiveApprovalDecision>? completion;
@@ -160,7 +160,8 @@ internal sealed class DesktopWriteExecutionSupervisor : IDisposable
             Task<InteractiveApprovalDecision> task;
             lock (sync)
             {
-                if (completion is not null) throw new InvalidOperationException("Only one approval may be active per turn.");
+                if (completion is { Task.IsCompleted: false })
+                    throw new InvalidOperationException("Only one approval may be active per turn.");
                 requestId = request.RequestId;
                 completion = new TaskCompletionSource<InteractiveApprovalDecision>(TaskCreationOptions.RunContinuationsAsynchronously);
                 task = completion.Task;
