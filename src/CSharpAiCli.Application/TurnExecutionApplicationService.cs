@@ -404,18 +404,26 @@ public sealed class TurnExecutionApplicationService
             if (!requested.Succeeded || requested.Aggregate is null) throw new InvalidOperationException(requested.Diagnostic?.SafeMessage);
             TurnRecord waitingTurn = requested.Aggregate.Turns.Single(turn => turn.TurnId == turnId);
             DurableApprovalProjection projection = ProjectApproval(waitingTurn.ActiveApproval!);
-            if (committed is not null) await committed(Project(requested.Aggregate, waitingTurn, false)).ConfigureAwait(false);
             using CancellationTokenSource expiry =
                 CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
             expiry.CancelAfter(TurnExecutionLimits.ApprovalLifetime);
+            ValueTask<InteractiveApprovalDecision> pendingDecision =
+                waiter.WaitAsync(projection, expiry.Token);
             InteractiveApprovalDecision decision;
             try
             {
-                decision = await waiter.WaitAsync(projection, expiry.Token).ConfigureAwait(false);
+                if (committed is not null)
+                    await committed(Project(requested.Aggregate, waitingTurn, false)).ConfigureAwait(false);
+                decision = await pendingDecision.ConfigureAwait(false);
             }
             catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
             {
                 throw new TimeoutException("Durable approval request expired.");
+            }
+            catch
+            {
+                expiry.Cancel();
+                throw;
             }
             ThreadStoreReadResult resolved = store.Read(threadId, cancellationToken);
             TurnRecord? resolvedTurn = resolved.Aggregate?.Turns.SingleOrDefault(turn => turn.TurnId == turnId);

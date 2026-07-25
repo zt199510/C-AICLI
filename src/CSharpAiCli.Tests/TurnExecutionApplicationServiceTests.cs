@@ -42,6 +42,35 @@ public sealed class TurnExecutionApplicationServiceTests
     }
 
     [Fact]
+    public async Task Approval_waiter_is_registered_before_waiting_state_is_published()
+    {
+        using Harness test = new("[approval] perform the controlled fixture write");
+        TurnExecutionStateProjection started = test.Start("start-approval-order").Data!;
+        DeferredResolvingWaiter waiter = new(test);
+        bool registeredBeforeCommit = false;
+
+        ApplicationResult<TurnExecutionStateProjection> completed = await test.Service.ExecuteAsync(
+            test.Snapshot,
+            test.ThreadId,
+            started.TurnId,
+            new DeterministicFakeTurnExecutionRuntime(),
+            waiter,
+            committed: state =>
+            {
+                if (state.Approval is not null)
+                {
+                    registeredBeforeCommit = waiter.Request?.RequestId == state.Approval.RequestId;
+                    waiter.Resolve();
+                }
+                return ValueTask.CompletedTask;
+            });
+
+        Assert.True(completed.Succeeded, completed.Error?.SafeMessage);
+        Assert.True(registeredBeforeCommit);
+        Assert.Equal(TurnStatus.Completed, completed.Data!.Status);
+    }
+
+    [Fact]
     public async Task Approval_denial_is_durable_and_terminal_without_retry()
     {
         using Harness test = new("[approval] deny the controlled fixture write");
@@ -313,6 +342,47 @@ public sealed class TurnExecutionApplicationServiceTests
             return ValueTask.FromResult(new InteractiveApprovalDecision(
                 "deny",
                 "deny-1",
+                request.TurnRevision,
+                request.ApprovalRevision));
+        }
+    }
+
+    private sealed class DeferredResolvingWaiter(Harness test) : IInteractiveApprovalWaiter
+    {
+        private readonly TaskCompletionSource<InteractiveApprovalDecision> completion =
+            new(TaskCreationOptions.RunContinuationsAsynchronously);
+
+        public DurableApprovalProjection? Request { get; private set; }
+
+        public ValueTask<InteractiveApprovalDecision> WaitAsync(
+            DurableApprovalProjection request,
+            CancellationToken cancellationToken)
+        {
+            Request = request;
+            return new ValueTask<InteractiveApprovalDecision>(
+                completion.Task.WaitAsync(cancellationToken));
+        }
+
+        public void Resolve()
+        {
+            DurableApprovalProjection request =
+                Request ?? throw new InvalidOperationException("Approval waiter was not registered.");
+            ThreadAggregate aggregate = test.Threads.Read(test.ThreadId).Aggregate!;
+            ApplicationResult<TurnExecutionStateProjection> resolved = test.Service.ResolveApproval(
+                new ApprovalResolveRequest(
+                    test.Snapshot,
+                    test.ThreadId,
+                    request.TurnId,
+                    request.RequestId,
+                    "approve",
+                    aggregate.Record.Revision,
+                    request.TurnRevision,
+                    request.ApprovalRevision,
+                    "approve-deferred"));
+            Assert.True(resolved.Succeeded, resolved.Error?.SafeMessage);
+            completion.TrySetResult(new InteractiveApprovalDecision(
+                "approve",
+                "approve-deferred",
                 request.TurnRevision,
                 request.ApprovalRevision));
         }
