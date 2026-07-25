@@ -1,6 +1,6 @@
 # Week 79 执行计划：Desktop 生产真实模型 Runtime、持久化审批与 Preview Gate 续跑
 
-状态：Ready
+状态：In Progress
 
 创建日期：2026-07-25
 

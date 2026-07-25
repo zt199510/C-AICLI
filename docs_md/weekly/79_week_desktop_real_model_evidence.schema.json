@@ -1,0 +1,140 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://caicli.local/schemas/week79-desktop-real-model-v1.json",
+  "title": "C-AICLI Week 79 Desktop Real-model Evidence",
+  "description": "Versioned, redacted evidence envelope for Week 79. Secrets, raw prompts or responses, command environments, absolute paths, raw diagnostics, and unsanitized stderr are forbidden by the companion validator.",
+  "type": "object",
+  "required": [
+    "schemaVersion",
+    "evidenceKind",
+    "capturedAtUtc",
+    "sourceRevision",
+    "sourceDirty",
+    "packageIdentity",
+    "appHostIdentity",
+    "status",
+    "summary",
+    "checks",
+    "counts",
+    "durationMilliseconds",
+    "cleanupDelta"
+  ],
+  "properties": {
+    "schemaVersion": {
+      "const": "week79-desktop-real-model/v1"
+    },
+    "evidenceKind": {
+      "enum": [
+        "manifest",
+        "architecture",
+        "credential-free",
+        "real-model-readonly",
+        "real-model-write",
+        "recovery",
+        "resource-summary",
+        "final-summary"
+      ]
+    },
+    "capturedAtUtc": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "sourceRevision": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{40}$"
+    },
+    "sourceDirty": {
+      "type": "boolean"
+    },
+    "packageIdentity": {
+      "$ref": "#/$defs/identity"
+    },
+    "appHostIdentity": {
+      "$ref": "#/$defs/identity"
+    },
+    "status": {
+      "enum": [
+        "NotRun",
+        "Running",
+        "Passed",
+        "Failed",
+        "Skipped",
+        "Unproven",
+        "Blocked",
+        "Superseded"
+      ]
+    },
+    "summary": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 1000
+    },
+    "checks": {
+      "type": "array",
+      "items": {
+        "type": "object"
+      }
+    },
+    "counts": {
+      "type": "object"
+    },
+    "durationMilliseconds": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "cleanupDelta": {
+      "type": "object",
+      "required": [
+        "process",
+        "temporary",
+        "configuration"
+      ],
+      "properties": {
+        "process": {
+          "type": "integer"
+        },
+        "temporary": {
+          "type": "integer"
+        },
+        "configuration": {
+          "type": "integer"
+        }
+      },
+      "additionalProperties": false
+    }
+  },
+  "$defs": {
+    "identity": {
+      "type": "object",
+      "required": [
+        "state",
+        "sha256"
+      ],
+      "properties": {
+        "state": {
+          "enum": [
+            "NotBuilt",
+            "Observed",
+            "Superseded"
+          ]
+        },
+        "sha256": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "pattern": "^[0-9A-F]{64}$"
+        },
+        "bytes": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "minimum": 0
+        }
+      },
+      "additionalProperties": false
+    }
+  },
+  "additionalProperties": true
+}
