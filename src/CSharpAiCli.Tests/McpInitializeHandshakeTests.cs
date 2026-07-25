@@ -396,9 +396,20 @@ public sealed class McpInitializeHandshakeTests
 
         public void Dispose()
         {
-            if (Directory.Exists(Path))
+            DateTime deadline = DateTime.UtcNow.AddSeconds(2);
+            while (Directory.Exists(Path))
             {
-                Directory.Delete(Path, recursive: true);
+                try
+                {
+                    Directory.Delete(Path, recursive: true);
+                    return;
+                }
+                catch (Exception exception) when (
+                    exception is IOException or UnauthorizedAccessException &&
+                    DateTime.UtcNow < deadline)
+                {
+                    Thread.Sleep(50);
+                }
             }
         }
     }
