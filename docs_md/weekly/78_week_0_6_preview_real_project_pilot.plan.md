@@ -1,6 +1,6 @@
 # Week 78 执行计划：0.6.0 Preview 状态收口与真实项目试用
 
-状态：In Progress
+状态：Completed / Blocked（2026-07-24 收尾；Desktop 生产 AppHost 缺少真实模型 runtime）
 
 创建日期：2026-07-23
 
