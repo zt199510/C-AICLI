@@ -24,6 +24,66 @@ public sealed class TurnExecutionApplicationServiceTests
     }
 
     [Fact]
+    public async Task Sequential_turns_do_not_reuse_timeline_item_identity()
+    {
+        using Harness test = new("Run the first deterministic fixture");
+        TurnExecutionStateProjection first = test.Start("start-identity-first").Data!;
+        ApplicationResult<TurnExecutionStateProjection> firstCompleted =
+            await test.Service.ExecuteAsync(
+                test.Snapshot,
+                test.ThreadId,
+                first.TurnId,
+                new DeterministicFakeTurnExecutionRuntime(),
+                new RejectingWaiter());
+        Assert.True(firstCompleted.Succeeded, firstCompleted.Error?.SafeMessage);
+
+        ThreadAggregate afterFirst = test.Threads.Read(test.ThreadId).Aggregate!;
+        ComposerQueueRecord queue = test.Composer.Get(
+            test.WorkspaceId,
+            test.WorkspaceRoot,
+            test.ThreadId).Queue!;
+        Assert.True(test.Composer.Enqueue(
+            test.WorkspaceId,
+            test.WorkspaceRoot,
+            test.ThreadId,
+            queue.Revision,
+            "enqueue-identity-second",
+            test.Intent("Run the second deterministic fixture")).Succeeded);
+        queue = test.Composer.Get(
+            test.WorkspaceId,
+            test.WorkspaceRoot,
+            test.ThreadId).Queue!;
+        TurnExecutionStateProjection second = test.Service.Start(new TurnStartRequest(
+            test.Snapshot,
+            test.ThreadId,
+            afterFirst.Record.Revision,
+            queue.Revision,
+            "start-identity-second")).Data!;
+        ApplicationResult<TurnExecutionStateProjection> secondCompleted =
+            await test.Service.ExecuteAsync(
+                test.Snapshot,
+                test.ThreadId,
+                second.TurnId,
+                new DeterministicFakeTurnExecutionRuntime(),
+                new RejectingWaiter());
+        Assert.True(secondCompleted.Succeeded, secondCompleted.Error?.SafeMessage);
+
+        TimelineItemRecord[] timeline =
+            test.Threads.ReadTimelinePage(test.ThreadId, 0, 100).Items.ToArray();
+        string[] firstIds = timeline
+            .Where(item => item.TurnId == first.TurnId)
+            .Select(item => item.ItemId)
+            .ToArray();
+        string[] secondIds = timeline
+            .Where(item => item.TurnId == second.TurnId)
+            .Select(item => item.ItemId)
+            .ToArray();
+        Assert.NotEmpty(firstIds);
+        Assert.NotEmpty(secondIds);
+        Assert.Empty(firstIds.Intersect(secondIds, StringComparer.Ordinal));
+    }
+
+    [Fact]
     public async Task Approval_IsIdentityBoundAndResolvedBeforeRuntimeContinues()
     {
         using Harness test = new("[approval] perform the controlled fixture write");

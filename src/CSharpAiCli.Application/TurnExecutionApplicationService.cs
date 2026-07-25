@@ -457,7 +457,7 @@ public sealed class TurnExecutionApplicationService
     private static TimelineItemRecord Item(ThreadRecord thread, string turnId, string seed, string type, string status,
         string summary, DateTimeOffset timestamp, TimelinePayloadRecord payload) => new()
     {
-        ItemId = ThreadIdentity.CreateDeterministicItemId(seed, type, 0),
+        ItemId = ThreadIdentity.CreateDeterministicItemId($"{turnId}:{seed}", type, 0),
         ThreadId = thread.ThreadId,
         TurnId = turnId,
         Sequence = thread.CommittedSequence + 1,
