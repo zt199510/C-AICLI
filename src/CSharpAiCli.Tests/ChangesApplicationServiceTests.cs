@@ -9,6 +9,31 @@ namespace CSharpAiCli.Tests;
 public sealed class ChangesApplicationServiceTests
 {
     [Fact]
+    public void Query_does_not_project_git_failure_summary_as_changed_file()
+    {
+        using TempDirectory temp = TempDirectory.Create();
+        CliEnvironmentSnapshot snapshot = CreateSnapshot(temp.Path);
+        ChangesApplicationService service = new(
+            _ => new EmptyConversationStore(),
+            (_, _) => ToolExecutionResult.Failure(
+                ToolErrorCode.GitTimeout,
+                "Git command timed out."),
+            (_, _) => ToolExecutionResult.Failure(
+                ToolErrorCode.GitTimeout,
+                "Git command timed out."));
+
+        ApplicationResult<ChangesViewReport> result = service.Query(
+            new ChangesQueryRequest(snapshot));
+
+        Assert.True(result.Succeeded);
+        Assert.NotNull(result.Data);
+        Assert.Equal("failed", result.Data.Status);
+        Assert.False(result.Data.Dirty);
+        Assert.Empty(result.Data.ChangedFiles);
+        Assert.Equal(ToolErrorCode.GitTimeout, result.Data.GitStatusErrorCode);
+    }
+
+    [Fact]
     public void Query_projection_has_stable_text_golden_and_redacts_file_names()
     {
         using TempDirectory temp = TempDirectory.Create();

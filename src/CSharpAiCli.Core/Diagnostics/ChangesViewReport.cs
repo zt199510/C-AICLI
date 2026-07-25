@@ -122,7 +122,9 @@ public sealed record ChangesViewReport
         }
 
         ChangesViewSession? session = CreateSessionReport(transcript, sessionName, sessionPath, warnings);
-        IReadOnlyList<ChangesViewChangedFile> changedFiles = ParseChangedFiles(gitStatus.Summary);
+        IReadOnlyList<ChangesViewChangedFile> changedFiles = gitStatus.Succeeded
+            ? ParseChangedFiles(gitStatus.Summary)
+            : [];
         bool dirty = gitStatus.Succeeded && !IsCleanStatus(gitStatus.Summary);
         bool hardGitFailure = !gitStatus.Succeeded && !nonGit;
         string status = hardGitFailure

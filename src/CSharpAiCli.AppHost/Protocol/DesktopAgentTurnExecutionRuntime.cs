@@ -54,7 +54,7 @@ internal sealed class DesktopAgentTurnExecutionRuntime : ITurnExecutionRuntime
             Prompt: input.Intent.Prompt,
             Workspace: input.Snapshot.Workspace,
             Instructions: input.Snapshot.Instructions.Instructions,
-            Limits: AgentRunLimits.Default);
+            Limits: input.Snapshot.Configuration.AgentRunLimits);
         Channel<AgentRunEvent> channel = Channel.CreateBounded<AgentRunEvent>(
             new BoundedChannelOptions(TurnExecutionLimits.MaxEventBatchItems)
             {

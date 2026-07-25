@@ -155,6 +155,35 @@ public sealed class Week79ProductionRuntimeTests
     }
 
     [Fact]
+    public async Task Runtime_honors_workspace_agent_turn_limit()
+    {
+        using TestWorkspace workspace = new();
+        CliEnvironmentSnapshot snapshot = workspace.CreateSnapshot(
+            model: "gpt-test",
+            apiKey: "sk-test-value",
+            apiKeySource: "OPENAI_API_KEY",
+            agentRunLimits: new AgentRunLimits(
+                MaxTurns: 1,
+                MaxToolCalls: 4,
+                MaxRetries: 0,
+                ModelCallTimeout: TimeSpan.FromSeconds(5),
+                OverallTimeout: TimeSpan.FromSeconds(5)));
+        RepeatingPlanGateway gateway = new();
+        DesktopAgentTurnExecutionRuntime runtime = new(
+            new OpenAiAgentRunnerFactory((_, _) => gateway));
+
+        TurnRuntimeResult result = await runtime.ExecuteAsync(
+            CreateInput(snapshot),
+            new CollectingSink(),
+            new RejectingApprovalGateway(),
+            CancellationToken.None);
+
+        Assert.Equal("failed", result.Status);
+        Assert.Equal("agent-loop-limit-reached", result.ErrorCode);
+        Assert.Equal(2, gateway.Calls);
+    }
+
+    [Fact]
     public void Desktop_approval_policy_is_per_action_stable_and_redacted()
     {
         using TestWorkspace workspace = new();
@@ -349,6 +378,40 @@ public sealed class Week79ProductionRuntimeTests
             throw new NotSupportedException();
     }
 
+    private sealed class RepeatingPlanGateway : IOpenAiResponsesGateway
+    {
+        public int Calls { get; private set; }
+
+        public OpenAiResponseEnvelope CreateAgentResponse(
+            OpenAiAgentRequest request,
+            CancellationToken cancellationToken = default)
+        {
+            Calls++;
+            return new OpenAiResponseEnvelope(
+                $"response-{Calls}",
+                "gpt-test",
+                string.Empty,
+                [new OpenAiToolCall(
+                    $"call-{Calls}",
+                    "agent.plan",
+                    """{"goal":"Inspect the workspace."}""")]);
+        }
+
+        public OpenAiResponseEnvelope CreateResponse(
+            string model,
+            string prompt,
+            string? instructions = null,
+            CancellationToken cancellationToken = default) =>
+            throw new NotSupportedException();
+
+        public IEnumerable<OpenAiStreamingResponseUpdate> CreateResponseStreaming(
+            string model,
+            string prompt,
+            string? instructions = null,
+            CancellationToken cancellationToken = default) =>
+            throw new NotSupportedException();
+    }
+
     private sealed class TestWorkspace : IDisposable
     {
         public TestWorkspace()
@@ -362,7 +425,8 @@ public sealed class Week79ProductionRuntimeTests
         public CliEnvironmentSnapshot CreateSnapshot(
             string model = "not configured",
             string? apiKey = null,
-            string apiKeySource = "missing")
+            string apiKeySource = "missing",
+            AgentRunLimits? agentRunLimits = null)
         {
             WorkspaceContext workspace = WorkspaceContext.Detect(Root, Root);
             EffectiveConfiguration configuration = new(
@@ -378,7 +442,10 @@ public sealed class Week79ProductionRuntimeTests
                 ApiKeySource: apiKeySource,
                 LoadedConfigPaths: [],
                 Warnings: [],
-                ConfigSources: []);
+                ConfigSources: [])
+            {
+                AgentRunLimits = agentRunLimits ?? AgentRunLimits.Default
+            };
             return new CliEnvironmentSnapshot(
                 workspace,
                 configuration,

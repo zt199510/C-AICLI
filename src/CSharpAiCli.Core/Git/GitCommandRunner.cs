@@ -50,15 +50,18 @@ internal sealed class GitCommandRunner : IGitCommandRunner
         cancellationToken.ThrowIfCancellationRequested();
         try
         {
+            ProcessStartInfo startInfo = new(executable, arguments)
+            {
+                WorkingDirectory = workspaceRoot,
+                RedirectStandardInput = true,
+                RedirectStandardOutput = true,
+                RedirectStandardError = true,
+                UseShellExecute = false,
+                CreateNoWindow = true,
+            };
+            HardenEnvironment(startInfo);
             return RunProcess(
-                new ProcessStartInfo(executable, arguments)
-                {
-                    WorkingDirectory = workspaceRoot,
-                    RedirectStandardOutput = true,
-                    RedirectStandardError = true,
-                    UseShellExecute = false,
-                    CreateNoWindow = true,
-                },
+                startInfo,
                 DefaultSuccessfulExitCodes,
                 cancellationToken);
         }
@@ -85,6 +88,7 @@ internal sealed class GitCommandRunner : IGitCommandRunner
             ProcessStartInfo startInfo = new(executable)
             {
                 WorkingDirectory = workspaceRoot,
+                RedirectStandardInput = true,
                 RedirectStandardOutput = true,
                 RedirectStandardError = true,
                 UseShellExecute = false,
@@ -95,6 +99,7 @@ internal sealed class GitCommandRunner : IGitCommandRunner
             {
                 startInfo.ArgumentList.Add(argument);
             }
+            HardenEnvironment(startInfo);
 
             return RunProcess(
                 startInfo,
@@ -125,6 +130,7 @@ internal sealed class GitCommandRunner : IGitCommandRunner
             ProcessStartInfo startInfo = new(executable)
             {
                 WorkingDirectory = workspaceRoot,
+                RedirectStandardInput = true,
                 RedirectStandardOutput = true,
                 RedirectStandardError = true,
                 UseShellExecute = false,
@@ -135,6 +141,7 @@ internal sealed class GitCommandRunner : IGitCommandRunner
             {
                 startInfo.ArgumentList.Add(argument);
             }
+            HardenEnvironment(startInfo);
 
             return RunProcessToFile(
                 startInfo,
@@ -162,6 +169,7 @@ internal sealed class GitCommandRunner : IGitCommandRunner
         };
 
         process.Start();
+        process.StandardInput.Close();
         using CancellationTokenRegistration cancellationRegistration =
             cancellationToken.Register(() => TryKill(process));
         Task<string> stdoutTask = process.StandardOutput.ReadToEndAsync();
@@ -216,6 +224,7 @@ internal sealed class GitCommandRunner : IGitCommandRunner
 
         using FileStream stdoutFile = File.Create(stdoutPath);
         process.Start();
+        process.StandardInput.Close();
         using CancellationTokenRegistration cancellationRegistration =
             cancellationToken.Register(() => TryKill(process));
         Task stdoutTask = process.StandardOutput.BaseStream.CopyToAsync(stdoutFile);
@@ -276,6 +285,15 @@ internal sealed class GitCommandRunner : IGitCommandRunner
         catch
         {
         }
+    }
+
+    private static void HardenEnvironment(ProcessStartInfo startInfo)
+    {
+        startInfo.Environment["GIT_TERMINAL_PROMPT"] = "0";
+        startInfo.Environment["GCM_INTERACTIVE"] = "Never";
+        startInfo.Environment["GIT_OPTIONAL_LOCKS"] = "0";
+        startInfo.Environment["GIT_PAGER"] = "cat";
+        startInfo.Environment["PAGER"] = "cat";
     }
 
     private static TruncatedText Truncate(string text, int maxBytes)
