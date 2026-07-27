@@ -36,6 +36,8 @@ describe("user terminal panel", () => {
       getTerminal: vi.fn(async () => result("running", "terminal-user-sentinel\n")),
     } as unknown as DesktopBridge;
     const view = render(<TerminalPanel workspaceReady />);
+    const output = view.container.querySelector(".terminal-output");
+    const outputText = output?.firstChild;
     const structuralMutations: MutationRecord[] = [];
     const observer = new MutationObserver((records) => structuralMutations.push(...records.filter((record) =>
       record.type === "childList" && [...record.addedNodes, ...record.removedNodes].some((node) => node.nodeType === Node.ELEMENT_NODE))));
@@ -49,6 +51,8 @@ describe("user terminal panel", () => {
     observer.disconnect();
 
     expect(structuralMutations).toHaveLength(0);
+    expect(outputText).toBeInstanceOf(Text);
+    expect(output?.firstChild).toBe(outputText);
   });
 
   it("does not open without a workspace", () => {
