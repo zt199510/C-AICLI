@@ -1,7 +1,7 @@
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
-import type { ArtifactMetadataData } from "../generated/desktop-contracts";
+import type { ArtifactMetadataData, ChangesData } from "../generated/desktop-contracts";
 import type { ReviewState } from "./desktop-state";
 import { ReviewInspector } from "./ReviewInspector";
 
@@ -30,6 +30,24 @@ describe("read-only review inspector", () => {
     expect(onTab).toHaveBeenCalledWith("reports");
     expect(changesTab.getAttribute("aria-controls")).toBe("review-panel-changes");
     expect(screen.getByRole("tabpanel").getAttribute("aria-labelledby")).toBe("review-tab-changes");
+  });
+
+  it("keeps all 50 changed files visible with a bounded review DOM", () => {
+    const changedFiles = Array.from({ length: 50 }, (_, index) => ({ path: `src/generated/file-${index + 1}.ts`, status: "M" }));
+    const changes: ChangesData = {
+      status: "ready", exitCode: 0, gitStatusSummary: "M src/generated", gitStatusSucceeded: true, gitStatusErrorCode: null,
+      dirty: true, diffStatSummary: "50 files", diffSucceeded: true, diffErrorCode: null, diffTruncated: true,
+      changedFiles, sessionSource: null, sessionName: null, warnings: ["bounded"],
+    };
+    const view = render(<ReviewInspector review={{ ...review, changes, truncated: true }} workspaceReady onTab={vi.fn()} onReport={vi.fn()} onArtifact={vi.fn()} />);
+    expect(view.container.querySelectorAll(".review-section li")).toHaveLength(50);
+    expect(screen.getByText("src/generated/file-50.ts")).toBeTruthy();
+    const content = view.container.querySelector(".review-content");
+    expect(content).not.toBeNull();
+    const walker = document.createTreeWalker(content!, NodeFilter.SHOW_ALL);
+    let nodes = 1;
+    while (walker.nextNode()) nodes++;
+    expect(nodes).toBeLessThanOrEqual(200);
   });
 });
 

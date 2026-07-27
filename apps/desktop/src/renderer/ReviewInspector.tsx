@@ -54,7 +54,7 @@ function ChangesPanel({ review }: { review: ReviewState }) {
     <h3>Git status summary</h3><pre>{value.gitStatusSummary || "No status output"}</pre>
     <h3>Diff statistics</h3><pre>{value.diffStatSummary || "No diff statistics"}</pre>
     <h3>Changed files</h3>
-    {value.changedFiles.length ? <ul>{value.changedFiles.map((file) => <li key={`${file.status}:${file.path}`}><span className="status-chip">{file.status}</span> <span className="plain-path">{file.path}</span></li>)}</ul> : <p>No changed files.</p>}
+    {value.changedFiles.length ? <ul>{value.changedFiles.map((file) => <li className="changed-file-row" data-status={file.status} aria-label={`${file.status} ${file.path}`} key={`${file.status}:${file.path}`}><span className="plain-path">{file.path}</span></li>)}</ul> : <p>No changed files.</p>}
     {value.warnings.length ? <div className="warning-list">{value.warnings.map((warning) => <p key={warning}>{warning}</p>)}</div> : null}
   </div>;
 }

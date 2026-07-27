@@ -130,6 +130,8 @@ button:focus-visible { outline:2px solid #2176c7; outline-offset:2px; }
 .review-section dl,.artifact-detail { display:grid; grid-template-columns:88px minmax(0,1fr); gap:7px 9px; }.review-section dt,.artifact-detail dt { color:#626a70; }.review-section dd,.artifact-detail dd { margin:0; }
 .review-list { display:grid; gap:5px; }.review-list button { min-width:0; display:grid; grid-template-columns:minmax(0,1fr) auto; gap:7px; border:1px solid #dfe2e5; border-radius:5px; background:#fff; padding:8px; text-align:left; cursor:pointer; }.review-list button span { overflow-wrap:anywhere; }
 .review-detail,.artifact-detail { margin-top:13px; border-top:1px solid #e2e4e6; padding-top:11px; }.plain-path { font-family:Consolas,monospace; overflow-wrap:anywhere; user-select:text; }.disclaimer { border-left:3px solid #cf8b28; background:#fff6df; padding:8px; line-height:1.45; }
+.changed-file-row { display:flex; align-items:center; gap:6px; }
+.changed-file-row::before { content:attr(data-status); display:inline-flex; align-items:center; flex:0 0 auto; border-radius:999px; background:#e7eaec; color:#545b60; padding:2px 6px; font-size:10px; line-height:1.2; }
 .terminal-panel { border-top:1px solid #cfd3d6; background:#f2f4f5; font-size:12px; }
 .terminal-heading { min-height:36px; display:flex; align-items:center; gap:10px; padding:5px 10px; }.terminal-heading>span { flex:1; color:#657078; }.terminal-heading>div { display:flex; gap:5px; }.terminal-heading button,.terminal-input-row button,.review-actions button { border:1px solid #bdc3c7; border-radius:4px; background:#fff; padding:4px 7px; cursor:pointer; }.terminal-heading button:disabled,.terminal-input-row button:disabled,.review-actions button:disabled { border-color:#a4a9ad; background:#f0f1f2; color:#626a70; opacity:1; cursor:default; }
 .terminal-output { height:140px; margin:0; overflow:auto; background:#171b1e; color:#e5eaed; padding:8px 10px; white-space:pre-wrap; overflow-wrap:anywhere; user-select:text; font:12px/1.4 Consolas,monospace; }
@@ -172,5 +174,5 @@ button:focus-visible { outline:2px solid #2176c7; outline-offset:2px; }
 @media (forced-colors:active) {
   button:focus-visible,.timeline-view:focus-visible,.composer textarea:focus { outline:2px solid Highlight; outline-offset:2px; forced-color-adjust:auto; }
   .thread-row.selected,.mention-group button[aria-selected=true],.review-tabs button[aria-selected=true] { border:1px solid Highlight; box-shadow:none; }
-  .status-dot,.status-chip,.approval-panel,.recovery-actions,.restart-confirm,.inline-error,.capped-banner,.recovery-banner { border:1px solid CanvasText; forced-color-adjust:auto; }
+  .status-dot,.status-chip,.changed-file-row::before,.approval-panel,.recovery-actions,.restart-confirm,.inline-error,.capped-banner,.recovery-banner { border:1px solid CanvasText; forced-color-adjust:auto; }
 }
