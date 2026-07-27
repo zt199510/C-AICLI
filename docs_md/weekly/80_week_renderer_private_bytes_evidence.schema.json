@@ -1,0 +1,54 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://caicli.local/schemas/week80-renderer-private-bytes-v1.json",
+  "title": "Week 80 Renderer Private Bytes Evidence",
+  "type": "object",
+  "required": [
+    "schemaVersion",
+    "evidenceKind",
+    "status",
+    "productRevision",
+    "baselineHead",
+    "packageIdentity",
+    "appHostIdentity",
+    "durationMilliseconds",
+    "cleanupDelta",
+    "summary"
+  ],
+  "properties": {
+    "schemaVersion": { "const": "week80-renderer-private-bytes/v1" },
+    "evidenceKind": { "type": "string", "minLength": 1, "maxLength": 64 },
+    "status": {
+      "enum": ["NotRun", "Running", "Passed", "Failed", "Blocked"]
+    },
+    "productRevision": { "type": "string", "pattern": "^[0-9a-f]{40}$" },
+    "baselineHead": { "type": "string", "pattern": "^[0-9a-f]{40}$" },
+    "packageIdentity": { "$ref": "#/$defs/identity" },
+    "appHostIdentity": { "$ref": "#/$defs/identity" },
+    "durationMilliseconds": { "type": "integer", "minimum": 0 },
+    "cleanupDelta": { "$ref": "#/$defs/cleanup" },
+    "summary": { "type": "string", "minLength": 1, "maxLength": 1000 }
+  },
+  "additionalProperties": true,
+  "$defs": {
+    "identity": {
+      "type": "object",
+      "required": ["sha256", "bytes"],
+      "properties": {
+        "sha256": { "type": "string", "pattern": "^[0-9A-F]{64}$" },
+        "bytes": { "type": "integer", "minimum": 1 }
+      },
+      "additionalProperties": false
+    },
+    "cleanup": {
+      "type": "object",
+      "required": ["process", "temporary", "configuration"],
+      "properties": {
+        "process": { "type": "integer", "minimum": 0 },
+        "temporary": { "type": "integer", "minimum": 0 },
+        "configuration": { "type": "integer", "minimum": 0 }
+      },
+      "additionalProperties": false
+    }
+  }
+}
