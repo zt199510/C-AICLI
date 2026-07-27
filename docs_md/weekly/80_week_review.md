@@ -1,182 +1,68 @@
-# Week 80 Review：Renderer Private-Bytes 诊断归因
+# Week 80 Review：Renderer Private-Bytes 根因诊断
 
-状态：`Blocked`
+状态：`Diagnosis Complete`
 
-日期：2026-07-25
+日期：2026-07-27
 
 基线 HEAD：`962d5dda4ae875299a96ba2c825bd13ec683240a`
 
-最终受测产品 revision：`8e227a4ca050e9bdff5d25d61bf89725fed26104`
+修复包 SHA-256：`E2A5BE23B0598ACA5827FC3977C48418298AE888D9293D1D51B937528BBB7A38`
 
 ## 结论
 
-Week 80 在独立授权的只读 provider 边界内重复了 Renderer private-bytes P1，但没有取得满足根因 Gate 的单一、安全产品修改边界。
+单一根因已经锁定：每个唯一的 `thread.changed` 都触发完整 authoritative projection 和 React commit。provider 每 turn 的 8 次通知因此重复创建状态控件并重投影持续增长的 timeline，形成 Blink Oilpan 页面和对象的高分配压力；自然 GC 的回收时序使 Renderer private bytes 在冻结的 15% Gate 上表现为高位且有波动的失败。
 
-- P1：private bytes `+8.48%`，Gate 内。
-- P5：private bytes `+22.67%`，Gate 失败。
-- P10：private bytes `+40.04%`，延续同方向增长。
-- P5/P10 的 JS heap used 同步增长，分别为 `+43.37%`、`+50.84%`。
-- 每个 provider turn 最终形成 6 个 timeline items，并触发恰好 8 个 `thread.changed`、8 个非重叠 resync runner、8 次完整 `listThreads`/`getThread(afterSequence=0)` 投影。
-- 但是 credential-free C5/C7 在相同 10-turn 增量、66-item 终态和 80 次完整投影下仍在 15% Gate 内，且 JS heap used 下降。
-- C6 使用与 P10 相同的 137 次 observer-style `getThread`，也没有复现 private bytes 或 live heap 增长。
+这不是 provider、bridge、observer 或普通 idle 自身造成的：当同样的 5 个 provider turns 和 40 个通知在 Main 中完成、但全部阻止进入 Renderer 时，private bytes 为 `-2.22%`、Nodes 为 `0`。零 measured-turn 的 provider idle 对照为 `+0.44%`、Nodes 为 `0`。
 
-因此，“减少 `queueResync`/完整投影次数”“修改 timeline DOM”“修改 timestamp 格式化”或“修改 observer/Gate”都不能作为 Week 81 的已证实修复。Week 80 不创建 `diagnosis-handoff.json`，不实施产品修复，不改变 Week 79 `Blocked`。
+最小产品修复保留全部 40 个通知的可见性，只在每 turn 两个 committed-sequence 生命周期边界刷新 authoritative projection；同时稳定短生命周期控件的 DOM 身份，并把历史 timeline event cards 改为用户展开某个 turn 后才 materialize。
 
-## 冻结身份与 Week 79 基线
+## 根因证据链
 
-- packaged Desktop：222,753,280 bytes，SHA-256 `6BDB9203C0ACCB8D0E3B90EC1F4218A02BF9E05A21E068654F1C2B9B0E82DE29`
-- packaged AppHost：79,941,168 bytes，SHA-256 `DC46DBFAD098D7E2F464F05F2C8383568DF733F619B3E45B9D70BAD4F9C13DFA`
-- Week 79 private bytes：
-  - attempt 1：`+47.77%`
-  - attempt 2：`+36.77%`
-  - attempt 3：`+35.84%`
-- Week 79 末次仍使用 1 秒 terminal poll、对称 30 秒 warm/post、5 秒采样、末 3 样本 median。
-- Week 79 没有保存精确的 `page.evaluate` 和 observer bridge 调用次数；Week 80 将该项保留为历史 audit gap，没有回填猜测值。
+| 对照 | Private bytes | Nodes | 关键结果 |
+| --- | ---: | ---: | --- |
+| P5Q 基线，40/40 通知进入 Renderer | `+24.77%` | `+500` | 冻结 Gate 必败 |
+| P5T 基线 + 非 Gate memory dump | `+21.62%` | `+502` | Blink GC pages `+8,978,432 B`；allocated objects `+3,091,680 B`；V8 仅 `+1,387,400 B`；malloc `-7,541,392 B` |
+| P0T provider idle | `+0.44%` | `0` | 普通 post-warm 活动不足以致因 |
+| P5DT provider/bridge 直达对照，40/40 通知丢弃于 Renderer 前 | `-2.22%` | `0` | provider、tool、bridge、trace 和 observer 均不足以致因 |
 
-## 授权边界
+DOM mutation census 进一步定位了同一机制的分配来源：基线 5 turns 发生 `285` 个 added nodes 和 `285` 个 removed nodes；稳定结构后均降为 `0`。EventTarget census 同期没有实际 `addEventListener`/`removeEventListener` 调用，排除了重复订阅这一替代解释。
 
-Phase 3 只从 `.env.local` 选择 `OPENAI_MODEL`、`OPENAI_BASE_URL`、`OPENAI_API_KEY`，且只注入本次 packaged Desktop 子进程及其 AppHost 后代。
+通知身份是逐条唯一的，但每 turn 的 committed sequence 呈现两个相邻重复边界。原实现每 turn 执行 8 次完整 projection；新策略仍 dispatch 8 次通知，只在两个生命周期边界执行 authoritative resync。纯函数回归将这一规则固定为 `8 → 2`。
 
-全部 P1/P5/P10 合计：
+## Deterministic regression
 
-- 19 个 provider turns；
-- 19 个 `workspace.read_text(global.json)`；
-- 0 个其他 tool；
-- 0 approval、write、shell、Git、MCP、changed files、reports、artifacts；
-- 0 未授权网络事件；
-- 0 敏感披露；
-- process/temp/config cleanup delta 全为 0；
-- 配置值、prompt、模型正文、第三方正文和 rooted path 均未进入 evidence。
+以下回归在修复前分别必败，修复后全部通过：
 
-Playwright 的 trace/screenshot/video 在 provider project 中关闭。一次早期 harness failure 自动产生的 failure context 已在确认 owned path 后删除；最终 evidence 不包含该内容。
+- 五 turn timeline 在用户打开某个 turn 前保持 bounded，打开后只 materialize 所选 turn。
+- Composer queued-intent 节点跨状态变化保持身份。
+- Composer 状态变化产生 `0` 次 child-list mutation。
+- TaskControls 节点跨 active/inactive 状态保持身份。
+- recovery banner 跨 recovery 状态保持身份。
+- 一组完整 provider turn 生命周期通知只排队 2 次 authoritative resync，同时所有通知仍被 dispatch。
 
-## Credential-free 控制矩阵
+这些测试不读取 memory 数值，因此不会受 GC 或采样抖动影响；它们直接约束根因机制。
 
-所有 profile 都使用 workers `1`、retries `0`、对称 30 秒窗口，不运行 forced GC，不以 reload 通过 Gate。
+## 修复包 Gate
 
-| Profile | Workload | WS | Private | JS heap used | Nodes | Resync / getThread |
-| --- | --- | ---: | ---: | ---: | ---: | ---: |
-| C0 | packaged zero-turn idle | -5.49% | -3.81% | -25.73% | -30 | n/a |
-| C1 | 6 turns / 36 safe items，逐 turn 投影 | +4.08% | +9.93% | -27.08% | +911 | 6 / 6 |
-| C2 | Week 77 frozen 240-item load | -6.75% | -8.75% | -44.24% | -3366 | 0 / 4 |
-| C3 | 40 burst notifications，无 item 增长 | -4.82% | -4.35% | -23.43% | -22 | 40 / 2 |
-| C4 | 一次增加 6 turns / 36 items | -51.06% | +1.23% | -33.70% | +911 | 1 / 1 |
-| C5 | P10 等量：+10 turns、+60 items、80 完整投影 | +4.11% | +12.44% | -18.89% | +1533 | 80 / 80 |
-| C6 | 137 次 observer-style 66-item 读取，不更新 UI | -6.92% | -2.54% | -34.08% | -24 | 0 / 137 |
-| C7 | C5 等量，且每 item 使用不同 timestamp | +4.86% | +14.37% | -21.78% | +1533 | 80 / 80 |
+三次运行使用完全相同的 packaged Desktop，workers `1`、retries `0`、对称 30 秒 warm/post、末 3 样本 median；未运行 forced GC，未 reload Renderer，也未修改 15% Gate。
 
-C5 的 post-Gate disposable heap snapshot 只在 scenario-owned temp 中存在。分析后原 snapshot 已删除，evidence 仅保存脱敏聚合：
+| Repeat | Working set | Private bytes | Nodes | 通知 | observer getThread |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| 1 | `+0.97%` | `+8.19%` | `+5` | `40/40` | `6` |
+| 2 | `+0.94%` | `+8.61%` | `+5` | `40/40` | `6` |
+| 3 | `+1.38%` | `+10.07%` | `+5` | `40/40` | `6` |
 
-- 138,243 nodes；
-- aggregate self size 9,195,318 bytes；
-- String 2,778,682 bytes；
-- Code 2,429,712 bytes；
-- NativeOther 1,011,668 bytes；
-- DOM 69,632 bytes；
-- Promise 180 bytes。
+三次 private bytes 和 working set 均低于冻结的 15% Gate，且都完成 5/5 measured provider turns。
 
-该 snapshot 不参与 Gate，也未保存 raw strings。
+## 授权与安全边界
 
-## Provider 分级矩阵
+所有 provider 场景只从 `.env.local` 选择 `OPENAI_MODEL`、`OPENAI_BASE_URL`、`OPENAI_API_KEY`，且仅注入对应 packaged Desktop 子进程。模型工具仍只有 `workspace.read_text`；tool calls 与 provider turns 一一对应。未经授权的 tool、write、shell、Git tool、MCP、网络事件和敏感披露均为 `0`，process/temp/config cleanup delta 均为 `0`。
 
-| Profile | Warm-up + measured | Private | JS heap used | JS heap total | Nodes | Terminal polls | Measured notifications / full projections |
-| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
-| P1 | 1 + 1 | +8.48% | +19.14% | +24.75% | +155 | 22 | 8 / 8 |
-| P5 | 1 + 5 | +22.67% | +43.37% | +59.40% | +504 | 68 | 40 / 40 |
-| P10 | 1 + 10 | +40.04% | +50.84% | +103.94% | +970 | 137 | 80 / 80 |
+Evidence 只保存脱敏 numeric aggregate；配置值、prompt、模型正文、第三方正文、raw snapshot、raw trace 和 rooted path 均未持久化。
 
-P10 仅因 P5 private bytes 超过 15% 才运行；P10 没有替代 P5 Gate。
+## 验证与交付
 
-P1 的 numeric projection size：
-
-- warm-up 后 6 items：4,361 UTF-8 bytes；
-- measured turn 后 12 items：8,193 UTF-8 bytes；
-- 12 items 的 summary 共 1,012 bytes，payload JSON 共 2,346 bytes；
-- 12 个 distinct timestamps。
-
-C5 的 66-item fixture projection 为 29,120 UTF-8 bytes。provider 每 item 较大，但总投影仍只有几十 KiB；该差异不足以单独说明 private bytes 增长。
-
-## Source attribution
-
-每个 provider turn 的 8 个通知可由源码路径完整解释：
-
-1. `turn.start` 成功响应产生 1 个 mutation notification；
-2. queued → running 转换产生 1 个 committed notification；
-3. 5 个 runtime events 各自产生 1 个 committed notification；
-4. terminal 转换产生 1 个 committed notification。
-
-路径为：
-
-- `src/CSharpAiCli.Application/TurnExecutionApplicationService.cs`
-- `src/CSharpAiCli.AppHost/Protocol/DesktopRpcServer.cs`
-- `src/CSharpAiCli.AppHost/Protocol/DesktopThreadNotificationSequencer.cs`
-- `apps/desktop/src/renderer/use-desktop-controller.ts`
-
-Renderer 的 `queueResync` 只在请求仍 in-flight 时 coalesce。provider durable events 间隔足够长，每个通知都启动自己的 runner；每个 runner 调用一次 `listThreads` 和一次选中线程的 `getThread(afterSequence=0)`。
-
-该线性关系是已证实的放大路径，但不是已证实的 retention 根因：C5/C7 精确匹配 80 次完整投影，仍未复现 provider 的 live heap/private-bytes 方向。
-
-### Coverage 纠偏
-
-早期 source-map coverage 偏移落在 callback 声明和 async 恢复 range，曾把 controller render/async resume 次数误记为调用次数。该结果已作废，未进入最终归因或 Gate。
-
-最终计数使用：
-
-- `queueResync` 同步 callback body；
-- 启动 async runner 前的同步赋值；
-- 与 packaged renderer bundle SHA-256 完全一致的 product-revision source-map build。
-
-最终每 turn 均为 8 requests、8 runners；不存在需要估算的 coalesced iteration。没有添加 retry，也没有通过重跑选择低内存结果。
-
-## Phase 4 决策树结果
-
-### A. JS heap used 与 private bytes 同步增长
-
-P5/P10 满足该现象，但 credential-free C5 snapshot 没有提供同方向 heap retention。provider snapshot 会含 prompt、模型正文和路径，Week 80 没有把完整 provider snapshot 保存或带入 evidence。
-
-### C. DOM/listener/document 增长
-
-provider Nodes 随 turn 增长，但 C5/C7 的 Nodes 增长更大、private bytes 仍在 Gate 内。Documents 不单调增长；listener counter 有波动，但没有形成与 private bytes 一致的可重复上界。
-
-### D. resync/full projection 线性放大
-
-调用放大得到精确确认，但 C5/C7 是直接反例：相同投影次数和更高 DOM node 增量未复现 provider live heap retention。因此不能把 `queueResync` 直接改成 incremental fetch 并声称根因已修复。
-
-### E. 非 Renderer 进程
-
-Gate 使用 Tab/Renderer private bytes；Main/GPU/Utility/AppHost 的角色采样没有替代 Renderer 结果。Week 80 没有把其他进程增长误归为 Renderer。
-
-## 未通过的根因 Gate
-
-满足：
-
-1. provider P5/P10 可重复；
-2. 存在多个不增长的对照；
-3. numeric counters 齐全；
-4. 与 Week 79 private-bytes 方向一致。
-
-未满足：
-
-5. 无法定义由证据支持的最小产品修改边界；
-6. 无法定义一个会先失败、且能证明该修改修复 retention 的 deterministic regression test。
-
-因此 W80-G5 为 false，最终只能是 `Blocked`。
-
-## 下一步所需证据
-
-进入产品修复前，必须先取得以下之一：
-
-- provider-safe 的 pre/post retained-object 差分，只输出对象类别/count/aggregate bytes，raw snapshot 仅存在于 owned temp 并在分析后删除；或
-- AppHost → Main IPC → preload → renderer detail projection 边界的 bounded numeric instrumentation，能区分反序列化对象、React current tree 和已替换 projection 的存活数量/字节。
-
-新证据必须继续使用 frozen package identity、P5 Gate、workers `1`、retries `0`、对称 30 秒窗口，并维持相同的只读授权边界。不得先实施 `queueResync`、incremental fetch、DOM 或 Gate 修正。
-
-## 交付物
-
-- ignored `artifacts/week80-renderer-private-bytes/`：10 个最终 envelope、8 个 credential-free raw profile、3 个 provider raw profile；
-- `docs_md/weekly/80_week_renderer_private_bytes_evidence.schema.json`；
-- `tools/Test-Week80RendererMemoryEvidence.ps1`；
-- credential-free 与 provider Playwright diagnosis harness；
-- production-default no-op 的 bounded numeric diagnostic switch。
-
-没有 tag、上传、Release、`Preview Ready`、产品修复或 `diagnosis-handoff.json`。
+- `npm run verify`：通过；26 个测试文件、110 项测试，typecheck、lint、build 和 production security check 全部通过。
+- `Test-Week80RendererMemoryEvidence.ps1`：验证 baseline 必败、独立对照、Blink allocator 差分、三次同包 Gate、授权边界、清理和脱敏。
+- ignored evidence 目录生成 11 个最终 envelope，其中包含 `diagnosis.json` 和 `diagnosis-handoff.json`。
+- 未 push、发布、tag 或部署。

@@ -2,7 +2,7 @@ const { contextBridge, ipcRenderer } = require("electron");
 
 const timestamp = "2026-07-17T00:00:00.000Z";
 const longSession = process.env.CAICLI_E2E_SCENARIO === "long-session";
-const week80Profile = /^week80-c[1-7]$/.test(process.env.CAICLI_E2E_SCENARIO ?? "")
+const week80Profile = /^week80-c[1-8]$/.test(process.env.CAICLI_E2E_SCENARIO ?? "")
   ? process.env.CAICLI_E2E_SCENARIO
   : null;
 const workspace = {
@@ -14,7 +14,8 @@ const types = ["user.message", "assistant.message", "plan.updated", "tool.starte
 let projectedTurnCount = week80Profile === "week80-c2" ||
     week80Profile === "week80-c5" ||
     week80Profile === "week80-c6" ||
-    week80Profile === "week80-c7"
+    week80Profile === "week80-c7" ||
+    week80Profile === "week80-c8"
   ? 1
   : week80Profile === "week80-c3"
     ? 6
@@ -27,7 +28,8 @@ let projectedTimelineCount = longSession || week80Profile === "week80-c2"
     ? 36
     : week80Profile === "week80-c5" ||
         week80Profile === "week80-c6" ||
-        week80Profile === "week80-c7"
+        week80Profile === "week80-c7" ||
+        week80Profile === "week80-c8"
       ? 6
       : week80Profile
         ? 0

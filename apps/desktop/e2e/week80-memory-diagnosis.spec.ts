@@ -11,6 +11,11 @@ import { spawnSync } from "node:child_process";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
+import {
+  abortRetainedObjectTracking,
+  finishRetainedObjectTracking,
+  startRetainedObjectTracking,
+} from "../scripts/week80-retained-tracker.mjs";
 
 const desktopRoot = path.resolve(import.meta.dirname, "..");
 const repositoryRoot = path.resolve(desktopRoot, "..", "..");
@@ -23,7 +28,7 @@ const evidenceRoot = process.env.CAICLI_WEEK80_EVIDENCE_DIR
 const windowSeconds = 30;
 const sampleIntervalSeconds = 5;
 const settledSampleCount = 3;
-const profileNames = ["C0", "C1", "C2", "C3", "C4", "C5", "C6", "C7"] as const;
+const profileNames = ["C0", "C1", "C2", "C3", "C4", "C5", "C6", "C7", "C8"] as const;
 type ProfileName = typeof profileNames[number];
 
 interface ObserverCounts {
@@ -121,12 +126,15 @@ for (const profile of profileNames) {
     };
     const started = Date.now();
     let application: ElectronApplication | null = null;
+    let applicationPid: number | null = null;
     let cdp: CDPSession | null = null;
     let page: Page | null = null;
     let appHostPid: number | null = null;
     let warm: SamplingWindow | null = null;
     let post: SamplingWindow | null = null;
     let heapSummary: ReturnType<typeof summarizeHeapSnapshot> | null = null;
+    let retainedTracker: Awaited<ReturnType<typeof startRetainedObjectTracking>> | null = null;
+    let retainedObjectAggregate: Awaited<ReturnType<typeof finishRetainedObjectTracking>> | null = null;
     let workloadDiagnostics: RendererDiagnostics | null = null;
     let scenarioError: unknown = null;
     let cleanupError: unknown = null;
@@ -145,6 +153,7 @@ for (const profile of profileNames) {
           args: ["--disable-gpu"],
           env: credentialFreeEnvironment(root),
         });
+        applicationPid = application.process().pid;
         observer.electronAppEvaluateCalls++;
         await application.evaluate(async ({ dialog }, selectedWorkspace) => {
           dialog.showOpenDialog = async () => ({ canceled: false, filePaths: [selectedWorkspace] });
@@ -154,7 +163,7 @@ for (const profile of profileNames) {
         await page.getByRole("button", { name: "Open workspace" }).first().click();
         await expect.poll(async () => observedPageEvaluate(page!, observer, async () =>
           Boolean(await window.caicli.getWorkspaceSnapshot())), { timeout: 20_000 }).toBe(true);
-        appHostPid = findAppHostPid(application.process().pid, observer);
+        appHostPid = findAppHostPid(applicationPid, observer);
         expect(appHostPid, "Packaged C0 must observe the owned AppHost PID.").not.toBeNull();
       } else {
         application = await electron.launch({
@@ -165,6 +174,7 @@ for (const profile of profileNames) {
             CAICLI_E2E_ROOT: root,
           },
         });
+        applicationPid = application.process().pid;
         page = await application.firstWindow();
         await expect(page.getByText("Fixture review thread")).toBeVisible();
         await page.locator(".thread-select").click({ force: true });
@@ -187,22 +197,33 @@ for (const profile of profileNames) {
       }
       warm = await captureSamplingWindow(application, page, cdp, appHostPid, observer);
       if (profile !== "C0") await diagnostics.reset();
+      if (profile === "C8") retainedTracker = await startRetainedObjectTracking(cdp);
       const aggregatedWorkloadDiagnostics = await runWorkload(profile, page, diagnostics);
       workloadDiagnostics = profile === "C0"
         ? null
         : aggregatedWorkloadDiagnostics ?? await diagnostics.snapshot();
       post = await captureSamplingWindow(application, page, cdp, appHostPid, observer);
-      if (profile === "C5") heapSummary = await captureFixtureHeapSummary(cdp, root);
+      if (retainedTracker) {
+        retainedObjectAggregate = await finishRetainedObjectTracking(cdp, retainedTracker);
+        retainedTracker = null;
+      }
+      if (profile === "C5") heapSummary = await captureFixtureHeapSummary(cdp);
     } catch (error) {
       scenarioError = error;
     }
 
     const ownedPids = uniquePids([...(warm?.samples ?? []), ...(post?.samples ?? [])]);
-    if (application) ownedPids.add(application.process().pid);
+    if (applicationPid !== null) ownedPids.add(applicationPid);
     if (appHostPid !== null) ownedPids.add(appHostPid);
     try {
-      if (cdp) await cdp.detach().catch(() => undefined);
-      if (application) await application.close();
+      if (cdp) {
+        if (retainedTracker) {
+          await abortRetainedObjectTracking(cdp, retainedTracker);
+          retainedTracker = null;
+        }
+        await cdp.detach().catch(() => undefined);
+      }
+      if (application) await application.close().catch(() => undefined);
       await waitForProcessesToExit([...ownedPids], 10_000);
       processDelta = countLiveProcesses([...ownedPids]);
       if (!isOwnedRoot(root, profile)) throw new Error("Diagnostic temp-root ownership check failed.");
@@ -226,6 +247,7 @@ for (const profile of profileNames) {
       listenersDelta: post.rendererSettledMedian.jsEventListeners - warm.rendererSettledMedian.jsEventListeners,
     } : null;
     const passed = scenarioError === null && cleanupError === null && warm !== null && post !== null &&
+      (profile !== "C8" || retainedObjectAggregate !== null) &&
       processDelta === 0 && temporaryDelta === 0 && configurationDelta === 0;
     const evidence = {
       schemaVersion: "week80-renderer-private-bytes/v1",
@@ -254,6 +276,8 @@ for (const profile of profileNames) {
         forcedGc: false,
         rendererReloadUsedForGate: false,
         providerCalls: 0,
+        gateEligible: profile !== "C8",
+        retainedObjectTracking: profile === "C8",
       },
       observer: {
         ...observer,
@@ -263,6 +287,7 @@ for (const profile of profileNames) {
       },
       workloadDiagnostics,
       heapSummary,
+      retainedObjectAggregate,
       warm,
       post,
       retention,
@@ -351,6 +376,18 @@ async function runWorkload(
         }
       }
       await expect(page.getByText("66 loaded items")).toBeVisible();
+      return null;
+    case "C8":
+      for (let turn = 2; turn <= 6; turn++) {
+        await diagnostics.setProjection(turn, turn * 6);
+        for (let notification = 0; notification < 8; notification++) {
+          const before = await diagnostics.snapshot();
+          await diagnostics.emitThreadChanges(1);
+          await expect.poll(async () => (await diagnostics.snapshot())?.resyncCompleted ?? 0)
+            .toBe((before?.resyncCompleted ?? 0) + 1);
+        }
+      }
+      await expect(page.getByText("36 loaded items")).toBeVisible();
       return null;
     case "C6":
       await diagnostics.setProjection(11, 66);
@@ -572,26 +609,23 @@ function workloadDescription(profile: ProfileName): string {
     case "C5": return "Ten six-item fixture turns trigger eight non-overlapping full projection resyncs per turn, matching P10 notification volume without provider content.";
     case "C6": return "One hundred thirty-seven observer-style direct getThread polls read an 11-turn, 66-item fixture projection without updating renderer state.";
     case "C7": return "C5-equivalent 80 full projections and 66 items use a distinct ISO timestamp per item to exercise repeated locale formatting.";
+    case "C8": return "Five six-item fixture turns trigger eight non-overlapping full projection resyncs per turn; post-boundary survivors are persisted only as fixed retained-object aggregates for P5R comparison.";
   }
 }
 
-async function captureFixtureHeapSummary(
-  cdp: CDPSession,
-  root: string,
-): Promise<ReturnType<typeof summarizeHeapSnapshot>> {
-  const snapshotPath = path.join(root, "fixture-post-gate.heapsnapshot");
+async function captureFixtureHeapSummary(cdp: CDPSession): Promise<ReturnType<typeof summarizeHeapSnapshot>> {
   const chunks: string[] = [];
   const listener = (event: { chunk: string }) => { chunks.push(event.chunk); };
   cdp.on("HeapProfiler.addHeapSnapshotChunk", listener);
   try {
     await cdp.send("HeapProfiler.enable");
     await cdp.send("HeapProfiler.takeHeapSnapshot", { reportProgress: false, captureNumericValue: false });
-    fs.writeFileSync(snapshotPath, chunks.join(""), "utf8");
-    return summarizeHeapSnapshot(JSON.parse(fs.readFileSync(snapshotPath, "utf8")) as HeapSnapshot);
+    const serialized = chunks.join("");
+    chunks.length = 0;
+    return summarizeHeapSnapshot(JSON.parse(serialized) as HeapSnapshot);
   } finally {
     cdp.off("HeapProfiler.addHeapSnapshotChunk", listener);
     await cdp.send("HeapProfiler.disable").catch(() => undefined);
-    fs.rmSync(snapshotPath, { force: true });
   }
 }
 

@@ -13,6 +13,11 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { SourceMapConsumer, type RawSourceMap } from "source-map-js";
+import {
+  abortRetainedObjectTracking,
+  finishRetainedObjectTracking,
+  startRetainedObjectTracking,
+} from "../scripts/week80-retained-tracker.mjs";
 
 const desktopRoot = path.resolve(import.meta.dirname, "..");
 const repositoryRoot = path.resolve(desktopRoot, "..", "..");
@@ -32,10 +37,75 @@ const sampleIntervalSeconds = 5;
 const settledSampleCount = 3;
 const terminalPollIntervalMilliseconds = 1000;
 const toolName = "workspace.read_text";
+const providerPrompt = "Use exactly one workspace.read_text tool call to read global.json. Then reply with one short sentence. Do not call any other tool, do not modify files, and do not use shell, Git, MCP, or any other network behavior.";
+const baselineDesktopSha256 = "6BDB9203C0ACCB8D0E3B90EC1F4218A02BF9E05A21E068654F1C2B9B0E82DE29";
+const fixedCandidateDesktopSha256 = "97F378352C3A97BA71AC431CA3B1874C9F6C7E739A0D39D5E4B6A1DA6D3BA09F";
+const virtualizedCandidateDesktopSha256 = "D6FB95D84F70F051E181C198DED12097D3A23D6CFD0C662873A589D9F89E26F1";
+const zeroOverscanCandidateDesktopSha256 = "35BE96FFC4230974875EBBC3565394163FFDC6C8BAD393987216F9FFFB03142E";
+const combinedCandidateDesktopSha256 = "15C4E45353865FFB2B63F503CA8D7063C1B867624C91134D5B25758D08790B4B";
+const allocationFreeCandidateDesktopSha256 = "2A6C7FEEDF116C38F6DCA0BF4C82C12980F2371B142165096B97AA96837AA481";
+const nativeSamplingDesktopSha256 = "C0EC7A8B40E7ADC013B6629A40966047BAB724C8A3357FAD0905149EB9D915C8";
+const constantWindowDesktopSha256 = "453406A0A9BBB94A35E0E0CBE9F84D745B08592BA5451971F8C4D6DD02D1C326";
+const defaultUiObserverDesktopSha256 = "8EE8A567A601F8BCCAAA75ACE9039A832F3B110FEB75664C76DB66A0F67E8C56";
+const incrementalResyncDesktopSha256 = "C54B5CEE39D5866259F87834972A98F489BE094965732FC29A3EF9BCCF31680B";
+const boundedTimelineDesktopSha256 = "217A0143A1AC85F9B7FB09118864FA0C013E4AA8111386087DF3DE7A162C47F0";
+const sixItemTimelineDesktopSha256 = "A8E66848EF8213079E7A30E784F47AB507D6432C34820E902DEAE0743B074908";
+const stableTimelineDesktopSha256 = "0C2EB6C8FC5591E46730C5A34E422C8F4CA5903C23680F3F6AFB551FD5BA6065";
+const hiddenTimelineDesktopSha256 = "3E9B56DE78A6CD1AD7E0AF6AC646044BA12DA7EB8A88CEAEC1D4B7A2D79C6DB2";
+const shallowThreadCloneDesktopSha256 = "71CF76129F73D514F97708986FC2340C761C32CA58B28172B44626651913B718";
+const hiddenTimelineOneShotDesktopSha256 = "2E651F7DF48D22ACBB692FE8983E02ED3AF4BB0088DAFBD1F6F645A52D972A02";
+const mainValidatedThreadDesktopSha256 = "07C7811B08E0BE7170DECDE89BA14013BA0C94A7CB6F1CDF2587639A34A4C504";
+const timelineWindowFixDesktopSha256 = "EFBEFE6AA18AACA6AB82899234EB115DB28AFA295E4F87B40AB827A747F0C344";
+const turnGroupsFixDesktopSha256 = "B6490B2EB6CD26EE21F4C6F716825CD82E693CF00DDEA520C14EB47EFE515140";
+const stableStatusUiFixDesktopSha256 = "481AD81085D519791FC532F3147A251FE8BCBB8B52673D780204B09BD03B8BD7";
+const boundedDomFixDesktopSha256 = "A994248B0589226D901D85D665325DE6CAE1058A8D6F83E5DB4377800D5C883A";
+const lifecycleResyncFixDesktopSha256 = "E2A5BE23B0598ACA5827FC3977C48418298AE888D9293D1D51B937528BBB7A38";
 const profileSettings = {
-  P1: { measuredTurns: 1, evidenceName: "provider-profile-p1.json" },
-  P5: { measuredTurns: 5, evidenceName: "provider-profile-p5.json" },
-  P10: { measuredTurns: 10, evidenceName: "provider-profile-p10.json" },
+  P1: { measuredTurns: 1, evidenceName: "provider-profile-p1.json", coverageDiagnostic: true, retainedDiagnostic: false, measuredNotificationStride: 1, directMeasuredTurns: false, boundedTerminalObserver: false, mainObservedTerminal: false },
+  P5: { measuredTurns: 5, evidenceName: "provider-profile-p5.json", coverageDiagnostic: true, retainedDiagnostic: false, measuredNotificationStride: 1, directMeasuredTurns: false, boundedTerminalObserver: false, mainObservedTerminal: false },
+  P10: { measuredTurns: 10, evidenceName: "provider-profile-p10.json", coverageDiagnostic: true, retainedDiagnostic: false, measuredNotificationStride: 1, directMeasuredTurns: false, boundedTerminalObserver: false, mainObservedTerminal: false },
+  P5NC: { measuredTurns: 5, evidenceName: "provider-profile-p5-no-coverage.json", coverageDiagnostic: false, retainedDiagnostic: false, measuredNotificationStride: 1, directMeasuredTurns: false, boundedTerminalObserver: false, mainObservedTerminal: false },
+  P5BO: { measuredTurns: 5, evidenceName: "provider-profile-p5-bounded-observer.json", coverageDiagnostic: false, retainedDiagnostic: false, measuredNotificationStride: 1, directMeasuredTurns: false, boundedTerminalObserver: true, mainObservedTerminal: false },
+  P5MO: { measuredTurns: 5, evidenceName: "provider-profile-p5-main-observer.json", coverageDiagnostic: false, retainedDiagnostic: false, measuredNotificationStride: 1, directMeasuredTurns: false, boundedTerminalObserver: false, mainObservedTerminal: true },
+  P5F: { measuredTurns: 5, evidenceName: "provider-profile-p5-fixed.json", coverageDiagnostic: false, retainedDiagnostic: false, measuredNotificationStride: 1, directMeasuredTurns: false, boundedTerminalObserver: false, mainObservedTerminal: true },
+  P5V: { measuredTurns: 5, evidenceName: "provider-profile-p5-virtualized.json", coverageDiagnostic: false, retainedDiagnostic: false, measuredNotificationStride: 1, directMeasuredTurns: false, boundedTerminalObserver: false, mainObservedTerminal: true },
+  P5V0: { measuredTurns: 5, evidenceName: "provider-profile-p5-zero-overscan.json", coverageDiagnostic: false, retainedDiagnostic: false, measuredNotificationStride: 1, directMeasuredTurns: false, boundedTerminalObserver: false, mainObservedTerminal: true },
+  P5C: { measuredTurns: 5, evidenceName: "provider-profile-p5-combined.json", coverageDiagnostic: false, retainedDiagnostic: false, measuredNotificationStride: 1, directMeasuredTurns: false, boundedTerminalObserver: false, mainObservedTerminal: true },
+  P5A: { measuredTurns: 5, evidenceName: "provider-profile-p5-allocation-free-validator.json", coverageDiagnostic: false, retainedDiagnostic: false, measuredNotificationStride: 1, directMeasuredTurns: false, boundedTerminalObserver: false, mainObservedTerminal: true },
+  P5M: { measuredTurns: 5, evidenceName: "provider-profile-p5-native-sampling.json", coverageDiagnostic: false, retainedDiagnostic: false, measuredNotificationStride: 1, directMeasuredTurns: false, boundedTerminalObserver: false, mainObservedTerminal: true },
+  P5W: { measuredTurns: 5, evidenceName: "provider-profile-p5-constant-window.json", coverageDiagnostic: false, retainedDiagnostic: false, measuredNotificationStride: 1, directMeasuredTurns: false, boundedTerminalObserver: false, mainObservedTerminal: true },
+  P5WU: { measuredTurns: 5, evidenceName: "provider-profile-p5-constant-window-ui-observer.json", coverageDiagnostic: false, retainedDiagnostic: false, measuredNotificationStride: 1, directMeasuredTurns: false, boundedTerminalObserver: false, mainObservedTerminal: false },
+  P5WS: { measuredTurns: 5, evidenceName: "provider-profile-p5-constant-window-single-resync.json", coverageDiagnostic: false, retainedDiagnostic: false, measuredNotificationStride: 8, directMeasuredTurns: false, boundedTerminalObserver: false, mainObservedTerminal: false },
+  P5U: { measuredTurns: 5, evidenceName: "provider-profile-p5-default-ui-observer.json", coverageDiagnostic: false, retainedDiagnostic: false, measuredNotificationStride: 1, directMeasuredTurns: false, boundedTerminalObserver: false, mainObservedTerminal: false },
+  P5S: { measuredTurns: 5, evidenceName: "provider-profile-p5-default-single-resync.json", coverageDiagnostic: false, retainedDiagnostic: false, measuredNotificationStride: 8, directMeasuredTurns: false, boundedTerminalObserver: false, mainObservedTerminal: false },
+  P5I: { measuredTurns: 5, evidenceName: "provider-profile-p5-incremental-resync.json", coverageDiagnostic: false, retainedDiagnostic: false, measuredNotificationStride: 1, directMeasuredTurns: false, boundedTerminalObserver: false, mainObservedTerminal: false },
+  P5L: { measuredTurns: 5, evidenceName: "provider-profile-p5-bounded-timeline.json", coverageDiagnostic: false, retainedDiagnostic: false, measuredNotificationStride: 1, directMeasuredTurns: false, boundedTerminalObserver: false, mainObservedTerminal: false },
+  P5L6: { measuredTurns: 5, evidenceName: "provider-profile-p5-six-item-timeline.json", coverageDiagnostic: false, retainedDiagnostic: false, measuredNotificationStride: 1, directMeasuredTurns: false, boundedTerminalObserver: false, mainObservedTerminal: false },
+  P5H: { measuredTurns: 5, evidenceName: "provider-profile-p5-stable-timeline.json", coverageDiagnostic: false, retainedDiagnostic: false, measuredNotificationStride: 1, directMeasuredTurns: false, boundedTerminalObserver: false, mainObservedTerminal: false },
+  P5Z: { measuredTurns: 5, evidenceName: "provider-profile-p5-hidden-timeline.json", coverageDiagnostic: false, retainedDiagnostic: false, measuredNotificationStride: 1, directMeasuredTurns: false, boundedTerminalObserver: false, mainObservedTerminal: false },
+  P5J: { measuredTurns: 5, evidenceName: "provider-profile-p5-js-allocation-sampling.json", coverageDiagnostic: false, retainedDiagnostic: false, measuredNotificationStride: 1, directMeasuredTurns: false, boundedTerminalObserver: false, mainObservedTerminal: false },
+  P5X: { measuredTurns: 5, evidenceName: "provider-profile-p5-shallow-thread-clone.json", coverageDiagnostic: false, retainedDiagnostic: false, measuredNotificationStride: 1, directMeasuredTurns: false, boundedTerminalObserver: false, mainObservedTerminal: false },
+  P5Q: { measuredTurns: 5, evidenceName: "provider-profile-p5-one-shot-observer.json", coverageDiagnostic: false, retainedDiagnostic: false, measuredNotificationStride: 1, directMeasuredTurns: false, boundedTerminalObserver: false, mainObservedTerminal: true },
+  P5QS: { measuredTurns: 5, evidenceName: "provider-profile-p5-one-shot-single-resync.json", coverageDiagnostic: false, retainedDiagnostic: false, measuredNotificationStride: 8, directMeasuredTurns: false, boundedTerminalObserver: false, mainObservedTerminal: true },
+  P5QZ: { measuredTurns: 5, evidenceName: "provider-profile-p5-one-shot-hidden-timeline.json", coverageDiagnostic: false, retainedDiagnostic: false, measuredNotificationStride: 1, directMeasuredTurns: false, boundedTerminalObserver: false, mainObservedTerminal: true },
+  P5Y: { measuredTurns: 5, evidenceName: "provider-profile-p5-main-validated-thread.json", coverageDiagnostic: false, retainedDiagnostic: false, measuredNotificationStride: 1, directMeasuredTurns: false, boundedTerminalObserver: false, mainObservedTerminal: true },
+  P5T: { measuredTurns: 5, evidenceName: "provider-profile-p5-memory-infra.json", coverageDiagnostic: false, retainedDiagnostic: false, measuredNotificationStride: 1, directMeasuredTurns: false, boundedTerminalObserver: false, mainObservedTerminal: true },
+  P0T: { measuredTurns: 0, evidenceName: "provider-profile-p0-memory-infra.json", coverageDiagnostic: false, retainedDiagnostic: false, measuredNotificationStride: 1, directMeasuredTurns: false, boundedTerminalObserver: false, mainObservedTerminal: false },
+  P5DT: { measuredTurns: 5, evidenceName: "provider-profile-p5-direct-memory-infra.json", coverageDiagnostic: false, retainedDiagnostic: false, measuredNotificationStride: 0, directMeasuredTurns: true, boundedTerminalObserver: false, mainObservedTerminal: true },
+  P5G: { measuredTurns: 5, evidenceName: "provider-profile-p5-timeline-window-fix.json", coverageDiagnostic: false, retainedDiagnostic: false, measuredNotificationStride: 1, directMeasuredTurns: false, boundedTerminalObserver: false, mainObservedTerminal: true },
+  P5TG: { measuredTurns: 5, evidenceName: "provider-profile-p5-turn-groups-fix.json", coverageDiagnostic: false, retainedDiagnostic: false, measuredNotificationStride: 1, directMeasuredTurns: false, boundedTerminalObserver: false, mainObservedTerminal: true },
+  P5TGC: { measuredTurns: 5, evidenceName: "provider-profile-p5-turn-groups-census.json", coverageDiagnostic: false, retainedDiagnostic: false, measuredNotificationStride: 1, directMeasuredTurns: false, boundedTerminalObserver: false, mainObservedTerminal: true },
+  P5ST: { measuredTurns: 5, evidenceName: "provider-profile-p5-stable-status-ui-fix.json", coverageDiagnostic: false, retainedDiagnostic: false, measuredNotificationStride: 1, directMeasuredTurns: false, boundedTerminalObserver: false, mainObservedTerminal: true },
+  P5STC: { measuredTurns: 5, evidenceName: "provider-profile-p5-stable-status-ui-census.json", coverageDiagnostic: false, retainedDiagnostic: false, measuredNotificationStride: 1, directMeasuredTurns: false, boundedTerminalObserver: false, mainObservedTerminal: true },
+  P5CF: { measuredTurns: 5, evidenceName: "provider-profile-p5-bounded-dom-fix.json", coverageDiagnostic: false, retainedDiagnostic: false, measuredNotificationStride: 1, directMeasuredTurns: false, boundedTerminalObserver: false, mainObservedTerminal: true },
+  P5CFC: { measuredTurns: 5, evidenceName: "provider-profile-p5-bounded-dom-census.json", coverageDiagnostic: false, retainedDiagnostic: false, measuredNotificationStride: 1, directMeasuredTurns: false, boundedTerminalObserver: false, mainObservedTerminal: true },
+  P5EL: { measuredTurns: 5, evidenceName: "provider-profile-p5-event-listener-census.json", coverageDiagnostic: false, retainedDiagnostic: false, measuredNotificationStride: 1, directMeasuredTurns: false, boundedTerminalObserver: false, mainObservedTerminal: true },
+  P5RF: { measuredTurns: 5, evidenceName: "provider-profile-p5-lifecycle-resync-fix.json", coverageDiagnostic: false, retainedDiagnostic: false, measuredNotificationStride: 1, directMeasuredTurns: false, boundedTerminalObserver: false, mainObservedTerminal: true },
+  P5B: { measuredTurns: 5, evidenceName: "provider-profile-p5-bounded-projection.json", coverageDiagnostic: false, retainedDiagnostic: false, measuredNotificationStride: 8, directMeasuredTurns: false, boundedTerminalObserver: false, mainObservedTerminal: true },
+  P5N1: { measuredTurns: 5, evidenceName: "provider-profile-p5-one-notification.json", coverageDiagnostic: false, retainedDiagnostic: false, measuredNotificationStride: 8, directMeasuredTurns: false, boundedTerminalObserver: false, mainObservedTerminal: false },
+  P5D: { measuredTurns: 5, evidenceName: "provider-profile-p5-direct.json", coverageDiagnostic: false, retainedDiagnostic: false, measuredNotificationStride: 0, directMeasuredTurns: true, boundedTerminalObserver: false, mainObservedTerminal: false },
+  P0R: { measuredTurns: 0, evidenceName: "provider-profile-p0-retained.json", coverageDiagnostic: false, retainedDiagnostic: true, measuredNotificationStride: 1, directMeasuredTurns: false, boundedTerminalObserver: false, mainObservedTerminal: false },
+  P5R: { measuredTurns: 5, evidenceName: "provider-profile-p5-retained.json", coverageDiagnostic: false, retainedDiagnostic: true, measuredNotificationStride: 1, directMeasuredTurns: false, boundedTerminalObserver: false, mainObservedTerminal: false },
 } as const;
 type ProviderProfile = keyof typeof profileSettings;
 
@@ -153,18 +223,67 @@ interface TurnEvidence {
   readonly timelineSummaryUtf8Bytes: number;
   readonly timelinePayloadJsonUtf8Bytes: number;
   readonly distinctTimelineTimestamps: number;
-  readonly coverage: CoverageCounts;
+  readonly coverage: CoverageCounts | null;
   readonly resourceAfterTurn: ProviderSample;
+}
+
+interface NotificationFilterCounts {
+  readonly stride: number;
+  readonly observed: number;
+  readonly forwarded: number;
+  readonly dropped: number;
+  readonly identities: Readonly<Record<string, number>>;
 }
 
 test("authorized provider-backed renderer memory profile", async ({ browserName }, testInfo) => {
   if (browserName !== "chromium") throw new Error("Electron provider diagnostics require Chromium.");
   const profile = parseProfile(process.env.CAICLI_WEEK80_PROVIDER_PROFILE);
   const settings = profileSettings[profile];
-  testInfo.setTimeout(profile === "P10" ? 1_500_000 : 1_000_000);
+  const expectedDesktopSha256 = profile === "P5RF"
+    ? lifecycleResyncFixDesktopSha256
+    : profile === "P5CF" || profile === "P5CFC" || profile === "P5EL"
+    ? boundedDomFixDesktopSha256
+    : profile === "P5ST" || profile === "P5STC"
+    ? stableStatusUiFixDesktopSha256
+    : profile === "P5TG" || profile === "P5TGC"
+    ? turnGroupsFixDesktopSha256
+    : profile === "P5G"
+      ? timelineWindowFixDesktopSha256
+    : profile === "P5F"
+    ? fixedCandidateDesktopSha256
+    : profile === "P5V"
+      ? virtualizedCandidateDesktopSha256
+      : profile === "P5V0"
+        ? zeroOverscanCandidateDesktopSha256
+        : profile === "P5C"
+          ? combinedCandidateDesktopSha256
+          : profile === "P5A"
+            ? allocationFreeCandidateDesktopSha256
+            : profile === "P5M" || profile === "P5Q" || profile === "P5QS" || profile === "P5T" || profile === "P0T" || profile === "P5DT"
+              ? nativeSamplingDesktopSha256
+              : profile === "P5W" || profile === "P5WU" || profile === "P5WS"
+                ? constantWindowDesktopSha256
+                : profile === "P5U" || profile === "P5S"
+                  ? defaultUiObserverDesktopSha256
+                  : profile === "P5I"
+                    ? incrementalResyncDesktopSha256
+                    : profile === "P5L"
+                      ? boundedTimelineDesktopSha256
+                      : profile === "P5L6"
+                        ? sixItemTimelineDesktopSha256
+                        : profile === "P5H"
+                          ? stableTimelineDesktopSha256
+                          : profile === "P5Z" || profile === "P5J"
+                            ? hiddenTimelineDesktopSha256
+                            : profile === "P5X"
+                              ? shallowThreadCloneDesktopSha256
+                              : profile === "P5QZ"
+                                ? hiddenTimelineOneShotDesktopSha256
+                                : profile === "P5Y" ? mainValidatedThreadDesktopSha256 : baselineDesktopSha256;
+  testInfo.setTimeout(profile === "P10" || settings.retainedDiagnostic ? 1_500_000 : 1_000_000);
   const providerConfig = readAuthorizedProviderConfig(path.join(repositoryRoot, ".env.local"));
   const secretValues = Object.values(providerConfig);
-  const coverageTargets = createCoverageTargets();
+  const coverageTargets = settings.coverageDiagnostic ? createCoverageTargets() : null;
   const root = fs.mkdtempSync(path.join(os.tmpdir(), `caicli-week80-${profile.toLowerCase()}-`));
   const workspace = path.join(root, "workspace");
   const profileRoot = path.join(root, "profile");
@@ -181,6 +300,7 @@ test("authorized provider-backed renderer memory profile", async ({ browserName 
   };
   const started = Date.now();
   let application: ElectronApplication | null = null;
+  let applicationPid: number | null = null;
   let page: Page | null = null;
   let cdp: CDPSession | null = null;
   let appHostPid: number | null = null;
@@ -198,6 +318,21 @@ test("authorized provider-backed renderer memory profile", async ({ browserName 
   let workspaceDelta: number | null = null;
   let reportCount: number | null = null;
   let artifactCount: number | null = null;
+  let retainedTracker: Awaited<ReturnType<typeof startRetainedObjectTracking>> | null = null;
+  let retainedObjectAggregate: Awaited<ReturnType<typeof finishRetainedObjectTracking>> | null = null;
+  let notificationFilter: NotificationFilterCounts | null = null;
+  let nativeSamplingActive = false;
+  let nativeAllocationAggregate: ReturnType<typeof summarizeNativeAllocations> | null = null;
+  let jsSamplingActive = false;
+  let jsAllocationAggregate: ReturnType<typeof summarizeJsAllocations> | null = null;
+  let memoryTrace: Awaited<ReturnType<typeof startMemoryInfraTrace>> | null = null;
+  let memoryDumpAggregate: ReturnType<typeof summarizeMemoryInfraTrace> | null = null;
+  let rendererPid: number | null = null;
+  let warmMemoryDumpGuid: string | null = null;
+  let warmDomCensus: Awaited<ReturnType<typeof captureDomCensus>> | null = null;
+  let postDomCensus: Awaited<ReturnType<typeof captureDomCensus>> | null = null;
+  let mutationCensus: Awaited<ReturnType<typeof readMutationCensus>> | null = null;
+  let eventListenerCensus: Awaited<ReturnType<typeof readEventListenerCensus>> | null = null;
 
   fs.mkdirSync(workspace, { recursive: true });
   fs.mkdirSync(path.join(profileRoot, ".caicli"), { recursive: true });
@@ -221,14 +356,15 @@ test("authorized provider-backed renderer memory profile", async ({ browserName 
   const workspaceBefore = inventoryWorkspace(workspace);
 
   try {
-    expect(sha256File(packagedExecutable)).toBe("6BDB9203C0ACCB8D0E3B90EC1F4218A02BF9E05A21E068654F1C2B9B0E82DE29");
+    expect(sha256File(packagedExecutable)).toBe(expectedDesktopSha256);
     expect(sha256File(packagedAppHost)).toBe("DC46DBFAD098D7E2F464F05F2C8383568DF733F619B3E45B9D70BAD4F9C13DFA");
-    expect(coverageTargets.mapVerified).toBe(true);
+    if (coverageTargets) expect(coverageTargets.mapVerified).toBe(true);
     application = await electron.launch({
       executablePath: packagedExecutable,
       args: ["--disable-gpu"],
       env: authorizedChildEnvironment(root, profileRoot, providerConfig),
     });
+    applicationPid = application.process().pid;
     observer.electronAppEvaluateCalls++;
     await application.evaluate(async ({ dialog }, selectedWorkspace) => {
       dialog.showOpenDialog = async () => ({ canceled: false, filePaths: [selectedWorkspace] });
@@ -266,34 +402,118 @@ test("authorized provider-backed renderer memory profile", async ({ browserName 
     if (!observedThreadId) throw new Error("Created provider diagnostic thread was not observed.");
     threadId = observedThreadId;
 
-    appHostPid = findAppHostPid(application.process().pid, observer);
+    appHostPid = findAppHostPid(applicationPid, observer);
     expect(appHostPid, "Provider profile must observe the owned AppHost PID.").not.toBeNull();
     cdp = await page.context().newCDPSession(page);
     await cdp.send("Performance.enable");
-    await cdp.send("Profiler.enable");
-    await cdp.send("Profiler.startPreciseCoverage", {
-      callCount: true,
-      detailed: true,
-      allowTriggeredUpdates: false,
-    });
+    if (coverageTargets) {
+      await cdp.send("Profiler.enable");
+      await cdp.send("Profiler.startPreciseCoverage", {
+        callCount: true,
+        detailed: true,
+        allowTriggeredUpdates: false,
+      });
+    }
 
     const warmup = await executeProviderTurn(
       page, cdp, application, appHostPid, threadId, 1, 1, "warmup", observer, coverageTargets,
+      settings.boundedTerminalObserver, false, ["P5WU", "P5WS", "P5U", "P5S", "P5I", "P5L", "P5L6", "P5H", "P5Z", "P5J", "P5X", "P5Q", "P5QS", "P5QZ", "P5Y", "P5T", "P5G", "P5TG", "P5TGC", "P5ST", "P5STC", "P5CF", "P5CFC", "P5EL", "P5RF"].includes(profile),
     );
     turns.push(warmup);
     console.log(`${profile} warmup completed durationMs=${warmup.durationMilliseconds} toolCalls=${warmup.toolCalls} timelineItems=${warmup.timelineItems}`);
-    await takeCoverage(cdp, observer, coverageTargets);
+    if (coverageTargets) await takeCoverage(cdp, observer, coverageTargets);
     warm = await captureSamplingWindow(application, page, cdp, appHostPid, observer);
-    await takeCoverage(cdp, observer, coverageTargets);
+    if (coverageTargets) await takeCoverage(cdp, observer, coverageTargets);
+    if (settings.retainedDiagnostic) retainedTracker = await startRetainedObjectTracking(cdp);
+    if (profile === "P5M") {
+      await cdp.send("Memory.startSampling", { samplingInterval: 32_768, suppressRandomness: true });
+      nativeSamplingActive = true;
+    }
+    if (profile === "P5J") {
+      await cdp.send("HeapProfiler.enable");
+      await cdp.send("HeapProfiler.startSampling", {
+        samplingInterval: 32_768,
+        stackDepth: 64,
+        includeObjectsCollectedByMajorGC: true,
+        includeObjectsCollectedByMinorGC: true,
+      });
+      jsSamplingActive = true;
+    }
+    if (profile === "P5T" || profile === "P0T" || profile === "P5DT" || profile === "P5TGC" || profile === "P5STC" || profile === "P5CFC") {
+      rendererPid = await application.evaluate(({ BrowserWindow }) =>
+        BrowserWindow.getAllWindows()[0]?.webContents.getOSProcessId() ?? null);
+      if (!rendererPid) throw new Error("Renderer OS process id was unavailable for memory-infra attribution.");
+      memoryTrace = await startMemoryInfraTrace(cdp);
+      const dump = await cdp.send("Tracing.requestMemoryDump", {
+        deterministic: false,
+        levelOfDetail: "detailed",
+      });
+      if (!dump.success) throw new Error("Warm memory-infra dump failed.");
+      warmMemoryDumpGuid = dump.dumpGuid;
+      if (profile === "P5TGC" || profile === "P5STC" || profile === "P5CFC") {
+        warmDomCensus = await captureDomCensus(page, observer);
+        await installMutationCensus(page, observer);
+      }
+    }
+    if (profile === "P5EL") await installEventListenerCensus(page, observer);
+    if (settings.measuredNotificationStride !== 1 || settings.mainObservedTerminal) {
+      await installMeasuredNotificationFilter(application, settings.measuredNotificationStride);
+    }
 
     for (let index = 1; index <= settings.measuredTurns; index++) {
-      const turn = await executeProviderTurn(
-        page, cdp, application, appHostPid, threadId, index, index + 1, "measured", observer, coverageTargets,
-      );
+      const turn = settings.directMeasuredTurns
+          ? await executeDirectProviderTurn(
+            page, cdp, application, appHostPid, threadId, index, index + 1, observer, settings.mainObservedTerminal,
+          )
+        : await executeProviderTurn(
+          page, cdp, application, appHostPid, threadId, index, index + 1, "measured", observer, coverageTargets,
+          settings.boundedTerminalObserver, settings.mainObservedTerminal,
+          ["P5WU", "P5WS", "P5U", "P5S", "P5I", "P5L", "P5L6", "P5H", "P5Z", "P5J", "P5X", "P5Q", "P5QS", "P5QZ", "P5Y", "P5T", "P5G", "P5TG", "P5TGC", "P5ST", "P5STC", "P5CF", "P5CFC", "P5EL", "P5RF"].includes(profile),
+        );
       turns.push(turn);
       console.log(`${profile} measured=${index}/${settings.measuredTurns} completed durationMs=${turn.durationMilliseconds} toolCalls=${turn.toolCalls} timelineItems=${turn.timelineItems}`);
     }
+    if (nativeSamplingActive) {
+      const allocationProfile = await cdp.send("Memory.getSamplingProfile");
+      nativeAllocationAggregate = summarizeNativeAllocations(allocationProfile.profile.samples);
+      await cdp.send("Memory.stopSampling");
+      nativeSamplingActive = false;
+    }
+    if (jsSamplingActive) {
+      const allocationProfile = await cdp.send("HeapProfiler.stopSampling");
+      jsAllocationAggregate = summarizeJsAllocations(allocationProfile.profile.head);
+      await cdp.send("HeapProfiler.disable");
+      jsSamplingActive = false;
+    }
     post = await captureSamplingWindow(application, page, cdp, appHostPid, observer);
+    if (profile === "P5EL") eventListenerCensus = await readEventListenerCensus(page, observer);
+    if (memoryTrace && rendererPid && warmMemoryDumpGuid) {
+      const dump = await cdp.send("Tracing.requestMemoryDump", {
+        deterministic: false,
+        levelOfDetail: "detailed",
+      });
+      if (!dump.success) throw new Error("Post memory-infra dump failed.");
+      if (profile === "P5TGC" || profile === "P5STC" || profile === "P5CFC") {
+        postDomCensus = await captureDomCensus(page, observer);
+        mutationCensus = await readMutationCensus(page, observer);
+      }
+      await cdp.send("Tracing.end");
+      await memoryTrace.completed;
+      memoryDumpAggregate = summarizeMemoryInfraTrace(
+        memoryTrace.events,
+        rendererPid,
+        warmMemoryDumpGuid,
+        dump.dumpGuid,
+      );
+      memoryTrace = null;
+    }
+    if (settings.measuredNotificationStride !== 1 || settings.mainObservedTerminal) {
+      notificationFilter = await readMeasuredNotificationFilter(application);
+    }
+    if (retainedTracker) {
+      retainedObjectAggregate = await finishRetainedObjectTracking(cdp, retainedTracker);
+      retainedTracker = null;
+    }
     const safeCounts = await observedPageEvaluate(page, observer, async () => {
       const [reports, artifacts] = await Promise.all([
         window.caicli.listReports(),
@@ -317,15 +537,35 @@ test("authorized provider-backed renderer memory profile", async ({ browserName 
     ...(post?.samples.flatMap((sample) => sample.ownedPids) ?? []),
     ...turns.map((turn) => turn.resourceAfterTurn).flatMap((sample) => sample.ownedPids),
   ]);
-  if (application) ownedPids.add(application.process().pid);
+  if (applicationPid !== null) ownedPids.add(applicationPid);
   if (appHostPid !== null) ownedPids.add(appHostPid);
   try {
     if (cdp) {
-      await cdp.send("Profiler.stopPreciseCoverage").catch(() => undefined);
-      await cdp.send("Profiler.disable").catch(() => undefined);
+      if (retainedTracker) {
+        await abortRetainedObjectTracking(cdp, retainedTracker);
+        retainedTracker = null;
+      }
+      if (nativeSamplingActive) {
+        await cdp.send("Memory.stopSampling").catch(() => undefined);
+        nativeSamplingActive = false;
+      }
+      if (jsSamplingActive) {
+        await cdp.send("HeapProfiler.stopSampling").catch(() => undefined);
+        await cdp.send("HeapProfiler.disable").catch(() => undefined);
+        jsSamplingActive = false;
+      }
+      if (memoryTrace) {
+        await cdp.send("Tracing.end").catch(() => undefined);
+        await memoryTrace.completed.catch(() => undefined);
+        memoryTrace = null;
+      }
+      if (coverageTargets) {
+        await cdp.send("Profiler.stopPreciseCoverage").catch(() => undefined);
+        await cdp.send("Profiler.disable").catch(() => undefined);
+      }
       await cdp.detach().catch(() => undefined);
     }
-    if (application) await application.close();
+    if (application) await application.close().catch(() => undefined);
     await waitForProcessesToExit([...ownedPids], 15_000);
     processDelta = countLiveProcesses([...ownedPids]);
     if (!isOwnedRoot(root, profile)) throw new Error("Provider diagnostic temp-root ownership check failed.");
@@ -373,17 +613,32 @@ test("authorized provider-backed renderer memory profile", async ({ browserName 
     boundary.reports === 0 &&
     boundary.artifacts === 0 &&
     boundary.unauthorizedToolCalls === 0 &&
+    (!settings.retainedDiagnostic || retainedObjectAggregate !== null) &&
+    (settings.measuredNotificationStride === 1 && !settings.mainObservedTerminal || (
+      notificationFilter?.observed === settings.measuredTurns * 8 &&
+      notificationFilter.forwarded === (settings.measuredNotificationStride === 0
+        ? 0
+        : settings.measuredTurns * (settings.measuredNotificationStride === 1 ? 8 : 1)) &&
+      notificationFilter.dropped === settings.measuredTurns * (settings.measuredNotificationStride === 0
+        ? 8
+        : settings.measuredNotificationStride === 1 ? 0 : 7)
+    )) &&
     workspaceDelta === 0 &&
     processDelta === 0 && temporaryDelta === 0 && configurationDelta === 0;
   const evidence = {
     schemaVersion: "week80-renderer-private-bytes/v1",
-    evidenceKind: `provider-${settings.measuredTurns}-turn`,
+    evidenceKind: settings.retainedDiagnostic
+      ? `provider-${settings.measuredTurns}-turn-retained-object-aggregate`
+      : `provider-${settings.measuredTurns}-turn`,
     profile,
     status: passed ? "Passed" : "Failed",
-    productRevision: "8e227a4ca050e9bdff5d25d61bf89725fed26104",
+    productRevision: profile === "P5F" || profile === "P5V" || profile === "P5V0" || profile === "P5C" || profile === "P5A" || profile === "P5M" || profile === "P5W" || profile === "P5WU" || profile === "P5G" || profile === "P5TG" || profile === "P5TGC" || profile === "P5ST" || profile === "P5STC" || profile === "P5CF" || profile === "P5CFC" || profile === "P5RF"
+      ? "960b230683226e7b313f31fbb771065702a54bc5"
+      : "8e227a4ca050e9bdff5d25d61bf89725fed26104",
+    sourceDirty: profile === "P5F" || profile === "P5V" || profile === "P5V0" || profile === "P5C" || profile === "P5A" || profile === "P5M" || profile === "P5W" || profile === "P5WU" || profile === "P5G" || profile === "P5TG" || profile === "P5TGC" || profile === "P5ST" || profile === "P5STC" || profile === "P5CF" || profile === "P5CFC" || profile === "P5RF",
     baselineHead: "962d5dda4ae875299a96ba2c825bd13ec683240a",
     packageIdentity: {
-      sha256: "6BDB9203C0ACCB8D0E3B90EC1F4218A02BF9E05A21E068654F1C2B9B0E82DE29",
+      sha256: expectedDesktopSha256,
       bytes: 222753280,
     },
     appHostIdentity: {
@@ -416,17 +671,32 @@ test("authorized provider-backed renderer memory profile", async ({ browserName 
       rendererReloadUsedForGate: false,
       terminalPollIntervalMilliseconds,
       allowedModelTools: [toolName],
+      gateEligible: !settings.retainedDiagnostic && profile !== "P5M" && profile !== "P5J" && profile !== "P5T" && profile !== "P0T" && profile !== "P5DT" && profile !== "P5TGC" && profile !== "P5STC" && profile !== "P5CFC" && profile !== "P5EL",
+      retainedObjectTracking: settings.retainedDiagnostic,
+      preciseCoverage: settings.coverageDiagnostic,
+      measuredNotificationStride: settings.measuredNotificationStride,
+      directMeasuredTurns: settings.directMeasuredTurns,
+      boundedTerminalObserver: settings.boundedTerminalObserver,
+      mainObservedTerminal: settings.mainObservedTerminal,
     },
-    sourceMapAudit: {
+    sourceMapAudit: coverageTargets ? {
       productBundleSha256: coverageTargets.bundleSha256,
       packagedBundleMatchedProductBuild: coverageTargets.mapVerified,
       persistedRootedPaths: 0,
-    },
+    } : null,
     observer,
     turns,
     warm,
     post,
     retention,
+    retainedObjectAggregate,
+    nativeAllocationAggregate,
+    jsAllocationAggregate,
+    memoryDumpAggregate,
+    domCensusAggregate: warmDomCensus && postDomCensus ? summarizeDomCensus(warmDomCensus, postDomCensus) : null,
+    mutationCensus,
+    eventListenerCensus,
+    notificationFilter,
     gate15Percent: retention ? {
       workingSetWithinLimit: retention.workingSetPercent <= 15,
       privateBytesWithinLimit: retention.privateBytesPercent <= 15,
@@ -443,7 +713,7 @@ test("authorized provider-backed renderer memory profile", async ({ browserName 
       ? null
       : safeError(scenarioError ?? cleanupError, secretValues),
     summary: passed
-      ? `${profile} provider-backed diagnostic completed within the authorized read-only boundary and zero cleanup delta.`
+      ? `${profile} provider-backed diagnostic completed within the authorized read-only boundary and zero cleanup delta${settings.retainedDiagnostic ? "; only provider-safe retained-object aggregates were persisted" : ""}.`
       : `${profile} provider-backed diagnostic failed closed without persisting provider configuration.`,
   };
   fs.mkdirSync(evidenceRoot, { recursive: true });
@@ -459,6 +729,145 @@ test("authorized provider-backed renderer memory profile", async ({ browserName 
   expect(passed, `${profile} provider boundary or evidence integrity failed.`).toBe(true);
 });
 
+async function installMeasuredNotificationFilter(
+  application: ElectronApplication,
+  stride: number,
+): Promise<void> {
+  await application.evaluate(({ BrowserWindow }, notificationStride) => {
+    const target = BrowserWindow.getAllWindows()[0];
+    if (!target || target.webContents.isDestroyed()) throw new Error("Renderer window is unavailable for notification filtering.");
+    const contents = target.webContents as unknown as {
+      send(channel: string, ...args: unknown[]): void;
+    };
+    const originalSend = contents.send.bind(contents);
+    const stats = { stride: notificationStride, observed: 0, forwarded: 0, dropped: 0, identities: {} as Record<string, number> };
+    contents.send = (channel: string, ...args: unknown[]) => {
+      if (channel === "thread:changed") {
+        stats.observed++;
+        const event = args[0] as { revision?: unknown; committedSequence?: unknown; changeKind?: unknown } | undefined;
+        const identity = `${String(event?.revision ?? "?")}:${String(event?.committedSequence ?? "?")}:${String(event?.changeKind ?? "?")}`;
+        stats.identities[identity] = (stats.identities[identity] ?? 0) + 1;
+        if (notificationStride === 0 || stats.observed % notificationStride !== 0) {
+          stats.dropped++;
+          return;
+        }
+        stats.forwarded++;
+      }
+      originalSend(channel, ...args);
+    };
+    (globalThis as typeof globalThis & { __week80NotificationFilter?: typeof stats }).__week80NotificationFilter = stats;
+  }, stride);
+}
+
+async function readMeasuredNotificationFilter(
+  application: ElectronApplication,
+): Promise<NotificationFilterCounts> {
+  return application.evaluate(() => {
+    const stats = (globalThis as typeof globalThis & {
+      __week80NotificationFilter?: NotificationFilterCounts;
+    }).__week80NotificationFilter;
+    if (!stats) throw new Error("Measured notification filter was not installed.");
+    return { ...stats };
+  });
+}
+
+async function waitForMeasuredNotificationCount(
+  application: ElectronApplication,
+  expectedCount: number,
+): Promise<void> {
+  const deadline = Date.now() + 300_000;
+  while (Date.now() < deadline) {
+    const observed = await application.evaluate(() => {
+      const stats = (globalThis as typeof globalThis & {
+        __week80NotificationFilter?: NotificationFilterCounts;
+      }).__week80NotificationFilter;
+      return stats?.observed ?? 0;
+    });
+    if (observed >= expectedCount) return;
+    await new Promise((resolve) => setTimeout(resolve, terminalPollIntervalMilliseconds));
+  }
+  throw new Error("Provider turn exceeded the Main-observed notification bound.");
+}
+
+async function executeDirectProviderTurn(
+  page: Page,
+  cdp: CDPSession,
+  application: ElectronApplication,
+  appHostPid: number,
+  threadId: string,
+  ordinal: number,
+  expectedTotalTurns: number,
+  observer: ObserverCounts,
+  mainObservedTerminal: boolean,
+): Promise<TurnEvidence> {
+  const startedAt = Date.now();
+  observer.observerBridgeGetThreadCalls++;
+  const transaction = await observedPageEvaluate(page, observer, async ({ id, prompt }) => {
+    const detail = await window.caicli.getThread({ threadId: id, afterSequence: 0 });
+    const composer = await window.caicli.getComposer({ threadId: id });
+    if (!detail.succeeded || !detail.data || !composer.succeeded || !composer.data) return { succeeded: false };
+    const enqueued = await window.caicli.enqueueComposer({
+      threadId: id,
+      expectedThreadRevision: detail.data.thread.revision,
+      expectedQueueRevision: composer.data.queueRevision,
+      clientMutationId: `week80-direct-enqueue-${crypto.randomUUID()}`,
+      prompt,
+      contextSelectionIds: [],
+      catalogSelections: [],
+    });
+    const intentId = enqueued.data?.pendingIntent?.intentId;
+    if (!enqueued.succeeded || !enqueued.data || !intentId) return { succeeded: false };
+    const authoritative = await window.caicli.getComposer({ threadId: id });
+    if (!authoritative.succeeded || !authoritative.data || authoritative.data.pendingIntent?.intentId !== intentId) {
+      return { succeeded: false };
+    }
+    const started = await window.caicli.startTurn({
+      threadId: id,
+      expectedThreadRevision: detail.data.thread.revision,
+      expectedQueueRevision: authoritative.data.queueRevision,
+      clientMutationId: `week80-direct-start-${intentId}`,
+    });
+    return { succeeded: started.succeeded && Boolean(started.data) };
+  }, { id: threadId, prompt: providerPrompt });
+  expect(transaction.succeeded, "Direct measured turn must enqueue and start through the typed Renderer bridge.").toBe(true);
+  let state: SanitizedThreadState;
+  if (mainObservedTerminal) {
+    await waitForMeasuredNotificationCount(application, ordinal * 8);
+    await new Promise((resolve) => setTimeout(resolve, 2_000));
+    state = await readCompletedTurnOnce(page, threadId, observer);
+  } else {
+    state = await waitForCompletedTurn(page, threadId, expectedTotalTurns, observer);
+  }
+  const durationMilliseconds = Date.now() - startedAt;
+  expect(state.latestTurn?.status).toBe("completed");
+  expect(state.latestTurn?.recoveryRequired).toBe(false);
+  expect(state.latestTurnToolCompletedCount).toBe(1);
+  expect(state.latestTurnToolNames).toEqual([toolName]);
+  expect(state.latestTurnApprovalCount).toBe(0);
+  expect(state.latestTurnCommandCount).toBe(0);
+  expect(state.latestTurnChangesCount).toBe(0);
+  const resourceAfterTurn = await captureSample(application, page, cdp, appHostPid, observer, 0);
+  return {
+    ordinal,
+    phase: "measured",
+    durationMilliseconds,
+    toolCalls: state.latestTurnToolCompletedCount,
+    firstTool: state.latestTurnToolNames[0] ?? null,
+    timelineItems: state.latestTurn?.timelineItemCount ?? 0,
+    runtimeEventCounts: state.latestTurnTypes,
+    approvalRequests: state.latestTurnApprovalCount,
+    commandEvents: state.latestTurnCommandCount,
+    changesEvents: state.latestTurnChangesCount,
+    warningEvents: state.latestTurnWarningCount,
+    projectionJsonUtf8Bytes: state.projectionJsonUtf8Bytes,
+    timelineSummaryUtf8Bytes: state.timelineSummaryUtf8Bytes,
+    timelinePayloadJsonUtf8Bytes: state.timelinePayloadJsonUtf8Bytes,
+    distinctTimelineTimestamps: state.distinctTimelineTimestamps,
+    coverage: null,
+    resourceAfterTurn,
+  };
+}
+
 async function executeProviderTurn(
   page: Page,
   cdp: CDPSession,
@@ -469,15 +878,30 @@ async function executeProviderTurn(
   expectedTotalTurns: number,
   phase: "warmup" | "measured",
   observer: ObserverCounts,
-  coverageTargets: CoverageTargets,
+  coverageTargets: CoverageTargets | null,
+  boundedTerminalObserver: boolean,
+  mainObservedTerminal: boolean,
+  uiObservedTerminal: boolean,
 ): Promise<TurnEvidence> {
-  await takeCoverage(cdp, observer, coverageTargets);
+  if (coverageTargets) await takeCoverage(cdp, observer, coverageTargets);
   const started = Date.now();
-  await page.getByRole("textbox", { name: "Composer prompt" }).fill(
-    "Use exactly one workspace.read_text tool call to read global.json. Then reply with one short sentence. Do not call any other tool, do not modify files, and do not use shell, Git, MCP, or any other network behavior.",
-  );
+  await page.getByRole("textbox", { name: "Composer prompt" }).fill(providerPrompt);
   await page.getByRole("button", { name: "Queue prompt" }).click();
-  const state = await waitForCompletedTurn(page, threadId, expectedTotalTurns, observer);
+  if (mainObservedTerminal) {
+    await waitForMeasuredNotificationCount(application, ordinal * 8);
+  }
+  let state: SanitizedThreadState;
+  if (uiObservedTerminal && mainObservedTerminal) {
+    await new Promise((resolve) => setTimeout(resolve, 2_000));
+    state = await readCompletedTurnOnce(page, threadId, observer);
+  } else if (uiObservedTerminal) {
+    const taskControls = page.locator(".task-controls");
+    await taskControls.waitFor({ state: "visible", timeout: 300_000 });
+    await taskControls.waitFor({ state: "hidden", timeout: 300_000 });
+    state = await readCompletedTurnOnce(page, threadId, observer);
+  } else {
+    state = await waitForCompletedTurn(page, threadId, expectedTotalTurns, observer, boundedTerminalObserver);
+  }
   const durationMilliseconds = Date.now() - started;
   expect(state.latestTurn?.status).toBe("completed");
   expect(state.latestTurn?.recoveryRequired).toBe(false);
@@ -486,10 +910,12 @@ async function executeProviderTurn(
   expect(state.latestTurnApprovalCount).toBe(0);
   expect(state.latestTurnCommandCount).toBe(0);
   expect(state.latestTurnChangesCount).toBe(0);
-  const coverage = await takeCoverage(cdp, observer, coverageTargets);
-  expect(coverage.queueResyncRequests, "Provider turn must emit Renderer resync requests.").toBeGreaterThan(0);
-  expect(coverage.resyncRunners, "Provider turn must complete a Renderer resync runner.").toBeGreaterThan(0);
-  expect(coverage.fullProjectionCallsLowerBound, "Provider turn must invoke authoritative full projection resync.").toBeGreaterThan(0);
+  const coverage = coverageTargets ? await takeCoverage(cdp, observer, coverageTargets) : null;
+  if (coverage) {
+    expect(coverage.queueResyncRequests, "Provider turn must emit Renderer resync requests.").toBeGreaterThan(0);
+    expect(coverage.resyncRunners, "Provider turn must complete a Renderer resync runner.").toBeGreaterThan(0);
+    expect(coverage.fullProjectionCallsLowerBound, "Provider turn must invoke authoritative full projection resync.").toBeGreaterThan(0);
+  }
   const resourceAfterTurn = await captureSample(
     application, page, cdp, appHostPid, observer, 0,
   );
@@ -519,7 +945,33 @@ async function waitForCompletedTurn(
   threadId: string,
   expectedTotalTurns: number,
   observer: ObserverCounts,
+  boundedObserver = false,
 ): Promise<SanitizedThreadState> {
+  if (boundedObserver) {
+    const deadline = Date.now() + 300_000;
+    while (Date.now() < deadline) {
+      observer.terminalPollCalls++;
+      observer.observerBridgeGetThreadCalls++;
+      const terminal = await observedPageEvaluate(page, observer, async (id) => {
+        const result = await window.caicli.getThread({ threadId: id, afterSequence: 0 });
+        const latest = result.data?.turns.at(-1) ?? null;
+        return {
+          succeeded: result.succeeded && Boolean(result.data),
+          turnCount: result.data?.turns.length ?? 0,
+          latestStatus: latest?.status ?? null,
+        };
+      }, threadId);
+      if (terminal.succeeded && terminal.turnCount >= expectedTotalTurns && terminal.latestStatus === "completed") {
+        await new Promise((resolve) => setTimeout(resolve, terminalPollIntervalMilliseconds));
+        return waitForCompletedTurn(page, threadId, expectedTotalTurns, observer, false);
+      }
+      if (terminal.latestStatus && ["failed", "canceled", "interrupted"].includes(terminal.latestStatus)) {
+        return waitForCompletedTurn(page, threadId, expectedTotalTurns, observer, false);
+      }
+      await new Promise((resolve) => setTimeout(resolve, terminalPollIntervalMilliseconds));
+    }
+    throw new Error("Provider turn exceeded the authorized terminal wait bound.");
+  }
   const deadline = Date.now() + 300_000;
   while (Date.now() < deadline) {
     observer.terminalPollCalls++;
@@ -590,6 +1042,73 @@ async function waitForCompletedTurn(
     await new Promise((resolve) => setTimeout(resolve, terminalPollIntervalMilliseconds));
   }
   throw new Error("Provider turn exceeded the authorized terminal wait bound.");
+}
+
+async function readCompletedTurnOnce(
+  page: Page,
+  threadId: string,
+  observer: ObserverCounts,
+): Promise<SanitizedThreadState> {
+  observer.terminalPollCalls++;
+  observer.observerBridgeGetThreadCalls++;
+  return observedPageEvaluate(page, observer, async (id) => {
+    const result = await window.caicli.getThread({ threadId: id, afterSequence: 0 });
+    if (!result.succeeded || !result.data) {
+      return {
+        succeeded: false,
+        threadStatus: null,
+        turnCount: 0,
+        timelineItemCount: 0,
+        latestTurn: null,
+        latestTurnTypes: {},
+        latestTurnToolNames: [],
+        latestTurnToolCompletedCount: 0,
+        latestTurnApprovalCount: 0,
+        latestTurnCommandCount: 0,
+        latestTurnChangesCount: 0,
+        latestTurnWarningCount: 0,
+        projectionJsonUtf8Bytes: 0,
+        timelineSummaryUtf8Bytes: 0,
+        timelinePayloadJsonUtf8Bytes: 0,
+        distinctTimelineTimestamps: 0,
+      };
+    }
+    const latest = result.data.turns.at(-1) ?? null;
+    const items = latest
+      ? result.data.timeline.filter((item) => item.turnId === latest.turnId)
+      : [];
+    const types: Record<string, number> = {};
+    for (const item of items) types[item.type] = (types[item.type] ?? 0) + 1;
+    const completedTools = items.filter((item) => item.type === "tool.completed");
+    const encoder = new TextEncoder();
+    return {
+      succeeded: true,
+      threadStatus: result.data.thread.status,
+      turnCount: result.data.turns.length,
+      timelineItemCount: result.data.timeline.length,
+      latestTurn: latest ? {
+        turnId: latest.turnId,
+        status: latest.status,
+        timelineItemCount: latest.timelineItemCount,
+        recoveryRequired: latest.recoveryRequired,
+      } : null,
+      latestTurnTypes: types,
+      latestTurnToolNames: completedTools.map((item) => item.payload.name ?? ""),
+      latestTurnToolCompletedCount: completedTools.length,
+      latestTurnApprovalCount: items.filter((item) => item.type.startsWith("approval.")).length,
+      latestTurnCommandCount: items.filter((item) => item.type.startsWith("command.")).length,
+      latestTurnChangesCount: items.filter((item) => item.type === "changes.updated").length,
+      latestTurnWarningCount: items.filter((item) => item.type === "warning.raised").length,
+      projectionJsonUtf8Bytes: encoder.encode(JSON.stringify(result.data)).byteLength,
+      timelineSummaryUtf8Bytes: result.data.timeline.reduce(
+        (total, item) => total + encoder.encode(item.summary).byteLength, 0,
+      ),
+      timelinePayloadJsonUtf8Bytes: result.data.timeline.reduce(
+        (total, item) => total + encoder.encode(JSON.stringify(item.payload)).byteLength, 0,
+      ),
+      distinctTimelineTimestamps: new Set(result.data.timeline.map((item) => item.timestampUtc)).size,
+    };
+  }, threadId);
 }
 
 function createCoverageTargets(): CoverageTargets {
@@ -863,8 +1382,426 @@ function generatedLineStarts(source: string): number[] {
 }
 
 function parseProfile(value: string | undefined): ProviderProfile {
-  if (value === "P1" || value === "P5" || value === "P10") return value;
-  throw new Error("CAICLI_WEEK80_PROVIDER_PROFILE must be P1, P5, or P10.");
+  if (value && Object.hasOwn(profileSettings, value)) return value as ProviderProfile;
+  throw new Error(`CAICLI_WEEK80_PROVIDER_PROFILE must be one of ${Object.keys(profileSettings).join(", ")}.`);
+}
+
+function summarizeNativeAllocations(samples: readonly {
+  readonly size: number;
+  readonly total: number;
+  readonly stack: readonly string[];
+}[]) {
+  const stacks = new Map<string, { sampledBytes: number; attributedBytes: number; samples: number }>();
+  for (const sample of samples) {
+    const stack = sample.stack.length > 0
+      ? sample.stack.map((frame) => frame
+        .replaceAll(repositoryRoot, "<repository>")
+        .replaceAll(desktopRoot, "<desktop>"))
+      : ["<unknown>"];
+    const key = stack.join(" <- ");
+    const aggregate = stacks.get(key) ?? { sampledBytes: 0, attributedBytes: 0, samples: 0 };
+    aggregate.sampledBytes += sample.size;
+    aggregate.attributedBytes += sample.total;
+    aggregate.samples += 1;
+    stacks.set(key, aggregate);
+  }
+  const topStacks = [...stacks.entries()]
+    .map(([stack, value]) => ({ stack, ...value }))
+    .sort((left, right) => right.attributedBytes - left.attributedBytes || right.sampledBytes - left.sampledBytes)
+    .slice(0, 50);
+  return {
+    schemaVersion: "week80-native-allocation-aggregate/v1",
+    samplingIntervalBytes: 32_768,
+    suppressRandomness: true,
+    sampleCount: samples.length,
+    sampledBytes: samples.reduce((sum, sample) => sum + sample.size, 0),
+    attributedBytes: samples.reduce((sum, sample) => sum + sample.total, 0),
+    uniqueStackCount: stacks.size,
+    topStacks,
+    rawProfilePersisted: false,
+    gateEligible: false,
+  };
+}
+
+async function installEventListenerCensus(page: Page, observer: ObserverCounts) {
+  await observedPageEvaluate(page, observer, () => {
+    const addedByType: Record<string, number> = {};
+    const removedByType: Record<string, number> = {};
+    const addStacks: Record<string, number> = {};
+    const increment = (counts: Record<string, number>, name: string) => {
+      counts[name] = (counts[name] ?? 0) + 1;
+    };
+    const safeStack = () => (new Error().stack ?? "<unknown>").split("\n").slice(2, 5).map((line) =>
+      line.trim().replace(/\([^)]*\)/gu, "(<location>)").replace(/(?:https?|file):\S+/gu, "<location>"),
+    ).join(" <- ");
+    const originalAdd = EventTarget.prototype.addEventListener;
+    const originalRemove = EventTarget.prototype.removeEventListener;
+    EventTarget.prototype.addEventListener = function addEventListener(type, callback, options) {
+      increment(addedByType, type);
+      increment(addStacks, `${type}: ${safeStack()}`);
+      return originalAdd.call(this, type, callback, options);
+    } as typeof EventTarget.prototype.addEventListener;
+    EventTarget.prototype.removeEventListener = function removeEventListener(type, callback, options) {
+      increment(removedByType, type);
+      return originalRemove.call(this, type, callback, options);
+    } as typeof EventTarget.prototype.removeEventListener;
+    (globalThis as typeof globalThis & {
+      __week80EventListenerCensus?: {
+        addedByType: Record<string, number>;
+        removedByType: Record<string, number>;
+        addStacks: Record<string, number>;
+        originalAdd: typeof EventTarget.prototype.addEventListener;
+        originalRemove: typeof EventTarget.prototype.removeEventListener;
+      };
+    }).__week80EventListenerCensus = { addedByType, removedByType, addStacks, originalAdd, originalRemove };
+  });
+}
+
+async function readEventListenerCensus(page: Page, observer: ObserverCounts) {
+  return observedPageEvaluate(page, observer, () => {
+    const state = (globalThis as typeof globalThis & {
+      __week80EventListenerCensus?: {
+        addedByType: Record<string, number>;
+        removedByType: Record<string, number>;
+        addStacks: Record<string, number>;
+        originalAdd: typeof EventTarget.prototype.addEventListener;
+        originalRemove: typeof EventTarget.prototype.removeEventListener;
+      };
+    }).__week80EventListenerCensus;
+    if (!state) throw new Error("Event-listener census was not installed.");
+    EventTarget.prototype.addEventListener = state.originalAdd;
+    EventTarget.prototype.removeEventListener = state.originalRemove;
+    const topStacks = Object.entries(state.addStacks).map(([stack, count]) => ({ stack, count }))
+      .sort((left, right) => right.count - left.count).slice(0, 50);
+    return {
+      addedByType: state.addedByType,
+      removedByType: state.removedByType,
+      added: Object.values(state.addedByType).reduce((sum, value) => sum + value, 0),
+      removed: Object.values(state.removedByType).reduce((sum, value) => sum + value, 0),
+      topStacks,
+      rawTargetsPersisted: false,
+      gateEligible: false,
+    };
+  });
+}
+
+async function installMutationCensus(page: Page, observer: ObserverCounts) {
+  await observedPageEvaluate(page, observer, () => {
+    type MutationStats = {
+      addedNodes: number;
+      removedNodes: number;
+      characterDataMutations: number;
+      characterTargets: Record<string, number>;
+      targets: Record<string, number>;
+      addedClasses: Record<string, number>;
+      removedClasses: Record<string, number>;
+      addedTags: Record<string, number>;
+      removedTags: Record<string, number>;
+    };
+    const stats: MutationStats = {
+      addedNodes: 0,
+      removedNodes: 0,
+      characterDataMutations: 0,
+      characterTargets: {},
+      targets: {},
+      addedClasses: {},
+      removedClasses: {},
+      addedTags: {},
+      removedTags: {},
+    };
+    const increment = (counts: Record<string, number>, name: string) => {
+      counts[name] = (counts[name] ?? 0) + 1;
+    };
+    const countTree = (node: Node, kind: "added" | "removed") => {
+      if (kind === "added") stats.addedNodes++;
+      else stats.removedNodes++;
+      if (node instanceof Element) {
+        increment(kind === "added" ? stats.addedTags : stats.removedTags, node.tagName.toLowerCase());
+        for (const token of node.classList) {
+          increment(kind === "added" ? stats.addedClasses : stats.removedClasses, token);
+        }
+      }
+      for (const child of node.childNodes) countTree(child, kind);
+    };
+    const mutationObserver = new MutationObserver((records) => {
+      for (const record of records) {
+        if (record.type === "characterData") {
+          stats.characterDataMutations++;
+          const parent = record.target.parentElement;
+          const target = parent?.classList[0] ?? parent?.tagName.toLowerCase() ?? record.target.nodeName.toLowerCase();
+          increment(stats.characterTargets, target);
+          continue;
+        }
+        const target = record.target instanceof Element
+          ? record.target.classList[0] ?? record.target.tagName.toLowerCase()
+          : record.target.nodeName.toLowerCase();
+        increment(stats.targets, target);
+        for (const node of record.addedNodes) countTree(node, "added");
+        for (const node of record.removedNodes) countTree(node, "removed");
+      }
+    });
+    mutationObserver.observe(document.documentElement, { childList: true, characterData: true, subtree: true });
+    (globalThis as typeof globalThis & {
+      __week80MutationCensus?: { stats: MutationStats; observer: MutationObserver };
+    }).__week80MutationCensus = { stats, observer: mutationObserver };
+  });
+}
+
+async function readMutationCensus(page: Page, observer: ObserverCounts) {
+  return observedPageEvaluate(page, observer, () => {
+    const state = (globalThis as typeof globalThis & {
+      __week80MutationCensus?: {
+        stats: {
+          addedNodes: number;
+          removedNodes: number;
+          characterDataMutations: number;
+          characterTargets: Record<string, number>;
+          targets: Record<string, number>;
+          addedClasses: Record<string, number>;
+          removedClasses: Record<string, number>;
+          addedTags: Record<string, number>;
+          removedTags: Record<string, number>;
+        };
+        observer: MutationObserver;
+      };
+    }).__week80MutationCensus;
+    if (!state) throw new Error("Mutation census was not installed.");
+    state.observer.disconnect();
+    return { ...state.stats, rawNodesPersisted: false, gateEligible: false };
+  });
+}
+
+async function captureDomCensus(page: Page, observer: ObserverCounts) {
+  const selectors = [
+    ".app-shell",
+    ".thread-sidebar",
+    ".task-surface",
+    ".timeline-view",
+    ".thread-context",
+    ".timeline-turn-browser",
+    ".task-controls",
+    ".terminal-panel",
+    ".composer",
+    ".inspector",
+  ];
+  return observedPageEvaluate(page, observer, (selectorList) => {
+    const countTokens = (values: readonly string[]) => {
+      const counts: Record<string, number> = {};
+      for (const value of values) counts[value] = (counts[value] ?? 0) + 1;
+      return counts;
+    };
+    const elements = [...document.querySelectorAll("*")];
+    const classTokens = elements.flatMap((element) => [...element.classList]);
+    const tagTokens = elements.map((element) => element.tagName.toLowerCase());
+    const subtrees: Record<string, { roots: number; elements: number }> = {};
+    for (const selector of selectorList) {
+      const roots = [...document.querySelectorAll(selector)];
+      subtrees[selector] = {
+        roots: roots.length,
+        elements: roots.reduce((sum, root) => sum + 1 + root.querySelectorAll("*").length, 0),
+      };
+    }
+    return {
+      totalElements: elements.length,
+      classes: countTokens(classTokens),
+      tags: countTokens(tagTokens),
+      subtrees,
+    };
+  }, selectors);
+}
+
+function summarizeDomCensus(
+  warm: Awaited<ReturnType<typeof captureDomCensus>>,
+  post: Awaited<ReturnType<typeof captureDomCensus>>,
+) {
+  const diffCounts = (left: Record<string, number>, right: Record<string, number>) => {
+    const keys = new Set([...Object.keys(left), ...Object.keys(right)]);
+    return [...keys].map((name) => ({
+      name,
+      warm: left[name] ?? 0,
+      post: right[name] ?? 0,
+      delta: (right[name] ?? 0) - (left[name] ?? 0),
+    })).filter((entry) => entry.delta !== 0).sort((a, b) => Math.abs(b.delta) - Math.abs(a.delta));
+  };
+  const warmSubtrees = Object.fromEntries(Object.entries(warm.subtrees).map(([name, value]) => [name, value.elements]));
+  const postSubtrees = Object.fromEntries(Object.entries(post.subtrees).map(([name, value]) => [name, value.elements]));
+  return {
+    schemaVersion: "week80-dom-census-aggregate/v1",
+    totalElements: { warm: warm.totalElements, post: post.totalElements, delta: post.totalElements - warm.totalElements },
+    subtreeDeltas: diffCounts(warmSubtrees, postSubtrees),
+    classDeltas: diffCounts(warm.classes, post.classes),
+    tagDeltas: diffCounts(warm.tags, post.tags),
+    rawDomPersisted: false,
+    gateEligible: false,
+  };
+}
+
+async function startMemoryInfraTrace(cdp: CDPSession) {
+  const events: Array<Record<string, unknown>> = [];
+  let resolveCompleted: (() => void) | null = null;
+  const completed = new Promise<void>((resolve) => { resolveCompleted = resolve; });
+  cdp.on("Tracing.dataCollected", (payload) => {
+    events.push(...payload.value as Array<Record<string, unknown>>);
+  });
+  cdp.on("Tracing.tracingComplete", () => resolveCompleted?.());
+  await cdp.send("Tracing.start", {
+    transferMode: "ReportEvents",
+    traceConfig: {
+      recordMode: "recordAsMuchAsPossible",
+      traceBufferSizeInKb: 65_536,
+      includedCategories: ["memory-infra", "disabled-by-default-memory-infra"],
+    },
+    tracingBackend: "chrome",
+  });
+  return { events, completed };
+}
+
+function summarizeMemoryInfraTrace(
+  events: readonly Record<string, unknown>[],
+  rendererPid: number,
+  requestedWarmGuid: string,
+  requestedPostGuid: string,
+) {
+  const dumpFragments = events
+    .filter((event) => event.pid === rendererPid && event.ph === "v")
+    .map((event) => {
+      const args = isPlainRecord(event.args) ? event.args : {};
+      const dumps = isPlainRecord(args.dumps) ? args.dumps : {};
+      return {
+        id: String(event.id ?? event.id2 ?? ""),
+        timestamp: typeof event.ts === "number" ? event.ts : 0,
+        allocators: isPlainRecord(dumps.allocators) ? dumps.allocators : {},
+        processTotals: isPlainRecord(dumps.process_totals) ? dumps.process_totals : {},
+      };
+    })
+    .filter((event) => Object.keys(event.allocators).length > 0)
+    .sort((left, right) => left.timestamp - right.timestamp);
+  const byDumpId = new Map<string, typeof dumpFragments[number]>();
+  for (const fragment of dumpFragments) {
+    const current = byDumpId.get(fragment.id);
+    if (!current) {
+      byDumpId.set(fragment.id, fragment);
+      continue;
+    }
+    Object.assign(current.allocators, fragment.allocators);
+    Object.assign(current.processTotals, fragment.processTotals);
+    current.timestamp = Math.min(current.timestamp, fragment.timestamp);
+  }
+  const dumpEvents = [...byDumpId.values()].sort((left, right) => left.timestamp - right.timestamp);
+  if (dumpEvents.length < 2) {
+    throw new Error(`Memory-infra produced ${dumpEvents.length} renderer dump groups from ${dumpFragments.length} fragments; expected at least two.`);
+  }
+  const warm = dumpEvents[0]!;
+  const post = dumpEvents.at(-1)!;
+  const warmAllocators = extractMemoryDumpScalars(warm.allocators);
+  const postAllocators = extractMemoryDumpScalars(post.allocators);
+  const allocatorNames = new Set([...Object.keys(warmAllocators), ...Object.keys(postAllocators)]);
+  const allocatorDeltas = [...allocatorNames]
+    .map((name) => ({
+      name,
+      warmBytes: warmAllocators[name] ?? 0,
+      postBytes: postAllocators[name] ?? 0,
+      deltaBytes: (postAllocators[name] ?? 0) - (warmAllocators[name] ?? 0),
+    }))
+    .sort((left, right) => Math.abs(right.deltaBytes) - Math.abs(left.deltaBytes))
+    .slice(0, 100);
+  const warmTotals = extractMemoryDumpScalars(warm.processTotals);
+  const postTotals = extractMemoryDumpScalars(post.processTotals);
+  const totalNames = new Set([...Object.keys(warmTotals), ...Object.keys(postTotals)]);
+  return {
+    schemaVersion: "week80-memory-infra-aggregate/v1",
+    rendererPid,
+    requestedDumpGuids: { warm: requestedWarmGuid, post: requestedPostGuid },
+    selectedDumpIds: { warm: warm.id, post: post.id },
+    traceEventCount: events.length,
+    rendererDumpFragmentCount: dumpFragments.length,
+    rendererDumpEventCount: dumpEvents.length,
+    processTotals: [...totalNames].map((name) => ({
+      name,
+      warmBytes: warmTotals[name] ?? 0,
+      postBytes: postTotals[name] ?? 0,
+      deltaBytes: (postTotals[name] ?? 0) - (warmTotals[name] ?? 0),
+    })).sort((left, right) => Math.abs(right.deltaBytes) - Math.abs(left.deltaBytes)),
+    allocatorDeltas,
+    deterministicDump: false,
+    forcedGc: false,
+    rawTracePersisted: false,
+    gateEligible: false,
+  };
+}
+
+function extractMemoryDumpScalars(value: Record<string, unknown>): Record<string, number> {
+  const scalars: Record<string, number> = {};
+  for (const [name, rawEntry] of Object.entries(value)) {
+    if ((typeof rawEntry === "string" || typeof rawEntry === "number") && name.endsWith("_bytes")) {
+      const decoded = decodeMemoryDumpScalar(rawEntry);
+      if (decoded !== null) scalars[name] = decoded;
+      continue;
+    }
+    if (!isPlainRecord(rawEntry)) continue;
+    const attrs = isPlainRecord(rawEntry.attrs) ? rawEntry.attrs : rawEntry;
+    for (const attribute of ["size", "effective_size", "resident_size", "private_footprint_bytes", "resident_set_bytes"]) {
+      const rawAttribute = attrs[attribute];
+      if (!isPlainRecord(rawAttribute) || rawAttribute.units !== "bytes") continue;
+      const decoded = decodeMemoryDumpScalar(rawAttribute.value);
+      if (decoded !== null) {
+        scalars[attribute === "size" ? name : `${name}/${attribute}`] = decoded;
+      }
+    }
+  }
+  return scalars;
+}
+
+function decodeMemoryDumpScalar(value: unknown): number | null {
+  if (typeof value === "number" && Number.isFinite(value)) return value;
+  if (typeof value !== "string" || !/^(?:0x)?[0-9a-f]+$/iu.test(value)) return null;
+  const decoded = Number.parseInt(value.replace(/^0x/iu, ""), 16);
+  return Number.isSafeInteger(decoded) ? decoded : null;
+}
+
+function isPlainRecord(value: unknown): value is Record<string, unknown> {
+  return value !== null && typeof value === "object" && !Array.isArray(value);
+}
+
+function summarizeJsAllocations(root: {
+  readonly callFrame: {
+    readonly functionName: string;
+    readonly url: string;
+    readonly lineNumber: number;
+    readonly columnNumber: number;
+  };
+  readonly selfSize: number;
+  readonly children: readonly unknown[];
+}) {
+  const nodes: Array<{ stack: string; selfBytes: number }> = [];
+  const visit = (node: typeof root, ancestors: readonly string[]) => {
+    const script = node.callFrame.url.split(/[\\/]/u).at(-1) || "<anonymous>";
+    const frame = `${node.callFrame.functionName || "<anonymous>"}@${script}:${node.callFrame.lineNumber + 1}:${node.callFrame.columnNumber + 1}`;
+    const stack = [...ancestors, frame];
+    if (node.selfSize > 0) nodes.push({ stack: stack.join(" <- "), selfBytes: node.selfSize });
+    for (const child of node.children) visit(child as typeof root, stack);
+  };
+  visit(root, []);
+  const byLeaf = new Map<string, number>();
+  for (const node of nodes) {
+    const leaf = node.stack.split(" <- ").at(-1) ?? "<unknown>";
+    byLeaf.set(leaf, (byLeaf.get(leaf) ?? 0) + node.selfBytes);
+  }
+  return {
+    schemaVersion: "week80-js-allocation-aggregate/v1",
+    samplingIntervalBytes: 32_768,
+    includesCollectedByMajorGc: true,
+    includesCollectedByMinorGc: true,
+    sampledSelfBytes: nodes.reduce((sum, node) => sum + node.selfBytes, 0),
+    sampledNodeCount: nodes.length,
+    topStacks: nodes.sort((left, right) => right.selfBytes - left.selfBytes).slice(0, 100),
+    topLeafFunctions: [...byLeaf.entries()]
+      .map(([frame, selfBytes]) => ({ frame, selfBytes }))
+      .sort((left, right) => right.selfBytes - left.selfBytes)
+      .slice(0, 50),
+    rawProfilePersisted: false,
+    gateEligible: false,
+  };
 }
 
 function sha256File(filePath: string): string {

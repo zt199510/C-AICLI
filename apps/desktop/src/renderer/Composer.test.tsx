@@ -53,6 +53,39 @@ describe("Composer", () => {
     expect((screen.getByRole("textbox", { name: "Composer prompt" }) as HTMLTextAreaElement).disabled).toBe(true);
   });
 
+  it("reuses the queued-intent DOM across pending state transitions", () => {
+    const initial = makeProps();
+    const view = render(<Composer {...initial} />);
+    const stableNode = document.querySelector(".queued-intent");
+    expect(stableNode).not.toBeNull();
+    expect((stableNode as HTMLElement).hidden).toBe(true);
+    const composer = { ...initialComposerUiState, snapshotStatus: "ready" as const, snapshot: {
+      workspaceId: "ws", threadId: "thread", threadRevision: 1, queueRevision: 2,
+      pendingIntent: { intentId: "intent", delivery: "next-turn" as const, createdAtUtc: "2026-07-17T00:00:00Z", contextCount: 1, catalogCount: 2 },
+      effectiveModel: "gpt-test", modelSource: "test", approvalMode: "OnRequest", approvalModeSource: "test", controlledContext: true,
+    } };
+    view.rerender(<Composer {...makeProps({ composer })} />);
+    expect(document.querySelector(".queued-intent")).toBe(stableNode);
+    expect((stableNode as HTMLElement).hidden).toBe(false);
+    view.rerender(<Composer {...makeProps()} />);
+    expect(document.querySelector(".queued-intent")).toBe(stableNode);
+    expect((stableNode as HTMLElement).hidden).toBe(true);
+  });
+
+  it("updates draft and status text without replacing DOM child nodes", async () => {
+    const initial = makeProps({ draft: { ...draft, text: "", status: "editing" } });
+    const view = render(<Composer {...initial} />);
+    const records: MutationRecord[] = [];
+    const observer = new MutationObserver((batch) => records.push(...batch));
+    observer.observe(document.querySelector(".composer")!, { childList: true, subtree: true });
+    view.rerender(<Composer {...makeProps({ draft: { ...draft, text: "provider prompt", status: "queued" } })} />);
+    view.rerender(<Composer {...initial} />);
+    await Promise.resolve();
+    observer.disconnect();
+    expect(records.flatMap((record) => [...record.addedNodes])).toHaveLength(0);
+    expect(records.flatMap((record) => [...record.removedNodes])).toHaveLength(0);
+  });
+
   it("navigates mention options with a roving active descendant and restores the prompt", async () => {
     const props = makeProps({ composer: { ...initialComposerUiState, mentions: {
       loading: false, error: null, truncated: false,
