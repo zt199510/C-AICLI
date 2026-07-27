@@ -7,9 +7,9 @@ const desktopRoot = path.resolve(import.meta.dirname, "..");
 const repositoryRoot = path.resolve(desktopRoot, "..", "..");
 const evidencePath = path.join(repositoryRoot, "artifacts", "week81-renderer-memory-remediation", "reload-diagnosis.json");
 
-test("records reload lifecycle allocation without changing the Gate", async ({ browserName }, testInfo) => {
+test("records staged workload allocation without changing the Gate", async ({ browserName }, testInfo) => {
   if (browserName !== "chromium") throw new Error("Electron diagnostics require Chromium.");
-  testInfo.setTimeout(120_000);
+  testInfo.setTimeout(210_000);
   const root = fs.mkdtempSync(path.join(os.tmpdir(), "caicli-week81-reload-diagnosis-"));
   let application: ElectronApplication | null = null;
   let cdp: CDPSession | null = null;
@@ -32,7 +32,7 @@ test("records reload lifecycle allocation without changing the Gate", async ({ b
     await installLifecycleCounters(page);
     samples.push(await sample("initial-240", application, page, cdp));
 
-    for (let index = 1; index <= 5; index++) {
+    for (let index = 1; index <= 4; index++) {
       await page.reload();
       await page.locator(".thread-select").click({ force: true });
       await expect(page.getByText("80 loaded items")).toBeVisible();
@@ -41,8 +41,13 @@ test("records reload lifecycle allocation without changing the Gate", async ({ b
       await installLifecycleCounters(page);
     }
 
+    await page.waitForTimeout(30_000);
+    samples.push(await sample("post-reloads-30s", application, page, cdp));
     await page.getByRole("tab", { name: "Changes" }).click();
     await expect(page.locator(".review-section li")).toHaveCount(50);
+    samples.push(await sample("post-changes-0s", application, page, cdp));
+    await page.waitForTimeout(30_000);
+    samples.push(await sample("post-changes-30s", application, page, cdp));
     await page.getByRole("button", { name: "Open terminal" }).click();
     await page.getByRole("textbox", { name: "Terminal input" }).fill("long-output");
     await page.getByRole("button", { name: "Send" }).click();
@@ -50,17 +55,15 @@ test("records reload lifecycle allocation without changing the Gate", async ({ b
     await page.getByRole("button", { name: "Cancel process" }).click();
     await expect(page.getByText(/exited/)).toBeVisible();
     await page.getByRole("button", { name: "Close terminal" }).click();
-    samples.push(await sample("post-workload-0s", application, page, cdp));
-    await page.waitForTimeout(10_000);
-    samples.push(await sample("post-workload-10s", application, page, cdp));
-    await page.waitForTimeout(20_000);
-    samples.push(await sample("post-workload-30s", application, page, cdp));
+    samples.push(await sample("post-terminal-0s", application, page, cdp));
+    await page.waitForTimeout(30_000);
+    samples.push(await sample("post-terminal-30s", application, page, cdp));
 
     fs.mkdirSync(path.dirname(evidencePath), { recursive: true });
     fs.writeFileSync(evidencePath, `${JSON.stringify({
       schemaVersion: "week81-reload-diagnosis/v1",
       status: "Measured",
-      settings: { reloads: 5, forcedGc: false, heapSnapshot: false, gateEligible: false },
+      settings: { reloads: 4, stageIdleSeconds: 30, forcedGc: false, heapSnapshot: false, gateEligible: false },
       samples,
     }, null, 2)}\n`, "utf8");
   } finally {

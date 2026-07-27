@@ -72,21 +72,21 @@ export function TerminalPanel({ workspaceReady }: { workspaceReady: boolean }) {
       <strong>User terminal</strong>
       <span role="status" aria-live="polite">{terminal ? `${terminal.status}${terminal.exitCode === null ? "" : ` · exit ${terminal.exitCode}`}${terminal.truncated ? " · output truncated" : ""}` : "Closed"}</span>
       <div>
-        {expanded ? <button type="button" onClick={() => setExpanded(false)}>Collapse</button> : null}
-        {!terminal || terminal.status === "closed" ? <button type="button" disabled={!workspaceReady || busy} onClick={() => void open()}>Open terminal</button> : null}
-        {terminal && terminal.status === "running" ? <button type="button" disabled={busy} onClick={() => void stop(false)}>Cancel process</button> : null}
-        {terminal && terminal.status !== "closed" ? <button type="button" disabled={busy} onClick={() => void stop(true)}>Close terminal</button> : null}
+        <button type="button" hidden={!expanded} onClick={() => setExpanded(false)}>Collapse</button>
+        <button type="button" hidden={Boolean(terminal && terminal.status !== "closed")} disabled={!workspaceReady || busy} onClick={() => void open()}>Open terminal</button>
+        <button type="button" hidden={terminal?.status !== "running"} disabled={busy} onClick={() => void stop(false)}>Cancel process</button>
+        <button type="button" hidden={!terminal || terminal.status === "closed"} disabled={busy} onClick={() => void stop(true)}>Close terminal</button>
       </div>
     </div>
-    {error ? <div className="inline-error" role="alert">{error}</div> : null}
-    {expanded && terminal ? <>
-      <pre ref={outputRef} className="terminal-output" tabIndex={0}>{terminal.truncated ? "[earlier output truncated]\n" : ""}{terminal.output}</pre>
+    <div className="inline-error" role="alert" hidden={!error}>{error ?? ""}</div>
+    <div className="terminal-session" hidden={!expanded || !terminal}>
+      <pre ref={outputRef} className="terminal-output" tabIndex={0}>{terminal?.truncated ? "[earlier output truncated]\n" : ""}{terminal?.output ?? ""}</pre>
       <div className="terminal-input-row">
-        <input aria-label="Terminal input" value={input} maxLength={8192} disabled={busy || terminal.status !== "running"} onChange={(event) => setInput(event.target.value)} onKeyDown={(event) => { if (event.key === "Enter") { event.preventDefault(); void send(); } }} />
-        <button type="button" disabled={busy || terminal.status !== "running" || !input} onClick={() => void send()}>Send</button>
+        <input aria-label="Terminal input" value={input} maxLength={8192} disabled={busy || terminal?.status !== "running"} onChange={(event) => setInput(event.target.value)} onKeyDown={(event) => { if (event.key === "Enter") { event.preventDefault(); void send(); } }} />
+        <button type="button" disabled={busy || terminal?.status !== "running" || !input} onClick={() => void send()}>Send</button>
         <button type="button" onClick={() => void copySelection()}>Copy selection</button>
       </div>
-    </> : null}
+    </div>
   </section>;
 }
 

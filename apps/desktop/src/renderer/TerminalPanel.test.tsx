@@ -27,6 +27,30 @@ describe("user terminal panel", () => {
     expect(screen.getByText("Closed")).toBeTruthy();
   });
 
+  it("preserves the terminal DOM structure across its full lifecycle", async () => {
+    window.caicli = {
+      openTerminal: vi.fn(async () => result("running")),
+      inputTerminal: vi.fn(async () => result("running", "terminal-user-sentinel\n")),
+      cancelTerminal: vi.fn(async () => result("exited", "terminal-user-sentinel\n", 130)),
+      closeTerminal: vi.fn(async () => result("closed", "terminal-user-sentinel\n", 130)),
+      getTerminal: vi.fn(async () => result("running", "terminal-user-sentinel\n")),
+    } as unknown as DesktopBridge;
+    const view = render(<TerminalPanel workspaceReady />);
+    const structuralMutations: MutationRecord[] = [];
+    const observer = new MutationObserver((records) => structuralMutations.push(...records.filter((record) =>
+      record.type === "childList" && [...record.addedNodes, ...record.removedNodes].some((node) => node.nodeType === Node.ELEMENT_NODE))));
+    observer.observe(view.container, { childList: true, subtree: true });
+
+    await userEvent.click(screen.getByRole("button", { name: "Open terminal" }));
+    await userEvent.type(screen.getByRole("textbox", { name: "Terminal input" }), "terminal-user-sentinel");
+    await userEvent.click(screen.getByRole("button", { name: "Send" }));
+    await userEvent.click(screen.getByRole("button", { name: "Cancel process" }));
+    await userEvent.click(screen.getByRole("button", { name: "Close terminal" }));
+    observer.disconnect();
+
+    expect(structuralMutations).toHaveLength(0);
+  });
+
   it("does not open without a workspace", () => {
     window.caicli = {} as DesktopBridge;
     render(<TerminalPanel workspaceReady={false} />);
