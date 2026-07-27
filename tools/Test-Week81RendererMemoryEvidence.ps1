@@ -83,7 +83,7 @@ if ((Get-FileHash -LiteralPath $appHostPath -Algorithm SHA256).Hash -ne $appHost
 }
 
 $review = Get-Content -LiteralPath (Join-Path $repositoryRoot 'docs_md\weekly\81_week_review.md') -Raw -Encoding UTF8
-if (-not $review.Contains('状态：`Candidate Ready for Requalification`') -or -not $review.Contains($candidate)) {
+if (-not $review.Contains('Candidate Ready for Requalification') -or -not $review.Contains($candidate)) {
     throw 'Week81 review is not bound to the candidate-ready revision.'
 }
 
