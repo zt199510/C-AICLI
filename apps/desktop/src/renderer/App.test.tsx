@@ -16,6 +16,20 @@ describe("desktop shell", () => {
     expect(window.caicli.getRuntimeStatus).toHaveBeenCalledOnce();
   });
 
+  it("disposes bridge subscriptions synchronously when the page is hidden", async () => {
+    const unsubscribeRuntime = vi.fn();
+    const unsubscribeThread = vi.fn();
+    const value = bridge();
+    vi.mocked(value.onRuntimeStatus).mockReturnValue(unsubscribeRuntime);
+    vi.mocked(value.onThreadChanged).mockReturnValue(unsubscribeThread);
+    window.caicli = value;
+    render(<App />);
+    expect(await screen.findByText("AppHost ready")).toBeTruthy();
+    window.dispatchEvent(new PageTransitionEvent("pagehide"));
+    expect(unsubscribeRuntime).toHaveBeenCalledOnce();
+    expect(unsubscribeThread).toHaveBeenCalledOnce();
+  });
+
   it("offers an explicit restart after failure", async () => {
     window.caicli = bridge(createRuntimeStatus("apphost-exited"));
     render(<App />);
