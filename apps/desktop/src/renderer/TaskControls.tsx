@@ -1,5 +1,5 @@
 import { RefreshCw, RotateCcw, ShieldCheck, ShieldX, Square } from "lucide-react";
-import { memo, useMemo, useRef, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import type { ThreadDetailData, TurnSummaryData } from "../generated/desktop-contracts";
 
 export interface TaskControlsProps {
@@ -12,7 +12,7 @@ export interface TaskControlsProps {
 
 const terminal = new Set(["completed", "failed", "canceled"]);
 
-export const TaskControls = memo(function TaskControls(props: TaskControlsProps) {
+export function TaskControls(props: TaskControlsProps) {
   const [busy, setBusy] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
   const [confirmRestart, setConfirmRestart] = useState(false);
@@ -83,7 +83,7 @@ export const TaskControls = memo(function TaskControls(props: TaskControlsProps)
       {message && <div className="inline-error" role="alert">{message}</div>}
     </section>
   );
-});
+}
 
 function activeTurn(detail: ThreadDetailData | null): TurnSummaryData | null {
   if (!detail) return null;
