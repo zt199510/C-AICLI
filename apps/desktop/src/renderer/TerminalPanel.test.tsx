@@ -55,6 +55,26 @@ describe("user terminal panel", () => {
     expect(output?.firstChild).toBe(outputText);
   });
 
+  it("materializes only a bounded tail of terminal scrollback", async () => {
+    const tail = "terminal-tail-sentinel\n";
+    const scrollback = `${"x".repeat((64 * 1024) - tail.length)}${tail}`;
+    window.caicli = {
+      openTerminal: vi.fn(async () => result("running")),
+      inputTerminal: vi.fn(async () => result("running", scrollback)),
+      getTerminal: vi.fn(async () => result("running", scrollback)),
+    } as unknown as DesktopBridge;
+    const view = render(<TerminalPanel workspaceReady />);
+
+    await userEvent.click(screen.getByRole("button", { name: "Open terminal" }));
+    await userEvent.type(screen.getByRole("textbox", { name: "Terminal input" }), "long-output");
+    await userEvent.click(screen.getByRole("button", { name: "Send" }));
+
+    const output = view.container.querySelector(".terminal-output");
+    expect(output?.textContent).toContain("[earlier output truncated]");
+    expect(output?.textContent).toContain("terminal-tail-sentinel");
+    expect(output?.textContent.length).toBeLessThanOrEqual((8 * 1024) + 64);
+  });
+
   it("does not open without a workspace", () => {
     window.caicli = {} as DesktopBridge;
     render(<TerminalPanel workspaceReady={false} />);

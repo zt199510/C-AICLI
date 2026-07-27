@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { TerminalStateData } from "../generated/desktop-contracts";
 
+const maxRenderedScrollbackCharacters = 8 * 1024;
+
 export function TerminalPanel({ workspaceReady }: { workspaceReady: boolean }) {
   const bridge = typeof window === "undefined" ? undefined : window.caicli;
   const [expanded, setExpanded] = useState(false);
@@ -21,7 +23,9 @@ export function TerminalPanel({ workspaceReady }: { workspaceReady: boolean }) {
 
   function adopt(value: TerminalStateData, clearOutput = false) {
     if (outputText.current && (clearOutput || value.output)) {
-      outputText.current.data = `${value.truncated ? "[earlier output truncated]\n" : ""}${value.output}`;
+      const tail = value.output.slice(-maxRenderedScrollbackCharacters);
+      const bounded = tail.length < value.output.length;
+      outputText.current.data = `${value.truncated || bounded ? "[earlier output truncated]\n" : ""}${tail}`;
     }
     setTerminal({ ...value, output: "" });
   }

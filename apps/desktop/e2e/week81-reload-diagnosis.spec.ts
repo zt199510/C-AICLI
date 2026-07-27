@@ -49,15 +49,24 @@ test("records staged workload allocation without changing the Gate", async ({ br
     await page.waitForTimeout(30_000);
     samples.push(await sample("post-changes-30s", application, page, cdp));
     await page.getByRole("button", { name: "Open terminal" }).click();
+    samples.push(await sample("post-terminal-open-0s", application, page, cdp));
+    await page.waitForTimeout(30_000);
+    samples.push(await sample("post-terminal-open-30s", application, page, cdp));
     await page.getByRole("textbox", { name: "Terminal input" }).fill("long-output");
     await page.getByRole("button", { name: "Send" }).click();
     await expect(page.getByRole("status").filter({ hasText: "output truncated" })).toBeVisible();
+    samples.push(await sample("post-terminal-input-0s", application, page, cdp));
+    await page.waitForTimeout(30_000);
+    samples.push(await sample("post-terminal-input-30s", application, page, cdp));
     await page.getByRole("button", { name: "Cancel process" }).click();
     await expect(page.getByText(/exited/)).toBeVisible();
-    await page.getByRole("button", { name: "Close terminal" }).click();
-    samples.push(await sample("post-terminal-0s", application, page, cdp));
+    samples.push(await sample("post-terminal-cancel-0s", application, page, cdp));
     await page.waitForTimeout(30_000);
-    samples.push(await sample("post-terminal-30s", application, page, cdp));
+    samples.push(await sample("post-terminal-cancel-30s", application, page, cdp));
+    await page.getByRole("button", { name: "Close terminal" }).click();
+    samples.push(await sample("post-terminal-close-0s", application, page, cdp));
+    await page.waitForTimeout(30_000);
+    samples.push(await sample("post-terminal-close-30s", application, page, cdp));
 
     fs.mkdirSync(path.dirname(evidencePath), { recursive: true });
     fs.writeFileSync(evidencePath, `${JSON.stringify({
