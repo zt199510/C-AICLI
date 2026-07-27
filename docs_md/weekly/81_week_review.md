@@ -1,74 +1,97 @@
 # Week 81 Review：Renderer Memory Retention 最小产品修复
 
-状态：`Blocked`
+状态：`Candidate Ready for Requalification`
 
 日期：2026-07-27
 
-handoff 起点：`960b230683226e7b313f31fbb771065702a54bc5`
+handoff exact clean 起点：`960b230683226e7b313f31fbb771065702a54bc5`
 
-最终受测 source revision：`961a12c57b85e93d59a1a2486e8a41dbbab6cee3`
+exact clean candidate revision：`e9e062d985545377aa373767f563de6a2bb30a64`
 
 ## 最终决定
 
-Week81 **不能**写为 `Candidate Ready for Requalification`。Week80 指定的 deterministic regression 已完成 baseline 红、修复后绿，最小 Renderer 产品修复、完整 .NET、Desktop verify、package security 和定向 recovery/read-only E2E 均通过；但冻结的 Week77 五 profile Gate 在同一 clean revision、workers `1`、retries `0` 下只有 `3/5` 通过，private bytes 有两项超过 `15%`。一个同根因边界内的额外 memo 候选在新 clean revision 上为 `0/5`，已撤销且失败 evidence 保留。
+Week81 达到 `Candidate Ready for Requalification`。确定性 regression 已在 baseline 红、修复后绿；修复后的 clean candidate 通过 full credential-free matrix、冻结 Week77 五 profile Gate 和 Week80 credential-free controls。真实 provider 没有运行，最终 provider-backed 重判移交 Week82；本周不宣布 `Preview Ready`。
 
-按 Week81 Critical Gate，任一 Week77 profile 超线都会阻止 candidate。没有修改 15% Gate、workers、retries 或窗口，没有运行 forced GC，也没有用 reload 作为通过条件。由于 W81-G5 失败，后续 full packaged/accessibility/protocol 和 Week80 control rerun 按 gate 停止；不得把 Week80 同包历史绿灯替代本轮失败。
+没有修改 15% Gate、workers、retries 或 warm/post 窗口；没有使用 forced GC、定时 reload、删除 durable history、协议升级、provider 重构或 UI redesign。没有读取 `.env.local`，没有 push、tag、上传、发布或部署。
 
-## Entry Gate 与确定性红绿
+## Entry Gate 与 baseline 红灯
 
-- Week80 review、`diagnosis.json`、`diagnosis-handoff.json` 均存在，结论为 `Diagnosis Complete`。
-- 工作分支从 handoff 的 exact clean `960b230…` 创建。
-- baseline 新增 6 项根因回归，结果为 `6 failed / 7 passed / 13 total`：
-  - 8 个 turn 生命周期通知只允许 2 次 authoritative resync；
-  - 五 turn history 在用户展开前不 materialize event cards；
-  - Composer queued-intent DOM 身份稳定；
-  - Composer 状态更新无 child-list mutation；
-  - TaskControls DOM 身份稳定；
-  - recovery banner DOM 身份稳定。
-- 最小修复后同组结果为 `13/13`。
+- 严格读取 Week80 review、`diagnosis.json` 与 `diagnosis-handoff.json`，确认结论 `Diagnosis Complete`、handoff revision `960b230…`、Desktop `E2A5BE…`、AppHost `DC46DB…`。
+- 分支从 `960b230…` exact clean revision 创建。
+- handoff 六项 deterministic regression 在 baseline 为 `6 failed / 7 passed / 13 total`，修复后为 `13/13`。
+- 后续定位 terminal/review workload 时又保留了独立红绿 regression：Review auto activation、Terminal structural DOM、Terminal Text node、Terminal Renderer bound、ready Review projection dedup。失败 evidence 未被 fixed evidence 覆盖。
 
-baseline evidence 与 fixed evidence 分别保存在 ignored `artifacts/week81-renderer-memory-remediation/baseline-regression.json` 和 `fixed-regression.json`，未互相覆盖。
+主要 ignored evidence：
 
-## 最小产品修改
+- `baseline-regression.json` / `fixed-regression.json`
+- `baseline-terminal-dom-regression.json` / `fixed-terminal-dom-regression.json`
+- `baseline-terminal-text-node-regression.json` / `fixed-terminal-text-node-regression.json`
+- `baseline-terminal-render-bound-regression.json` / `fixed-terminal-render-bound-regression.json`
+- `baseline-review-dedup-regression.json` / `fixed-review-dedup-regression.json`
 
-修改范围只包含 Week80 evidence 指向的 Renderer projection/commit 边界：
+## 最小产品修复
 
-- 所有 `thread.changed` 仍 dispatch；authoritative resync 仅在两个重复 committed-sequence 生命周期边界排队，保留 workspace/thread 切换、非 updated 事件与 duplicate identity 语义。
-- 历史 timeline 按 turn 分组，用户展开某个 turn 后才 materialize 该 turn 的 event cards；ThreadStore durable history 未删除或截短。
-- Composer、TaskControls、recovery/refresh 状态使用稳定 DOM 身份，减少短生命周期节点 churn。
-- read-only E2E 增加显式打开 turn 的操作，保持新交互的语义覆盖。
+修改保持在 Week80 证据支持的 Renderer projection/commit 与 transient DOM 边界：
 
-相对 handoff 起点共 11 个文件，`207 insertions / 45 deletions`。没有协议、provider、权限、approval、workspace guard、redaction 或 durable store 修改。
+- 所有 `thread.changed` 仍 dispatch；authoritative resync 只在每 turn 两个重复 `committedSequence` 生命周期边界排队。
+- Timeline durable history、ordering 与 identity 不变；历史 event card 只在用户打开对应 turn 后物化。
+- Composer、TaskControls、recovery/refresh 与 Terminal 生命周期使用稳定 DOM identity。
+- Terminal 使用既有 `afterCursor`，相同 cursor/status 不再产生重复 React commit；React state 只保存 terminal metadata，不保存完整 scrollback projection。
+- AppHost/协议仍保留 64 KiB terminal scrollback；Renderer DOM 只物化尾部 8 KiB并保留 truncated marker 与尾部内容。没有删除 durable history。
+- 已就绪且当前选中的 Review tab 不再重复执行 loading/full projection/ready commit；Changes、Reports 与 recovery 可见性不减。
 
-## 验证结果
+未修改 ThreadStore、desktop-v1、provider、approval、workspace guard、redaction、workers、retries 或 Gate measurement。
 
-| Gate | 结果 | 证据 |
-| --- | --- | --- |
-| deterministic regression | Passed | baseline 6 项必败；修复后 `13/13` |
-| Desktop verify | Passed | 25 files，`109/109`；typecheck、lint、build、production security 通过 |
-| full .NET | Passed | `1421/1421`，skipped `0`，锁定 SDK 9.0.308 |
-| dependency audit | Passed | `0 vulnerabilities` |
-| package audit | Passed | 78 files、12 asar entries、forbidden payload `0` |
-| recovery E2E | Passed | unpacked recovery `6/6` |
-| read-only timeline E2E | Passed | unpacked + packaged `2/2` |
-| unpacked E2E 首轮 | Failed | `7/9`；read-only 旧交互已修正，long-session private bytes `16.81%` 仍失败 |
-| Week77 frozen five profiles | **Failed** | `3/5`；private bytes `14.26%、14.61%、18.14%、16.33%、14.62%`；working set 全通过，cleanup 全为 0 |
-| memo 对照五 profiles | **Failed** | `0/5`；private bytes `16.21%、17.16%、17.53%、17.49%、16.91%`；增量已撤销 |
-| full packaged/accessibility/protocol | Not run | W81-G5 已失败，停止扩大验证 |
-| Week80 credential-free control rerun | Not run | W81-G5 已失败；历史同包结果不冒充本轮 rerun |
-| `git diff --check` | Passed | 无 whitespace error |
+## Root-cause 复测
 
-第一次 package audit 因测试自有 `apps/desktop/artifacts/` 被误包含而失败；只删除了该空的测试自有目录，根目录 Week81 evidence 未删除。随后从 clean revision 重建并通过 package audit。该首败未被隐瞒。
+非 Gate staged diagnosis（trace/screenshot/video off，无 heap snapshot、无 forced GC）将 workload 拆为 reload、Changes、terminal open/input/cancel/close：
 
-## 最终 package identity
+- reload 后自然 30 秒回到单 Document；
+- Changes 增量接近 0；
+- 完整 64 KiB terminal output DOM materialization 是剩余 private allocation 的主要阶段；open 不增长，cancel/close 只产生小增量；
+- bounded terminal DOM 后，冻结单 profile 从 `15.42–16.19%` 降到 `10.20%`，正式五 profile 稳定为 `8.78–9.88%`。
 
-- Desktop executable SHA-256：`E2A5BE23B0598ACA5827FC3977C48418298AE888D9293D1D51B937528BBB7A38`
-- Desktop executable bytes：`222753280`
-- AppHost SHA-256：`DC46DBFAD098D7E2F464F05F2C8383568DF733F619B3E45B9D70BAD4F9C13DFA`
-- AppHost bytes：`79941168`
-- package security：78 files、12 asar entries、forbidden payload `0`
+曾试验但未进入 candidate 的改动包括 React.memo、pagehide unsubscribe、root unmount、Changes DOM flatten 和 Review lazy activation；相应失败 evidence 保留，产品改动均已撤销。
 
-package 已从最终受测 clean revision 重建。未 push、tag、上传、发布或部署。
+## Credential-free 验证
+
+| Gate | 结果 |
+| --- | --- |
+| deterministic regression | Passed；baseline 红，fixed 绿 |
+| Desktop verify | Passed；25 files，`112/112`，typecheck/lint/build/security 全通过 |
+| full .NET | Passed；`1421/1421`，skipped `0` |
+| dependency audit | Passed；`0 vulnerabilities` |
+| package audit | Passed；78 files、12 asar entries、forbidden payload `0` |
+| unpacked E2E | Passed；`9/9` |
+| packaged E2E | Passed；`8/8` |
+| accessibility automation | Passed；`2/2`，cleanup `0` |
+| packaged smoke | Passed；`8/8`，cleanup `0` |
+| protocol measurement | Passed；3 rounds、每轮 48 responses、process/temp `0` |
+| Week77 frozen Gate | Passed；`5/5`、1 worker、0 retries、固定 30 秒窗口 |
+| Week80 credential-free controls | Passed；C0–C7 evidence status 全 Passed、identity 一致、process/temp/config 全 `0` |
+| `git diff --check` | Passed |
+
+Week80 旧 fixture 的 cross-world notification callback 在当前 Electron control run 中没有进入 Renderer counters；没有伪造该 counter。根因上限由 deterministic policy regression 验证，C1/C3/C4/C5/C7 的资源 controls 使用公开 thread selection 路径执行 1/2/6/20 次 authoritative projection；通知/turn/item 规模、30 秒窗口和资源 Gate 不变。C0/C2/C6 使用原 control 路径通过。
+
+Week77 五 profile private bytes：
+
+1. `9.3029%`
+2. `9.8796%`
+3. `8.7824%`
+4. `9.0921%`
+5. `9.0979%`
+
+对应 working set 为 `3.5937%、3.8439%、2.8251%、3.2311%、3.0300%`；每项 process/temp cleanup 均为 `0`。package gate 与 profile gate 均为 true。
+
+## Candidate identity
+
+- source revision：`e9e062d985545377aa373767f563de6a2bb30a64`
+- Desktop executable：222,753,280 bytes，SHA-256 `C736C48B23B8971ED5DAD7F53EBF7BE6CE5CDC2BA6B24CC2CCAFE3DD9064CBB0`
+- package tree：464,708,708 bytes；source-bound evidence SHA-256 `ADDFBC3114B10E31633F1E9A9500934B9B8F17BCD3222CD4D02217AA606C6E38`
+- `app.asar`：555,012 bytes，SHA-256 `D7959F8886DAE4F1E66068D728A8EF74C19231D8ACCA68F67A603FA2CE034C04`
+- AppHost：79,941,168 bytes，SHA-256 `DC46DBFAD098D7E2F464F05F2C8383568DF733F619B3E45B9D70BAD4F9C13DFA`
+
+package 从该 clean candidate 重建。之后的 review/handoff commit 只包含文档与 evidence validator，不改变 candidate package 内容。
 
 ## Critical Gates
 
@@ -77,15 +100,12 @@ package 已从最终受测 clean revision 重建。未 push、tag、上传、发
 | W81-G0 handoff 完整且 exact baseline 可复现 | Passed |
 | W81-G1 regression baseline 失败、修复后通过 | Passed |
 | W81-G2 修改范围与 root cause 一致 | Passed |
-| W81-G3 stale response、approval、recovery、timeline ordering | Passed（定向回归） |
-| W81-G4 full credential-free matrix | **Not closed** |
-| W81-G5 Week77 5 profiles 与 Week80 controls | **Failed** |
-| W81-G6 candidate identity 与 cleanup | **Not closed** |
-| `git diff --check` | Passed |
+| W81-G3 stale response、approval、recovery、timeline ordering | Passed |
+| W81-G4 full credential-free matrix | Passed |
+| W81-G5 Week77 5 profiles 与 Week80 controls | Passed |
+| W81-G6 candidate identity 与 cleanup | Passed |
+| `git diff --check` 与 Week81 evidence validator | Passed |
 
-## 后续解除条件
+## Week82 handoff
 
-1. 返回 Week80 诊断边界，解释为何同一 `E2A5…` package 在 provider profiles 通过但 Week77 frozen fixture 的 post-idle private bytes 稳定为约 `69–75 MB`，并形成新的 deterministic mechanism regression。
-2. 只在新增 evidence 锁定组件后实施新的最小修复；不得继续猜测 terminal、review 或通用 state rewrite。
-3. 新 clean revision 必须重新执行 full credential-free matrix、Week77 五 profiles 与 Week80 controls；五个 profile 都必须同时满足 working set/private bytes `<=15%`。
-4. 只有上述条件关闭后，才能生成 `Candidate Ready for Requalification` handoff 并进入 Week82 Phase 6/7/8/9。
+Week82 必须绑定上述 exact candidate/package/AppHost identity，重新执行 provider-backed read-only、controlled write、sequential approvals、crash/restart no-replay、resource/idle Phase 6/7/8/9。不得使用本周 credential-free 结果替代真实 provider requalification，也不得读取未明确授权的配置或扩大工具边界。
