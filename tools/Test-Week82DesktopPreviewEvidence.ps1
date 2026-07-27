@@ -299,6 +299,36 @@ foreach ($name in @('provider-readonly.json', 'provider-write.json', 'provider-r
     Assert-Identity $document $name
     Assert-Cleanup $document.cleanupDelta $name
 }
+$readOnly = Read-Json (Join-Path $resolvedEvidenceRoot 'provider-readonly.json')
+if ([int]$readOnly.counts.providerTurns -ne 1 -or [int]$readOnly.counts.readCalls -ne 1 -or
+    [int]$readOnly.counts.approvalRequests -ne 0 -or [int]$readOnly.counts.writeCalls -ne 0 -or
+    [int]$readOnly.counts.shellCalls -ne 0 -or [int]$readOnly.counts.changedFiles -ne 0) {
+    throw 'Provider read-only evidence violated its exact boundary.'
+}
+$write = Read-Json (Join-Path $resolvedEvidenceRoot 'provider-write.json')
+foreach ($check in @('deterministicFailingBaseline', 'exactlyOnePatch', 'exactlyOneTargetTestCommand',
+    'distinctDurableApprovals', 'independentTargetTestPassed', 'timelineContiguous',
+    'timelineItemIdsUnique', 'resyncBounded', 'domAndListenersBounded', 'projectDiscarded')) {
+    if (-not [bool]$write.checks.$check) { throw "Provider write check failed: $check" }
+}
+if ([int]$write.counts.patchCalls -ne 1 -or [int]$write.counts.shellCalls -ne 1 -or
+    [int]$write.counts.approvalRequests -ne 2 -or [int]$write.counts.approvalResolutions -ne 2 -or
+    [int]$write.counts.changedFiles -gt 2 -or [int]$write.counts.changedLines -gt 160) {
+    throw 'Provider write evidence violated tool, approval, file, or diff bounds.'
+}
+$recovery = Read-Json (Join-Path $resolvedEvidenceRoot 'provider-recovery.json')
+foreach ($check in @('ownedAppHostCrashOnly', 'noAutomaticRestartOrReplay', 'explicitRestart',
+    'oldAttemptInterrupted', 'newAttemptCanceledBeforeApproval', 'turnIdentitySeparated',
+    'approvalIdentitySeparated', 'modelIdentitySeparated', 'toolIdentitySeparated',
+    'timelineContiguous', 'timelineItemIdsUnique', 'resyncBounded', 'domAndListenersBounded',
+    'diskUnchanged', 'reviewClean')) {
+    if (-not [bool]$recovery.checks.$check) { throw "Provider recovery check failed: $check" }
+}
+if ([int]$recovery.counts.turns -ne 2 -or [int]$recovery.counts.appHostCrashes -ne 1 -or
+    [int]$recovery.counts.runtimeRestarts -ne 1 -or [int]$recovery.counts.approvalRequests -ne 2 -or
+    [int]$recovery.counts.approvalResolutions -ne 0 -or [int]$recovery.counts.changedFiles -ne 0) {
+    throw 'Provider recovery evidence violated crash, replay, approval, or disk bounds.'
+}
 for ($index = 1; $index -le 5; $index++) {
     $profile = Read-Json (Join-Path $resolvedEvidenceRoot "provider-resource-profile-$index.json")
     if ($profile.schemaVersion -ne $schema -or $profile.status -ne 'Passed' -or
@@ -307,11 +337,27 @@ for ($index = 1; $index -le 5; $index++) {
         [double]$profile.retention.privateBytesPercent -gt 15 -or
         [int]$profile.counts.providerTurns -ne 6 -or [int]$profile.counts.readCalls -ne 6 -or
         [int]$profile.settings.workers -ne 1 -or [int]$profile.settings.retries -ne 0 -or
-        [int]$profile.settings.warmWindowSeconds -ne 30 -or [int]$profile.settings.postWindowSeconds -ne 30) {
+        [int]$profile.settings.warmWindowSeconds -ne 30 -or [int]$profile.settings.postWindowSeconds -ne 30 -or
+        [double]$profile.retention.jsHeapUsedPercent -gt 15 -or [bool]$profile.sustainedMonotonicGrowth -or
+        -not [bool]$profile.rendererBounds.resyncWithinBound -or
+        -not [bool]$profile.rendererBounds.visibleTimelineCardsWithinLimit -or
+        -not [bool]$profile.rendererBounds.nodesWithinLimit -or
+        -not [bool]$profile.rendererBounds.documentsWithinLimit -or
+        -not [bool]$profile.rendererBounds.listenersWithinLimit -or
+        [int]$profile.counts.approvalRequests -ne 0 -or [int]$profile.counts.writeCalls -ne 0 -or
+        [int]$profile.counts.shellCalls -ne 0 -or [int]$profile.counts.changedFiles -ne 0) {
         throw "Provider resource profile $index failed settings, counts, or retention validation."
     }
     Assert-Identity $profile "Provider resource profile $index"
     Assert-Cleanup $profile.cleanupDelta "Provider resource profile $index"
+}
+$resourceSummary = Read-Json (Join-Path $resolvedEvidenceRoot 'resource-summary.json')
+if ([int]$resourceSummary.counts.expectedProfiles -ne 5 -or [int]$resourceSummary.counts.passedProfiles -ne 5 -or
+    [int]$resourceSummary.counts.providerTurns -ne 30 -or [int]$resourceSummary.counts.readCalls -ne 30 -or
+    [int]$resourceSummary.settings.workers -ne 1 -or [int]$resourceSummary.settings.retries -ne 0 -or
+    [int]$resourceSummary.settings.warmWindowSeconds -ne 30 -or [int]$resourceSummary.settings.postWindowSeconds -ne 30 -or
+    [bool]$resourceSummary.settings.forcedGc -or [bool]$resourceSummary.settings.rendererReloadUsedForGate) {
+    throw 'Provider resource summary violated the frozen five-profile Gate.'
 }
 
 $final = Read-Json (Join-Path $resolvedEvidenceRoot 'final-summary.json')

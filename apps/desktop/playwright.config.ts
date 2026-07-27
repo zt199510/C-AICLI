@@ -23,5 +23,20 @@ export default defineConfig({
       testMatch: /week81-reload-diagnosis\.spec\.ts/,
       use: { trace: "off", screenshot: "off", video: "off" },
     },
+    {
+      name: "week82-provider-resource",
+      testMatch: /week82-provider-resource\.spec\.ts/,
+      use: { trace: "off", screenshot: "off", video: "off" },
+    },
+    {
+      name: "week82-provider-recovery",
+      testMatch: /week82-provider-recovery\.spec\.ts/,
+      use: { trace: "off", screenshot: "off", video: "off" },
+    },
+    {
+      name: "week82-provider-write",
+      testMatch: /week82-provider-write\.spec\.ts/,
+      use: { trace: "off", screenshot: "off", video: "off" },
+    },
   ],
 });
