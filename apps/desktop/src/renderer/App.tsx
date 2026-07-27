@@ -32,10 +32,6 @@ export function App() {
   }, []);
 
   useEffect(() => {
-    if (state.workspace) controller.setReviewTab("changes");
-  }, [state.workspace?.workspaceId]);
-
-  useEffect(() => {
     if (!leftOpen && restoreThreadsFocus.current) {
       restoreThreadsFocus.current = false;
       showThreadsTrigger.current?.focus();
