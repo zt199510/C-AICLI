@@ -1,5 +1,5 @@
 import { FilePlus2, FolderPlus, Send, Trash2, X } from "lucide-react";
-import { useEffect, useLayoutEffect, useMemo, useRef, useState, type KeyboardEvent } from "react";
+import { memo, useEffect, useLayoutEffect, useMemo, useRef, useState, type KeyboardEvent } from "react";
 import type { CatalogItemData, ContextDescriptorData } from "../generated/desktop-contracts";
 import type { ComposerDraft, ComposerCatalogKind, ComposerUiState, SelectedCatalogItem } from "./composer-state";
 import { MentionMenu } from "./MentionMenu";
@@ -21,7 +21,7 @@ interface ComposerProps {
   readonly onClear: () => void;
 }
 
-export function Composer(props: ComposerProps) {
+export const Composer = memo(function Composer(props: ComposerProps) {
   const [composing, setComposing] = useState(false);
   const [activeMentionIndex, setActiveMentionIndex] = useState(0);
   const textarea = useRef<HTMLTextAreaElement>(null);
@@ -93,4 +93,4 @@ export function Composer(props: ComposerProps) {
       <div id="composer-status" className={props.draft.error ? "composer-error" : "composer-status"} role={props.draft.error ? "alert" : "status"}>{props.draft.error ?? props.disabledReason ?? (props.draft.status === "queued" ? "Prompt queued." : "\u00a0")}</div>
     </section>
   );
-}
+});

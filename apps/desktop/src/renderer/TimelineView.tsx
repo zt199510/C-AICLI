@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { memo, useState } from "react";
 import type { ThreadDetailData, TimelineItemData } from "../generated/desktop-contracts";
 import type { QueryStatus } from "./desktop-state";
 import { TimelineItem } from "./TimelineItem";
@@ -10,7 +10,7 @@ export interface TimelineViewProps {
   onLoadMore(): void;
 }
 
-export function TimelineView({ detail, status, error, onLoadMore }: TimelineViewProps) {
+export const TimelineView = memo(function TimelineView({ detail, status, error, onLoadMore }: TimelineViewProps) {
   const items = detail?.timeline ?? [];
 
   if (status === "error" && !detail) return <div className="state-card failure-card" role="alert"><h1>History unavailable</h1><p>{error}</p></div>;
@@ -31,7 +31,7 @@ export function TimelineView({ detail, status, error, onLoadMore }: TimelineView
       )}
     </div>
   );
-}
+});
 
 function TimelineTurnBrowser({ items }: { items: readonly TimelineItemData[] }) {
   const groups = groupByTurn(items);
