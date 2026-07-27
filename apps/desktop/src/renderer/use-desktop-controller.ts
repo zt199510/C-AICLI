@@ -3,6 +3,7 @@ import type { CatalogItemData, ContextDescriptorData, ThreadChangedParams, Works
 import { createRuntimeStatus, type DesktopBridge } from "../shared/bridge-contract";
 import { desktopReducer, initialDesktopState, threadEventIdentity, type ReviewState } from "./desktop-state";
 import { composerReducer, currentDraft, draftKey, initialComposerUiState, type ComposerCatalogKind, type SelectedCatalogItem } from "./composer-state";
+import { incrementMemoryDiagnostic } from "./memory-diagnostics";
 
 export function useDesktopController(bridge: DesktopBridge | undefined) {
   const [state, dispatch] = useReducer(desktopReducer, initialDesktopState);
@@ -48,6 +49,7 @@ export function useDesktopController(bridge: DesktopBridge | undefined) {
   ) => {
     if (!bridge) return;
     const requestId = ++detailRequest.current;
+    incrementMemoryDiagnostic("detailRequestsStarted");
     dispatch({ type: "detail-loading", epoch, selectionEpoch, requestId, threadId });
     try {
       const result = await bridge.getThread({ threadId, afterSequence });
@@ -62,9 +64,18 @@ export function useDesktopController(bridge: DesktopBridge | undefined) {
         });
         return;
       }
+      const current = stateRef.current;
+      const stale = requestId !== detailRequest.current ||
+          current.contextEpoch !== epoch ||
+          current.selectionEpoch !== selectionEpoch ||
+          current.selectedThreadId !== threadId;
+      if (stale) incrementMemoryDiagnostic("ignoredStaleResponses");
+      else incrementMemoryDiagnostic(append ? "projectionAppended" : "projectionReplaced");
       dispatch({ type: "detail-ready", epoch, selectionEpoch, requestId, detail: result.data, append });
     } catch {
       dispatch({ type: "detail-error", epoch, selectionEpoch, requestId, message: "Thread history could not be loaded." });
+    } finally {
+      incrementMemoryDiagnostic("detailRequestsCompleted");
     }
   }, [bridge]);
 
@@ -77,7 +88,12 @@ export function useDesktopController(bridge: DesktopBridge | undefined) {
   }, [refreshThreads]);
 
   const queueResync = useCallback(() => {
-    if (resyncRunning.current) { resyncDirty.current = true; return; }
+    incrementMemoryDiagnostic("resyncRequested");
+    if (resyncRunning.current) {
+      incrementMemoryDiagnostic("resyncCoalesced");
+      resyncDirty.current = true;
+      return;
+    }
     resyncRunning.current = true;
     void (async () => {
       do {
@@ -90,6 +106,7 @@ export function useDesktopController(bridge: DesktopBridge | undefined) {
       } while (resyncDirty.current);
       dispatch({ type: "refresh-complete" });
       resyncRunning.current = false;
+      incrementMemoryDiagnostic("resyncCompleted");
     })();
   }, [fetchThread, refreshThreads]);
 

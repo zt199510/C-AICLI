@@ -12,5 +12,11 @@ export default defineConfig({
   projects: [
     { name: "unpacked", testMatch: /(?:read-only-shell|desktop-recovery|long-session|week76-hardening)\.spec\.ts/ },
     { name: "packaged", testMatch: /(?:read-only-shell|desktop-recovery|week76-hardening)\.spec\.ts/ },
+    { name: "week80-memory-diagnosis", testMatch: /week80-memory-diagnosis\.spec\.ts/ },
+    {
+      name: "week80-provider-memory",
+      testMatch: /week80-provider-memory\.spec\.ts/,
+      use: { trace: "off", screenshot: "off", video: "off" },
+    },
   ],
 });
