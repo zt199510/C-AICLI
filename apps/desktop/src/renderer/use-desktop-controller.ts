@@ -221,9 +221,11 @@ export function useDesktopController(bridge: DesktopBridge | undefined) {
   }, [queueResync, refreshThreads, selectThread]);
 
   const setReviewTab = useCallback((tab: ReviewState["activeTab"]) => {
+    const current = stateRef.current;
+    if (current.workspace && current.review.activeTab === tab && current.review.status === "ready") return;
     dispatch({ type: "review-tab", tab });
-    const epoch = stateRef.current.contextEpoch;
-    if (!bridge || !stateRef.current.workspace) return;
+    const epoch = current.contextEpoch;
+    if (!bridge || !current.workspace) return;
     dispatch({ type: "review-loading", epoch });
     const failed = () => dispatch({ type: "review-error", epoch, message: "Review data could not be loaded." });
     if (tab === "changes") void bridge.getChanges({}).then((result) => {
