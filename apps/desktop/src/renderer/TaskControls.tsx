@@ -19,10 +19,9 @@ export function TaskControls(props: TaskControlsProps) {
   const restartTrigger = useRef<HTMLButtonElement>(null);
   const turn = useMemo(() => activeTurn(props.detail), [props.detail]);
   const recovery = useMemo(() => recoveryTurn(props.detail), [props.detail]);
+  const current = turn ?? recovery;
   const approval = turn?.approval ?? recovery?.approval ?? null;
-  const canCancel = turn && !terminal.has(turn.status) && turn.status !== "canceling";
-
-  if (!turn && !recovery) return null;
+  const canCancel = Boolean(turn && !terminal.has(turn.status) && turn.status !== "canceling");
 
   async function run(key: string, action: () => Promise<string | null>) {
     setBusy(key);
@@ -37,17 +36,15 @@ export function TaskControls(props: TaskControlsProps) {
   }
 
   return (
-    <section className="task-controls" aria-label="Task controls">
+    <section className="task-controls" aria-label="Task controls" hidden={!current}>
       <div className="task-control-row">
         <div className="task-control-summary">
-          <strong>{turn ? `Turn ${turn.ordinal}` : "Recovery"}</strong>
-          <span className={`status-chip status-${(turn ?? recovery)?.status.toLowerCase()}`}>{(turn ?? recovery)?.status}</span>
+          <strong>{turn ? `Turn ${turn.ordinal}` : recovery ? "Recovery" : "No active turn"}</strong>
+          <span className={`status-chip status-${current?.status.toLowerCase() ?? "idle"}`}>{current?.status ?? "idle"}</span>
         </div>
-        {canCancel && (
-          <button className="command-button danger-command" type="button" disabled={busy !== null} onClick={() => void run("cancel", () => props.onCancel(turn.turnId, turn.revision))}>
+          <button className="command-button danger-command" type="button" hidden={!canCancel} disabled={busy !== null || !turn} onClick={() => { if (turn) void run("cancel", () => props.onCancel(turn.turnId, turn.revision)); }}>
             <Square size={14} aria-hidden="true" />{busy === "cancel" ? "Canceling" : "Cancel"}
           </button>
-        )}
       </div>
 
       {approval && (
@@ -67,17 +64,15 @@ export function TaskControls(props: TaskControlsProps) {
         </div>
       )}
 
-      {recovery && (
-        <div className="recovery-actions" role="alert">
+        <div className="recovery-actions" role="alert" hidden={!recovery}>
           <span>This turn needs recovery before it can continue.</span>
-          <button className="command-button" type="button" disabled={busy !== null} onClick={() => void run("resume", () => props.onResume(recovery.turnId, recovery.revision))}>
+          <button className="command-button" type="button" disabled={busy !== null || !recovery} onClick={() => { if (recovery) void run("resume", () => props.onResume(recovery.turnId, recovery.revision)); }}>
             <RefreshCw size={15} aria-hidden="true" />Resume
           </button>
-          <button ref={restartTrigger} className="command-button danger-command" type="button" disabled={busy !== null} onClick={() => setConfirmRestart(true)}>
+          <button ref={restartTrigger} className="command-button danger-command" type="button" disabled={busy !== null || !recovery} onClick={() => { if (recovery) setConfirmRestart(true); }}>
             <RotateCcw size={15} aria-hidden="true" />Restart
           </button>
         </div>
-      )}
 
       {confirmRestart && recovery && <div className="restart-confirm" role="alertdialog" aria-modal="true" aria-labelledby="restart-confirm-title" aria-describedby="restart-confirm-description" onKeyDown={(event) => { if (event.key === "Escape") { event.preventDefault(); setConfirmRestart(false); window.requestAnimationFrame(() => restartTrigger.current?.focus()); } }}>
         <strong id="restart-confirm-title">Restart this turn?</strong>

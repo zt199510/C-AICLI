@@ -5,6 +5,13 @@ import { desktopReducer, initialDesktopState, threadEventIdentity, type ReviewSt
 import { composerReducer, currentDraft, draftKey, initialComposerUiState, type ComposerCatalogKind, type SelectedCatalogItem } from "./composer-state";
 import { incrementMemoryDiagnostic } from "./memory-diagnostics";
 
+export function shouldQueueThreadResync(previous: ThreadChangedParams | null, event: ThreadChangedParams): boolean {
+  if (!previous || previous.workspaceId !== event.workspaceId || previous.threadId !== event.threadId) return true;
+  if (previous.eventSequence === event.eventSequence && threadEventIdentity(previous) === threadEventIdentity(event)) return false;
+  if (event.changeKind !== "updated") return true;
+  return previous.committedSequence === event.committedSequence;
+}
+
 export function useDesktopController(bridge: DesktopBridge | undefined) {
   const [state, dispatch] = useReducer(desktopReducer, initialDesktopState);
   const [composer, dispatchComposer] = useReducer(composerReducer, initialComposerUiState);
@@ -17,6 +24,7 @@ export function useDesktopController(bridge: DesktopBridge | undefined) {
   const detailRequest = useRef(0);
   const resyncRunning = useRef(false);
   const resyncDirty = useRef(false);
+  const lastThreadEvent = useRef<ThreadChangedParams | null>(null);
 
   const refreshThreads = useCallback(async (epoch = stateRef.current.contextEpoch) => {
     if (!bridge) return;
@@ -132,14 +140,14 @@ export function useDesktopController(bridge: DesktopBridge | undefined) {
     });
     const unsubscribeThread = bridge.onThreadChanged((event: ThreadChangedParams) => {
       const snapshot = stateRef.current;
+      const shouldResync = shouldQueueThreadResync(lastThreadEvent.current, event);
+      lastThreadEvent.current = event;
       if (!snapshot.workspace || event.workspaceId !== snapshot.workspace.workspaceId) {
         dispatch({ type: "event", event });
         return;
       }
-      const exactDuplicate = snapshot.lastEventSequence === event.eventSequence &&
-        snapshot.lastEventIdentity === threadEventIdentity(event);
       dispatch({ type: "event", event });
-      if (!exactDuplicate) queueResync();
+      if (shouldResync) queueResync();
     });
     void bridge.getRuntimeStatus().then((status) => {
       if (disposed || receivedRuntimeEvent) return;

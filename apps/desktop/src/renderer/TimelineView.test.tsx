@@ -28,6 +28,34 @@ describe("frozen timeline projection", () => {
     await userEvent.click(screen.getByRole("button", { name: "Load newer items" }));
     expect(onLoadMore).toHaveBeenCalledOnce();
   });
+
+  it("keeps the Week80 five-turn projection collapsed until a turn is opened", async () => {
+    const timeline = Array.from({ length: 36 }, (_, index) => ({
+      ...item(index + 1, types[index % types.length] as string),
+      turnId: `turn-${Math.floor(index / 6) + 1}`,
+    }));
+    render(<TimelineView detail={{ ...detail, timeline }} status="ready" error={null} onLoadMore={vi.fn()} />);
+    expect(document.querySelectorAll(".timeline-turn-browser-toggle")).toHaveLength(1);
+    expect(document.querySelectorAll(".timeline-turn-option")).toHaveLength(0);
+    expect(document.querySelectorAll(".timeline-card")).toHaveLength(0);
+    await userEvent.click(screen.getByRole("button", { name: /Browse 6 turns/ }));
+    expect(document.querySelectorAll(".timeline-turn-option")).toHaveLength(6);
+    await userEvent.click(screen.getByRole("button", { name: /Turn 6/ }));
+    expect(document.querySelectorAll(".timeline-card")).toHaveLength(6);
+  });
+
+  it("reuses the recovery banner across projection transitions", () => {
+    const view = render(<TimelineView detail={detail} status="ready" error={null} onLoadMore={vi.fn()} />);
+    const stableNode = document.querySelector(".recovery-banner");
+    expect(stableNode).not.toBeNull();
+    expect((stableNode as HTMLElement).hidden).toBe(true);
+    view.rerender(<TimelineView detail={{ ...detail, recoveryRequired: true }} status="ready" error={null} onLoadMore={vi.fn()} />);
+    expect(document.querySelector(".recovery-banner")).toBe(stableNode);
+    expect((stableNode as HTMLElement).hidden).toBe(false);
+    view.rerender(<TimelineView detail={detail} status="ready" error={null} onLoadMore={vi.fn()} />);
+    expect(document.querySelector(".recovery-banner")).toBe(stableNode);
+    expect((stableNode as HTMLElement).hidden).toBe(true);
+  });
 });
 
 const summary = {
