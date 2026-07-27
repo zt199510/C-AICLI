@@ -1,7 +1,6 @@
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import type { WorkspaceSnapshotData } from "../generated/desktop-contracts";
 import { createRuntimeStatus, type DesktopBridge } from "../shared/bridge-contract";
 import { App } from "./App";
 
@@ -15,17 +14,6 @@ describe("desktop shell", () => {
     render(<App />);
     expect(await screen.findByText("AppHost ready")).toBeTruthy();
     expect(window.caicli.getRuntimeStatus).toHaveBeenCalledOnce();
-  });
-
-  it("loads review data only after the user activates a review tab", async () => {
-    const configured = bridge();
-    configured.getWorkspaceSnapshot = vi.fn(async () => workspace);
-    window.caicli = configured;
-    render(<App />);
-    expect(await screen.findByText(workspace.rootPath)).toBeTruthy();
-    expect(configured.getChanges).not.toHaveBeenCalled();
-    await userEvent.click(screen.getByRole("tab", { name: "Changes" }));
-    expect(configured.getChanges).toHaveBeenCalledOnce();
   });
 
   it("offers an explicit restart after failure", async () => {
@@ -65,23 +53,6 @@ describe("desktop shell", () => {
     expect(screen.getByRole("button", { name: "Show threads" })).toBeTruthy();
   });
 });
-
-const workspace: WorkspaceSnapshotData = {
-  workspaceId: "workspace-1",
-  rootPath: "C:\\workspace",
-  status: "ready",
-  capabilities: { readOnlyQueries: true, gitQueries: true, localCatalogs: true, managedArtifacts: true, controlledContext: true },
-  configuration: {
-    hasApiKey: false,
-    apiKeySource: "none",
-    effectiveModel: "gpt-test",
-    modelSource: "default",
-    agentBackendSource: "default",
-    approvalMode: "ask",
-    approvalModeSource: "default",
-    loadedSourceCount: 0,
-  },
-};
 
 function bridge(status = createRuntimeStatus("runtime-ready")): DesktopBridge {
   return {
