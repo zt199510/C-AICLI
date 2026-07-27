@@ -36,6 +36,8 @@ test("read-only thread timeline review survives renderer reload", async ({ brows
     assertFixtureProjection(projection);
     await expect(page.getByText("Fixture review thread")).toBeVisible();
     await page.locator(".thread-select").click({ force: true });
+    await page.getByRole("button", { name: /Browse 1 turns/ }).click();
+    await page.getByRole("button", { name: /Turn 1/ }).click();
     await expect(page.getByText("User message")).toBeVisible();
     await expect(page.locator(".timeline-card")).toHaveCount(14);
     await page.getByRole("button", { name: "Attach workspace file" }).click();
