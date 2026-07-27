@@ -149,13 +149,6 @@ export function useDesktopController(bridge: DesktopBridge | undefined) {
       dispatch({ type: "event", event });
       if (shouldResync) queueResync();
     });
-    const dispose = () => {
-      if (disposed) return;
-      disposed = true;
-      unsubscribeThread();
-      unsubscribeRuntime();
-    };
-    window.addEventListener("pagehide", dispose, { once: true });
     void bridge.getRuntimeStatus().then((status) => {
       if (disposed || receivedRuntimeEvent) return;
       dispatch({ type: "runtime", status });
@@ -163,10 +156,7 @@ export function useDesktopController(bridge: DesktopBridge | undefined) {
     }).catch(() => {
       if (!disposed) dispatch({ type: "runtime", status: createRuntimeStatus("apphost-start-failed") });
     });
-    return () => {
-      window.removeEventListener("pagehide", dispose);
-      dispose();
-    };
+    return () => { disposed = true; unsubscribeThread(); unsubscribeRuntime(); };
   }, [adoptWorkspace, bridge, queueResync]);
 
   useEffect(() => {
