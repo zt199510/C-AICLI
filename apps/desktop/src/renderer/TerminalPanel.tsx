@@ -1,5 +1,7 @@
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import type { TerminalStateData } from "../generated/desktop-contracts";
+
+const maxRenderedScrollbackCharacters = 8 * 1024;
 
 export function TerminalPanel({ workspaceReady }: { workspaceReady: boolean }) {
   const bridge = typeof window === "undefined" ? undefined : window.caicli;
@@ -8,13 +10,34 @@ export function TerminalPanel({ workspaceReady }: { workspaceReady: boolean }) {
   const [input, setInput] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const outputRef = useRef<HTMLPreElement>(null);
+  const outputElement = useRef<HTMLPreElement>(null);
+  const outputText = useRef<Text>(null);
+  const bindOutputElement = useCallback((element: HTMLPreElement | null) => {
+    outputElement.current = element;
+    if (element && outputText.current?.parentNode !== element) {
+      const text = document.createTextNode("");
+      element.append(text);
+      outputText.current = text;
+    }
+  }, []);
+
+  function adopt(value: TerminalStateData, clearOutput = false) {
+    if (outputText.current && (clearOutput || value.output)) {
+      const tail = value.output.slice(-maxRenderedScrollbackCharacters);
+      const bounded = tail.length < value.output.length;
+      outputText.current.data = `${value.truncated || bounded ? "[earlier output truncated]\n" : ""}${tail}`;
+    }
+    setTerminal({ ...value, output: "" });
+  }
 
   useEffect(() => {
     if (!expanded || !terminal || terminal.status !== "running" || !bridge) return;
     const timer = window.setInterval(() => {
-      void bridge.getTerminal({ sessionId: terminal.sessionId, afterCursor: 0 }).then((result) => {
-        if (result.succeeded && result.data) setTerminal(result.data);
+      void bridge.getTerminal({ sessionId: terminal.sessionId, afterCursor: terminal.cursor }).then((result) => {
+        if (!result.succeeded || !result.data) return;
+        if (result.data.cursor === terminal.cursor && result.data.status === terminal.status &&
+            result.data.exitCode === terminal.exitCode && result.data.truncated === terminal.truncated) return;
+        adopt(result.data);
       }).catch(() => setError("Terminal status could not be refreshed."));
     }, 500);
     return () => window.clearInterval(timer);
@@ -26,7 +49,7 @@ export function TerminalPanel({ workspaceReady }: { workspaceReady: boolean }) {
     try {
       const result = await bridge.openTerminal({ shellProfile: "system-default", clientMutationId: mutation("open") });
       if (!result.succeeded || !result.data) throw new Error(result.error?.safeMessage ?? "Terminal could not be opened.");
-      setTerminal(result.data); setExpanded(true);
+      adopt(result.data, true); setExpanded(true);
     } catch (value) { setError(value instanceof Error ? value.message : "Terminal could not be opened."); }
     finally { setBusy(false); }
   }
@@ -37,7 +60,7 @@ export function TerminalPanel({ workspaceReady }: { workspaceReady: boolean }) {
     try {
       const result = await bridge.inputTerminal({ sessionId: terminal.sessionId, text: input + "\n", clientMutationId: mutation("input") });
       if (!result.succeeded || !result.data) throw new Error(result.error?.safeMessage ?? "Terminal input failed.");
-      setTerminal(result.data); setInput("");
+      adopt(result.data); setInput("");
     } catch (value) { setError(value instanceof Error ? value.message : "Terminal input failed."); }
     finally { setBusy(false); }
   }
@@ -50,11 +73,12 @@ export function TerminalPanel({ workspaceReady }: { workspaceReady: boolean }) {
       const result = close ? await bridge.closeTerminal(command) : await bridge.cancelTerminal(command);
       if (!result.succeeded || !result.data) throw new Error(result.error?.safeMessage ?? "Terminal action failed.");
       if (close) {
+        if (outputText.current) outputText.current.data = "";
         setTerminal(null);
         setInput("");
         setExpanded(false);
       } else {
-        setTerminal(result.data);
+        adopt(result.data);
       }
     } catch (value) { setError(value instanceof Error ? value.message : "Terminal action failed."); }
     finally { setBusy(false); }
@@ -62,7 +86,7 @@ export function TerminalPanel({ workspaceReady }: { workspaceReady: boolean }) {
 
   async function copySelection() {
     const selected = document.getSelection()?.toString() ?? "";
-    if (selected && outputRef.current?.contains(document.getSelection()?.anchorNode ?? null)) {
+    if (selected && outputElement.current?.contains(document.getSelection()?.anchorNode ?? null)) {
       await navigator.clipboard.writeText(selected);
     }
   }
@@ -72,21 +96,21 @@ export function TerminalPanel({ workspaceReady }: { workspaceReady: boolean }) {
       <strong>User terminal</strong>
       <span role="status" aria-live="polite">{terminal ? `${terminal.status}${terminal.exitCode === null ? "" : ` · exit ${terminal.exitCode}`}${terminal.truncated ? " · output truncated" : ""}` : "Closed"}</span>
       <div>
-        {expanded ? <button type="button" onClick={() => setExpanded(false)}>Collapse</button> : null}
-        {!terminal || terminal.status === "closed" ? <button type="button" disabled={!workspaceReady || busy} onClick={() => void open()}>Open terminal</button> : null}
-        {terminal && terminal.status === "running" ? <button type="button" disabled={busy} onClick={() => void stop(false)}>Cancel process</button> : null}
-        {terminal && terminal.status !== "closed" ? <button type="button" disabled={busy} onClick={() => void stop(true)}>Close terminal</button> : null}
+        <button type="button" hidden={!expanded} onClick={() => setExpanded(false)}>Collapse</button>
+        <button type="button" hidden={Boolean(terminal && terminal.status !== "closed")} disabled={!workspaceReady || busy} onClick={() => void open()}>Open terminal</button>
+        <button type="button" hidden={terminal?.status !== "running"} disabled={busy} onClick={() => void stop(false)}>Cancel process</button>
+        <button type="button" hidden={!terminal || terminal.status === "closed"} disabled={busy} onClick={() => void stop(true)}>Close terminal</button>
       </div>
     </div>
-    {error ? <div className="inline-error" role="alert">{error}</div> : null}
-    {expanded && terminal ? <>
-      <pre ref={outputRef} className="terminal-output" tabIndex={0}>{terminal.truncated ? "[earlier output truncated]\n" : ""}{terminal.output}</pre>
+    <div className="inline-error" role="alert" hidden={!error}>{error ?? ""}</div>
+    <div className="terminal-session" hidden={!expanded || !terminal}>
+      <pre ref={bindOutputElement} className="terminal-output" tabIndex={0} />
       <div className="terminal-input-row">
-        <input aria-label="Terminal input" value={input} maxLength={8192} disabled={busy || terminal.status !== "running"} onChange={(event) => setInput(event.target.value)} onKeyDown={(event) => { if (event.key === "Enter") { event.preventDefault(); void send(); } }} />
-        <button type="button" disabled={busy || terminal.status !== "running" || !input} onClick={() => void send()}>Send</button>
+        <input aria-label="Terminal input" value={input} maxLength={8192} disabled={busy || terminal?.status !== "running"} onChange={(event) => setInput(event.target.value)} onKeyDown={(event) => { if (event.key === "Enter") { event.preventDefault(); void send(); } }} />
+        <button type="button" disabled={busy || terminal?.status !== "running" || !input} onClick={() => void send()}>Send</button>
         <button type="button" onClick={() => void copySelection()}>Copy selection</button>
       </div>
-    </> : null}
+    </div>
   </section>;
 }
 

@@ -18,5 +18,10 @@ export default defineConfig({
       testMatch: /week80-provider-memory\.spec\.ts/,
       use: { trace: "off", screenshot: "off", video: "off" },
     },
+    {
+      name: "week81-reload-diagnosis",
+      testMatch: /week81-reload-diagnosis\.spec\.ts/,
+      use: { trace: "off", screenshot: "off", video: "off" },
+    },
   ],
 });

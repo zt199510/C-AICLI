@@ -31,6 +31,7 @@ describe("read-only review inspector", () => {
     expect(changesTab.getAttribute("aria-controls")).toBe("review-panel-changes");
     expect(screen.getByRole("tabpanel").getAttribute("aria-labelledby")).toBe("review-tab-changes");
   });
+
 });
 
 const artifact: ArtifactMetadataData = {
