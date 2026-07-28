@@ -57,6 +57,13 @@ interface RecoveryState {
   readonly itemIdsUnique: boolean;
 }
 
+interface ThreadChangeTrace {
+  readonly eventSequence: number;
+  readonly revision: number;
+  readonly committedSequence: number;
+  readonly changeKind: string;
+}
+
 test("authorized Week83 provider crash and explicit restart", async ({ browserName }, testInfo) => {
   if (browserName !== "chromium") throw new Error("Electron provider recovery requires Chromium.");
   if (process.env.CAICLI_WEEK83_PROVIDER_AUTHORIZED !== "read-only-recovery-resource") {
@@ -85,6 +92,7 @@ test("authorized Week83 provider crash and explicit restart", async ({ browserNa
   let noAutomaticRestartOrReplayObserved = false;
   let workspaceUnchangedObserved = false;
   let reviewCleanObserved = false;
+  let notificationTrace: readonly ThreadChangeTrace[] = [];
   let resync = { queueRequests: 0, runners: 0 };
   let domDelta = { nodes: 0, documents: 0, listeners: 0 };
   let domBefore: { nodes: number; documents: number; jsEventListeners: number };
@@ -156,6 +164,21 @@ test("authorized Week83 provider crash and explicit restart", async ({ browserNa
       if (!id) throw new Error("Recovery thread was not returned by the authoritative list.");
       return id;
     }, title));
+    await page.evaluate(() => {
+      const target = window as typeof window & {
+        caicliWeek83ThreadTrace?: ThreadChangeTrace[];
+        caicliWeek83ThreadTraceUnsubscribe?: () => void;
+      };
+      target.caicliWeek83ThreadTrace = [];
+      target.caicliWeek83ThreadTraceUnsubscribe = window.caicli.onThreadChanged((event) => {
+        target.caicliWeek83ThreadTrace?.push({
+          eventSequence: event.eventSequence,
+          revision: event.revision,
+          committedSequence: event.committedSequence,
+          changeKind: event.changeKind,
+        });
+      });
+    });
     await takeCoverage(cdp, coverageTargets);
     domBefore = await cdp.send("Memory.getDOMCounters");
 
@@ -268,6 +291,16 @@ test("authorized Week83 provider crash and explicit restart", async ({ browserNa
   }
 
   try {
+    if (page) {
+      notificationTrace = await page.evaluate(() => {
+        const target = window as typeof window & {
+          caicliWeek83ThreadTrace?: ThreadChangeTrace[];
+          caicliWeek83ThreadTraceUnsubscribe?: () => void;
+        };
+        target.caicliWeek83ThreadTraceUnsubscribe?.();
+        return target.caicliWeek83ThreadTrace ?? [];
+      }).catch(() => []);
+    }
     if (cdp) {
       await cdp.send("Profiler.stopPreciseCoverage").catch(() => undefined);
       await cdp.send("Profiler.disable").catch(() => undefined);
@@ -351,6 +384,7 @@ test("authorized Week83 provider crash and explicit restart", async ({ browserNa
       documentsDelta: domDelta.documents,
       listenersDelta: domDelta.listeners,
     },
+    notificationTrace,
     durationMilliseconds: Date.now() - started,
     cleanupDelta: { process: processDelta, temporary: temporaryDelta, configuration: configurationDelta },
     failure: scenarioError === null && cleanupError === null ? null : safeError(scenarioError ?? cleanupError, secrets),
