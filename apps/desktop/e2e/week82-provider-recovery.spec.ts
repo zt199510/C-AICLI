@@ -179,9 +179,6 @@ test("authorized Week83 provider crash and explicit restart", async ({ browserNa
         });
       });
     });
-    await takeCoverage(cdp, coverageTargets);
-    domBefore = await cdp.send("Memory.getDOMCounters");
-
     await page.getByRole("textbox", { name: "Composer prompt" }).fill(
       "Your only valid next action is exactly one workspace.apply_patch tool call replacing the single line 'before' with 'after' in recovery.txt. Do not answer directly, do not read files, and do not use shell, Git, MCP, or any other tool. Stop and wait when the Desktop approval is requested.",
     );
@@ -195,6 +192,10 @@ test("authorized Week83 provider crash and explicit restart", async ({ browserNa
     expect(items(oldState, 0, "tool.started")).toHaveLength(1);
     expect(items(oldState, 0, "approval.requested")).toHaveLength(1);
     expect(fs.readFileSync(target, "utf8")).toBe("before\n");
+    await expect.poll(async () => (await takeCoverage(cdp!, coverageTargets)).completions, {
+      timeout: 30_000,
+    }).toBeGreaterThanOrEqual(1);
+    domBefore = await cdp.send("Memory.getDOMCounters");
 
     process.kill(oldAppHostPid);
     crashExecuted = true;
@@ -463,7 +464,7 @@ function intersection(left: readonly TimelineIdentity[], right: readonly Timelin
   return left.map((item) => item.itemId).filter((id) => rightIds.has(id));
 }
 
-function createCoverageTargets(): { queue: number; runner: number; length: number } {
+function createCoverageTargets(): { queue: number; runner: number; completion: number; length: number } {
   const packaged = extractFile(packagedAsar, `dist\\renderer\\assets\\${productBundleName}`);
   const built = fs.readFileSync(productBundlePath);
   if (sha256(packaged) !== sha256(built)) throw new Error("Packaged Renderer bundle does not match the verified product build.");
@@ -476,12 +477,20 @@ function createCoverageTargets(): { queue: number; runner: number; length: numbe
     if (position.line === null || position.column === null) throw new Error("Product coverage target could not be mapped.");
     return starts[position.line - 1]! + position.column;
   };
-  const result = { queue: offset(110), runner: offset(116), length: built.toString("utf8").length };
+  const result = {
+    queue: offset(110),
+    runner: offset(116),
+    completion: offset(128),
+    length: built.toString("utf8").length,
+  };
   consumer.destroy?.();
   return result;
 }
 
-async function takeCoverage(cdp: CDPSession, targets: { queue: number; runner: number; length: number }) {
+async function takeCoverage(
+  cdp: CDPSession,
+  targets: { queue: number; runner: number; completion: number; length: number },
+) {
   const coverage = await cdp.send("Profiler.takePreciseCoverage");
   const script = coverage.result.find((candidate) => candidate.url.endsWith(productBundleName)) ??
     coverage.result.find((candidate) => candidate.functions.some((fn) =>
@@ -489,7 +498,11 @@ async function takeCoverage(cdp: CDPSession, targets: { queue: number; runner: n
   const countAt = (offset: number) => script?.functions.flatMap((fn) => fn.ranges)
     .filter((range) => range.startOffset <= offset && range.endOffset >= offset)
     .sort((left, right) => (left.endOffset - left.startOffset) - (right.endOffset - right.startOffset))[0]?.count ?? 0;
-  return { queueRequests: countAt(targets.queue), runners: countAt(targets.runner) };
+  return {
+    queueRequests: countAt(targets.queue),
+    runners: countAt(targets.runner),
+    completions: countAt(targets.completion),
+  };
 }
 
 function readAuthorizedProviderConfig(filePath: string): ProviderConfig {
