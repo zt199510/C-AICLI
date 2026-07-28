@@ -194,7 +194,6 @@ test("authorized Week83 provider crash and explicit restart", async ({ browserNa
     expect(fs.readFileSync(target, "utf8")).toBe("before\n");
     await expect(page.getByText("Refreshing…")).toBeHidden({ timeout: 30_000 });
     await takeCoverage(cdp, coverageTargets);
-    domBefore = await cdp.send("Memory.getDOMCounters");
 
     process.kill(oldAppHostPid);
     crashExecuted = true;
@@ -242,6 +241,7 @@ test("authorized Week83 provider crash and explicit restart", async ({ browserNa
     expect(restartedState.sequencesContiguous).toBe(true);
     expect(restartedState.itemIdsUnique).toBe(true);
     expect(fs.readFileSync(target, "utf8")).toBe("before\n");
+    domBefore = await cdp.send("Memory.getDOMCounters");
 
     await page.getByRole("button", { name: "Cancel", exact: true }).click();
     await expect.poll(async () => (await readRecoveryState(page!, threadId)).turns[1]?.status, {
