@@ -138,7 +138,7 @@ for (const profile of profileNames) {
 
     try {
       if (profile === "C0") {
-        expect(sha256(packagedExecutable)).toBe("160668DED8D58C80F6215BF5B899CD1C568439F5E4D8B8880D0CEBB068F43383");
+        expect(sha256(packagedExecutable)).toBe("BFB856136D9A67E36B16B8F032B7776A4CE3D61326EDEBEC3862FBA47ECC23A5");
         expect(sha256(packagedAppHost)).toBe("DC46DBFAD098D7E2F464F05F2C8383568DF733F619B3E45B9D70BAD4F9C13DFA");
         const workspace = path.join(root, "workspace");
         fs.mkdirSync(workspace, { recursive: true });
@@ -237,10 +237,10 @@ for (const profile of profileNames) {
       evidenceKind: "credential-free-profile",
       profile,
       status: passed ? "Passed" : "Failed",
-      productRevision: "348dd4f30064a70751ae2a55ec5e37a95c49ec87",
+      productRevision: "ccf9d82c9fa76c201876ee01d3849902989091e9",
       baselineHead: "962d5dda4ae875299a96ba2c825bd13ec683240a",
       packageIdentity: {
-        sha256: "160668DED8D58C80F6215BF5B899CD1C568439F5E4D8B8880D0CEBB068F43383",
+        sha256: "BFB856136D9A67E36B16B8F032B7776A4CE3D61326EDEBEC3862FBA47ECC23A5",
         bytes: 222753280,
       },
       appHostIdentity: {
