@@ -151,17 +151,25 @@ export function useDesktopController(bridge: DesktopBridge | undefined) {
     const unsubscribeThread = bridge.onThreadChanged((event: ThreadChangedParams) => {
       const snapshot = stateRef.current;
       const shouldResync = shouldQueueThreadResync(lastThreadEvent.current, event);
-      const selectedProjectionBehind = snapshot.selectedThreadId === event.threadId &&
-        snapshot.detail?.thread.threadId === event.threadId &&
-        snapshot.detail.thread.revision < event.revision;
+      const eventTargetsSelection = snapshot.selectedThreadId === event.threadId;
+      const selectedDetail = eventTargetsSelection && snapshot.detail?.thread.threadId === event.threadId
+        ? snapshot.detail
+        : null;
+      const committedLag = selectedDetail
+        ? Math.max(0, event.committedSequence - selectedDetail.thread.timelineItemCount)
+        : 0;
+      const selectedProjectionBehind = selectedDetail !== null &&
+        (selectedDetail.thread.revision < event.revision || committedLag > 0);
+      const boundedCatchupRequired = selectedDetail !== null && committedLag >= 3;
       lastThreadEvent.current = event;
       if (!snapshot.workspace || event.workspaceId !== snapshot.workspace.workspaceId) {
         dispatch({ type: "event", event });
         return;
       }
       dispatch({ type: "event", event });
-      if (shouldResync) queueResync();
-      else if (selectedProjectionBehind) {
+      if (shouldResync) {
+        if (!eventTargetsSelection || selectedDetail === null || selectedProjectionBehind) queueResync();
+      } else if (boundedCatchupRequired) {
         if (resyncRunning.current) resyncDirty.current = true;
         else queueResync();
       }

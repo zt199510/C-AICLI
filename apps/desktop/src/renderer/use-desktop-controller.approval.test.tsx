@@ -97,6 +97,51 @@ describe("approval projection resync", () => {
     expect(screen.getByText("waiting-for-approval projection r5")).toBeTruthy();
     expect(getThread.mock.calls.length).toBeGreaterThanOrEqual(2);
   });
+
+  it("bounds a completed provider turn to two selected-projection resyncs", async () => {
+    let notify: ((event: ThreadChangedParams) => void) | null = null;
+    let authoritative = detail("running", 2, null, 1);
+    const getThread = vi.fn(async () => threadResult(authoritative));
+    const bridge = {
+      getRuntimeStatus: vi.fn(async () => createRuntimeStatus("runtime-ready")),
+      getWorkspaceSnapshot: vi.fn(async () => workspace),
+      listThreads: vi.fn(async () => listResult(authoritative.thread)),
+      getThread,
+      getComposer: vi.fn(async () => { throw new Error("not needed by this regression"); }),
+      onRuntimeStatus: vi.fn(() => () => undefined),
+      onThreadChanged: vi.fn((listener: (event: ThreadChangedParams) => void) => {
+        notify = listener;
+        return () => undefined;
+      }),
+    } as unknown as DesktopBridge;
+
+    render(<ApprovalProjectionHarness bridge={bridge} />);
+    await waitFor(() => expect((screen.getByRole("button", { name: "Select regression thread" }) as HTMLButtonElement).disabled).toBe(false));
+    fireEvent.click(screen.getByRole("button", { name: "Select regression thread" }));
+    await screen.findByText("running projection r2");
+
+    act(() => {
+      notify?.(event(2, 2, 1));
+      notify?.(event(3, 1, 1));
+    });
+    authoritative = detail("running", 5, null, 4);
+    act(() => {
+      notify?.(event(4, 3, 2));
+      notify?.(event(5, 4, 3));
+      notify?.(event(6, 5, 4));
+    });
+    await screen.findByText("running projection r5");
+
+    authoritative = detail("completed", 8, null, 6);
+    act(() => {
+      notify?.(event(7, 6, 5));
+      notify?.(event(8, 7, 6));
+      notify?.(event(9, 8, 6));
+    });
+    await screen.findByText("completed projection r8");
+
+    expect(getThread).toHaveBeenCalledTimes(3);
+  });
 });
 
 function ApprovalProjectionHarness(props: { readonly bridge: DesktopBridge }) {
@@ -136,25 +181,34 @@ const approval: ApprovalRequestData = {
   expiresAtUtc: "2026-07-28T00:30:00.000Z",
 };
 
-function detail(status: string, revision: number, activeApproval: ApprovalRequestData | null): ThreadDetailData {
+function detail(
+  status: string,
+  revision: number,
+  activeApproval: ApprovalRequestData | null,
+  timelineItemCount = status === "waiting-for-approval" ? 4 : 1,
+): ThreadDetailData {
   const turn: TurnSummaryData = {
     turnId: "turn-1", ordinal: 1, revision, status,
     createdAtUtc: "2026-07-28T00:00:00.000Z", startedAtUtc: "2026-07-28T00:00:01.000Z", completedAtUtc: null,
     taskSummary: "Approval projection", stopReason: null, errorCode: null, sourcePointers: [],
-    timelineFirstSequence: 1, timelineLastSequence: status === "waiting-for-approval" ? 4 : 1,
-    timelineItemCount: status === "waiting-for-approval" ? 4 : 1, recoveryRequired: false, approval: activeApproval,
+    timelineFirstSequence: 1, timelineLastSequence: timelineItemCount,
+    timelineItemCount, recoveryRequired: false, approval: activeApproval,
   };
   return {
-    thread: summary(status, revision), turns: [turn], timeline: [], nextSequence: null,
+    thread: summary(status, revision, timelineItemCount), turns: [turn], timeline: [], nextSequence: null,
     timelineTruncated: false, recoveryRequired: false,
   };
 }
 
-function summary(status: string, revision: number): ThreadSummaryData {
+function summary(
+  status: string,
+  revision: number,
+  timelineItemCount = status === "waiting-for-approval" ? 4 : 1,
+): ThreadSummaryData {
   return {
     threadId: "thread-1", revision, workspaceId: "workspace-1", title: "Approval projection", status,
     createdAtUtc: "2026-07-28T00:00:00.000Z", updatedAtUtc: "2026-07-28T00:00:04.000Z", archivedAtUtc: null,
-    turnCount: 1, timelineItemCount: status === "waiting-for-approval" ? 4 : 1, activeTurnId: "turn-1",
+    turnCount: 1, timelineItemCount, activeTurnId: "turn-1",
     origin: { kind: "desktop", sourceKind: null, sourceId: null, sourceFingerprint: null },
   };
 }
