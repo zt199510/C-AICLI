@@ -1,7 +1,8 @@
 [CmdletBinding()]
 param(
     [string]$EvidenceRoot,
-    [switch]$AllowIncomplete
+    [switch]$AllowIncomplete,
+    [switch]$AllowBlocked
 )
 
 $ErrorActionPreference = 'Stop'
@@ -302,6 +303,70 @@ if ($AllowIncomplete) {
         throw 'Incomplete Week82 final summary must remain InProgress/Pending.'
     }
     Write-Output 'Week82 evidence validation passed in incomplete mode: Phase 0-1, candidate identity, regressions, first failures, privacy, and cleanup are consistent.'
+    return
+}
+
+if ($AllowBlocked) {
+    $readOnly = Read-Json (Join-Path $resolvedEvidenceRoot 'provider-readonly.json')
+    if ($readOnly.schemaVersion -ne $schema -or $readOnly.status -ne 'Passed' -or
+        $readOnly.exactCandidateRevision -ne $candidate -or
+        [int]$readOnly.counts.providerTurns -ne 1 -or [int]$readOnly.counts.readCalls -ne 1 -or
+        [int]$readOnly.counts.approvalRequests -ne 0 -or [int]$readOnly.counts.writeCalls -ne 0 -or
+        [int]$readOnly.counts.shellCalls -ne 0 -or [int]$readOnly.counts.changedFiles -ne 0) {
+        throw 'Blocked Week82 read-only evidence is not a valid Passed result.'
+    }
+    Assert-Identity $readOnly 'Blocked Week82 read-only evidence'
+    Assert-Cleanup $readOnly.cleanupDelta 'Blocked Week82 read-only evidence'
+    $recovery = Read-Json (Join-Path $resolvedEvidenceRoot 'provider-recovery.json')
+    if ($recovery.schemaVersion -ne $schema -or $recovery.status -ne 'Failed' -or
+        $recovery.exactCandidateRevision -ne $candidate -or
+        $recovery.category -ne 'renderer-approval-projection-stale' -or
+        $recovery.observed.durableThreadStatus -ne 'waiting-for-approval' -or
+        [int]$recovery.observed.durableToolStarted -ne 1 -or
+        [int]$recovery.observed.durableApprovalRequests -ne 1 -or
+        [int]$recovery.observed.rendererLoadedItems -ne 1 -or
+        [int]$recovery.observed.rendererApprovalCards -ne 0 -or
+        [bool]$recovery.observed.appHostCrashExecuted -or [bool]$recovery.observed.writeExecuted) {
+        throw 'Blocked Week82 recovery evidence does not preserve the stale approval projection failure.'
+    }
+    Assert-Identity $recovery 'Blocked Week82 recovery evidence'
+    Assert-Cleanup $recovery.cleanupDelta 'Blocked Week82 recovery evidence'
+    $write = Read-Json (Join-Path $resolvedEvidenceRoot 'provider-write.json')
+    $resourceSummary = Read-Json (Join-Path $resolvedEvidenceRoot 'resource-summary.json')
+    if ($write.status -ne 'NotRun' -or $resourceSummary.status -ne 'NotRun') {
+        throw 'Blocked Week82 must leave downstream write and resource Gates NotRun.'
+    }
+    for ($index = 1; $index -le 5; $index++) {
+        $profile = Read-Json (Join-Path $resolvedEvidenceRoot "provider-resource-profile-$index.json")
+        if ($profile.status -ne 'NotRun' -or $profile.authorization -ne 'GrantedNotRunDueToRecoveryGate') {
+            throw "Blocked Week82 resource profile $index has an invalid stopped state."
+        }
+    }
+    $final = Read-Json (Join-Path $resolvedEvidenceRoot 'final-summary.json')
+    if ($final.schemaVersion -ne $schema -or $final.status -ne 'Blocked' -or
+        $final.decision -ne 'Blocked' -or [int]$final.openP0 -ne 0 -or [int]$final.openP1 -ne 1 -or
+        $final.exactCandidateRevision -ne $candidate -or $final.blockingGate -ne 'W82-G4') {
+        throw 'Blocked Week82 final summary is inconsistent.'
+    }
+    Assert-Identity $final 'Blocked Week82 final summary'
+    Assert-Cleanup $final.cleanupDelta 'Blocked Week82 final summary'
+    $reviewPath = Join-Path $repositoryRoot 'docs_md\weekly\82_week_review.md'
+    $handoffPath = Join-Path $resolvedEvidenceRoot 'week83-handoff.json'
+    if (-not (Test-Path -LiteralPath $reviewPath -PathType Leaf) -or -not (Test-Path -LiteralPath $handoffPath -PathType Leaf)) {
+        throw 'Blocked Week82 review or Week83 handoff is missing.'
+    }
+    $review = Get-Content -LiteralPath $reviewPath -Raw -Encoding UTF8
+    if (-not $review.Contains('Blocked') -or -not $review.Contains($candidate) -or
+        -not $review.Contains('renderer-approval-projection-stale') -or
+        -not $review.Contains('0.6.0 formal release')) {
+        throw 'Blocked Week82 review does not preserve the bounded decision.'
+    }
+    $handoff = Read-Json $handoffPath
+    if ($handoff.status -ne 'Blocked' -or $handoff.exactCandidateRevision -ne $candidate -or
+        $handoff.blockingGate -ne 'W82-G4') {
+        throw 'Blocked Week83 handoff is inconsistent.'
+    }
+    Write-Output 'Week82 blocked evidence validation passed: read-only passed, recovery stale projection preserved, downstream provider Gates stopped, privacy and cleanup consistent.'
     return
 }
 

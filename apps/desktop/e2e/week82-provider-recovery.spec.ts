@@ -287,6 +287,7 @@ test("authorized Week82 provider crash and explicit restart", async ({ browserNa
     cleanupError = error;
   }
 
+  const evidenceState = canceledState ?? restartedState ?? oldState;
   const oldTurn = oldState?.turns[0] ?? null;
   const newTurn = restartedState?.turns[1] ?? null;
   const passed = scenarioError === null && cleanupError === null && oldTurn !== null && newTurn !== null &&
@@ -311,6 +312,7 @@ test("authorized Week82 provider crash and explicit restart", async ({ browserNa
     },
     checks: {
       ownedAppHostCrashOnly: crashExecuted,
+      durableApprovalObserved: oldTurn?.approvalRequestId !== null && oldTurn?.approvalRequestId !== undefined,
       noAutomaticRestartOrReplay: noAutomaticRestartOrReplayObserved,
       explicitRestart: newAppHostPid !== null && newAppHostPid !== oldAppHostPid,
       oldAttemptInterrupted: canceledState?.turns[0]?.stopReason === "interrupted",
@@ -321,8 +323,8 @@ test("authorized Week82 provider crash and explicit restart", async ({ browserNa
         intersection(items(oldState, 0, "assistant.message"), items(restartedState, 1, "assistant.message")).length === 0,
       toolIdentitySeparated: oldState !== null && restartedState !== null &&
         intersection(items(oldState, 0, "tool.started"), items(restartedState, 1, "tool.started")).length === 0,
-      timelineContiguous: canceledState?.sequencesContiguous ?? false,
-      timelineItemIdsUnique: canceledState?.itemIdsUnique ?? false,
+      timelineContiguous: evidenceState?.sequencesContiguous ?? false,
+      timelineItemIdsUnique: evidenceState?.itemIdsUnique ?? false,
       resyncBounded: resync.queueRequests >= 2 && resync.runners >= 2 &&
         resync.runners <= resync.queueRequests && resync.queueRequests <= 4 && resync.runners <= 4,
       domAndListenersBounded: domDelta.nodes <= 100 && domDelta.documents <= 0 && domDelta.listeners <= 40,
@@ -331,18 +333,18 @@ test("authorized Week82 provider crash and explicit restart", async ({ browserNa
     },
     counts: {
       desktopLaunches: application ? 1 : 0,
-      appHostProcesses: oldAppHostPid !== null && newAppHostPid !== null ? 2 : 0,
+      appHostProcesses: [oldAppHostPid, newAppHostPid].filter((pid) => pid !== null).length,
       appHostCrashes: crashExecuted ? 1 : 0,
       runtimeRestarts: newAppHostPid !== null ? 1 : 0,
-      turns: canceledState?.turns.length ?? 0,
-      modelItems: canceledState?.timeline.filter((item) => item.type === "assistant.message").length ?? 0,
-      toolCalls: canceledState?.timeline.filter((item) => item.type === "tool.started").length ?? 0,
-      approvalRequests: canceledState?.timeline.filter((item) => item.type === "approval.requested").length ?? 0,
-      approvalResolutions: canceledState?.timeline.filter((item) => item.type === "approval.resolved").length ?? 0,
+      turns: evidenceState?.turns.length ?? 0,
+      modelItems: evidenceState?.timeline.filter((item) => item.type === "assistant.message").length ?? 0,
+      toolCalls: evidenceState?.timeline.filter((item) => item.type === "tool.started").length ?? 0,
+      approvalRequests: evidenceState?.timeline.filter((item) => item.type === "approval.requested").length ?? 0,
+      approvalResolutions: evidenceState?.timeline.filter((item) => item.type === "approval.resolved").length ?? 0,
       changedFiles,
       reports,
       artifacts,
-      timelineItems: canceledState?.timeline.length ?? 0,
+      timelineItems: evidenceState?.timeline.length ?? 0,
       queueResyncRequests: resync.queueRequests,
       resyncRunners: resync.runners,
       nodesDelta: domDelta.nodes,
