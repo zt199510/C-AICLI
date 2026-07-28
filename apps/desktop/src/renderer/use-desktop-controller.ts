@@ -9,6 +9,7 @@ export function shouldQueueThreadResync(previous: ThreadChangedParams | null, ev
   if (!previous || previous.workspaceId !== event.workspaceId || previous.threadId !== event.threadId) return true;
   if (previous.eventSequence === event.eventSequence && threadEventIdentity(previous) === threadEventIdentity(event)) return false;
   if (event.changeKind !== "updated") return true;
+  if (event.revision < previous.revision && event.committedSequence <= previous.committedSequence) return false;
   return previous.committedSequence === event.committedSequence;
 }
 
