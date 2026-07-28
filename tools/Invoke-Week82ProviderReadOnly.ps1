@@ -21,7 +21,7 @@ if ($env:CAICLI_WEEK83_PROVIDER_AUTHORIZED -ne 'read-only-recovery-resource') {
 }
 $desktopPath = Join-Path $desktopRoot 'out\C-AICLI Desktop-win32-x64\caicli-desktop.exe'
 $appHostPath = Join-Path $desktopRoot 'out\C-AICLI Desktop-win32-x64\resources\apphost\CSharpAiCli.AppHost.exe'
-if ((Get-FileHash -LiteralPath $desktopPath -Algorithm SHA256).Hash -ne '160668DED8D58C80F6215BF5B899CD1C568439F5E4D8B8880D0CEBB068F43383' -or
+if ((Get-FileHash -LiteralPath $desktopPath -Algorithm SHA256).Hash -ne 'AB4B79A97C66041E1A478F217AA99EC75D1D1082FA42500AFDADBC13063B62D9' -or
     (Get-FileHash -LiteralPath $appHostPath -Algorithm SHA256).Hash -ne 'DC46DBFAD098D7E2F464F05F2C8383568DF733F619B3E45B9D70BAD4F9C13DFA') {
     throw 'Week83 provider read-only package identity mismatch.'
 }

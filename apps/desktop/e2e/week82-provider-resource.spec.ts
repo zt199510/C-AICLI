@@ -21,7 +21,7 @@ const packagedExecutable = path.join(packagedRoot, "caicli-desktop.exe");
 const packagedAppHost = path.join(packagedRoot, "resources", "apphost", "CSharpAiCli.AppHost.exe");
 const packagedAsar = path.join(packagedRoot, "resources", "app.asar");
 const productMapRoot = desktopRoot;
-const productBundleName = "index-CIHLwOJK.js";
+const productBundleName = "index-CUwLHMJq.js";
 const productBundlePath = path.join(productMapRoot, "dist", "renderer", "assets", productBundleName);
 const productSourceMapPath = `${productBundlePath}.map`;
 const evidenceRoot = process.env.CAICLI_WEEK83_EVIDENCE_DIR
@@ -233,7 +233,7 @@ test("authorized Week83 provider resource profile", async ({ browserName }, test
   const workspaceBefore = inventoryWorkspace(workspace);
 
   try {
-    expect(sha256File(packagedExecutable)).toBe("160668DED8D58C80F6215BF5B899CD1C568439F5E4D8B8880D0CEBB068F43383");
+    expect(sha256File(packagedExecutable)).toBe("AB4B79A97C66041E1A478F217AA99EC75D1D1082FA42500AFDADBC13063B62D9");
     expect(sha256File(packagedAppHost)).toBe("DC46DBFAD098D7E2F464F05F2C8383568DF733F619B3E45B9D70BAD4F9C13DFA");
     expect(coverageTargets.mapVerified).toBe(true);
     application = await electron.launch({
@@ -439,12 +439,12 @@ test("authorized Week83 provider resource profile", async ({ browserName }, test
     profile: settings.profileNumber,
     profileId: profile,
     status: passed ? "Passed" : "Failed",
-    exactCandidateRevision: "348dd4f30064a70751ae2a55ec5e37a95c49ec87",
+    exactCandidateRevision: "e282eac8cdf4440f4b3cd024dfea4cf7bb02606f",
     packageIdentity: {
-      sha256: "160668DED8D58C80F6215BF5B899CD1C568439F5E4D8B8880D0CEBB068F43383",
+      sha256: "AB4B79A97C66041E1A478F217AA99EC75D1D1082FA42500AFDADBC13063B62D9",
       bytes: 222753280,
-      treeSha256: "7D8C690876B53E12AC976C7B12C1291456C1DB3EB13F6E98A08D6A305BC6F7A2",
-      treeBytes: 464708884,
+      treeSha256: "3EEE850186EF69E6BE359FBC92FC7A5478907DAF8F52A5B861F43A07002953B3",
+      treeBytes: 464709026,
     },
     appHostIdentity: {
       sha256: "DC46DBFAD098D7E2F464F05F2C8383568DF733F619B3E45B9D70BAD4F9C13DFA",
