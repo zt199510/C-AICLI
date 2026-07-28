@@ -81,6 +81,10 @@ test("authorized Week82 provider crash and explicit restart", async ({ browserNa
   let canceledState: RecoveryState | null = null;
   let oldAppHostPid: number | null = null;
   let newAppHostPid: number | null = null;
+  let crashExecuted = false;
+  let noAutomaticRestartOrReplayObserved = false;
+  let workspaceUnchangedObserved = false;
+  let reviewCleanObserved = false;
   let resync = { queueRequests: 0, runners: 0 };
   let domDelta = { nodes: 0, documents: 0, listeners: 0 };
   let domBefore: { nodes: number; documents: number; jsEventListeners: number };
@@ -156,20 +160,21 @@ test("authorized Week82 provider crash and explicit restart", async ({ browserNa
     domBefore = await cdp.send("Memory.getDOMCounters");
 
     await page.getByRole("textbox", { name: "Composer prompt" }).fill(
-      "Use exactly one workspace.apply_patch call to replace the single line 'before' with 'after' in recovery.txt. Do not read files and do not use shell, Git, MCP, or any other tool. Wait for approval and do nothing else.",
+      "Your only valid next action is exactly one workspace.apply_patch tool call replacing the single line 'before' with 'after' in recovery.txt. Do not answer directly, do not read files, and do not use shell, Git, MCP, or any other tool. Stop and wait when the Desktop approval is requested.",
     );
     await page.getByRole("button", { name: "Queue prompt" }).click();
-    await expect(page.getByRole("group", { name: "Approval request" })).toBeVisible({ timeout: 300_000 });
-    oldState = await readRecoveryState(page, threadId);
+    oldState = await waitForApprovalOrTerminal(page, threadId, 300_000);
     expect(oldState.turns).toHaveLength(1);
     expect(oldState.turns[0]?.status).toBe("waiting-for-approval");
     expect(oldState.turns[0]?.approvalRequestId).toBeTruthy();
+    await expect(page.getByRole("group", { name: "Approval request" })).toBeVisible();
     expect(items(oldState, 0, "assistant.message").length).toBeGreaterThan(0);
     expect(items(oldState, 0, "tool.started")).toHaveLength(1);
     expect(items(oldState, 0, "approval.requested")).toHaveLength(1);
     expect(fs.readFileSync(target, "utf8")).toBe("before\n");
 
     process.kill(oldAppHostPid);
+    crashExecuted = true;
     await expect.poll(() => isProcessAlive(oldAppHostPid!), { timeout: 15_000 }).toBe(false);
     await expect(page.getByRole("heading", { name: "AppHost stopped unexpectedly" })).toBeVisible();
     await expect.poll(async () => page!.evaluate(async () => (await window.caicli.getRuntimeStatus()).code)).toBe("apphost-exited");
@@ -177,6 +182,7 @@ test("authorized Week82 provider crash and explicit restart", async ({ browserNa
     expect(findAppHostPid(application.process().pid)).toBeNull();
     expect(fs.readFileSync(target, "utf8")).toBe("before\n");
     await expect(page.getByText("Task completed successfully.")).toHaveCount(0);
+    noAutomaticRestartOrReplayObserved = true;
 
     await page.getByRole("button", { name: "Restart AppHost" }).click();
     await expect(page.getByText("AppHost ready")).toBeVisible({ timeout: 60_000 });
@@ -197,11 +203,11 @@ test("authorized Week82 provider crash and explicit restart", async ({ browserNa
     await page.getByRole("button", { name: "Restart", exact: true }).click();
     await expect(page.getByRole("alertdialog", { name: "Restart this turn?" })).toBeVisible();
     await page.getByRole("button", { name: "Restart turn", exact: true }).click();
-    await expect(page.getByRole("group", { name: "Approval request" })).toBeVisible({ timeout: 300_000 });
-    restartedState = await readRecoveryState(page, threadId);
+    restartedState = await waitForApprovalOrTerminal(page, threadId, 300_000);
     expect(restartedState.turns).toHaveLength(2);
     expect(restartedState.turns[1]?.status).toBe("waiting-for-approval");
     expect(restartedState.turns[1]?.approvalRequestId).toBeTruthy();
+    await expect(page.getByRole("group", { name: "Approval request" })).toBeVisible();
     expect(restartedState.turns[1]?.turnId).not.toBe(oldState.turns[0]?.turnId);
     expect(restartedState.turns[1]?.approvalRequestId).not.toBe(oldState.turns[0]?.approvalRequestId);
     expect(intersection(items(oldState, 0, "assistant.message"), items(restartedState, 1, "assistant.message"))).toHaveLength(0);
@@ -255,6 +261,8 @@ test("authorized Week82 provider crash and explicit restart", async ({ browserNa
     expect(reports).toBe(0);
     expect(artifacts).toBe(0);
     expect(inventoryWorkspace(workspace)).toEqual(workspaceBefore);
+    workspaceUnchangedObserved = true;
+    reviewCleanObserved = true;
   } catch (error) {
     scenarioError = error;
   }
@@ -302,8 +310,8 @@ test("authorized Week82 provider crash and explicit restart", async ({ browserNa
       bytes: 79941168,
     },
     checks: {
-      ownedAppHostCrashOnly: oldAppHostPid !== null,
-      noAutomaticRestartOrReplay: true,
+      ownedAppHostCrashOnly: crashExecuted,
+      noAutomaticRestartOrReplay: noAutomaticRestartOrReplayObserved,
       explicitRestart: newAppHostPid !== null && newAppHostPid !== oldAppHostPid,
       oldAttemptInterrupted: canceledState?.turns[0]?.stopReason === "interrupted",
       newAttemptCanceledBeforeApproval: canceledState?.turns[1]?.status === "canceled",
@@ -318,13 +326,13 @@ test("authorized Week82 provider crash and explicit restart", async ({ browserNa
       resyncBounded: resync.queueRequests >= 2 && resync.runners >= 2 &&
         resync.runners <= resync.queueRequests && resync.queueRequests <= 4 && resync.runners <= 4,
       domAndListenersBounded: domDelta.nodes <= 100 && domDelta.documents <= 0 && domDelta.listeners <= 40,
-      diskUnchanged: changedFiles === 0,
-      reviewClean: changesDirty === false && reports === 0 && artifacts === 0,
+      diskUnchanged: workspaceUnchangedObserved && changedFiles === 0,
+      reviewClean: reviewCleanObserved,
     },
     counts: {
       desktopLaunches: application ? 1 : 0,
       appHostProcesses: oldAppHostPid !== null && newAppHostPid !== null ? 2 : 0,
-      appHostCrashes: oldAppHostPid !== null ? 1 : 0,
+      appHostCrashes: crashExecuted ? 1 : 0,
       runtimeRestarts: newAppHostPid !== null ? 1 : 0,
       turns: canceledState?.turns.length ?? 0,
       modelItems: canceledState?.timeline.filter((item) => item.type === "assistant.message").length ?? 0,
@@ -385,6 +393,18 @@ async function readRecoveryState(page: Page, threadId: string): Promise<Recovery
       itemIdsUnique: new Set(timeline.map((item) => item.itemId)).size === timeline.length,
     };
   }, threadId);
+}
+
+async function waitForApprovalOrTerminal(page: Page, threadId: string, timeoutMilliseconds: number): Promise<RecoveryState> {
+  const deadline = Date.now() + timeoutMilliseconds;
+  let state = await readRecoveryState(page, threadId);
+  while (Date.now() < deadline) {
+    const latest = state.turns.at(-1);
+    if (latest?.approvalRequestId || latest && ["completed", "failed", "canceled"].includes(latest.status)) return state;
+    await new Promise((resolve) => setTimeout(resolve, 1_000));
+    state = await readRecoveryState(page, threadId);
+  }
+  throw new Error("Recovery provider turn exceeded the authorized approval wait bound.");
 }
 
 function items(state: RecoveryState, turnIndex: number, type: string): TimelineIdentity[] {

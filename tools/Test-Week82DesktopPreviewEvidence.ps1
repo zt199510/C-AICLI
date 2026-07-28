@@ -257,6 +257,21 @@ if ($regression.status -ne 'Passed' -or $regression.exactCandidateRevision -ne $
     throw 'Week81 deterministic regression evidence failed.'
 }
 
+$recoveryFirstFailure = Read-Json (Join-Path $resolvedEvidenceRoot 'provider-recovery-first-failure.json')
+if ($recoveryFirstFailure.schemaVersion -ne $schema -or $recoveryFirstFailure.status -ne 'Failed' -or
+    $recoveryFirstFailure.exactCandidateRevision -ne $candidate -or
+    $recoveryFirstFailure.category -ne 'provider-completed-without-requested-tool' -or
+    [int]$recoveryFirstFailure.observed.timelineItems -ne 3 -or
+    [int]$recoveryFirstFailure.observed.toolCalls -ne 0 -or
+    [int]$recoveryFirstFailure.observed.approvalRequests -ne 0 -or
+    [bool]$recoveryFirstFailure.observed.appHostCrashExecuted -or
+    [bool]$recoveryFirstFailure.observed.runtimeRestartExecuted -or
+    [bool]$recoveryFirstFailure.observed.writeExecuted) {
+    throw 'Week82 recovery first failure was not preserved accurately.'
+}
+Assert-Identity $recoveryFirstFailure 'Week82 recovery first failure'
+Assert-Cleanup $recoveryFirstFailure.cleanupDelta 'Week82 recovery first failure'
+
 $packageRoot = Join-Path $repositoryRoot 'apps\desktop\out\C-AICLI Desktop-win32-x64'
 $desktopPath = Join-Path $packageRoot 'caicli-desktop.exe'
 $asarPath = Join-Path $packageRoot 'resources\app.asar'
