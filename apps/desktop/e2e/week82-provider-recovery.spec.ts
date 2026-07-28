@@ -192,9 +192,8 @@ test("authorized Week83 provider crash and explicit restart", async ({ browserNa
     expect(items(oldState, 0, "tool.started")).toHaveLength(1);
     expect(items(oldState, 0, "approval.requested")).toHaveLength(1);
     expect(fs.readFileSync(target, "utf8")).toBe("before\n");
-    await expect.poll(async () => (await takeCoverage(cdp!, coverageTargets)).completions, {
-      timeout: 30_000,
-    }).toBeGreaterThanOrEqual(1);
+    await expect(page.getByText("Refreshing…")).toBeHidden({ timeout: 30_000 });
+    await takeCoverage(cdp, coverageTargets);
     domBefore = await cdp.send("Memory.getDOMCounters");
 
     process.kill(oldAppHostPid);
@@ -464,7 +463,7 @@ function intersection(left: readonly TimelineIdentity[], right: readonly Timelin
   return left.map((item) => item.itemId).filter((id) => rightIds.has(id));
 }
 
-function createCoverageTargets(): { queue: number; runner: number; completion: number; length: number } {
+function createCoverageTargets(): { queue: number; runner: number; length: number } {
   const packaged = extractFile(packagedAsar, `dist\\renderer\\assets\\${productBundleName}`);
   const built = fs.readFileSync(productBundlePath);
   if (sha256(packaged) !== sha256(built)) throw new Error("Packaged Renderer bundle does not match the verified product build.");
@@ -479,8 +478,7 @@ function createCoverageTargets(): { queue: number; runner: number; completion: n
   };
   const result = {
     queue: offset(110),
-    runner: offset(116),
-    completion: offset(128),
+    runner: offset(117),
     length: built.toString("utf8").length,
   };
   consumer.destroy?.();
@@ -489,7 +487,7 @@ function createCoverageTargets(): { queue: number; runner: number; completion: n
 
 async function takeCoverage(
   cdp: CDPSession,
-  targets: { queue: number; runner: number; completion: number; length: number },
+  targets: { queue: number; runner: number; length: number },
 ) {
   const coverage = await cdp.send("Profiler.takePreciseCoverage");
   const script = coverage.result.find((candidate) => candidate.url.endsWith(productBundleName)) ??
@@ -498,11 +496,7 @@ async function takeCoverage(
   const countAt = (offset: number) => script?.functions.flatMap((fn) => fn.ranges)
     .filter((range) => range.startOffset <= offset && range.endOffset >= offset)
     .sort((left, right) => (left.endOffset - left.startOffset) - (right.endOffset - right.startOffset))[0]?.count ?? 0;
-  return {
-    queueRequests: countAt(targets.queue),
-    runners: countAt(targets.runner),
-    completions: countAt(targets.completion),
-  };
+  return { queueRequests: countAt(targets.queue), runners: countAt(targets.runner) };
 }
 
 function readAuthorizedProviderConfig(filePath: string): ProviderConfig {

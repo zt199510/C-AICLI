@@ -708,7 +708,7 @@ function createCoverageTargets(): CoverageTargets {
   const result = {
     offsets: {
       queueResync: offset(110, 4),
-      resyncRunner: offset(116, 4),
+      resyncRunner: offset(117, 4),
     },
     bundleSha256: builtHash,
     bundleCharacterLength: builtBundle.toString("utf8").length,
