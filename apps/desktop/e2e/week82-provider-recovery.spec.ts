@@ -20,7 +20,7 @@ const packageRoot = path.join(desktopRoot, "out", "C-AICLI Desktop-win32-x64");
 const packagedExecutable = path.join(packageRoot, "caicli-desktop.exe");
 const packagedAppHost = path.join(packageRoot, "resources", "apphost", "CSharpAiCli.AppHost.exe");
 const packagedAsar = path.join(packageRoot, "resources", "app.asar");
-const productBundleName = "index-CUwLHMJq.js";
+const productBundleName = "index-0rsbCDm4.js";
 const productBundlePath = path.join(desktopRoot, "dist", "renderer", "assets", productBundleName);
 const productMapPath = `${productBundlePath}.map`;
 const evidenceRoot = process.env.CAICLI_WEEK83_EVIDENCE_DIR
@@ -123,7 +123,7 @@ test("authorized Week83 provider crash and explicit restart", async ({ browserNa
   const workspaceBefore = inventoryWorkspace(workspace);
 
   try {
-    expect(sha256File(packagedExecutable)).toBe("AB4B79A97C66041E1A478F217AA99EC75D1D1082FA42500AFDADBC13063B62D9");
+    expect(sha256File(packagedExecutable)).toBe("A71610CF467A06552C603AD2C838267F1F371535D905A4827019B3B817ABB28F");
     expect(sha256File(packagedAppHost)).toBe("DC46DBFAD098D7E2F464F05F2C8383568DF733F619B3E45B9D70BAD4F9C13DFA");
     const coverageTargets = createCoverageTargets();
     application = await electron.launch({
@@ -344,12 +344,12 @@ test("authorized Week83 provider crash and explicit restart", async ({ browserNa
     schemaVersion: "week83-approval-projection-remediation/v1",
     evidenceKind: "provider-recovery",
     status: passed ? "Passed" : "Failed",
-    exactCandidateRevision: "e282eac8cdf4440f4b3cd024dfea4cf7bb02606f",
+    exactCandidateRevision: "5ee698c5a74cc7a0d127235ae9426414f0afc26f",
     packageIdentity: {
-      sha256: "AB4B79A97C66041E1A478F217AA99EC75D1D1082FA42500AFDADBC13063B62D9",
+      sha256: "A71610CF467A06552C603AD2C838267F1F371535D905A4827019B3B817ABB28F",
       bytes: 222753280,
-      treeSha256: "3EEE850186EF69E6BE359FBC92FC7A5478907DAF8F52A5B861F43A07002953B3",
-      treeBytes: 464709026,
+      treeSha256: "8123AF9B1964230AB7DA4276391366A069438127E86C880812D616C612282E9D",
+      treeBytes: 464709156,
     },
     appHostIdentity: {
       sha256: "DC46DBFAD098D7E2F464F05F2C8383568DF733F619B3E45B9D70BAD4F9C13DFA",
