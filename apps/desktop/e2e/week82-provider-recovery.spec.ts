@@ -218,28 +218,20 @@ test("authorized Week83 provider crash and explicit restart", async ({ browserNa
     await page.getByRole("button", { name: "Open workspace" }).first().click();
     await page.getByText(title, { exact: true }).first().click();
     await expect(page.getByText("This turn needs recovery before it can continue.")).toBeVisible();
-    await expect.poll(async () => {
-      const state = await readRecoveryState(page!, threadId);
-      return {
-        status: state.turns[0]?.status ?? null,
-        stopReason: state.turns[0]?.stopReason ?? null,
-        approvalRequestId: state.turns[0]?.approvalRequestId ?? null,
-      };
-    }, { timeout: 30_000 }).toEqual({
-      status: "failed",
-      stopReason: "interrupted",
-      approvalRequestId: null,
-    });
-    const interrupted = await readRecoveryState(page, threadId);
-    expect(interrupted.turns[0]?.status).toBe("failed");
-    expect(interrupted.turns[0]?.stopReason).toBe("interrupted");
-    expect(interrupted.turns[0]?.approvalRequestId).toBeNull();
+    const stale = await readRecoveryState(page, threadId);
+    expect(stale.recoveryRequired).toBe(true);
+    expect(stale.turns[0]?.status).toBe("waiting-for-approval");
+    expect(stale.turns[0]?.stopReason).toBeNull();
+    expect(stale.turns[0]?.approvalRequestId).toBe(oldState.turns[0]?.approvalRequestId);
 
     await page.getByRole("button", { name: "Restart", exact: true }).click();
     await expect(page.getByRole("alertdialog", { name: "Restart this turn?" })).toBeVisible();
     await page.getByRole("button", { name: "Restart turn", exact: true }).click();
     restartedState = await waitForApprovalOrTerminal(page, threadId, 300_000);
     expect(restartedState.turns).toHaveLength(2);
+    expect(restartedState.turns[0]?.status).toBe("failed");
+    expect(restartedState.turns[0]?.stopReason).toBe("interrupted");
+    expect(restartedState.turns[0]?.approvalRequestId).toBeNull();
     expect(restartedState.turns[1]?.status).toBe("waiting-for-approval");
     expect(restartedState.turns[1]?.approvalRequestId).toBeTruthy();
     await expect(page.getByRole("group", { name: "Approval request" })).toBeVisible();
