@@ -218,6 +218,18 @@ test("authorized Week83 provider crash and explicit restart", async ({ browserNa
     await page.getByRole("button", { name: "Open workspace" }).first().click();
     await page.getByText(title, { exact: true }).first().click();
     await expect(page.getByText("This turn needs recovery before it can continue.")).toBeVisible();
+    await expect.poll(async () => {
+      const state = await readRecoveryState(page!, threadId);
+      return {
+        status: state.turns[0]?.status ?? null,
+        stopReason: state.turns[0]?.stopReason ?? null,
+        approvalRequestId: state.turns[0]?.approvalRequestId ?? null,
+      };
+    }, { timeout: 30_000 }).toEqual({
+      status: "failed",
+      stopReason: "interrupted",
+      approvalRequestId: null,
+    });
     const interrupted = await readRecoveryState(page, threadId);
     expect(interrupted.turns[0]?.status).toBe("failed");
     expect(interrupted.turns[0]?.stopReason).toBe("interrupted");
