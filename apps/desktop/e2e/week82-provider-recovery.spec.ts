@@ -20,12 +20,12 @@ const packageRoot = path.join(desktopRoot, "out", "C-AICLI Desktop-win32-x64");
 const packagedExecutable = path.join(packageRoot, "caicli-desktop.exe");
 const packagedAppHost = path.join(packageRoot, "resources", "apphost", "CSharpAiCli.AppHost.exe");
 const packagedAsar = path.join(packageRoot, "resources", "app.asar");
-const productBundleName = "index-Ctw8Lkem.js";
+const productBundleName = "index-Bk-7wMX0.js";
 const productBundlePath = path.join(desktopRoot, "dist", "renderer", "assets", productBundleName);
 const productMapPath = `${productBundlePath}.map`;
-const evidenceRoot = process.env.CAICLI_WEEK82_EVIDENCE_DIR
-  ? path.resolve(process.env.CAICLI_WEEK82_EVIDENCE_DIR)
-  : path.join(repositoryRoot, "artifacts", "week82-desktop-preview-requalification");
+const evidenceRoot = process.env.CAICLI_WEEK83_EVIDENCE_DIR
+  ? path.resolve(process.env.CAICLI_WEEK83_EVIDENCE_DIR)
+  : path.join(repositoryRoot, "artifacts", "week83-approval-projection-remediation");
 
 interface ProviderConfig {
   readonly OPENAI_MODEL: string;
@@ -57,15 +57,22 @@ interface RecoveryState {
   readonly itemIdsUnique: boolean;
 }
 
-test("authorized Week82 provider crash and explicit restart", async ({ browserName }, testInfo) => {
+interface ThreadChangeTrace {
+  readonly eventSequence: number;
+  readonly revision: number;
+  readonly committedSequence: number;
+  readonly changeKind: string;
+}
+
+test("authorized Week83 provider crash and explicit restart", async ({ browserName }, testInfo) => {
   if (browserName !== "chromium") throw new Error("Electron provider recovery requires Chromium.");
-  if (process.env.CAICLI_WEEK82_PROVIDER_AUTHORIZED !== "read-only-recovery-resource") {
-    throw new Error("Week82 provider recovery authorization was not explicitly granted.");
+  if (process.env.CAICLI_WEEK83_PROVIDER_AUTHORIZED !== "read-only-recovery-resource") {
+    throw new Error("Week83 provider recovery authorization was not explicitly granted.");
   }
   testInfo.setTimeout(420_000);
   const provider = readAuthorizedProviderConfig(path.join(repositoryRoot, ".env.local"));
   const secrets = Object.values(provider);
-  const root = fs.mkdtempSync(path.join(os.tmpdir(), "caicli-week82-recovery-"));
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "caicli-week83-recovery-"));
   const workspace = path.join(root, "workspace");
   const profile = path.join(root, "profile");
   const target = path.join(workspace, "recovery.txt");
@@ -85,6 +92,7 @@ test("authorized Week82 provider crash and explicit restart", async ({ browserNa
   let noAutomaticRestartOrReplayObserved = false;
   let workspaceUnchangedObserved = false;
   let reviewCleanObserved = false;
+  let notificationTrace: readonly ThreadChangeTrace[] = [];
   let resync = { queueRequests: 0, runners: 0 };
   let domDelta = { nodes: 0, documents: 0, listeners: 0 };
   let domBefore: { nodes: number; documents: number; jsEventListeners: number };
@@ -115,7 +123,7 @@ test("authorized Week82 provider crash and explicit restart", async ({ browserNa
   const workspaceBefore = inventoryWorkspace(workspace);
 
   try {
-    expect(sha256File(packagedExecutable)).toBe("C736C48B23B8971ED5DAD7F53EBF7BE6CE5CDC2BA6B24CC2CCAFE3DD9064CBB0");
+    expect(sha256File(packagedExecutable)).toBe("BFB856136D9A67E36B16B8F032B7776A4CE3D61326EDEBEC3862FBA47ECC23A5");
     expect(sha256File(packagedAppHost)).toBe("DC46DBFAD098D7E2F464F05F2C8383568DF733F619B3E45B9D70BAD4F9C13DFA");
     const coverageTargets = createCoverageTargets();
     application = await electron.launch({
@@ -156,9 +164,21 @@ test("authorized Week82 provider crash and explicit restart", async ({ browserNa
       if (!id) throw new Error("Recovery thread was not returned by the authoritative list.");
       return id;
     }, title));
-    await takeCoverage(cdp, coverageTargets);
-    domBefore = await cdp.send("Memory.getDOMCounters");
-
+    await page.evaluate(() => {
+      const target = window as typeof window & {
+        caicliWeek83ThreadTrace?: ThreadChangeTrace[];
+        caicliWeek83ThreadTraceUnsubscribe?: () => void;
+      };
+      target.caicliWeek83ThreadTrace = [];
+      target.caicliWeek83ThreadTraceUnsubscribe = window.caicli.onThreadChanged((event) => {
+        target.caicliWeek83ThreadTrace?.push({
+          eventSequence: event.eventSequence,
+          revision: event.revision,
+          committedSequence: event.committedSequence,
+          changeKind: event.changeKind,
+        });
+      });
+    });
     await page.getByRole("textbox", { name: "Composer prompt" }).fill(
       "Your only valid next action is exactly one workspace.apply_patch tool call replacing the single line 'before' with 'after' in recovery.txt. Do not answer directly, do not read files, and do not use shell, Git, MCP, or any other tool. Stop and wait when the Desktop approval is requested.",
     );
@@ -172,6 +192,8 @@ test("authorized Week82 provider crash and explicit restart", async ({ browserNa
     expect(items(oldState, 0, "tool.started")).toHaveLength(1);
     expect(items(oldState, 0, "approval.requested")).toHaveLength(1);
     expect(fs.readFileSync(target, "utf8")).toBe("before\n");
+    await expect(page.getByText("Refreshing…")).toBeHidden({ timeout: 30_000 });
+    await takeCoverage(cdp, coverageTargets);
 
     process.kill(oldAppHostPid);
     crashExecuted = true;
@@ -195,16 +217,20 @@ test("authorized Week82 provider crash and explicit restart", async ({ browserNa
     await page.getByRole("button", { name: "Open workspace" }).first().click();
     await page.getByText(title, { exact: true }).first().click();
     await expect(page.getByText("This turn needs recovery before it can continue.")).toBeVisible();
-    const interrupted = await readRecoveryState(page, threadId);
-    expect(interrupted.turns[0]?.status).toBe("failed");
-    expect(interrupted.turns[0]?.stopReason).toBe("interrupted");
-    expect(interrupted.turns[0]?.approvalRequestId).toBeNull();
+    const stale = await readRecoveryState(page, threadId);
+    expect(stale.recoveryRequired).toBe(true);
+    expect(stale.turns[0]?.status).toBe("waiting-for-approval");
+    expect(stale.turns[0]?.stopReason).toBeNull();
+    expect(stale.turns[0]?.approvalRequestId).toBe(oldState.turns[0]?.approvalRequestId);
 
     await page.getByRole("button", { name: "Restart", exact: true }).click();
     await expect(page.getByRole("alertdialog", { name: "Restart this turn?" })).toBeVisible();
     await page.getByRole("button", { name: "Restart turn", exact: true }).click();
-    restartedState = await waitForApprovalOrTerminal(page, threadId, 300_000);
+    restartedState = await waitForApprovalOrTerminal(page, threadId, 300_000, 2);
     expect(restartedState.turns).toHaveLength(2);
+    expect(restartedState.turns[0]?.status).toBe("failed");
+    expect(restartedState.turns[0]?.stopReason).toBe("interrupted");
+    expect(restartedState.turns[0]?.approvalRequestId).toBeNull();
     expect(restartedState.turns[1]?.status).toBe("waiting-for-approval");
     expect(restartedState.turns[1]?.approvalRequestId).toBeTruthy();
     await expect(page.getByRole("group", { name: "Approval request" })).toBeVisible();
@@ -215,6 +241,8 @@ test("authorized Week82 provider crash and explicit restart", async ({ browserNa
     expect(restartedState.sequencesContiguous).toBe(true);
     expect(restartedState.itemIdsUnique).toBe(true);
     expect(fs.readFileSync(target, "utf8")).toBe("before\n");
+    await waitForRenderCommit(page);
+    domBefore = await cdp.send("Memory.getDOMCounters");
 
     await page.getByRole("button", { name: "Cancel", exact: true }).click();
     await expect.poll(async () => (await readRecoveryState(page!, threadId)).turns[1]?.status, {
@@ -225,6 +253,9 @@ test("authorized Week82 provider crash and explicit restart", async ({ browserNa
     expect(items(canceledState, 1, "tool.completed")).toHaveLength(0);
     expect(items(canceledState, 1, "assistant.final")).toHaveLength(0);
     expect(fs.readFileSync(target, "utf8")).toBe("before\n");
+    await expect(page.getByRole("group", { name: "Approval request" })).toHaveCount(0);
+    await expect(page.getByText("Refreshing…")).toBeHidden({ timeout: 30_000 });
+    await waitForRenderCommit(page);
     resync = await takeCoverage(cdp, coverageTargets);
     const domAfter = await cdp.send("Memory.getDOMCounters");
     domDelta = {
@@ -268,6 +299,16 @@ test("authorized Week82 provider crash and explicit restart", async ({ browserNa
   }
 
   try {
+    if (page) {
+      notificationTrace = await page.evaluate(() => {
+        const target = window as typeof window & {
+          caicliWeek83ThreadTrace?: ThreadChangeTrace[];
+          caicliWeek83ThreadTraceUnsubscribe?: () => void;
+        };
+        target.caicliWeek83ThreadTraceUnsubscribe?.();
+        return target.caicliWeek83ThreadTrace ?? [];
+      }).catch(() => []);
+    }
     if (cdp) {
       await cdp.send("Profiler.stopPreciseCoverage").catch(() => undefined);
       await cdp.send("Profiler.disable").catch(() => undefined);
@@ -296,15 +337,15 @@ test("authorized Week82 provider crash and explicit restart", async ({ browserNa
     changedFiles === 0 && changesDirty === false && reports === 0 && artifacts === 0 &&
     processDelta === 0 && temporaryDelta === 0 && configurationDelta === 0;
   const evidence = {
-    schemaVersion: "week82-desktop-preview-requalification/v1",
+    schemaVersion: "week83-approval-projection-remediation/v1",
     evidenceKind: "provider-recovery",
     status: passed ? "Passed" : "Failed",
-    exactCandidateRevision: "e9e062d985545377aa373767f563de6a2bb30a64",
+    exactCandidateRevision: "ccf9d82c9fa76c201876ee01d3849902989091e9",
     packageIdentity: {
-      sha256: "C736C48B23B8971ED5DAD7F53EBF7BE6CE5CDC2BA6B24CC2CCAFE3DD9064CBB0",
+      sha256: "BFB856136D9A67E36B16B8F032B7776A4CE3D61326EDEBEC3862FBA47ECC23A5",
       bytes: 222753280,
-      treeSha256: "ADDFBC3114B10E31633F1E9A9500934B9B8F17BCD3222CD4D02217AA606C6E38",
-      treeBytes: 464708708,
+      treeSha256: "B9C5055B08A4A2B2BAFE64914CA55DE567BF6AAB969E43298813D0859EF0C932",
+      treeBytes: 464709225,
     },
     appHostIdentity: {
       sha256: "DC46DBFAD098D7E2F464F05F2C8383568DF733F619B3E45B9D70BAD4F9C13DFA",
@@ -351,17 +392,18 @@ test("authorized Week82 provider crash and explicit restart", async ({ browserNa
       documentsDelta: domDelta.documents,
       listenersDelta: domDelta.listeners,
     },
+    notificationTrace,
     durationMilliseconds: Date.now() - started,
     cleanupDelta: { process: processDelta, temporary: temporaryDelta, configuration: configurationDelta },
     failure: scenarioError === null && cleanupError === null ? null : safeError(scenarioError ?? cleanupError, secrets),
     summary: passed
-      ? "Week82 packaged provider recovery failed closed after the owned AppHost crash, required explicit restart, separated all durable attempt identities, canceled before approval, and left zero cleanup delta."
-      : "Week82 packaged provider recovery failed closed; the first attempt remains preserved in this evidence envelope.",
+      ? "Week83 packaged provider recovery failed closed after the owned AppHost crash, required explicit restart, separated all durable attempt identities, canceled before approval, and left zero cleanup delta."
+      : "Week83 packaged provider recovery failed closed; the first attempt remains preserved in this evidence envelope.",
   };
   fs.mkdirSync(evidenceRoot, { recursive: true });
   const body = JSON.stringify(evidence, null, 2);
   fs.writeFileSync(path.join(evidenceRoot, "provider-recovery.json"), `${body}\n`, "utf8");
-  await testInfo.attach("week82-provider-recovery.json", { body: Buffer.from(body), contentType: "application/json" });
+  await testInfo.attach("week83-provider-recovery.json", { body: Buffer.from(body), contentType: "application/json" });
   if (scenarioError && cleanupError) throw new AggregateError([scenarioError, cleanupError], "Recovery scenario and cleanup failed.");
   if (scenarioError) throw scenarioError;
   if (cleanupError) throw cleanupError;
@@ -397,12 +439,18 @@ async function readRecoveryState(page: Page, threadId: string): Promise<Recovery
   }, threadId);
 }
 
-async function waitForApprovalOrTerminal(page: Page, threadId: string, timeoutMilliseconds: number): Promise<RecoveryState> {
+async function waitForApprovalOrTerminal(
+  page: Page,
+  threadId: string,
+  timeoutMilliseconds: number,
+  minimumTurnCount = 1,
+): Promise<RecoveryState> {
   const deadline = Date.now() + timeoutMilliseconds;
   let state = await readRecoveryState(page, threadId);
   while (Date.now() < deadline) {
     const latest = state.turns.at(-1);
-    if (latest?.approvalRequestId || latest && ["completed", "failed", "canceled"].includes(latest.status)) return state;
+    if (state.turns.length >= minimumTurnCount &&
+      (latest?.approvalRequestId || latest && ["completed", "failed", "canceled"].includes(latest.status))) return state;
     await new Promise((resolve) => setTimeout(resolve, 1_000));
     state = await readRecoveryState(page, threadId);
   }
@@ -419,6 +467,12 @@ function intersection(left: readonly TimelineIdentity[], right: readonly Timelin
   return left.map((item) => item.itemId).filter((id) => rightIds.has(id));
 }
 
+async function waitForRenderCommit(page: Page): Promise<void> {
+  await page.evaluate(() => new Promise<void>((resolve) => {
+    requestAnimationFrame(() => requestAnimationFrame(() => resolve()));
+  }));
+}
+
 function createCoverageTargets(): { queue: number; runner: number; length: number } {
   const packaged = extractFile(packagedAsar, `dist\\renderer\\assets\\${productBundleName}`);
   const built = fs.readFileSync(productBundlePath);
@@ -432,12 +486,19 @@ function createCoverageTargets(): { queue: number; runner: number; length: numbe
     if (position.line === null || position.column === null) throw new Error("Product coverage target could not be mapped.");
     return starts[position.line - 1]! + position.column;
   };
-  const result = { queue: offset(99), runner: offset(105), length: built.toString("utf8").length };
+  const result = {
+    queue: offset(110),
+    runner: offset(117),
+    length: built.toString("utf8").length,
+  };
   consumer.destroy?.();
   return result;
 }
 
-async function takeCoverage(cdp: CDPSession, targets: { queue: number; runner: number; length: number }) {
+async function takeCoverage(
+  cdp: CDPSession,
+  targets: { queue: number; runner: number; length: number },
+) {
   const coverage = await cdp.send("Profiler.takePreciseCoverage");
   const script = coverage.result.find((candidate) => candidate.url.endsWith(productBundleName)) ??
     coverage.result.find((candidate) => candidate.functions.some((fn) =>
@@ -532,7 +593,7 @@ function countLiveProcesses(pids: readonly number[]): number {
 
 function isOwnedRoot(root: string): boolean {
   const resolved = path.resolve(root);
-  return resolved.startsWith(path.resolve(os.tmpdir()) + path.sep) && path.basename(resolved).startsWith("caicli-week82-recovery-");
+  return resolved.startsWith(path.resolve(os.tmpdir()) + path.sep) && path.basename(resolved).startsWith("caicli-week83-recovery-");
 }
 
 function sha256File(filePath: string): string {

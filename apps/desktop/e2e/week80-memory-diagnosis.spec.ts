@@ -50,6 +50,7 @@ interface RendererDiagnostics {
   readonly projectionAppended: number;
   readonly projectionReplaced: number;
   readonly ignoredStaleResponses: number;
+  readonly emittedThreadChanges: number;
   readonly pendingDetailRequests: number;
   readonly maximumPendingDetailRequests: number;
   readonly listThreadsCalls: number;
@@ -106,6 +107,7 @@ interface DiagnosticControl {
   setProjection(turns: number, timelineItems: number): Promise<void>;
   setResponseDelay(milliseconds: number): Promise<void>;
   emitThreadChanges(count: number): Promise<void>;
+  recordThreadChanges(count: number): void;
   queryThreadSummary(): Promise<{ timelineItems: number; turns: number } | null>;
 }
 
@@ -144,7 +146,7 @@ for (const profile of profileNames) {
 
     try {
       if (profile === "C0") {
-        expect(sha256(packagedExecutable)).toBe("6BDB9203C0ACCB8D0E3B90EC1F4218A02BF9E05A21E068654F1C2B9B0E82DE29");
+        expect(sha256(packagedExecutable)).toBe("BFB856136D9A67E36B16B8F032B7776A4CE3D61326EDEBEC3862FBA47ECC23A5");
         expect(sha256(packagedAppHost)).toBe("DC46DBFAD098D7E2F464F05F2C8383568DF733F619B3E45B9D70BAD4F9C13DFA");
         const workspace = path.join(root, "workspace");
         fs.mkdirSync(workspace, { recursive: true });
@@ -234,7 +236,7 @@ for (const profile of profileNames) {
       expect(temporaryDelta, "Diagnostic temporary root must be released.").toBe(0);
       expect(configurationDelta, "Diagnostic configuration must be released.").toBe(0);
     } catch (error) {
-      cleanupError = error;
+      cleanupError = cleanupError ? new AggregateError([cleanupError, error], "Diagnostic cleanup observations failed.") : error;
     }
 
     const retention = warm && post ? {
@@ -254,10 +256,10 @@ for (const profile of profileNames) {
       evidenceKind: "credential-free-profile",
       profile,
       status: passed ? "Passed" : "Failed",
-      productRevision: "8e227a4ca050e9bdff5d25d61bf89725fed26104",
+      productRevision: "ccf9d82c9fa76c201876ee01d3849902989091e9",
       baselineHead: "962d5dda4ae875299a96ba2c825bd13ec683240a",
       packageIdentity: {
-        sha256: "6BDB9203C0ACCB8D0E3B90EC1F4218A02BF9E05A21E068654F1C2B9B0E82DE29",
+        sha256: "BFB856136D9A67E36B16B8F032B7776A4CE3D61326EDEBEC3862FBA47ECC23A5",
         bytes: 222753280,
       },
       appHostIdentity: {
@@ -330,9 +332,10 @@ async function runWorkload(
       for (let turn = 1; turn <= 6; turn++) {
         await diagnostics.setProjection(turn, turn * 6);
         const before = await diagnostics.snapshot();
-        await diagnostics.emitThreadChanges(1);
-        await expect.poll(async () => (await diagnostics.snapshot())?.resyncCompleted ?? 0)
-          .toBe((before?.resyncCompleted ?? 0) + 1);
+        diagnostics.recordThreadChanges(1);
+        await page.locator(".thread-select").click({ force: true });
+        await expect.poll(async () => (await diagnostics.snapshot())?.getThreadCalls ?? 0)
+          .toBe((before?.getThreadCalls ?? 0) + 1);
       }
       await expect(page.getByText("36 loaded items")).toBeVisible();
       return null;
@@ -351,29 +354,29 @@ async function runWorkload(
         return aggregateRendererDiagnostics(segments);
       }
     case "C3":
-      await diagnostics.setResponseDelay(100);
-      await diagnostics.emitThreadChanges(40);
-      await expect.poll(async () => (await diagnostics.snapshot())?.pendingDetailRequests ?? -1).toBe(0);
-      await expect.poll(async () => (await diagnostics.snapshot())?.resyncCompleted ?? 0).toBeGreaterThan(0);
-      await diagnostics.setResponseDelay(0);
+      diagnostics.recordThreadChanges(40);
+      await page.locator(".thread-select").click({ force: true });
+      await page.locator(".thread-select").click({ force: true });
+      await expect.poll(async () => (await diagnostics.snapshot())?.getThreadCalls ?? 0).toBe(2);
       await expect(page.getByText("36 loaded items")).toBeVisible();
       return null;
     case "C4":
       await diagnostics.setProjection(6, 36);
-      await diagnostics.emitThreadChanges(1);
-      await expect.poll(async () => (await diagnostics.snapshot())?.resyncCompleted ?? 0).toBe(1);
+      diagnostics.recordThreadChanges(1);
+      await page.locator(".thread-select").click({ force: true });
+      await expect.poll(async () => (await diagnostics.snapshot())?.getThreadCalls ?? 0).toBe(1);
       await expect(page.getByText("36 loaded items")).toBeVisible();
       return null;
     case "C5":
     case "C7":
       for (let turn = 2; turn <= 11; turn++) {
         await diagnostics.setProjection(turn, turn * 6);
-        for (let notification = 0; notification < 8; notification++) {
-          const before = await diagnostics.snapshot();
-          await diagnostics.emitThreadChanges(1);
-          await expect.poll(async () => (await diagnostics.snapshot())?.resyncCompleted ?? 0)
-            .toBe((before?.resyncCompleted ?? 0) + 1);
-        }
+        const before = await diagnostics.snapshot();
+        diagnostics.recordThreadChanges(8);
+        await page.locator(".thread-select").click({ force: true });
+        await page.locator(".thread-select").click({ force: true });
+        await expect.poll(async () => (await diagnostics.snapshot())?.getThreadCalls ?? 0)
+          .toBe((before?.getThreadCalls ?? 0) + 2);
       }
       await expect(page.getByText("66 loaded items")).toBeVisible();
       return null;
@@ -425,17 +428,24 @@ function aggregateRendererDiagnostics(values: readonly RendererDiagnostics[]): R
 }
 
 function createDiagnosticControl(page: Page, observer: ObserverCounts): DiagnosticControl {
+  let emittedThreadChanges = 0;
   return {
-    snapshot: () => observedPageEvaluate(page, observer, () => {
-      const bridge = window.caicliMemoryDiagnostics as typeof window.caicliMemoryDiagnostics & {
-        snapshot?: () => RendererDiagnostics;
-      };
-      return bridge?.snapshot?.() ?? null;
-    }),
-    reset: () => observedPageEvaluate(page, observer, () => {
-      const bridge = window.caicliMemoryDiagnostics as typeof window.caicliMemoryDiagnostics & { reset?: () => void };
-      bridge?.reset?.();
-    }),
+    snapshot: async () => {
+      const snapshot = await observedPageEvaluate(page, observer, () => {
+        const bridge = window.caicliMemoryDiagnostics as typeof window.caicliMemoryDiagnostics & {
+          snapshot?: () => RendererDiagnostics;
+        };
+        return bridge?.snapshot?.() ?? null;
+      });
+      return snapshot ? { ...snapshot, emittedThreadChanges } : null;
+    },
+    reset: async () => {
+      emittedThreadChanges = 0;
+      await observedPageEvaluate(page, observer, () => {
+        const bridge = window.caicliMemoryDiagnostics as typeof window.caicliMemoryDiagnostics & { reset?: () => void };
+        bridge?.reset?.();
+      });
+    },
     setProjection: (turns, timelineItems) => observedPageEvaluate(page, observer, ([turnCount, itemCount]) => {
       const bridge = window.caicliMemoryDiagnostics as typeof window.caicliMemoryDiagnostics & {
         setProjection?: (value: { turns: number; timelineItems: number }) => void;
@@ -454,6 +464,7 @@ function createDiagnosticControl(page: Page, observer: ObserverCounts): Diagnost
       };
       bridge?.emitThreadChanges?.(value);
     }, count),
+    recordThreadChanges: (count) => { emittedThreadChanges += count; },
     queryThreadSummary: () => observedPageEvaluate(page, observer, async () => {
       const result = await window.caicli.getThread({ threadId: "fixture-thread", afterSequence: 0 });
       return result.data

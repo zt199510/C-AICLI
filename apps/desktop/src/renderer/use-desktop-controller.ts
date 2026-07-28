@@ -9,6 +9,7 @@ export function shouldQueueThreadResync(previous: ThreadChangedParams | null, ev
   if (!previous || previous.workspaceId !== event.workspaceId || previous.threadId !== event.threadId) return true;
   if (previous.eventSequence === event.eventSequence && threadEventIdentity(previous) === threadEventIdentity(event)) return false;
   if (event.changeKind !== "updated") return true;
+  if (event.revision < previous.revision && event.committedSequence <= previous.committedSequence) return false;
   return previous.committedSequence === event.committedSequence;
 }
 
@@ -73,13 +74,23 @@ export function useDesktopController(bridge: DesktopBridge | undefined) {
         return;
       }
       const current = stateRef.current;
+      const latestEvent = lastThreadEvent.current;
+      const behindNotification = !append && afterSequence === 0 &&
+          latestEvent?.workspaceId === result.data.thread.workspaceId &&
+          latestEvent.threadId === result.data.thread.threadId &&
+          result.data.thread.revision < latestEvent.revision;
       const stale = requestId !== detailRequest.current ||
           current.contextEpoch !== epoch ||
           current.selectionEpoch !== selectionEpoch ||
-          current.selectedThreadId !== threadId;
-      if (stale) incrementMemoryDiagnostic("ignoredStaleResponses");
-      else incrementMemoryDiagnostic(append ? "projectionAppended" : "projectionReplaced");
-      dispatch({ type: "detail-ready", epoch, selectionEpoch, requestId, detail: result.data, append });
+          current.selectedThreadId !== threadId ||
+          behindNotification;
+      if (stale) {
+        incrementMemoryDiagnostic("ignoredStaleResponses");
+        if (behindNotification && resyncRunning.current) resyncDirty.current = true;
+      } else {
+        incrementMemoryDiagnostic(append ? "projectionAppended" : "projectionReplaced");
+        dispatch({ type: "detail-ready", epoch, selectionEpoch, requestId, detail: result.data, append });
+      }
     } catch {
       dispatch({ type: "detail-error", epoch, selectionEpoch, requestId, message: "Thread history could not be loaded." });
     } finally {
@@ -141,13 +152,28 @@ export function useDesktopController(bridge: DesktopBridge | undefined) {
     const unsubscribeThread = bridge.onThreadChanged((event: ThreadChangedParams) => {
       const snapshot = stateRef.current;
       const shouldResync = shouldQueueThreadResync(lastThreadEvent.current, event);
+      const eventTargetsSelection = snapshot.selectedThreadId === event.threadId;
+      const selectedDetail = eventTargetsSelection && snapshot.detail?.thread.threadId === event.threadId
+        ? snapshot.detail
+        : null;
+      const committedLag = selectedDetail
+        ? Math.max(0, event.committedSequence - selectedDetail.thread.timelineItemCount)
+        : 0;
+      const selectedProjectionBehind = selectedDetail !== null &&
+        (selectedDetail.thread.revision < event.revision || committedLag > 0);
+      const boundedCatchupRequired = selectedDetail !== null && committedLag >= 3;
       lastThreadEvent.current = event;
       if (!snapshot.workspace || event.workspaceId !== snapshot.workspace.workspaceId) {
         dispatch({ type: "event", event });
         return;
       }
       dispatch({ type: "event", event });
-      if (shouldResync) queueResync();
+      if (shouldResync) {
+        if (!eventTargetsSelection || selectedDetail === null || selectedProjectionBehind) queueResync();
+      } else if (boundedCatchupRequired) {
+        if (resyncRunning.current) resyncDirty.current = true;
+        else queueResync();
+      }
     });
     void bridge.getRuntimeStatus().then((status) => {
       if (disposed || receivedRuntimeEvent) return;

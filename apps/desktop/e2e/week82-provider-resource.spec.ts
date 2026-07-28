@@ -21,12 +21,12 @@ const packagedExecutable = path.join(packagedRoot, "caicli-desktop.exe");
 const packagedAppHost = path.join(packagedRoot, "resources", "apphost", "CSharpAiCli.AppHost.exe");
 const packagedAsar = path.join(packagedRoot, "resources", "app.asar");
 const productMapRoot = desktopRoot;
-const productBundleName = "index-Ctw8Lkem.js";
+const productBundleName = "index-Bk-7wMX0.js";
 const productBundlePath = path.join(productMapRoot, "dist", "renderer", "assets", productBundleName);
 const productSourceMapPath = `${productBundlePath}.map`;
-const evidenceRoot = process.env.CAICLI_WEEK82_EVIDENCE_DIR
-  ? path.resolve(process.env.CAICLI_WEEK82_EVIDENCE_DIR)
-  : path.join(repositoryRoot, "artifacts", "week82-desktop-preview-requalification");
+const evidenceRoot = process.env.CAICLI_WEEK83_EVIDENCE_DIR
+  ? path.resolve(process.env.CAICLI_WEEK83_EVIDENCE_DIR)
+  : path.join(repositoryRoot, "artifacts", "week83-approval-projection-remediation");
 const windowSeconds = 30;
 const sampleIntervalSeconds = 5;
 const settledSampleCount = 3;
@@ -164,18 +164,18 @@ interface TurnEvidence {
   readonly resourceAfterTurn: ProviderSample;
 }
 
-test("authorized Week82 provider resource profile", async ({ browserName }, testInfo) => {
+test("authorized Week83 provider resource profile", async ({ browserName }, testInfo) => {
   if (browserName !== "chromium") throw new Error("Electron provider diagnostics require Chromium.");
-  if (process.env.CAICLI_WEEK82_PROVIDER_AUTHORIZED !== "read-only-recovery-resource") {
-    throw new Error("Week82 provider resource authorization was not explicitly granted.");
+  if (process.env.CAICLI_WEEK83_PROVIDER_AUTHORIZED !== "read-only-recovery-resource") {
+    throw new Error("Week83 provider resource authorization was not explicitly granted.");
   }
-  const profile = parseProfile(process.env.CAICLI_WEEK82_PROVIDER_PROFILE);
+  const profile = parseProfile(process.env.CAICLI_WEEK83_PROVIDER_PROFILE);
   const settings = profileSettings[profile];
   testInfo.setTimeout(1_000_000);
   const providerConfig = readAuthorizedProviderConfig(path.join(repositoryRoot, ".env.local"));
   const secretValues = Object.values(providerConfig);
   const coverageTargets = createCoverageTargets();
-  const root = fs.mkdtempSync(path.join(os.tmpdir(), `caicli-week82-${profile.toLowerCase()}-`));
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), `caicli-week83-${profile.toLowerCase()}-`));
   const workspace = path.join(root, "workspace");
   const profileRoot = path.join(root, "profile");
   const observer: ObserverCounts = {
@@ -233,7 +233,7 @@ test("authorized Week82 provider resource profile", async ({ browserName }, test
   const workspaceBefore = inventoryWorkspace(workspace);
 
   try {
-    expect(sha256File(packagedExecutable)).toBe("C736C48B23B8971ED5DAD7F53EBF7BE6CE5CDC2BA6B24CC2CCAFE3DD9064CBB0");
+    expect(sha256File(packagedExecutable)).toBe("BFB856136D9A67E36B16B8F032B7776A4CE3D61326EDEBEC3862FBA47ECC23A5");
     expect(sha256File(packagedAppHost)).toBe("DC46DBFAD098D7E2F464F05F2C8383568DF733F619B3E45B9D70BAD4F9C13DFA");
     expect(coverageTargets.mapVerified).toBe(true);
     application = await electron.launch({
@@ -434,17 +434,17 @@ test("authorized Week82 provider resource profile", async ({ browserName }, test
     workspaceDelta === 0 &&
     processDelta === 0 && temporaryDelta === 0 && configurationDelta === 0;
   const evidence = {
-    schemaVersion: "week82-desktop-preview-requalification/v1",
+    schemaVersion: "week83-approval-projection-remediation/v1",
     evidenceKind: settings.evidenceKind,
     profile: settings.profileNumber,
     profileId: profile,
     status: passed ? "Passed" : "Failed",
-    exactCandidateRevision: "e9e062d985545377aa373767f563de6a2bb30a64",
+    exactCandidateRevision: "ccf9d82c9fa76c201876ee01d3849902989091e9",
     packageIdentity: {
-      sha256: "C736C48B23B8971ED5DAD7F53EBF7BE6CE5CDC2BA6B24CC2CCAFE3DD9064CBB0",
+      sha256: "BFB856136D9A67E36B16B8F032B7776A4CE3D61326EDEBEC3862FBA47ECC23A5",
       bytes: 222753280,
-      treeSha256: "ADDFBC3114B10E31633F1E9A9500934B9B8F17BCD3222CD4D02217AA606C6E38",
-      treeBytes: 464708708,
+      treeSha256: "B9C5055B08A4A2B2BAFE64914CA55DE567BF6AAB969E43298813D0859EF0C932",
+      treeBytes: 464709225,
     },
     appHostIdentity: {
       sha256: "DC46DBFAD098D7E2F464F05F2C8383568DF733F619B3E45B9D70BAD4F9C13DFA",
@@ -515,16 +515,16 @@ test("authorized Week82 provider resource profile", async ({ browserName }, test
       : safeError(scenarioError ?? cleanupError, secretValues),
     summary: passed
       ? settings.resourceGate
-        ? `${profile} Week82 provider resource profile passed the frozen retention, boundary, and cleanup Gates.`
-        : "Week82 packaged provider read-only passed exactly one read with durable timeline, clean review, and zero cleanup delta."
+        ? `${profile} Week83 provider resource profile passed the frozen retention, boundary, and cleanup Gates.`
+        : "Week83 packaged provider read-only passed exactly one read with durable timeline, clean review, and zero cleanup delta."
       : settings.resourceGate
-        ? `${profile} Week82 provider resource profile failed closed without persisting provider configuration.`
-        : "Week82 packaged provider read-only failed closed without persisting provider configuration.",
+        ? `${profile} Week83 provider resource profile failed closed without persisting provider configuration.`
+        : "Week83 packaged provider read-only failed closed without persisting provider configuration.",
   };
   fs.mkdirSync(evidenceRoot, { recursive: true });
   const body = JSON.stringify(evidence, null, 2);
   fs.writeFileSync(path.join(evidenceRoot, settings.evidenceName), `${body}\n`, "utf8");
-  await testInfo.attach(`week82-${profile.toLowerCase()}-provider-resource.json`, {
+  await testInfo.attach(`week83-${profile.toLowerCase()}-provider-resource.json`, {
     body: Buffer.from(body),
     contentType: "application/json",
   });
@@ -707,8 +707,8 @@ function createCoverageTargets(): CoverageTargets {
   };
   const result = {
     offsets: {
-      queueResync: offset(99, 4),
-      resyncRunner: offset(105, 4),
+      queueResync: offset(110, 4),
+      resyncRunner: offset(117, 4),
     },
     bundleSha256: builtHash,
     bundleCharacterLength: builtBundle.toString("utf8").length,
@@ -954,7 +954,7 @@ function generatedLineStarts(source: string): number[] {
 
 function parseProfile(value: string | undefined): ProviderProfile {
   if (value === "RO" || value === "R1" || value === "R2" || value === "R3" || value === "R4" || value === "R5") return value;
-  throw new Error("CAICLI_WEEK82_PROVIDER_PROFILE must be RO, R1, R2, R3, R4, or R5.");
+  throw new Error("CAICLI_WEEK83_PROVIDER_PROFILE must be RO, R1, R2, R3, R4, or R5.");
 }
 
 function sha256File(filePath: string): string {
@@ -1019,7 +1019,7 @@ function countLiveProcesses(pids: readonly number[]): number {
 function isOwnedRoot(root: string, profile: ProviderProfile): boolean {
   const resolved = path.resolve(root);
   return resolved.startsWith(path.resolve(os.tmpdir()) + path.sep) &&
-    path.basename(resolved).startsWith(`caicli-week82-${profile.toLowerCase()}-`);
+    path.basename(resolved).startsWith(`caicli-week83-${profile.toLowerCase()}-`);
 }
 
 function safeError(
