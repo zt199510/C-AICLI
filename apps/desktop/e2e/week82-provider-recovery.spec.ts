@@ -241,6 +241,7 @@ test("authorized Week83 provider crash and explicit restart", async ({ browserNa
     expect(restartedState.sequencesContiguous).toBe(true);
     expect(restartedState.itemIdsUnique).toBe(true);
     expect(fs.readFileSync(target, "utf8")).toBe("before\n");
+    await waitForRenderCommit(page);
     domBefore = await cdp.send("Memory.getDOMCounters");
 
     await page.getByRole("button", { name: "Cancel", exact: true }).click();
@@ -254,6 +255,7 @@ test("authorized Week83 provider crash and explicit restart", async ({ browserNa
     expect(fs.readFileSync(target, "utf8")).toBe("before\n");
     await expect(page.getByRole("group", { name: "Approval request" })).toHaveCount(0);
     await expect(page.getByText("Refreshing…")).toBeHidden({ timeout: 30_000 });
+    await waitForRenderCommit(page);
     resync = await takeCoverage(cdp, coverageTargets);
     const domAfter = await cdp.send("Memory.getDOMCounters");
     domDelta = {
@@ -463,6 +465,12 @@ function items(state: RecoveryState, turnIndex: number, type: string): TimelineI
 function intersection(left: readonly TimelineIdentity[], right: readonly TimelineIdentity[]): string[] {
   const rightIds = new Set(right.map((item) => item.itemId));
   return left.map((item) => item.itemId).filter((id) => rightIds.has(id));
+}
+
+async function waitForRenderCommit(page: Page): Promise<void> {
+  await page.evaluate(() => new Promise<void>((resolve) => {
+    requestAnimationFrame(() => requestAnimationFrame(() => resolve()));
+  }));
 }
 
 function createCoverageTargets(): { queue: number; runner: number; length: number } {
