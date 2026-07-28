@@ -58,6 +58,45 @@ describe("approval projection resync", () => {
     expect(screen.getByText("waiting-for-approval projection r4")).toBeTruthy();
     expect(bridge.getThread).toHaveBeenCalledTimes(3);
   });
+
+  it("resyncs a selected projection behind monotonically advancing provider notifications", async () => {
+    let notify: ((event: ThreadChangedParams) => void) | null = null;
+    let authoritative = detail("running", 1, null);
+    const listThreads = vi.fn(async () => listResult(authoritative.thread));
+    const getThread = vi.fn(async () => threadResult(authoritative));
+    const bridge = {
+      getRuntimeStatus: vi.fn(async () => createRuntimeStatus("runtime-ready")),
+      getWorkspaceSnapshot: vi.fn(async () => workspace),
+      listThreads,
+      getThread,
+      getComposer: vi.fn(async () => { throw new Error("not needed by this regression"); }),
+      onRuntimeStatus: vi.fn(() => () => undefined),
+      onThreadChanged: vi.fn((listener: (event: ThreadChangedParams) => void) => {
+        notify = listener;
+        return () => undefined;
+      }),
+    } as unknown as DesktopBridge;
+
+    render(<ApprovalProjectionHarness bridge={bridge} />);
+    await waitFor(() => expect((screen.getByRole("button", { name: "Select regression thread" }) as HTMLButtonElement).disabled).toBe(false));
+
+    act(() => notify?.(event(1, 1, 0, "created")));
+    await waitFor(() => expect(listThreads.mock.calls.length).toBeGreaterThanOrEqual(2));
+    fireEvent.click(screen.getByRole("button", { name: "Select regression thread" }));
+    await screen.findByText("running projection r1");
+
+    authoritative = detail("waiting-for-approval", 5, approval);
+    act(() => {
+      notify?.(event(2, 2, 1));
+      notify?.(event(3, 3, 2));
+      notify?.(event(4, 4, 3));
+      notify?.(event(5, 5, 4));
+    });
+
+    await waitFor(() => expect(screen.getByRole("group", { name: "Approval request" })).toBeTruthy());
+    expect(screen.getByText("waiting-for-approval projection r5")).toBeTruthy();
+    expect(getThread.mock.calls.length).toBeGreaterThanOrEqual(2);
+  });
 });
 
 function ApprovalProjectionHarness(props: { readonly bridge: DesktopBridge }) {
@@ -120,10 +159,15 @@ function summary(status: string, revision: number): ThreadSummaryData {
   };
 }
 
-function event(eventSequence: number, revision: number, committedSequence: number): ThreadChangedParams {
+function event(
+  eventSequence: number,
+  revision: number,
+  committedSequence: number,
+  changeKind = "updated",
+): ThreadChangedParams {
   return {
     schemaVersion: 1, eventSequence, workspaceId: "workspace-1", threadId: "thread-1",
-    revision, committedSequence, changeKind: "updated", emittedAtUtc: "2026-07-28T00:00:04.000Z",
+    revision, committedSequence, changeKind, emittedAtUtc: "2026-07-28T00:00:04.000Z",
   };
 }
 

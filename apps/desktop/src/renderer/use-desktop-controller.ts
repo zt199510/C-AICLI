@@ -151,6 +151,9 @@ export function useDesktopController(bridge: DesktopBridge | undefined) {
     const unsubscribeThread = bridge.onThreadChanged((event: ThreadChangedParams) => {
       const snapshot = stateRef.current;
       const shouldResync = shouldQueueThreadResync(lastThreadEvent.current, event);
+      const selectedProjectionBehind = snapshot.selectedThreadId === event.threadId &&
+        snapshot.detail?.thread.threadId === event.threadId &&
+        snapshot.detail.thread.revision < event.revision;
       lastThreadEvent.current = event;
       if (!snapshot.workspace || event.workspaceId !== snapshot.workspace.workspaceId) {
         dispatch({ type: "event", event });
@@ -158,6 +161,10 @@ export function useDesktopController(bridge: DesktopBridge | undefined) {
       }
       dispatch({ type: "event", event });
       if (shouldResync) queueResync();
+      else if (selectedProjectionBehind) {
+        if (resyncRunning.current) resyncDirty.current = true;
+        else queueResync();
+      }
     });
     void bridge.getRuntimeStatus().then((status) => {
       if (disposed || receivedRuntimeEvent) return;
