@@ -252,6 +252,8 @@ test("authorized Week83 provider crash and explicit restart", async ({ browserNa
     expect(items(canceledState, 1, "tool.completed")).toHaveLength(0);
     expect(items(canceledState, 1, "assistant.final")).toHaveLength(0);
     expect(fs.readFileSync(target, "utf8")).toBe("before\n");
+    await expect(page.getByRole("group", { name: "Approval request" })).toHaveCount(0);
+    await expect(page.getByText("Refreshing…")).toBeHidden({ timeout: 30_000 });
     resync = await takeCoverage(cdp, coverageTargets);
     const domAfter = await cdp.send("Memory.getDOMCounters");
     domDelta = {
