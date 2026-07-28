@@ -20,7 +20,7 @@ const packageRoot = path.join(desktopRoot, "out", "C-AICLI Desktop-win32-x64");
 const packagedExecutable = path.join(packageRoot, "caicli-desktop.exe");
 const packagedAppHost = path.join(packageRoot, "resources", "apphost", "CSharpAiCli.AppHost.exe");
 const packagedAsar = path.join(packageRoot, "resources", "app.asar");
-const productBundleName = "index-0rsbCDm4.js";
+const productBundleName = "index-Bk-7wMX0.js";
 const productBundlePath = path.join(desktopRoot, "dist", "renderer", "assets", productBundleName);
 const productMapPath = `${productBundlePath}.map`;
 const evidenceRoot = process.env.CAICLI_WEEK83_EVIDENCE_DIR
@@ -123,7 +123,7 @@ test("authorized Week83 provider crash and explicit restart", async ({ browserNa
   const workspaceBefore = inventoryWorkspace(workspace);
 
   try {
-    expect(sha256File(packagedExecutable)).toBe("A71610CF467A06552C603AD2C838267F1F371535D905A4827019B3B817ABB28F");
+    expect(sha256File(packagedExecutable)).toBe("BFB856136D9A67E36B16B8F032B7776A4CE3D61326EDEBEC3862FBA47ECC23A5");
     expect(sha256File(packagedAppHost)).toBe("DC46DBFAD098D7E2F464F05F2C8383568DF733F619B3E45B9D70BAD4F9C13DFA");
     const coverageTargets = createCoverageTargets();
     application = await electron.launch({
@@ -344,12 +344,12 @@ test("authorized Week83 provider crash and explicit restart", async ({ browserNa
     schemaVersion: "week83-approval-projection-remediation/v1",
     evidenceKind: "provider-recovery",
     status: passed ? "Passed" : "Failed",
-    exactCandidateRevision: "5ee698c5a74cc7a0d127235ae9426414f0afc26f",
+    exactCandidateRevision: "ccf9d82c9fa76c201876ee01d3849902989091e9",
     packageIdentity: {
-      sha256: "A71610CF467A06552C603AD2C838267F1F371535D905A4827019B3B817ABB28F",
+      sha256: "BFB856136D9A67E36B16B8F032B7776A4CE3D61326EDEBEC3862FBA47ECC23A5",
       bytes: 222753280,
-      treeSha256: "8123AF9B1964230AB7DA4276391366A069438127E86C880812D616C612282E9D",
-      treeBytes: 464709156,
+      treeSha256: "B9C5055B08A4A2B2BAFE64914CA55DE567BF6AAB969E43298813D0859EF0C932",
+      treeBytes: 464709225,
     },
     appHostIdentity: {
       sha256: "DC46DBFAD098D7E2F464F05F2C8383568DF733F619B3E45B9D70BAD4F9C13DFA",
@@ -478,7 +478,7 @@ function createCoverageTargets(): { queue: number; runner: number; length: numbe
     if (position.line === null || position.column === null) throw new Error("Product coverage target could not be mapped.");
     return starts[position.line - 1]! + position.column;
   };
-  const result = { queue: offset(109), runner: offset(115), length: built.toString("utf8").length };
+  const result = { queue: offset(110), runner: offset(116), length: built.toString("utf8").length };
   consumer.destroy?.();
   return result;
 }
