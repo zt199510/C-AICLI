@@ -73,13 +73,23 @@ export function useDesktopController(bridge: DesktopBridge | undefined) {
         return;
       }
       const current = stateRef.current;
+      const latestEvent = lastThreadEvent.current;
+      const behindNotification = !append && afterSequence === 0 &&
+          latestEvent?.workspaceId === result.data.thread.workspaceId &&
+          latestEvent.threadId === result.data.thread.threadId &&
+          result.data.thread.revision < latestEvent.revision;
       const stale = requestId !== detailRequest.current ||
           current.contextEpoch !== epoch ||
           current.selectionEpoch !== selectionEpoch ||
-          current.selectedThreadId !== threadId;
-      if (stale) incrementMemoryDiagnostic("ignoredStaleResponses");
-      else incrementMemoryDiagnostic(append ? "projectionAppended" : "projectionReplaced");
-      dispatch({ type: "detail-ready", epoch, selectionEpoch, requestId, detail: result.data, append });
+          current.selectedThreadId !== threadId ||
+          behindNotification;
+      if (stale) {
+        incrementMemoryDiagnostic("ignoredStaleResponses");
+        if (behindNotification && resyncRunning.current) resyncDirty.current = true;
+      } else {
+        incrementMemoryDiagnostic(append ? "projectionAppended" : "projectionReplaced");
+        dispatch({ type: "detail-ready", epoch, selectionEpoch, requestId, detail: result.data, append });
+      }
     } catch {
       dispatch({ type: "detail-error", epoch, selectionEpoch, requestId, message: "Thread history could not be loaded." });
     } finally {
