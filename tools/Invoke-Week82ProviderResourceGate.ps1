@@ -10,21 +10,21 @@ $repositoryRoot = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot '..'))
 $artifactsRoot = [IO.Path]::GetFullPath((Join-Path $repositoryRoot 'artifacts'))
 $desktopRoot = Join-Path $repositoryRoot 'apps\desktop'
 if ([string]::IsNullOrWhiteSpace($EvidenceRoot)) {
-    $EvidenceRoot = Join-Path $artifactsRoot 'week82-desktop-preview-requalification'
+    $EvidenceRoot = Join-Path $artifactsRoot 'week83-approval-projection-remediation'
 }
 $resolvedEvidenceRoot = [IO.Path]::GetFullPath($EvidenceRoot)
 if (-not $resolvedEvidenceRoot.StartsWith($artifactsRoot + [IO.Path]::DirectorySeparatorChar, [StringComparison]::OrdinalIgnoreCase)) {
     throw 'EvidenceRoot must be below the repository artifacts directory.'
 }
-if ($env:CAICLI_WEEK82_PROVIDER_AUTHORIZED -ne 'read-only-recovery-resource') {
-    throw 'Week82 provider read-only/recovery/resource authorization is required.'
+if ($env:CAICLI_WEEK83_PROVIDER_AUTHORIZED -ne 'read-only-recovery-resource') {
+    throw 'Week83 provider read-only/recovery/resource authorization is required.'
 }
 
-$candidate = 'e9e062d985545377aa373767f563de6a2bb30a64'
-$desktopSha = 'C736C48B23B8971ED5DAD7F53EBF7BE6CE5CDC2BA6B24CC2CCAFE3DD9064CBB0'
+$candidate = '348dd4f30064a70751ae2a55ec5e37a95c49ec87'
+$desktopSha = '160668DED8D58C80F6215BF5B899CD1C568439F5E4D8B8880D0CEBB068F43383'
 $desktopBytes = 222753280L
-$treeSha = 'ADDFBC3114B10E31633F1E9A9500934B9B8F17BCD3222CD4D02217AA606C6E38'
-$treeBytes = 464708708L
+$treeSha = '7D8C690876B53E12AC976C7B12C1291456C1DB3EB13F6E98A08D6A305BC6F7A2'
+$treeBytes = 464708884L
 $appHostSha = 'DC46DBFAD098D7E2F464F05F2C8383568DF733F619B3E45B9D70BAD4F9C13DFA'
 $appHostBytes = 79941168L
 $packageRoot = Join-Path $desktopRoot 'out\C-AICLI Desktop-win32-x64'
@@ -35,10 +35,10 @@ if ((Get-FileHash -LiteralPath $desktopPath -Algorithm SHA256).Hash -ne $desktop
     (Get-Item -LiteralPath $desktopPath).Length -ne $desktopBytes -or
     (Get-FileHash -LiteralPath $appHostPath -Algorithm SHA256).Hash -ne $appHostSha -or
     (Get-Item -LiteralPath $appHostPath).Length -ne $appHostBytes) {
-    throw 'Week82 provider resource Gate package identity mismatch.'
+    throw 'Week83 provider resource Gate package identity mismatch.'
 }
 & git -C $repositoryRoot cat-file -e "$candidate^{commit}"
-if ($LASTEXITCODE -ne 0) { throw 'Week82 exact candidate revision is unavailable.' }
+if ($LASTEXITCODE -ne 0) { throw 'Week83 exact candidate revision is unavailable.' }
 
 $profilePaths = 1..5 | ForEach-Object {
     Join-Path $resolvedEvidenceRoot "provider-resource-profile-$_.json"
@@ -56,8 +56,8 @@ $results = [Collections.Generic.List[object]]::new()
 Push-Location $desktopRoot
 try {
     for ($index = 1; $index -le 5; $index++) {
-        $env:CAICLI_WEEK82_PROVIDER_PROFILE = "R$index"
-        $env:CAICLI_WEEK82_EVIDENCE_DIR = $resolvedEvidenceRoot
+        $env:CAICLI_WEEK83_PROVIDER_PROFILE = "R$index"
+        $env:CAICLI_WEEK83_EVIDENCE_DIR = $resolvedEvidenceRoot
         & npx playwright test --project=week82-provider-resource --workers=1 --retries=0
         $exitCode = $LASTEXITCODE
         $profile = Get-Content -LiteralPath $profilePaths[$index - 1] -Raw -Encoding UTF8 | ConvertFrom-Json
@@ -79,8 +79,8 @@ try {
 }
 finally {
     Pop-Location
-    Remove-Item Env:CAICLI_WEEK82_PROVIDER_PROFILE -ErrorAction SilentlyContinue
-    Remove-Item Env:CAICLI_WEEK82_EVIDENCE_DIR -ErrorAction SilentlyContinue
+    Remove-Item Env:CAICLI_WEEK83_PROVIDER_PROFILE -ErrorAction SilentlyContinue
+    Remove-Item Env:CAICLI_WEEK83_EVIDENCE_DIR -ErrorAction SilentlyContinue
 }
 
 $passed = @($results | Where-Object {
@@ -91,7 +91,7 @@ $passed = @($results | Where-Object {
 }).Count -eq 5
 $completed = [DateTimeOffset]::UtcNow
 $summary = [ordered]@{
-    schemaVersion = 'week82-desktop-preview-requalification/v1'
+    schemaVersion = 'week83-approval-projection-remediation/v1'
     evidenceKind = 'resource-summary'
     status = $(if ($passed) { 'Passed' } else { 'Failed' })
     exactCandidateRevision = $candidate
@@ -133,11 +133,11 @@ $summary = [ordered]@{
         configuration = [int](@($results | Measure-Object -Property configurationDelta -Maximum).Maximum)
     }
     summary = $(if ($passed) {
-        'Five consecutive independent Week82 provider resource profiles passed all retention, Renderer-boundary, authorization, and cleanup Gates.'
+        'Five consecutive independent Week83 provider resource profiles passed all retention, Renderer-boundary, authorization, and cleanup Gates.'
     } else {
-        'The single five-profile Week82 provider resource Gate failed; no individual profile may be rerun into this evidence root.'
+        'The single five-profile Week83 provider resource Gate failed; no individual profile may be rerun into this evidence root.'
     })
 }
 $summary | ConvertTo-Json -Depth 12 | Set-Content -LiteralPath (Join-Path $resolvedEvidenceRoot 'resource-summary.json') -Encoding UTF8
-if (-not $passed) { throw 'Week82 provider resource five-profile Gate failed.' }
-Write-Output 'Week82 provider resource five-profile Gate passed.'
+if (-not $passed) { throw 'Week83 provider resource five-profile Gate failed.' }
+Write-Output 'Week83 provider resource five-profile Gate passed.'
