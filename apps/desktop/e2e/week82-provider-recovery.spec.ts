@@ -227,7 +227,7 @@ test("authorized Week83 provider crash and explicit restart", async ({ browserNa
     await page.getByRole("button", { name: "Restart", exact: true }).click();
     await expect(page.getByRole("alertdialog", { name: "Restart this turn?" })).toBeVisible();
     await page.getByRole("button", { name: "Restart turn", exact: true }).click();
-    restartedState = await waitForApprovalOrTerminal(page, threadId, 300_000);
+    restartedState = await waitForApprovalOrTerminal(page, threadId, 300_000, 2);
     expect(restartedState.turns).toHaveLength(2);
     expect(restartedState.turns[0]?.status).toBe("failed");
     expect(restartedState.turns[0]?.stopReason).toBe("interrupted");
@@ -435,12 +435,18 @@ async function readRecoveryState(page: Page, threadId: string): Promise<Recovery
   }, threadId);
 }
 
-async function waitForApprovalOrTerminal(page: Page, threadId: string, timeoutMilliseconds: number): Promise<RecoveryState> {
+async function waitForApprovalOrTerminal(
+  page: Page,
+  threadId: string,
+  timeoutMilliseconds: number,
+  minimumTurnCount = 1,
+): Promise<RecoveryState> {
   const deadline = Date.now() + timeoutMilliseconds;
   let state = await readRecoveryState(page, threadId);
   while (Date.now() < deadline) {
     const latest = state.turns.at(-1);
-    if (latest?.approvalRequestId || latest && ["completed", "failed", "canceled"].includes(latest.status)) return state;
+    if (state.turns.length >= minimumTurnCount &&
+      (latest?.approvalRequestId || latest && ["completed", "failed", "canceled"].includes(latest.status))) return state;
     await new Promise((resolve) => setTimeout(resolve, 1_000));
     state = await readRecoveryState(page, threadId);
   }
