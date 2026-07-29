@@ -1,0 +1,3536 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.c-aicli.local/weekly/84_92_week_gate_result.schema.json",
+  "title": "C-AICLI Week 84-92 Gate Result",
+  "description": "Auditable result for one automated or manual Gate in the Week84-92 single Goal.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schemaVersion",
+    "registryVersion",
+    "goalId",
+    "checkpoint",
+    "week",
+    "lane",
+    "gateId",
+    "requirementsBinding",
+    "commandControlBinding",
+    "resultPath",
+    "resultPathGateIdMatched",
+    "title",
+    "requiredGate",
+    "status",
+    "statusReason",
+    "planBasis",
+    "startedAt",
+    "finishedAt",
+    "identity",
+    "authorization",
+    "commands",
+    "commandCounts",
+    "testCounts",
+    "acceptanceAssertions",
+    "firstFailure",
+    "evidence",
+    "cleanup",
+    "openIssues",
+    "boundaryRequestIds",
+    "nextAction"
+  ],
+  "properties": {
+    "schemaVersion": {
+      "const": "1.0.0"
+    },
+    "registryVersion": {
+      "const": "w84-w92-gates-v1"
+    },
+    "goalId": {
+      "const": "c-aicli-cli-desktop-refactor-w84-w92"
+    },
+    "checkpoint": {
+      "$ref": "#/$defs/checkpoint"
+    },
+    "week": {
+      "type": "integer",
+      "minimum": 84,
+      "maximum": 92
+    },
+    "lane": {
+      "$ref": "#/$defs/lane"
+    },
+    "gateId": {
+      "type": "string",
+      "pattern": "^W(8[4-9]|9[0-2])-[A-Z0-9][A-Z0-9-]*$"
+    },
+    "requirementsBinding": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "path",
+        "manifestSha256",
+        "registryVersion",
+        "gateRequirementSha256"
+      ],
+      "properties": {
+        "path": {
+          "const": "docs_md/weekly/84_92_week_gate_requirements.json"
+        },
+        "manifestSha256": {
+          "$ref": "#/$defs/sha256"
+        },
+        "registryVersion": {
+          "const": "w84-w92-gate-requirements-v1"
+        },
+        "gateRequirementSha256": {
+          "$ref": "#/$defs/sha256"
+        }
+      }
+    },
+    "commandControlBinding": {
+      "oneOf": [
+        {
+          "type": "null"
+        },
+        {
+          "$ref": "#/$defs/commandControlBinding"
+        }
+      ]
+    },
+    "resultPath": {
+      "type": "string",
+      "pattern": "^artifacts/week(8[4-9]|9[0-2])-[a-z0-9-]+/gates/W(8[4-9]|9[0-2])-[GRC][0-9]+\\.json$"
+    },
+    "resultPathGateIdMatched": {
+      "const": true
+    },
+    "title": {
+      "type": "string",
+      "minLength": 1
+    },
+    "requiredGate": {
+      "const": true
+    },
+    "status": {
+      "$ref": "#/$defs/gateStatus"
+    },
+    "statusReason": {
+      "type": "string",
+      "minLength": 1
+    },
+    "planBasis": {
+      "oneOf": [
+        {
+          "type": "null"
+        },
+        {
+          "type": "string",
+          "minLength": 1
+        }
+      ]
+    },
+    "startedAt": {
+      "oneOf": [
+        {
+          "type": "null"
+        },
+        {
+          "$ref": "#/$defs/dateTime"
+        }
+      ]
+    },
+    "finishedAt": {
+      "oneOf": [
+        {
+          "type": "null"
+        },
+        {
+          "$ref": "#/$defs/dateTime"
+        }
+      ]
+    },
+    "identity": {
+      "$ref": "#/$defs/identity"
+    },
+    "authorization": {
+      "$ref": "#/$defs/authorizationUse"
+    },
+    "commands": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/commandResult"
+      }
+    },
+    "commandCounts": {
+      "$ref": "#/$defs/commandCounts"
+    },
+    "testCounts": {
+      "$ref": "#/$defs/testCounts"
+    },
+    "acceptanceAssertions": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/assertion"
+      },
+      "minItems": 1
+    },
+    "firstFailure": {
+      "oneOf": [
+        {
+          "type": "null"
+        },
+        {
+          "$ref": "#/$defs/firstFailure"
+        }
+      ]
+    },
+    "evidence": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/evidence"
+      }
+    },
+    "cleanup": {
+      "$ref": "#/$defs/cleanup"
+    },
+    "openIssues": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "p0",
+        "p1",
+        "other"
+      ],
+      "properties": {
+        "p0": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "p1": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "other": {
+          "type": "integer",
+          "minimum": 0
+        }
+      }
+    },
+    "boundaryRequestIds": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "pattern": "^BR-[0-9]{3,}$"
+      },
+      "uniqueItems": true
+    },
+    "nextAction": {
+      "$ref": "#/$defs/nextAction"
+    }
+  },
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "status": { "const": "Passed" }
+        },
+        "required": ["status"]
+      },
+      "then": {
+        "properties": {
+          "commandControlBinding": {
+            "$ref": "#/$defs/commandControlBinding"
+          }
+        }
+      },
+      "else": {
+        "properties": {
+          "commandControlBinding": { "type": "null" }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "gateId": { "enum": ["W84-G6", "W84-G7", "W84-G8", "W92-G7"] },
+          "status": { "const": "Passed" }
+        },
+        "required": ["gateId", "status"]
+      },
+      "then": {
+        "properties": {
+          "authorization": {
+            "properties": {
+              "providerBoundaryDecision": { "$ref": "#/$defs/providerBoundaryDecisionBinding" },
+              "packageLaunchReceipts": { "minItems": 1 }
+            }
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "not": {
+          "properties": {
+            "gateId": { "enum": ["W84-G6", "W84-G7", "W84-G8", "W92-G7"] }
+          },
+          "required": ["gateId"]
+        }
+      },
+      "then": {
+        "properties": {
+          "authorization": {
+            "properties": {
+              "providerBoundaryDecision": { "type": "null" },
+              "packageLaunchReceipts": { "maxItems": 0 }
+            }
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "gateId": { "enum": ["W84-G6", "W84-G7", "W84-G8", "W92-G7"] },
+          "status": { "enum": ["NotRun", "NotApplicable"] }
+        },
+        "required": ["gateId", "status"]
+      },
+      "then": {
+        "properties": {
+          "authorization": {
+            "properties": {
+              "providerBoundaryDecision": { "type": "null" },
+              "packageLaunchReceipts": { "maxItems": 0 }
+            }
+          }
+        }
+      }
+    },
+    {
+      "if": { "properties": { "gateId": { "const": "W84-G6" }, "status": { "const": "Passed" } }, "required": ["gateId", "status"] },
+      "then": { "properties": { "authorization": { "properties": { "packageLaunchReceipts": { "minItems": 2, "maxItems": 2 } } } } }
+    },
+    {
+      "if": { "properties": { "gateId": { "const": "W84-G7" }, "status": { "const": "Passed" } }, "required": ["gateId", "status"] },
+      "then": { "properties": { "authorization": { "properties": { "packageLaunchReceipts": { "minItems": 5, "maxItems": 5 } } } } }
+    },
+    {
+      "if": { "properties": { "gateId": { "const": "W84-G8" }, "status": { "const": "Passed" } }, "required": ["gateId", "status"] },
+      "then": { "properties": { "authorization": { "properties": { "packageLaunchReceipts": { "minItems": 1, "maxItems": 1 } } } } }
+    },
+    {
+      "if": { "properties": { "gateId": { "const": "W92-G7" }, "status": { "const": "Passed" } }, "required": ["gateId", "status"] },
+      "then": { "properties": { "authorization": { "properties": { "packageLaunchReceipts": { "minItems": 8, "maxItems": 8 } } } } }
+    },
+    {
+      "if": {
+        "properties": {
+          "checkpoint": {
+            "const": "W84"
+          }
+        },
+        "required": [
+          "checkpoint"
+        ]
+      },
+      "then": {
+        "properties": {
+          "week": {
+            "const": 84
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "gateId": { "enum": ["W84-G6", "W84-G7", "W84-G8", "W92-G7"] },
+          "status": { "const": "Passed" }
+        },
+        "required": ["gateId", "status"]
+      },
+      "then": {
+        "properties": {
+          "authorization": {
+            "properties": {
+              "providerSuccessfulAttemptId": {
+                "type": "string",
+                "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"
+              }
+            }
+          }
+        }
+      },
+      "else": {
+        "properties": {
+          "authorization": {
+            "properties": {
+              "providerSuccessfulAttemptId": { "type": "null" }
+            }
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "not": {
+          "properties": {
+            "gateId": { "enum": ["W84-G6", "W84-G7", "W84-G8", "W92-G7"] }
+          },
+          "required": ["gateId"]
+        }
+      },
+      "then": {
+        "properties": {
+          "authorization": {
+            "properties": {
+              "providerTurnsConsumed": { "const": 0 },
+              "providerSuccessfulAttemptId": { "type": "null" },
+              "scopesUsed": {
+                "not": {
+                  "contains": {
+                    "enum": [
+                      "provider-read-only",
+                      "provider-recovery",
+                      "provider-resource",
+                      "controlled-write"
+                    ]
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "checkpoint": {
+            "const": "W85"
+          }
+        },
+        "required": [
+          "checkpoint"
+        ]
+      },
+      "then": {
+        "properties": {
+          "week": {
+            "const": 85
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "checkpoint": {
+            "const": "W86"
+          }
+        },
+        "required": [
+          "checkpoint"
+        ]
+      },
+      "then": {
+        "properties": {
+          "week": {
+            "const": 86
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "checkpoint": {
+            "const": "W87"
+          }
+        },
+        "required": [
+          "checkpoint"
+        ]
+      },
+      "then": {
+        "properties": {
+          "week": {
+            "const": 87
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "checkpoint": {
+            "const": "W88"
+          }
+        },
+        "required": [
+          "checkpoint"
+        ]
+      },
+      "then": {
+        "properties": {
+          "week": {
+            "const": 88
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "checkpoint": {
+            "const": "W89"
+          }
+        },
+        "required": [
+          "checkpoint"
+        ]
+      },
+      "then": {
+        "properties": {
+          "week": {
+            "const": 89
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "checkpoint": {
+            "const": "W90"
+          }
+        },
+        "required": [
+          "checkpoint"
+        ]
+      },
+      "then": {
+        "properties": {
+          "week": {
+            "const": 90
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "checkpoint": {
+            "const": "W91"
+          }
+        },
+        "required": [
+          "checkpoint"
+        ]
+      },
+      "then": {
+        "properties": {
+          "week": {
+            "const": 91
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "checkpoint": {
+            "const": "W92"
+          }
+        },
+        "required": [
+          "checkpoint"
+        ]
+      },
+      "then": {
+        "properties": {
+          "week": {
+            "const": 92
+          }
+        }
+      }
+    },
+    {
+      "oneOf": [
+        {
+          "properties": {
+            "week": { "const": 84 }, "checkpoint": { "const": "W84" }, "lane": { "const": "baseline" },
+            "gateId": { "enum": ["W84-G0", "W84-G1", "W84-G2", "W84-G3", "W84-G4", "W84-G5", "W84-G6", "W84-G7", "W84-G8", "W84-G9"] },
+            "resultPath": { "pattern": "^artifacts/week84-renderer-listener-retention/gates/W84-G[0-9]\\.json$" }
+          }
+        },
+        {
+          "properties": {
+            "week": { "const": 85 }, "checkpoint": { "const": "W85" }, "lane": { "const": "renderer" },
+            "gateId": { "enum": ["W85-R0", "W85-R1", "W85-R2", "W85-R3", "W85-R4", "W85-R5", "W85-R6", "W85-R7"] },
+            "resultPath": { "pattern": "^artifacts/week85-renderer-feature-boundaries/gates/W85-R[0-7]\\.json$" }
+          }
+        },
+        {
+          "properties": {
+            "week": { "const": 85 }, "checkpoint": { "const": "W85" }, "lane": { "const": "cli" },
+            "gateId": { "enum": ["W85-C0", "W85-C1", "W85-C2", "W85-C3", "W85-C4", "W85-C5"] },
+            "resultPath": { "pattern": "^artifacts/week85-cli-composition/gates/W85-C[0-5]\\.json$" }
+          }
+        },
+        {
+          "properties": {
+            "week": { "const": 86 }, "checkpoint": { "const": "W86" }, "lane": { "const": "renderer" },
+            "gateId": { "enum": ["W86-R0", "W86-R1", "W86-R2", "W86-R3", "W86-R4", "W86-R5", "W86-R6", "W86-R7"] },
+            "resultPath": { "pattern": "^artifacts/week86-renderer-chat-first-shell/gates/W86-R[0-7]\\.json$" }
+          }
+        },
+        {
+          "properties": {
+            "week": { "const": 86 }, "checkpoint": { "const": "W86" }, "lane": { "const": "cli" },
+            "gateId": { "enum": ["W86-C0", "W86-C1", "W86-C2", "W86-C3", "W86-C4", "W86-C5"] },
+            "resultPath": { "pattern": "^artifacts/week86-cli-jobs-review-session/gates/W86-C[0-5]\\.json$" }
+          }
+        },
+        {
+          "properties": {
+            "week": { "const": 87 }, "checkpoint": { "const": "W87" }, "lane": { "const": "renderer" },
+            "gateId": { "enum": ["W87-R0", "W87-R1", "W87-R2", "W87-R3", "W87-R4", "W87-R5"] },
+            "resultPath": { "pattern": "^artifacts/week87-renderer-conversation-projection/gates/W87-R[0-5]\\.json$" }
+          }
+        },
+        {
+          "properties": {
+            "week": { "const": 87 }, "checkpoint": { "const": "W87" }, "lane": { "const": "cli" },
+            "gateId": { "enum": ["W87-C0", "W87-C1", "W87-C2", "W87-C3", "W87-C4", "W87-C5"] },
+            "resultPath": { "pattern": "^artifacts/week87-cli-exec-skills-queue/gates/W87-C[0-5]\\.json$" }
+          }
+        },
+        {
+          "properties": {
+            "week": { "const": 88 }, "checkpoint": { "const": "W88" }, "lane": { "const": "renderer" },
+            "gateId": { "enum": ["W88-R0", "W88-R1", "W88-R2", "W88-R3", "W88-R4", "W88-R5"] },
+            "resultPath": { "pattern": "^artifacts/week88-renderer-composer-approval/gates/W88-R[0-5]\\.json$" }
+          }
+        },
+        {
+          "properties": {
+            "week": { "const": 88 }, "checkpoint": { "const": "W88" }, "lane": { "const": "cli" },
+            "gateId": { "enum": ["W88-C0", "W88-C1", "W88-C2", "W88-C3", "W88-C4", "W88-C5"] },
+            "resultPath": { "pattern": "^artifacts/week88-cli-packs-artifacts/gates/W88-C[0-5]\\.json$" }
+          }
+        },
+        {
+          "properties": {
+            "week": { "const": 89 }, "checkpoint": { "const": "W89" }, "lane": { "const": "renderer" },
+            "gateId": { "enum": ["W89-R0", "W89-R1", "W89-R2", "W89-R3", "W89-R4", "W89-R5", "W89-R6", "W89-R7"] },
+            "resultPath": { "pattern": "^artifacts/week89-context-review-workspace/gates/W89-R[0-7]\\.json$" }
+          }
+        },
+        {
+          "properties": {
+            "week": { "const": 89 }, "checkpoint": { "const": "W89" }, "lane": { "const": "cli" },
+            "gateId": { "enum": ["W89-C0", "W89-C1", "W89-C2", "W89-C3", "W89-C4", "W89-C5", "W89-C6", "W89-C7"] },
+            "resultPath": { "pattern": "^artifacts/week89-cli-automation-pipeline/gates/W89-C[0-7]\\.json$" }
+          }
+        },
+        {
+          "properties": {
+            "week": { "const": 90 }, "checkpoint": { "const": "W90" }, "lane": { "const": "integration" },
+            "gateId": { "enum": ["W90-G0", "W90-G1", "W90-G2", "W90-G3", "W90-G4", "W90-G5", "W90-G6", "W90-G7"] },
+            "resultPath": { "pattern": "^artifacts/week90-cli-desktop-integration/gates/W90-G[0-7]\\.json$" }
+          }
+        },
+        {
+          "properties": {
+            "week": { "const": 91 }, "checkpoint": { "const": "W91" }, "lane": { "const": "hardening" },
+            "gateId": { "enum": ["W91-G0", "W91-G1", "W91-G2", "W91-G3", "W91-G4", "W91-G5", "W91-G6", "W91-G7"] },
+            "resultPath": { "pattern": "^artifacts/week91-refactor-hardening/gates/W91-G[0-7]\\.json$" }
+          }
+        },
+        {
+          "properties": {
+            "week": { "const": 92 }, "checkpoint": { "const": "W92" }, "lane": { "const": "acceptance" },
+            "gateId": { "enum": ["W92-G0", "W92-G1", "W92-G2", "W92-G3", "W92-G4", "W92-G5", "W92-G6", "W92-G7", "W92-G8", "W92-G9"] },
+            "resultPath": { "pattern": "^artifacts/week92-refactor-acceptance/gates/W92-G[0-9]\\.json$" }
+          }
+        }
+      ]
+    },
+    {
+      "if": {
+        "properties": {
+          "status": {
+            "const": "Passed"
+          }
+        },
+        "required": [
+          "status"
+        ]
+      },
+      "then": {
+        "properties": {
+          "startedAt": {
+            "$ref": "#/$defs/dateTime"
+          },
+          "finishedAt": {
+            "$ref": "#/$defs/dateTime"
+          },
+          "acceptanceAssertions": {
+            "items": {
+              "allOf": [
+                {
+                  "$ref": "#/$defs/assertion"
+                },
+                {
+                  "properties": {
+                    "status": {
+                      "const": "Passed"
+                    }
+                  }
+                }
+              ]
+            }
+          },
+          "evidence": {
+            "minItems": 1
+          },
+          "commandCounts": {
+            "properties": {
+              "total": { "minimum": 1 },
+              "passed": { "minimum": 1 },
+              "failed": { "const": 0 },
+              "notRun": { "const": 0 },
+              "countsBalanced": { "const": true }
+            }
+          },
+          "testCounts": {
+            "properties": {
+              "failed": { "const": 0 },
+              "notRun": { "const": 0 },
+              "countsBalanced": { "const": true }
+            }
+          },
+          "cleanup": {
+            "properties": {
+              "status": { "enum": ["Passed", "NotApplicable"] },
+              "ownedProcessesRemaining": { "const": 0 },
+              "ownedTempPathsRemaining": { "const": 0 },
+              "configMutationsRemaining": { "const": 0 },
+              "countsBalanced": { "const": true }
+            }
+          },
+          "openIssues": {
+            "properties": {
+              "p0": { "const": 0 },
+              "p1": { "const": 0 }
+            }
+          },
+          "authorization": {
+            "properties": {
+              "newBoundaryRequired": { "const": false },
+              "providerTurnLedgerBalanced": { "const": true }
+            }
+          },
+          "identity": {
+            "properties": {
+              "dirtyState": { "const": "Clean" },
+              "productCandidate": { "$ref": "#/$defs/gitSha" },
+              "checkpointCommit": { "$ref": "#/$defs/gitSha" }
+            }
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "status": {
+            "const": "Failed"
+          }
+        },
+        "required": [
+          "status"
+        ]
+      },
+      "then": {
+        "properties": {
+          "startedAt": {
+            "$ref": "#/$defs/dateTime"
+          },
+          "finishedAt": {
+            "$ref": "#/$defs/dateTime"
+          },
+          "firstFailure": {
+            "$ref": "#/$defs/firstFailure"
+          },
+          "acceptanceAssertions": {
+            "contains": {
+              "properties": {
+                "status": {
+                  "const": "Failed"
+                }
+              },
+              "required": [
+                "status"
+              ]
+            }
+          },
+          "evidence": {
+            "minItems": 1
+          },
+          "nextAction": {
+            "properties": {
+              "kind": {
+                "enum": [
+                  "FixFailure",
+                  "AwaitUserConfirmation"
+                ]
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "status": {
+            "const": "NotRun"
+          }
+        },
+        "required": [
+          "status"
+        ]
+      },
+      "then": {
+        "properties": {
+          "startedAt": {
+            "type": "null"
+          },
+          "finishedAt": {
+            "type": "null"
+          },
+          "commandCounts": {
+            "properties": {
+              "total": {
+                "const": 0
+              },
+              "passed": {
+                "const": 0
+              },
+              "failed": {
+                "const": 0
+              }
+            }
+          },
+          "acceptanceAssertions": {
+            "items": {
+              "allOf": [
+                {
+                  "$ref": "#/$defs/assertion"
+                },
+                {
+                  "properties": {
+                    "status": {
+                      "const": "NotRun"
+                    }
+                  }
+                }
+              ]
+            }
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "status": {
+            "const": "NotApplicable"
+          }
+        },
+        "required": [
+          "status"
+        ]
+      },
+      "then": {
+        "properties": {
+          "planBasis": {
+            "type": "string",
+            "minLength": 1
+          },
+          "startedAt": {
+            "type": "null"
+          },
+          "finishedAt": {
+            "type": "null"
+          },
+          "commandCounts": {
+            "properties": {
+              "total": {
+                "const": 0
+              },
+              "passed": {
+                "const": 0
+              },
+              "failed": {
+                "const": 0
+              }
+            }
+          },
+          "acceptanceAssertions": {
+            "items": {
+              "allOf": [
+                {
+                  "$ref": "#/$defs/assertion"
+                },
+                {
+                  "properties": {
+                    "status": {
+                      "const": "NotApplicable"
+                    }
+                  }
+                }
+              ]
+            }
+          },
+          "evidence": {
+            "minItems": 1
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "authorization": {
+            "properties": { "controlledWriteUsed": { "const": true } },
+            "required": ["controlledWriteUsed"]
+          }
+        },
+        "required": ["authorization"]
+      },
+      "then": {
+        "oneOf": [
+          { "properties": { "week": { "const": 84 }, "lane": { "const": "baseline" }, "gateId": { "const": "W84-G8" } } },
+          { "properties": { "week": { "const": 92 }, "lane": { "const": "acceptance" }, "gateId": { "const": "W92-G7" } } }
+        ],
+        "properties": {
+          "authorization": {
+            "properties": {
+              "controlledWriteShapeVerified": { "const": true },
+              "controlledWriteExecutionCount": { "const": 1 },
+              "controlledWriteNonWritePreconditionsPassed": { "const": true },
+              "controlledWriteEvidenceRefs": { "minItems": 1 },
+              "scopesUsed": { "contains": { "const": "controlled-write" } }
+            }
+          }
+        }
+      },
+      "else": {
+        "properties": {
+          "authorization": {
+            "properties": {
+              "controlledWriteExecutionCount": { "const": 0 },
+              "controlledWriteEvidenceRefs": { "maxItems": 0 }
+            }
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "gateId": { "enum": ["W84-G8", "W92-G7"] },
+          "status": { "const": "Passed" }
+        },
+        "required": ["gateId", "status"]
+      },
+      "then": {
+        "properties": {
+          "authorization": {
+            "properties": { "controlledWriteUsed": { "const": true } }
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "gateId": { "const": "W84-G6" },
+          "status": { "const": "Passed" }
+        },
+        "required": ["gateId", "status"]
+      },
+      "then": {
+        "properties": {
+          "authorization": {
+            "properties": {
+              "providerTurnsConsumed": { "minimum": 3 },
+              "scopesUsed": {
+                "allOf": [
+                  { "contains": { "const": "provider-read-only" } },
+                  { "contains": { "const": "provider-recovery" } }
+                ]
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "gateId": { "const": "W84-G7" },
+          "status": { "const": "Passed" }
+        },
+        "required": ["gateId", "status"]
+      },
+      "then": {
+        "properties": {
+          "authorization": {
+            "properties": {
+              "providerTurnsConsumed": { "minimum": 30 },
+              "scopesUsed": { "contains": { "const": "provider-resource" } }
+            }
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "gateId": { "const": "W84-G8" },
+          "status": { "const": "Passed" }
+        },
+        "required": ["gateId", "status"]
+      },
+      "then": {
+        "properties": {
+          "authorization": {
+            "properties": {
+              "providerTurnsConsumed": { "minimum": 1 },
+              "scopesUsed": { "contains": { "const": "controlled-write" } }
+            }
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "gateId": { "const": "W92-G7" },
+          "status": { "const": "Passed" }
+        },
+        "required": ["gateId", "status"]
+      },
+      "then": {
+        "properties": {
+          "authorization": {
+            "properties": {
+              "providerTurnsConsumed": { "minimum": 34 },
+              "scopesUsed": {
+                "allOf": [
+                  { "contains": { "const": "provider-read-only" } },
+                  { "contains": { "const": "provider-recovery" } },
+                  { "contains": { "const": "provider-resource" } },
+                  { "contains": { "const": "controlled-write" } }
+                ]
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "gateId": { "enum": ["W86-R7", "W89-R5", "W91-G2", "W92-G9"] },
+          "status": { "const": "Passed" }
+        },
+        "required": ["gateId", "status"]
+      },
+      "then": {
+        "properties": {
+          "authorization": {
+            "properties": {
+              "scopesUsed": {
+                "contains": { "enum": ["user-visual-acceptance", "operator-narrator-manual-ux"] }
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "oneOf": [
+        {
+          "properties": {
+            "gateId": {
+              "const": "W84-G0"
+            },
+            "resultPath": {
+              "const": "artifacts/week84-renderer-listener-retention/gates/W84-G0.json"
+            }
+          },
+          "required": [
+            "gateId",
+            "resultPath"
+          ]
+        },
+        {
+          "properties": {
+            "gateId": {
+              "const": "W84-G1"
+            },
+            "resultPath": {
+              "const": "artifacts/week84-renderer-listener-retention/gates/W84-G1.json"
+            }
+          },
+          "required": [
+            "gateId",
+            "resultPath"
+          ]
+        },
+        {
+          "properties": {
+            "gateId": {
+              "const": "W84-G2"
+            },
+            "resultPath": {
+              "const": "artifacts/week84-renderer-listener-retention/gates/W84-G2.json"
+            }
+          },
+          "required": [
+            "gateId",
+            "resultPath"
+          ]
+        },
+        {
+          "properties": {
+            "gateId": {
+              "const": "W84-G3"
+            },
+            "resultPath": {
+              "const": "artifacts/week84-renderer-listener-retention/gates/W84-G3.json"
+            }
+          },
+          "required": [
+            "gateId",
+            "resultPath"
+          ]
+        },
+        {
+          "properties": {
+            "gateId": {
+              "const": "W84-G4"
+            },
+            "resultPath": {
+              "const": "artifacts/week84-renderer-listener-retention/gates/W84-G4.json"
+            }
+          },
+          "required": [
+            "gateId",
+            "resultPath"
+          ]
+        },
+        {
+          "properties": {
+            "gateId": {
+              "const": "W84-G5"
+            },
+            "resultPath": {
+              "const": "artifacts/week84-renderer-listener-retention/gates/W84-G5.json"
+            }
+          },
+          "required": [
+            "gateId",
+            "resultPath"
+          ]
+        },
+        {
+          "properties": {
+            "gateId": {
+              "const": "W84-G6"
+            },
+            "resultPath": {
+              "const": "artifacts/week84-renderer-listener-retention/gates/W84-G6.json"
+            }
+          },
+          "required": [
+            "gateId",
+            "resultPath"
+          ]
+        },
+        {
+          "properties": {
+            "gateId": {
+              "const": "W84-G7"
+            },
+            "resultPath": {
+              "const": "artifacts/week84-renderer-listener-retention/gates/W84-G7.json"
+            }
+          },
+          "required": [
+            "gateId",
+            "resultPath"
+          ]
+        },
+        {
+          "properties": {
+            "gateId": {
+              "const": "W84-G8"
+            },
+            "resultPath": {
+              "const": "artifacts/week84-renderer-listener-retention/gates/W84-G8.json"
+            }
+          },
+          "required": [
+            "gateId",
+            "resultPath"
+          ]
+        },
+        {
+          "properties": {
+            "gateId": {
+              "const": "W84-G9"
+            },
+            "resultPath": {
+              "const": "artifacts/week84-renderer-listener-retention/gates/W84-G9.json"
+            }
+          },
+          "required": [
+            "gateId",
+            "resultPath"
+          ]
+        },
+        {
+          "properties": {
+            "gateId": {
+              "const": "W85-R0"
+            },
+            "resultPath": {
+              "const": "artifacts/week85-renderer-feature-boundaries/gates/W85-R0.json"
+            }
+          },
+          "required": [
+            "gateId",
+            "resultPath"
+          ]
+        },
+        {
+          "properties": {
+            "gateId": {
+              "const": "W85-R1"
+            },
+            "resultPath": {
+              "const": "artifacts/week85-renderer-feature-boundaries/gates/W85-R1.json"
+            }
+          },
+          "required": [
+            "gateId",
+            "resultPath"
+          ]
+        },
+        {
+          "properties": {
+            "gateId": {
+              "const": "W85-R2"
+            },
+            "resultPath": {
+              "const": "artifacts/week85-renderer-feature-boundaries/gates/W85-R2.json"
+            }
+          },
+          "required": [
+            "gateId",
+            "resultPath"
+          ]
+        },
+        {
+          "properties": {
+            "gateId": {
+              "const": "W85-R3"
+            },
+            "resultPath": {
+              "const": "artifacts/week85-renderer-feature-boundaries/gates/W85-R3.json"
+            }
+          },
+          "required": [
+            "gateId",
+            "resultPath"
+          ]
+        },
+        {
+          "properties": {
+            "gateId": {
+              "const": "W85-R4"
+            },
+            "resultPath": {
+              "const": "artifacts/week85-renderer-feature-boundaries/gates/W85-R4.json"
+            }
+          },
+          "required": [
+            "gateId",
+            "resultPath"
+          ]
+        },
+        {
+          "properties": {
+            "gateId": {
+              "const": "W85-R5"
+            },
+            "resultPath": {
+              "const": "artifacts/week85-renderer-feature-boundaries/gates/W85-R5.json"
+            }
+          },
+          "required": [
+            "gateId",
+            "resultPath"
+          ]
+        },
+        {
+          "properties": {
+            "gateId": {
+              "const": "W85-R6"
+            },
+            "resultPath": {
+              "const": "artifacts/week85-renderer-feature-boundaries/gates/W85-R6.json"
+            }
+          },
+          "required": [
+            "gateId",
+            "resultPath"
+          ]
+        },
+        {
+          "properties": {
+            "gateId": {
+              "const": "W85-R7"
+            },
+            "resultPath": {
+              "const": "artifacts/week85-renderer-feature-boundaries/gates/W85-R7.json"
+            }
+          },
+          "required": [
+            "gateId",
+            "resultPath"
+          ]
+        },
+        {
+          "properties": {
+            "gateId": {
+              "const": "W85-C0"
+            },
+            "resultPath": {
+              "const": "artifacts/week85-cli-composition/gates/W85-C0.json"
+            }
+          },
+          "required": [
+            "gateId",
+            "resultPath"
+          ]
+        },
+        {
+          "properties": {
+            "gateId": {
+              "const": "W85-C1"
+            },
+            "resultPath": {
+              "const": "artifacts/week85-cli-composition/gates/W85-C1.json"
+            }
+          },
+          "required": [
+            "gateId",
+            "resultPath"
+          ]
+        },
+        {
+          "properties": {
+            "gateId": {
+              "const": "W85-C2"
+            },
+            "resultPath": {
+              "const": "artifacts/week85-cli-composition/gates/W85-C2.json"
+            }
+          },
+          "required": [
+            "gateId",
+            "resultPath"
+          ]
+        },
+        {
+          "properties": {
+            "gateId": {
+              "const": "W85-C3"
+            },
+            "resultPath": {
+              "const": "artifacts/week85-cli-composition/gates/W85-C3.json"
+            }
+          },
+          "required": [
+            "gateId",
+            "resultPath"
+          ]
+        },
+        {
+          "properties": {
+            "gateId": {
+              "const": "W85-C4"
+            },
+            "resultPath": {
+              "const": "artifacts/week85-cli-composition/gates/W85-C4.json"
+            }
+          },
+          "required": [
+            "gateId",
+            "resultPath"
+          ]
+        },
+        {
+          "properties": {
+            "gateId": {
+              "const": "W85-C5"
+            },
+            "resultPath": {
+              "const": "artifacts/week85-cli-composition/gates/W85-C5.json"
+            }
+          },
+          "required": [
+            "gateId",
+            "resultPath"
+          ]
+        },
+        {
+          "properties": {
+            "gateId": {
+              "const": "W86-R0"
+            },
+            "resultPath": {
+              "const": "artifacts/week86-renderer-chat-first-shell/gates/W86-R0.json"
+            }
+          },
+          "required": [
+            "gateId",
+            "resultPath"
+          ]
+        },
+        {
+          "properties": {
+            "gateId": {
+              "const": "W86-R1"
+            },
+            "resultPath": {
+              "const": "artifacts/week86-renderer-chat-first-shell/gates/W86-R1.json"
+            }
+          },
+          "required": [
+            "gateId",
+            "resultPath"
+          ]
+        },
+        {
+          "properties": {
+            "gateId": {
+              "const": "W86-R2"
+            },
+            "resultPath": {
+              "const": "artifacts/week86-renderer-chat-first-shell/gates/W86-R2.json"
+            }
+          },
+          "required": [
+            "gateId",
+            "resultPath"
+          ]
+        },
+        {
+          "properties": {
+            "gateId": {
+              "const": "W86-R3"
+            },
+            "resultPath": {
+              "const": "artifacts/week86-renderer-chat-first-shell/gates/W86-R3.json"
+            }
+          },
+          "required": [
+            "gateId",
+            "resultPath"
+          ]
+        },
+        {
+          "properties": {
+            "gateId": {
+              "const": "W86-R4"
+            },
+            "resultPath": {
+              "const": "artifacts/week86-renderer-chat-first-shell/gates/W86-R4.json"
+            }
+          },
+          "required": [
+            "gateId",
+            "resultPath"
+          ]
+        },
+        {
+          "properties": {
+            "gateId": {
+              "const": "W86-R5"
+            },
+            "resultPath": {
+              "const": "artifacts/week86-renderer-chat-first-shell/gates/W86-R5.json"
+            }
+          },
+          "required": [
+            "gateId",
+            "resultPath"
+          ]
+        },
+        {
+          "properties": {
+            "gateId": {
+              "const": "W86-R6"
+            },
+            "resultPath": {
+              "const": "artifacts/week86-renderer-chat-first-shell/gates/W86-R6.json"
+            }
+          },
+          "required": [
+            "gateId",
+            "resultPath"
+          ]
+        },
+        {
+          "properties": {
+            "gateId": {
+              "const": "W86-R7"
+            },
+            "resultPath": {
+              "const": "artifacts/week86-renderer-chat-first-shell/gates/W86-R7.json"
+            }
+          },
+          "required": [
+            "gateId",
+            "resultPath"
+          ]
+        },
+        {
+          "properties": {
+            "gateId": {
+              "const": "W86-C0"
+            },
+            "resultPath": {
+              "const": "artifacts/week86-cli-jobs-review-session/gates/W86-C0.json"
+            }
+          },
+          "required": [
+            "gateId",
+            "resultPath"
+          ]
+        },
+        {
+          "properties": {
+            "gateId": {
+              "const": "W86-C1"
+            },
+            "resultPath": {
+              "const": "artifacts/week86-cli-jobs-review-session/gates/W86-C1.json"
+            }
+          },
+          "required": [
+            "gateId",
+            "resultPath"
+          ]
+        },
+        {
+          "properties": {
+            "gateId": {
+              "const": "W86-C2"
+            },
+            "resultPath": {
+              "const": "artifacts/week86-cli-jobs-review-session/gates/W86-C2.json"
+            }
+          },
+          "required": [
+            "gateId",
+            "resultPath"
+          ]
+        },
+        {
+          "properties": {
+            "gateId": {
+              "const": "W86-C3"
+            },
+            "resultPath": {
+              "const": "artifacts/week86-cli-jobs-review-session/gates/W86-C3.json"
+            }
+          },
+          "required": [
+            "gateId",
+            "resultPath"
+          ]
+        },
+        {
+          "properties": {
+            "gateId": {
+              "const": "W86-C4"
+            },
+            "resultPath": {
+              "const": "artifacts/week86-cli-jobs-review-session/gates/W86-C4.json"
+            }
+          },
+          "required": [
+            "gateId",
+            "resultPath"
+          ]
+        },
+        {
+          "properties": {
+            "gateId": {
+              "const": "W86-C5"
+            },
+            "resultPath": {
+              "const": "artifacts/week86-cli-jobs-review-session/gates/W86-C5.json"
+            }
+          },
+          "required": [
+            "gateId",
+            "resultPath"
+          ]
+        },
+        {
+          "properties": {
+            "gateId": {
+              "const": "W87-R0"
+            },
+            "resultPath": {
+              "const": "artifacts/week87-renderer-conversation-projection/gates/W87-R0.json"
+            }
+          },
+          "required": [
+            "gateId",
+            "resultPath"
+          ]
+        },
+        {
+          "properties": {
+            "gateId": {
+              "const": "W87-R1"
+            },
+            "resultPath": {
+              "const": "artifacts/week87-renderer-conversation-projection/gates/W87-R1.json"
+            }
+          },
+          "required": [
+            "gateId",
+            "resultPath"
+          ]
+        },
+        {
+          "properties": {
+            "gateId": {
+              "const": "W87-R2"
+            },
+            "resultPath": {
+              "const": "artifacts/week87-renderer-conversation-projection/gates/W87-R2.json"
+            }
+          },
+          "required": [
+            "gateId",
+            "resultPath"
+          ]
+        },
+        {
+          "properties": {
+            "gateId": {
+              "const": "W87-R3"
+            },
+            "resultPath": {
+              "const": "artifacts/week87-renderer-conversation-projection/gates/W87-R3.json"
+            }
+          },
+          "required": [
+            "gateId",
+            "resultPath"
+          ]
+        },
+        {
+          "properties": {
+            "gateId": {
+              "const": "W87-R4"
+            },
+            "resultPath": {
+              "const": "artifacts/week87-renderer-conversation-projection/gates/W87-R4.json"
+            }
+          },
+          "required": [
+            "gateId",
+            "resultPath"
+          ]
+        },
+        {
+          "properties": {
+            "gateId": {
+              "const": "W87-R5"
+            },
+            "resultPath": {
+              "const": "artifacts/week87-renderer-conversation-projection/gates/W87-R5.json"
+            }
+          },
+          "required": [
+            "gateId",
+            "resultPath"
+          ]
+        },
+        {
+          "properties": {
+            "gateId": {
+              "const": "W87-C0"
+            },
+            "resultPath": {
+              "const": "artifacts/week87-cli-exec-skills-queue/gates/W87-C0.json"
+            }
+          },
+          "required": [
+            "gateId",
+            "resultPath"
+          ]
+        },
+        {
+          "properties": {
+            "gateId": {
+              "const": "W87-C1"
+            },
+            "resultPath": {
+              "const": "artifacts/week87-cli-exec-skills-queue/gates/W87-C1.json"
+            }
+          },
+          "required": [
+            "gateId",
+            "resultPath"
+          ]
+        },
+        {
+          "properties": {
+            "gateId": {
+              "const": "W87-C2"
+            },
+            "resultPath": {
+              "const": "artifacts/week87-cli-exec-skills-queue/gates/W87-C2.json"
+            }
+          },
+          "required": [
+            "gateId",
+            "resultPath"
+          ]
+        },
+        {
+          "properties": {
+            "gateId": {
+              "const": "W87-C3"
+            },
+            "resultPath": {
+              "const": "artifacts/week87-cli-exec-skills-queue/gates/W87-C3.json"
+            }
+          },
+          "required": [
+            "gateId",
+            "resultPath"
+          ]
+        },
+        {
+          "properties": {
+            "gateId": {
+              "const": "W87-C4"
+            },
+            "resultPath": {
+              "const": "artifacts/week87-cli-exec-skills-queue/gates/W87-C4.json"
+            }
+          },
+          "required": [
+            "gateId",
+            "resultPath"
+          ]
+        },
+        {
+          "properties": {
+            "gateId": {
+              "const": "W87-C5"
+            },
+            "resultPath": {
+              "const": "artifacts/week87-cli-exec-skills-queue/gates/W87-C5.json"
+            }
+          },
+          "required": [
+            "gateId",
+            "resultPath"
+          ]
+        },
+        {
+          "properties": {
+            "gateId": {
+              "const": "W88-R0"
+            },
+            "resultPath": {
+              "const": "artifacts/week88-renderer-composer-approval/gates/W88-R0.json"
+            }
+          },
+          "required": [
+            "gateId",
+            "resultPath"
+          ]
+        },
+        {
+          "properties": {
+            "gateId": {
+              "const": "W88-R1"
+            },
+            "resultPath": {
+              "const": "artifacts/week88-renderer-composer-approval/gates/W88-R1.json"
+            }
+          },
+          "required": [
+            "gateId",
+            "resultPath"
+          ]
+        },
+        {
+          "properties": {
+            "gateId": {
+              "const": "W88-R2"
+            },
+            "resultPath": {
+              "const": "artifacts/week88-renderer-composer-approval/gates/W88-R2.json"
+            }
+          },
+          "required": [
+            "gateId",
+            "resultPath"
+          ]
+        },
+        {
+          "properties": {
+            "gateId": {
+              "const": "W88-R3"
+            },
+            "resultPath": {
+              "const": "artifacts/week88-renderer-composer-approval/gates/W88-R3.json"
+            }
+          },
+          "required": [
+            "gateId",
+            "resultPath"
+          ]
+        },
+        {
+          "properties": {
+            "gateId": {
+              "const": "W88-R4"
+            },
+            "resultPath": {
+              "const": "artifacts/week88-renderer-composer-approval/gates/W88-R4.json"
+            }
+          },
+          "required": [
+            "gateId",
+            "resultPath"
+          ]
+        },
+        {
+          "properties": {
+            "gateId": {
+              "const": "W88-R5"
+            },
+            "resultPath": {
+              "const": "artifacts/week88-renderer-composer-approval/gates/W88-R5.json"
+            }
+          },
+          "required": [
+            "gateId",
+            "resultPath"
+          ]
+        },
+        {
+          "properties": {
+            "gateId": {
+              "const": "W88-C0"
+            },
+            "resultPath": {
+              "const": "artifacts/week88-cli-packs-artifacts/gates/W88-C0.json"
+            }
+          },
+          "required": [
+            "gateId",
+            "resultPath"
+          ]
+        },
+        {
+          "properties": {
+            "gateId": {
+              "const": "W88-C1"
+            },
+            "resultPath": {
+              "const": "artifacts/week88-cli-packs-artifacts/gates/W88-C1.json"
+            }
+          },
+          "required": [
+            "gateId",
+            "resultPath"
+          ]
+        },
+        {
+          "properties": {
+            "gateId": {
+              "const": "W88-C2"
+            },
+            "resultPath": {
+              "const": "artifacts/week88-cli-packs-artifacts/gates/W88-C2.json"
+            }
+          },
+          "required": [
+            "gateId",
+            "resultPath"
+          ]
+        },
+        {
+          "properties": {
+            "gateId": {
+              "const": "W88-C3"
+            },
+            "resultPath": {
+              "const": "artifacts/week88-cli-packs-artifacts/gates/W88-C3.json"
+            }
+          },
+          "required": [
+            "gateId",
+            "resultPath"
+          ]
+        },
+        {
+          "properties": {
+            "gateId": {
+              "const": "W88-C4"
+            },
+            "resultPath": {
+              "const": "artifacts/week88-cli-packs-artifacts/gates/W88-C4.json"
+            }
+          },
+          "required": [
+            "gateId",
+            "resultPath"
+          ]
+        },
+        {
+          "properties": {
+            "gateId": {
+              "const": "W88-C5"
+            },
+            "resultPath": {
+              "const": "artifacts/week88-cli-packs-artifacts/gates/W88-C5.json"
+            }
+          },
+          "required": [
+            "gateId",
+            "resultPath"
+          ]
+        },
+        {
+          "properties": {
+            "gateId": {
+              "const": "W89-R0"
+            },
+            "resultPath": {
+              "const": "artifacts/week89-context-review-workspace/gates/W89-R0.json"
+            }
+          },
+          "required": [
+            "gateId",
+            "resultPath"
+          ]
+        },
+        {
+          "properties": {
+            "gateId": {
+              "const": "W89-R1"
+            },
+            "resultPath": {
+              "const": "artifacts/week89-context-review-workspace/gates/W89-R1.json"
+            }
+          },
+          "required": [
+            "gateId",
+            "resultPath"
+          ]
+        },
+        {
+          "properties": {
+            "gateId": {
+              "const": "W89-R2"
+            },
+            "resultPath": {
+              "const": "artifacts/week89-context-review-workspace/gates/W89-R2.json"
+            }
+          },
+          "required": [
+            "gateId",
+            "resultPath"
+          ]
+        },
+        {
+          "properties": {
+            "gateId": {
+              "const": "W89-R3"
+            },
+            "resultPath": {
+              "const": "artifacts/week89-context-review-workspace/gates/W89-R3.json"
+            }
+          },
+          "required": [
+            "gateId",
+            "resultPath"
+          ]
+        },
+        {
+          "properties": {
+            "gateId": {
+              "const": "W89-R4"
+            },
+            "resultPath": {
+              "const": "artifacts/week89-context-review-workspace/gates/W89-R4.json"
+            }
+          },
+          "required": [
+            "gateId",
+            "resultPath"
+          ]
+        },
+        {
+          "properties": {
+            "gateId": {
+              "const": "W89-R5"
+            },
+            "resultPath": {
+              "const": "artifacts/week89-context-review-workspace/gates/W89-R5.json"
+            }
+          },
+          "required": [
+            "gateId",
+            "resultPath"
+          ]
+        },
+        {
+          "properties": {
+            "gateId": {
+              "const": "W89-R6"
+            },
+            "resultPath": {
+              "const": "artifacts/week89-context-review-workspace/gates/W89-R6.json"
+            }
+          },
+          "required": [
+            "gateId",
+            "resultPath"
+          ]
+        },
+        {
+          "properties": {
+            "gateId": {
+              "const": "W89-R7"
+            },
+            "resultPath": {
+              "const": "artifacts/week89-context-review-workspace/gates/W89-R7.json"
+            }
+          },
+          "required": [
+            "gateId",
+            "resultPath"
+          ]
+        },
+        {
+          "properties": {
+            "gateId": {
+              "const": "W89-C0"
+            },
+            "resultPath": {
+              "const": "artifacts/week89-cli-automation-pipeline/gates/W89-C0.json"
+            }
+          },
+          "required": [
+            "gateId",
+            "resultPath"
+          ]
+        },
+        {
+          "properties": {
+            "gateId": {
+              "const": "W89-C1"
+            },
+            "resultPath": {
+              "const": "artifacts/week89-cli-automation-pipeline/gates/W89-C1.json"
+            }
+          },
+          "required": [
+            "gateId",
+            "resultPath"
+          ]
+        },
+        {
+          "properties": {
+            "gateId": {
+              "const": "W89-C2"
+            },
+            "resultPath": {
+              "const": "artifacts/week89-cli-automation-pipeline/gates/W89-C2.json"
+            }
+          },
+          "required": [
+            "gateId",
+            "resultPath"
+          ]
+        },
+        {
+          "properties": {
+            "gateId": {
+              "const": "W89-C3"
+            },
+            "resultPath": {
+              "const": "artifacts/week89-cli-automation-pipeline/gates/W89-C3.json"
+            }
+          },
+          "required": [
+            "gateId",
+            "resultPath"
+          ]
+        },
+        {
+          "properties": {
+            "gateId": {
+              "const": "W89-C4"
+            },
+            "resultPath": {
+              "const": "artifacts/week89-cli-automation-pipeline/gates/W89-C4.json"
+            }
+          },
+          "required": [
+            "gateId",
+            "resultPath"
+          ]
+        },
+        {
+          "properties": {
+            "gateId": {
+              "const": "W89-C5"
+            },
+            "resultPath": {
+              "const": "artifacts/week89-cli-automation-pipeline/gates/W89-C5.json"
+            }
+          },
+          "required": [
+            "gateId",
+            "resultPath"
+          ]
+        },
+        {
+          "properties": {
+            "gateId": {
+              "const": "W89-C6"
+            },
+            "resultPath": {
+              "const": "artifacts/week89-cli-automation-pipeline/gates/W89-C6.json"
+            }
+          },
+          "required": [
+            "gateId",
+            "resultPath"
+          ]
+        },
+        {
+          "properties": {
+            "gateId": {
+              "const": "W89-C7"
+            },
+            "resultPath": {
+              "const": "artifacts/week89-cli-automation-pipeline/gates/W89-C7.json"
+            }
+          },
+          "required": [
+            "gateId",
+            "resultPath"
+          ]
+        },
+        {
+          "properties": {
+            "gateId": {
+              "const": "W90-G0"
+            },
+            "resultPath": {
+              "const": "artifacts/week90-cli-desktop-integration/gates/W90-G0.json"
+            }
+          },
+          "required": [
+            "gateId",
+            "resultPath"
+          ]
+        },
+        {
+          "properties": {
+            "gateId": {
+              "const": "W90-G1"
+            },
+            "resultPath": {
+              "const": "artifacts/week90-cli-desktop-integration/gates/W90-G1.json"
+            }
+          },
+          "required": [
+            "gateId",
+            "resultPath"
+          ]
+        },
+        {
+          "properties": {
+            "gateId": {
+              "const": "W90-G2"
+            },
+            "resultPath": {
+              "const": "artifacts/week90-cli-desktop-integration/gates/W90-G2.json"
+            }
+          },
+          "required": [
+            "gateId",
+            "resultPath"
+          ]
+        },
+        {
+          "properties": {
+            "gateId": {
+              "const": "W90-G3"
+            },
+            "resultPath": {
+              "const": "artifacts/week90-cli-desktop-integration/gates/W90-G3.json"
+            }
+          },
+          "required": [
+            "gateId",
+            "resultPath"
+          ]
+        },
+        {
+          "properties": {
+            "gateId": {
+              "const": "W90-G4"
+            },
+            "resultPath": {
+              "const": "artifacts/week90-cli-desktop-integration/gates/W90-G4.json"
+            }
+          },
+          "required": [
+            "gateId",
+            "resultPath"
+          ]
+        },
+        {
+          "properties": {
+            "gateId": {
+              "const": "W90-G5"
+            },
+            "resultPath": {
+              "const": "artifacts/week90-cli-desktop-integration/gates/W90-G5.json"
+            }
+          },
+          "required": [
+            "gateId",
+            "resultPath"
+          ]
+        },
+        {
+          "properties": {
+            "gateId": {
+              "const": "W90-G6"
+            },
+            "resultPath": {
+              "const": "artifacts/week90-cli-desktop-integration/gates/W90-G6.json"
+            }
+          },
+          "required": [
+            "gateId",
+            "resultPath"
+          ]
+        },
+        {
+          "properties": {
+            "gateId": {
+              "const": "W90-G7"
+            },
+            "resultPath": {
+              "const": "artifacts/week90-cli-desktop-integration/gates/W90-G7.json"
+            }
+          },
+          "required": [
+            "gateId",
+            "resultPath"
+          ]
+        },
+        {
+          "properties": {
+            "gateId": {
+              "const": "W91-G0"
+            },
+            "resultPath": {
+              "const": "artifacts/week91-refactor-hardening/gates/W91-G0.json"
+            }
+          },
+          "required": [
+            "gateId",
+            "resultPath"
+          ]
+        },
+        {
+          "properties": {
+            "gateId": {
+              "const": "W91-G1"
+            },
+            "resultPath": {
+              "const": "artifacts/week91-refactor-hardening/gates/W91-G1.json"
+            }
+          },
+          "required": [
+            "gateId",
+            "resultPath"
+          ]
+        },
+        {
+          "properties": {
+            "gateId": {
+              "const": "W91-G2"
+            },
+            "resultPath": {
+              "const": "artifacts/week91-refactor-hardening/gates/W91-G2.json"
+            }
+          },
+          "required": [
+            "gateId",
+            "resultPath"
+          ]
+        },
+        {
+          "properties": {
+            "gateId": {
+              "const": "W91-G3"
+            },
+            "resultPath": {
+              "const": "artifacts/week91-refactor-hardening/gates/W91-G3.json"
+            }
+          },
+          "required": [
+            "gateId",
+            "resultPath"
+          ]
+        },
+        {
+          "properties": {
+            "gateId": {
+              "const": "W91-G4"
+            },
+            "resultPath": {
+              "const": "artifacts/week91-refactor-hardening/gates/W91-G4.json"
+            }
+          },
+          "required": [
+            "gateId",
+            "resultPath"
+          ]
+        },
+        {
+          "properties": {
+            "gateId": {
+              "const": "W91-G5"
+            },
+            "resultPath": {
+              "const": "artifacts/week91-refactor-hardening/gates/W91-G5.json"
+            }
+          },
+          "required": [
+            "gateId",
+            "resultPath"
+          ]
+        },
+        {
+          "properties": {
+            "gateId": {
+              "const": "W91-G6"
+            },
+            "resultPath": {
+              "const": "artifacts/week91-refactor-hardening/gates/W91-G6.json"
+            }
+          },
+          "required": [
+            "gateId",
+            "resultPath"
+          ]
+        },
+        {
+          "properties": {
+            "gateId": {
+              "const": "W91-G7"
+            },
+            "resultPath": {
+              "const": "artifacts/week91-refactor-hardening/gates/W91-G7.json"
+            }
+          },
+          "required": [
+            "gateId",
+            "resultPath"
+          ]
+        },
+        {
+          "properties": {
+            "gateId": {
+              "const": "W92-G0"
+            },
+            "resultPath": {
+              "const": "artifacts/week92-refactor-acceptance/gates/W92-G0.json"
+            }
+          },
+          "required": [
+            "gateId",
+            "resultPath"
+          ]
+        },
+        {
+          "properties": {
+            "gateId": {
+              "const": "W92-G1"
+            },
+            "resultPath": {
+              "const": "artifacts/week92-refactor-acceptance/gates/W92-G1.json"
+            }
+          },
+          "required": [
+            "gateId",
+            "resultPath"
+          ]
+        },
+        {
+          "properties": {
+            "gateId": {
+              "const": "W92-G2"
+            },
+            "resultPath": {
+              "const": "artifacts/week92-refactor-acceptance/gates/W92-G2.json"
+            }
+          },
+          "required": [
+            "gateId",
+            "resultPath"
+          ]
+        },
+        {
+          "properties": {
+            "gateId": {
+              "const": "W92-G3"
+            },
+            "resultPath": {
+              "const": "artifacts/week92-refactor-acceptance/gates/W92-G3.json"
+            }
+          },
+          "required": [
+            "gateId",
+            "resultPath"
+          ]
+        },
+        {
+          "properties": {
+            "gateId": {
+              "const": "W92-G4"
+            },
+            "resultPath": {
+              "const": "artifacts/week92-refactor-acceptance/gates/W92-G4.json"
+            }
+          },
+          "required": [
+            "gateId",
+            "resultPath"
+          ]
+        },
+        {
+          "properties": {
+            "gateId": {
+              "const": "W92-G5"
+            },
+            "resultPath": {
+              "const": "artifacts/week92-refactor-acceptance/gates/W92-G5.json"
+            }
+          },
+          "required": [
+            "gateId",
+            "resultPath"
+          ]
+        },
+        {
+          "properties": {
+            "gateId": {
+              "const": "W92-G6"
+            },
+            "resultPath": {
+              "const": "artifacts/week92-refactor-acceptance/gates/W92-G6.json"
+            }
+          },
+          "required": [
+            "gateId",
+            "resultPath"
+          ]
+        },
+        {
+          "properties": {
+            "gateId": {
+              "const": "W92-G7"
+            },
+            "resultPath": {
+              "const": "artifacts/week92-refactor-acceptance/gates/W92-G7.json"
+            }
+          },
+          "required": [
+            "gateId",
+            "resultPath"
+          ]
+        },
+        {
+          "properties": {
+            "gateId": {
+              "const": "W92-G8"
+            },
+            "resultPath": {
+              "const": "artifacts/week92-refactor-acceptance/gates/W92-G8.json"
+            }
+          },
+          "required": [
+            "gateId",
+            "resultPath"
+          ]
+        },
+        {
+          "properties": {
+            "gateId": {
+              "const": "W92-G9"
+            },
+            "resultPath": {
+              "const": "artifacts/week92-refactor-acceptance/gates/W92-G9.json"
+            }
+          },
+          "required": [
+            "gateId",
+            "resultPath"
+          ]
+        }
+      ]
+    },
+    {
+      "if": {
+        "properties": {
+          "gateId": {
+            "enum": [
+              "W86-R7",
+              "W89-R5",
+              "W92-G9"
+            ]
+          },
+          "status": {
+            "const": "Passed"
+          }
+        },
+        "required": [
+          "gateId",
+          "status"
+        ]
+      },
+      "then": {
+        "properties": {
+          "authorization": {
+            "properties": {
+              "scopesUsed": {
+                "contains": {
+                  "const": "user-visual-acceptance"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "gateId": {
+            "const": "W91-G2"
+          },
+          "status": {
+            "const": "Passed"
+          }
+        },
+        "required": [
+          "gateId",
+          "status"
+        ]
+      },
+      "then": {
+        "properties": {
+          "authorization": {
+            "properties": {
+              "scopesUsed": {
+                "contains": {
+                  "const": "operator-narrator-manual-ux"
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  ],
+  "$defs": {
+    "providerBoundaryDecisionBinding": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "path",
+        "sha256",
+        "firstAddCommit",
+        "decisionId",
+        "mode",
+        "packageTreeRootSha256"
+      ],
+      "properties": {
+        "path": {
+          "enum": [
+            "docs_md/weekly/84_92_provider_boundary_decisions/W84-G6.json",
+            "docs_md/weekly/84_92_provider_boundary_decisions/W92-G7.json"
+          ]
+        },
+        "sha256": { "$ref": "#/$defs/sha256" },
+        "firstAddCommit": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{40}$"
+        },
+        "decisionId": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"
+        },
+        "mode": {
+          "enum": ["strong-isolation", "cooperative-candidate"]
+        },
+        "packageTreeRootSha256": { "$ref": "#/$defs/sha256" }
+      }
+    },
+    "packageLaunchReceiptBinding": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "path",
+        "sha256",
+        "phase",
+        "profileOrdinal",
+        "batchId",
+        "packageTreeRootSha256"
+      ],
+      "properties": {
+        "path": {
+          "type": "string",
+          "pattern": "^artifacts/week(84|92)-[a-z0-9-]+/gate-evidence/W(84|92)-G[0-9]+/package-launch-[a-z0-9-]+\\.json$"
+        },
+        "sha256": { "$ref": "#/$defs/sha256" },
+        "phase": {
+          "enum": [
+            "provider-read-only",
+            "provider-recovery",
+            "provider-resource",
+            "controlled-write"
+          ]
+        },
+        "profileOrdinal": {
+          "oneOf": [
+            { "type": "null" },
+            { "type": "integer", "minimum": 1, "maximum": 5 }
+          ]
+        },
+        "batchId": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"
+        },
+        "packageTreeRootSha256": { "$ref": "#/$defs/sha256" }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": { "phase": { "const": "provider-resource" } },
+            "required": ["phase"]
+          },
+          "then": {
+            "properties": { "profileOrdinal": { "type": "integer", "minimum": 1, "maximum": 5 } }
+          },
+          "else": {
+            "properties": { "profileOrdinal": { "type": "null" } }
+          }
+        }
+      ]
+    },
+    "commandControlBinding": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "path",
+        "sha256",
+        "gitBlobSha",
+        "controlRevision",
+        "preparedFromRevision",
+        "sourceTrust"
+      ],
+      "properties": {
+        "path": {
+          "type": "string",
+          "pattern": "^docs_md/weekly/84_92_command_control/W(8[4-9]|9[0-2])-[GRC][0-9]+\\.json$"
+        },
+        "sha256": {
+          "$ref": "#/$defs/sha256"
+        },
+        "gitBlobSha": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{40}$"
+        },
+        "controlRevision": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{40}$"
+        },
+        "preparedFromRevision": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{40}$"
+        },
+        "sourceTrust": {
+          "enum": [
+            "prior-sealed",
+            "bootstrap-external-review"
+          ]
+        }
+      }
+    },
+    "dateTime": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "gitSha": {
+      "type": "string",
+      "pattern": "^[0-9a-fA-F]{7,64}$"
+    },
+    "sha256": {
+      "type": "string",
+      "pattern": "^[0-9a-fA-F]{64}$"
+    },
+    "checkpoint": {
+      "enum": [
+        "W84",
+        "W85",
+        "W86",
+        "W87",
+        "W88",
+        "W89",
+        "W90",
+        "W91",
+        "W92"
+      ]
+    },
+    "lane": {
+      "enum": [
+        "baseline",
+        "renderer",
+        "cli",
+        "integration",
+        "hardening",
+        "acceptance"
+      ]
+    },
+    "gateStatus": {
+      "enum": [
+        "Passed",
+        "Failed",
+        "NotRun",
+        "NotApplicable"
+      ]
+    },
+    "identityArtifact": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "role",
+        "name",
+        "sha256",
+        "bytes"
+      ],
+      "properties": {
+        "role": {
+          "enum": [
+            "cli",
+            "package-tree",
+            "desktop-executable",
+            "app-asar",
+            "apphost",
+            "renderer-bundle",
+            "generated-contract",
+            "other"
+          ]
+        },
+        "name": {
+          "type": "string",
+          "minLength": 1
+        },
+        "sha256": {
+          "$ref": "#/$defs/sha256"
+        },
+        "bytes": {
+          "type": "integer",
+          "minimum": 0
+        }
+      }
+    },
+    "identity": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "branch",
+        "worktree",
+        "sourceHead",
+        "dirtyState",
+        "baseline",
+        "productCandidate",
+        "checkpointCommit",
+        "runtime",
+        "protocol",
+        "artifacts"
+      ],
+      "properties": {
+        "branch": {
+          "type": "string",
+          "pattern": "^codex/"
+        },
+        "worktree": {
+          "type": "string",
+          "minLength": 1
+        },
+        "sourceHead": {
+          "$ref": "#/$defs/gitSha"
+        },
+        "dirtyState": {
+          "enum": [
+            "Clean",
+            "ExpectedPlanBootstrapChanges",
+            "DirtyControlled",
+            "DirtyUnexpected"
+          ]
+        },
+        "baseline": {
+          "oneOf": [
+            {
+              "type": "null"
+            },
+            {
+              "$ref": "#/$defs/gitSha"
+            }
+          ]
+        },
+        "productCandidate": {
+          "oneOf": [
+            {
+              "type": "null"
+            },
+            {
+              "$ref": "#/$defs/gitSha"
+            }
+          ]
+        },
+        "checkpointCommit": {
+          "oneOf": [
+            {
+              "type": "null"
+            },
+            {
+              "$ref": "#/$defs/gitSha"
+            }
+          ]
+        },
+        "runtime": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "dotnetSdk",
+            "node",
+            "npm",
+            "electron"
+          ],
+          "properties": {
+            "dotnetSdk": {
+              "const": "9.0.308"
+            },
+            "node": {
+              "type": "string",
+              "minLength": 1
+            },
+            "npm": {
+              "type": "string",
+              "minLength": 1
+            },
+            "electron": {
+              "type": "string",
+              "minLength": 1
+            }
+          }
+        },
+        "protocol": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "version",
+            "invokeMethodCount",
+            "eventCount",
+            "changed"
+          ],
+          "properties": {
+            "version": {
+              "const": "desktop-v1"
+            },
+            "invokeMethodCount": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "eventCount": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "changed": {
+              "type": "boolean"
+            }
+          }
+        },
+        "artifacts": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/identityArtifact"
+          }
+        }
+      }
+    },
+    "authorizationUse": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "scopesUsed",
+        "providerTurnsBefore",
+        "providerTurnsConsumed",
+        "providerTurnsAfter",
+        "providerSuccessfulAttemptId",
+        "providerTurnBudget",
+        "providerLedgerPath",
+        "providerLedgerPrefixSha256",
+        "providerSequenceBefore",
+        "providerSequenceAfter",
+        "providerTurnLedgerBalanced",
+        "secretValuesEmitted",
+        "controlledWriteUsed",
+        "controlledWriteShapeVerified",
+        "controlledWriteExecutionCount",
+        "controlledWriteNonWritePreconditionsPassed",
+        "controlledWriteEvidenceRefs",
+        "providerBoundaryDecision",
+        "packageLaunchReceipts",
+        "newBoundaryRequired"
+      ],
+      "properties": {
+        "scopesUsed": {
+          "type": "array",
+          "items": {
+            "enum": [
+              "credential-free",
+              "local-git",
+              "local-repository-write",
+              "dependency-restore",
+              "owned-process-cleanup",
+              "provider-read-only",
+              "provider-recovery",
+              "provider-resource",
+              "controlled-write",
+              "user-visual-acceptance",
+              "operator-narrator-manual-ux"
+            ]
+          },
+          "minItems": 1,
+          "uniqueItems": true
+        },
+        "providerTurnsBefore": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 120
+        },
+        "providerTurnsConsumed": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 120
+        },
+        "providerTurnsAfter": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 120
+        },
+        "providerSuccessfulAttemptId": {
+          "oneOf": [
+            { "type": "null" },
+            {
+              "type": "string",
+              "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"
+            }
+          ]
+        },
+        "providerTurnBudget": {
+          "const": 120
+        },
+        "providerLedgerPath": {
+          "const": "artifacts/week84-92-goal-control/provider-turn-ledger.json"
+        },
+        "providerLedgerPrefixSha256": {
+          "$ref": "#/$defs/sha256"
+        },
+        "providerSequenceBefore": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "providerSequenceAfter": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "providerTurnLedgerBalanced": {
+          "const": true
+        },
+        "secretValuesEmitted": {
+          "const": false
+        },
+        "controlledWriteUsed": {
+          "type": "boolean"
+        },
+        "controlledWriteShapeVerified": {
+          "type": "boolean"
+        },
+        "controlledWriteExecutionCount": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 1
+        },
+        "controlledWriteNonWritePreconditionsPassed": {
+          "type": "boolean"
+        },
+        "controlledWriteEvidenceRefs": {
+          "type": "array",
+          "items": { "type": "string", "minLength": 1 },
+          "uniqueItems": true
+        },
+        "providerBoundaryDecision": {
+          "oneOf": [
+            { "type": "null" },
+            { "$ref": "#/$defs/providerBoundaryDecisionBinding" }
+          ]
+        },
+        "packageLaunchReceipts": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/packageLaunchReceiptBinding" },
+          "uniqueItems": true
+        },
+        "newBoundaryRequired": {
+          "type": "boolean"
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "controlledWriteUsed": {
+                "const": true
+              }
+            },
+            "required": [
+              "controlledWriteUsed"
+            ]
+          },
+          "then": {
+            "properties": {
+              "controlledWriteShapeVerified": {
+                "const": true
+              },
+              "scopesUsed": {
+                "contains": {
+                  "const": "controlled-write"
+                }
+              }
+            }
+          }
+        }
+      ]
+    },
+    "commandResult": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "commandId",
+        "redactedCommand",
+        "status",
+        "startedAt",
+        "finishedAt",
+        "exitCode",
+        "testCountSource",
+        "evidenceRefs"
+      ],
+      "properties": {
+        "commandId": {
+          "type": "string",
+          "minLength": 1
+        },
+        "redactedCommand": {
+          "type": "string",
+          "minLength": 1
+        },
+        "status": {
+          "$ref": "#/$defs/gateStatus"
+        },
+        "startedAt": {
+          "oneOf": [
+            {
+              "type": "null"
+            },
+            {
+              "$ref": "#/$defs/dateTime"
+            }
+          ]
+        },
+        "finishedAt": {
+          "oneOf": [
+            {
+              "type": "null"
+            },
+            {
+              "$ref": "#/$defs/dateTime"
+            }
+          ]
+        },
+        "exitCode": {
+          "oneOf": [
+            {
+              "type": "null"
+            },
+            {
+              "type": "integer"
+            }
+          ]
+        },
+        "testCountSource": {
+          "type": "boolean"
+        },
+        "evidenceRefs": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          },
+          "uniqueItems": true
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "status": {
+                "enum": [
+                  "Passed",
+                  "Failed"
+                ]
+              }
+            },
+            "required": [
+              "status"
+            ]
+          },
+          "then": {
+            "properties": {
+              "startedAt": {
+                "$ref": "#/$defs/dateTime"
+              },
+              "finishedAt": {
+                "$ref": "#/$defs/dateTime"
+              },
+              "exitCode": {
+                "type": "integer"
+              }
+            }
+          },
+          "else": {
+            "properties": {
+              "startedAt": {
+                "type": "null"
+              },
+              "finishedAt": {
+                "type": "null"
+              },
+              "exitCode": {
+                "type": "null"
+              }
+            }
+          }
+        }
+      ]
+    },
+    "commandCounts": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "total",
+        "passed",
+        "failed",
+        "notRun",
+        "notApplicable",
+        "countsBalanced"
+      ],
+      "properties": {
+        "total": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "passed": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "failed": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "notRun": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "notApplicable": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "countsBalanced": {
+          "const": true
+        }
+      }
+    },
+    "testCounts": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "discovered",
+        "passed",
+        "failed",
+        "skipped",
+        "notRun",
+        "notApplicable",
+        "countsBalanced"
+      ],
+      "properties": {
+        "discovered": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "passed": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "failed": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "skipped": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "notRun": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "notApplicable": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "countsBalanced": {
+          "const": true
+        }
+      }
+    },
+    "assertion": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "assertionId",
+        "text",
+        "status",
+        "actual",
+        "evidenceRefs"
+      ],
+      "properties": {
+        "assertionId": {
+          "type": "string",
+          "minLength": 1
+        },
+        "text": {
+          "type": "string",
+          "minLength": 1
+        },
+        "status": {
+          "$ref": "#/$defs/gateStatus"
+        },
+        "actual": {
+          "type": "string",
+          "minLength": 1
+        },
+        "evidenceRefs": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          },
+          "uniqueItems": true
+        }
+      }
+    },
+    "firstFailure": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "failureId",
+        "observedAt",
+        "commandId",
+        "phase",
+        "redactedCommand",
+        "exitCode",
+        "summary",
+        "classification",
+        "evidenceRefs",
+        "preserved",
+        "supersededBy"
+      ],
+      "properties": {
+        "failureId": {
+          "type": "string",
+          "minLength": 1
+        },
+        "observedAt": {
+          "$ref": "#/$defs/dateTime"
+        },
+        "commandId": {
+          "oneOf": [
+            {
+              "type": "null"
+            },
+            {
+              "type": "string",
+              "minLength": 1
+            }
+          ]
+        },
+        "phase": {
+          "type": "string",
+          "minLength": 1
+        },
+        "redactedCommand": {
+          "oneOf": [
+            {
+              "type": "null"
+            },
+            {
+              "type": "string",
+              "minLength": 1
+            }
+          ]
+        },
+        "exitCode": {
+          "oneOf": [
+            {
+              "type": "null"
+            },
+            {
+              "type": "integer"
+            }
+          ]
+        },
+        "summary": {
+          "type": "string",
+          "minLength": 1
+        },
+        "classification": {
+          "enum": [
+            "Product",
+            "Test",
+            "Harness",
+            "Observer",
+            "Environment",
+            "Authorization",
+            "Unknown"
+          ]
+        },
+        "evidenceRefs": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          },
+          "minItems": 1,
+          "uniqueItems": true
+        },
+        "preserved": {
+          "const": true
+        },
+        "supersededBy": {
+          "oneOf": [
+            {
+              "type": "null"
+            },
+            {
+              "type": "string",
+              "minLength": 1
+            }
+          ]
+        }
+      }
+    },
+    "evidence": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "evidenceId",
+        "kind",
+        "path",
+        "sha256",
+        "redacted",
+        "preservesFirstFailure"
+      ],
+      "properties": {
+        "evidenceId": {
+          "type": "string",
+          "minLength": 1
+        },
+        "kind": {
+          "enum": [
+            "json",
+            "text-log",
+            "test-report",
+            "screenshot",
+            "video",
+            "identity",
+            "diff",
+            "manual-attestation",
+            "plan-reference",
+            "other"
+          ]
+        },
+        "path": {
+          "type": "string",
+          "minLength": 1
+        },
+        "sha256": {
+          "$ref": "#/$defs/sha256"
+        },
+        "redacted": {
+          "const": true
+        },
+        "preservesFirstFailure": {
+          "type": "boolean"
+        }
+      }
+    },
+    "cleanup": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "status",
+        "ownedProcessesRemaining",
+        "ownedTempPathsRemaining",
+        "configMutationsRemaining",
+        "unownedProcessTouched",
+        "unownedPathTouched",
+        "countsBalanced",
+        "evidenceRefs"
+      ],
+      "properties": {
+        "status": {
+          "$ref": "#/$defs/gateStatus"
+        },
+        "ownedProcessesRemaining": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "ownedTempPathsRemaining": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "configMutationsRemaining": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "unownedProcessTouched": {
+          "const": false
+        },
+        "unownedPathTouched": {
+          "const": false
+        },
+        "countsBalanced": {
+          "const": true
+        },
+        "evidenceRefs": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          },
+          "uniqueItems": true
+        }
+      }
+    },
+    "nextAction": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "kind",
+        "owner",
+        "summary",
+        "blockedBy"
+      ],
+      "properties": {
+        "kind": {
+          "enum": [
+            "Continue",
+            "RunGate",
+            "FixFailure",
+            "AwaitUserConfirmation",
+            "StartNextCheckpoint",
+            "MergeLane",
+            "FinalizeGoal"
+          ]
+        },
+        "owner": {
+          "enum": [
+            "GoalAgent",
+            "RendererLane",
+            "CliLane",
+            "IntegrationOwner",
+            "User"
+          ]
+        },
+        "summary": {
+          "type": "string",
+          "minLength": 1
+        },
+        "blockedBy": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          },
+          "uniqueItems": true
+        }
+      }
+    }
+  }
+}

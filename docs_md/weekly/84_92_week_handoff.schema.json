@@ -1,0 +1,5027 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.c-aicli.local/weekly/84_92_week_handoff.schema.json",
+  "title": "C-AICLI Week 84-92 Checkpoint Handoff",
+  "description": "Lane or checkpoint handoff for the Week84-92 single Goal.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schemaVersion",
+    "registryVersion",
+    "goalId",
+    "checkpoint",
+    "week",
+    "lane",
+    "decision",
+    "finalDecision",
+    "nextWeek",
+    "nextLanes",
+    "identity",
+    "parentHandoffs",
+    "gateResults",
+    "gateCounts",
+    "requiredGatesSatisfied",
+    "firstFailures",
+    "authorizationBudget",
+    "goalControlBinding",
+    "freezeIntegrity",
+    "cleanup",
+    "userAcceptances",
+    "openIssues",
+    "boundaryRequests",
+    "laneOutput",
+    "gitCheckpoint",
+    "evidenceRefs",
+    "blockingCondition",
+    "nextAction",
+    "createdAt"
+  ],
+  "properties": {
+    "schemaVersion": {
+      "const": "1.0.0"
+    },
+    "registryVersion": {
+      "const": "w84-w92-gates-v1"
+    },
+    "goalId": {
+      "const": "c-aicli-cli-desktop-refactor-w84-w92"
+    },
+    "checkpoint": {
+      "$ref": "#/$defs/checkpoint"
+    },
+    "week": {
+      "type": "integer",
+      "minimum": 84,
+      "maximum": 92
+    },
+    "lane": {
+      "$ref": "#/$defs/lane"
+    },
+    "decision": {
+      "enum": [
+        "ReadyForNextCheckpoint",
+        "AwaitingUserConfirmation",
+        "Blocked",
+        "GoalComplete"
+      ]
+    },
+    "finalDecision": {
+      "oneOf": [
+        {
+          "type": "null"
+        },
+        {
+          "enum": [
+            "RefactorAccepted",
+            "CandidateReady",
+            "Blocked"
+          ]
+        }
+      ]
+    },
+    "nextWeek": {
+      "oneOf": [
+        {
+          "type": "null"
+        },
+        {
+          "type": "integer",
+          "minimum": 85,
+          "maximum": 92
+        }
+      ]
+    },
+    "nextLanes": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/lane"
+      },
+      "uniqueItems": true
+    },
+    "identity": {
+      "$ref": "#/$defs/identity"
+    },
+    "parentHandoffs": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/handoffParentReference"
+      },
+      "maxItems": 2,
+      "uniqueItems": true
+    },
+    "gateResults": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/gateReference"
+      },
+      "minItems": 1,
+      "uniqueItems": true
+    },
+    "gateCounts": {
+      "$ref": "#/$defs/gateCounts"
+    },
+    "requiredGatesSatisfied": {
+      "type": "boolean"
+    },
+    "firstFailures": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/firstFailureReference"
+      }
+    },
+    "authorizationBudget": {
+      "$ref": "#/$defs/authorizationBudget"
+    },
+    "goalControlBinding": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["path", "sha256", "providerLedgerPath", "providerLedgerSha256", "providerLedgerSequence"],
+      "properties": {
+        "path": { "type": "string", "pattern": "^artifacts/week(?:8[4-9]|9[0-2])-[a-z0-9-]+/goal-control-snapshot\\.json$" },
+        "sha256": { "$ref": "#/$defs/sha256" },
+        "providerLedgerPath": { "const": "artifacts/week84-92-goal-control/provider-turn-ledger.json" },
+        "providerLedgerSha256": { "$ref": "#/$defs/sha256" },
+        "providerLedgerSequence": { "type": "integer", "minimum": 0 }
+      }
+    },
+    "freezeIntegrity": {
+      "$ref": "#/$defs/freezeIntegrity"
+    },
+    "cleanup": {
+      "$ref": "#/$defs/cleanup"
+    },
+    "userAcceptances": {
+      "type": "array",
+      "prefixItems": [
+        { "allOf": [{ "$ref": "#/$defs/userAcceptance" }, { "properties": { "acceptanceId": { "const": "W86-USER-VISUAL" }, "kind": { "const": "Visual" }, "checkpoint": { "const": "W86" } } }] },
+        { "allOf": [{ "$ref": "#/$defs/userAcceptance" }, { "properties": { "acceptanceId": { "const": "W89-USER-VISUAL" }, "kind": { "const": "Visual" }, "checkpoint": { "const": "W89" } } }] },
+        { "allOf": [{ "$ref": "#/$defs/userAcceptance" }, { "properties": { "acceptanceId": { "const": "W92-USER-VISUAL" }, "kind": { "const": "Visual" }, "checkpoint": { "const": "W92" } } }] }
+      ],
+      "items": false,
+      "minItems": 3,
+      "maxItems": 3,
+      "uniqueItems": true
+    },
+    "openIssues": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "p0",
+        "p1",
+        "other",
+        "issueRefs"
+      ],
+      "properties": {
+        "p0": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "p1": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "other": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "issueRefs": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          },
+          "uniqueItems": true
+        }
+      }
+    },
+    "boundaryRequests": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/boundaryRequestReference"
+      }
+    },
+    "laneOutput": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "summary",
+        "changedScopes",
+        "outOfLaneChanges",
+        "deliverables",
+        "deviations"
+      ],
+      "properties": {
+        "summary": {
+          "type": "string",
+          "minLength": 1
+        },
+        "changedScopes": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          },
+          "uniqueItems": true
+        },
+        "outOfLaneChanges": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          },
+          "uniqueItems": true
+        },
+        "deliverables": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          },
+          "minItems": 1,
+          "uniqueItems": true
+        },
+        "deviations": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          },
+          "uniqueItems": true
+        }
+      }
+    },
+    "gitCheckpoint": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "branch",
+        "checkpointCommit",
+        "localMergeCommit",
+        "pushed",
+        "tagged",
+        "released",
+        "published",
+        "deployed"
+      ],
+      "properties": {
+        "branch": {
+          "type": "string",
+          "pattern": "^codex/"
+        },
+        "checkpointCommit": {
+          "oneOf": [
+            {
+              "type": "null"
+            },
+            {
+              "$ref": "#/$defs/gitSha"
+            }
+          ]
+        },
+        "localMergeCommit": {
+          "oneOf": [
+            {
+              "type": "null"
+            },
+            {
+              "$ref": "#/$defs/gitSha"
+            }
+          ]
+        },
+        "pushed": {
+          "const": false
+        },
+        "tagged": {
+          "const": false
+        },
+        "released": {
+          "const": false
+        },
+        "published": {
+          "const": false
+        },
+        "deployed": {
+          "const": false
+        }
+      }
+    },
+    "evidenceRefs": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "minLength": 1
+      },
+      "minItems": 1,
+      "uniqueItems": true
+    },
+    "blockingCondition": {
+      "oneOf": [
+        {
+          "type": "null"
+        },
+        {
+          "$ref": "#/$defs/blockingCondition"
+        }
+      ]
+    },
+    "nextAction": {
+      "$ref": "#/$defs/nextAction"
+    },
+    "createdAt": {
+      "$ref": "#/$defs/dateTime"
+    }
+  },
+  "allOf": [
+    {
+      "if": {
+        "properties": { "week": { "const": 84 } },
+        "required": ["week"]
+      },
+      "then": {
+        "properties": { "parentHandoffs": { "maxItems": 0 } }
+      }
+    },
+    {
+      "if": {
+        "properties": { "week": { "enum": [85, 86, 87, 88, 89, 91, 92] } },
+        "required": ["week"]
+      },
+      "then": {
+        "properties": { "parentHandoffs": { "minItems": 1, "maxItems": 1 } }
+      }
+    },
+    {
+      "if": {
+        "properties": { "week": { "const": 90 } },
+        "required": ["week"]
+      },
+      "then": {
+        "properties": { "parentHandoffs": { "minItems": 2, "maxItems": 2 } }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "week": {
+            "const": 84
+          }
+        },
+        "required": [
+          "week"
+        ]
+      },
+      "then": {
+        "properties": {
+          "checkpoint": {
+            "const": "W84"
+          },
+          "lane": {
+            "const": "baseline"
+          },
+          "nextWeek": {
+            "const": 85
+          },
+          "nextLanes": {
+            "prefixItems": [
+              {
+                "const": "renderer"
+              },
+              {
+                "const": "cli"
+              }
+            ],
+            "items": false,
+            "minItems": 2,
+            "maxItems": 2
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "week": {
+            "const": 85
+          }
+        },
+        "required": [
+          "week"
+        ]
+      },
+      "then": {
+        "properties": {
+          "checkpoint": {
+            "const": "W85"
+          },
+          "lane": {
+            "enum": [
+              "renderer",
+              "cli"
+            ]
+          },
+          "nextWeek": {
+            "const": 86
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "week": {
+            "const": 86
+          }
+        },
+        "required": [
+          "week"
+        ]
+      },
+      "then": {
+        "properties": {
+          "checkpoint": {
+            "const": "W86"
+          },
+          "lane": {
+            "enum": [
+              "renderer",
+              "cli"
+            ]
+          },
+          "nextWeek": {
+            "const": 87
+          },
+          "userAcceptances": {
+            "contains": {
+              "properties": {
+                "acceptanceId": {
+                  "const": "W86-USER-VISUAL"
+                },
+                "kind": {
+                  "const": "Visual"
+                },
+                "checkpoint": {
+                  "const": "W86"
+                },
+                "required": {
+                  "const": true
+                }
+              },
+              "required": [
+                "acceptanceId",
+                "kind",
+                "checkpoint",
+                "required"
+              ]
+            }
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "week": {
+            "const": 87
+          }
+        },
+        "required": [
+          "week"
+        ]
+      },
+      "then": {
+        "properties": {
+          "checkpoint": {
+            "const": "W87"
+          },
+          "lane": {
+            "enum": [
+              "renderer",
+              "cli"
+            ]
+          },
+          "nextWeek": {
+            "const": 88
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "week": {
+            "const": 88
+          }
+        },
+        "required": [
+          "week"
+        ]
+      },
+      "then": {
+        "properties": {
+          "checkpoint": {
+            "const": "W88"
+          },
+          "lane": {
+            "enum": [
+              "renderer",
+              "cli"
+            ]
+          },
+          "nextWeek": {
+            "const": 89
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "week": {
+            "const": 89
+          }
+        },
+        "required": [
+          "week"
+        ]
+      },
+      "then": {
+        "properties": {
+          "checkpoint": {
+            "const": "W89"
+          },
+          "lane": {
+            "enum": [
+              "renderer",
+              "cli"
+            ]
+          },
+          "nextWeek": {
+            "const": 90
+          },
+          "nextLanes": {
+            "prefixItems": [
+              {
+                "const": "integration"
+              }
+            ],
+            "items": false,
+            "minItems": 1,
+            "maxItems": 1
+          },
+          "userAcceptances": {
+            "contains": {
+              "properties": {
+                "acceptanceId": {
+                  "const": "W89-USER-VISUAL"
+                },
+                "kind": {
+                  "const": "Visual"
+                },
+                "checkpoint": {
+                  "const": "W89"
+                },
+                "required": {
+                  "const": true
+                }
+              },
+              "required": [
+                "acceptanceId",
+                "kind",
+                "checkpoint",
+                "required"
+              ]
+            }
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "week": {
+            "const": 90
+          }
+        },
+        "required": [
+          "week"
+        ]
+      },
+      "then": {
+        "properties": {
+          "checkpoint": {
+            "const": "W90"
+          },
+          "lane": {
+            "const": "integration"
+          },
+          "nextWeek": {
+            "const": 91
+          },
+          "nextLanes": {
+            "prefixItems": [
+              {
+                "const": "hardening"
+              }
+            ],
+            "items": false,
+            "minItems": 1,
+            "maxItems": 1
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "week": {
+            "const": 91
+          }
+        },
+        "required": [
+          "week"
+        ]
+      },
+      "then": {
+        "properties": {
+          "checkpoint": {
+            "const": "W91"
+          },
+          "lane": {
+            "const": "hardening"
+          },
+          "nextWeek": {
+            "const": 92
+          },
+          "nextLanes": {
+            "prefixItems": [
+              {
+                "const": "acceptance"
+              }
+            ],
+            "items": false,
+            "minItems": 1,
+            "maxItems": 1
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "week": {
+            "const": 92
+          }
+        },
+        "required": [
+          "week"
+        ]
+      },
+      "then": {
+        "properties": {
+          "checkpoint": {
+            "const": "W92"
+          },
+          "lane": {
+            "const": "acceptance"
+          },
+          "nextWeek": {
+            "type": "null"
+          },
+          "nextLanes": {
+            "maxItems": 0
+          },
+          "userAcceptances": {
+            "contains": {
+              "properties": {
+                "acceptanceId": {
+                  "const": "W92-USER-VISUAL"
+                },
+                "kind": {
+                  "const": "Visual"
+                },
+                "checkpoint": {
+                  "const": "W92"
+                },
+                "required": {
+                  "const": true
+                }
+              },
+              "required": [
+                "acceptanceId",
+                "kind",
+                "checkpoint",
+                "required"
+              ]
+            }
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "decision": {
+            "const": "ReadyForNextCheckpoint"
+          }
+        },
+        "required": [
+          "decision"
+        ]
+      },
+      "then": {
+        "properties": {
+          "week": {
+            "maximum": 91
+          },
+          "finalDecision": {
+            "type": "null"
+          },
+          "nextLanes": {
+            "minItems": 1
+          },
+          "requiredGatesSatisfied": {
+            "const": true
+          },
+          "gateResults": {
+            "items": {
+              "properties": {
+                "required": {
+                  "const": true
+                },
+                "status": {
+                  "const": "Passed"
+                }
+              },
+              "required": [
+                "required",
+                "status"
+              ]
+            }
+          },
+          "gateCounts": {
+            "properties": {
+              "failed": {
+                "const": 0
+              },
+              "notRun": {
+                "const": 0
+              },
+              "notApplicable": {
+                "const": 0
+              },
+              "countsBalanced": {
+                "const": true
+              }
+            }
+          },
+          "cleanup": {
+            "properties": {
+              "status": {
+                "enum": ["Passed", "Failed"]
+              },
+              "trackedResidueCount": {
+                "const": 0
+              },
+              "untrackedResidueCount": {
+                "const": 0
+              },
+              "tempArtifactCount": {
+                "const": 0
+              },
+              "processResidueCount": {
+                "const": 0
+              },
+              "countsBalanced": {
+                "const": true
+              }
+            }
+          },
+          "openIssues": {
+            "properties": {
+              "p0": {
+                "const": 0
+              },
+              "p1": {
+                "const": 0
+              }
+            }
+          },
+          "blockingCondition": {
+            "type": "null"
+          },
+          "identity": {
+            "properties": {
+              "dirtyState": { "const": "Clean" },
+              "productCandidate": { "$ref": "#/$defs/gitSha" },
+              "checkpointCommit": { "$ref": "#/$defs/gitSha" }
+            }
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "decision": {
+            "const": "AwaitingUserConfirmation"
+          }
+        },
+        "required": [
+          "decision"
+        ]
+      },
+      "then": {
+        "properties": {
+          "boundaryRequests": {
+            "contains": {
+              "properties": {
+                "status": {
+                  "const": "Pending"
+                }
+              },
+              "required": [
+                "status"
+              ]
+            }
+          },
+          "nextAction": {
+            "properties": {
+              "kind": {
+                "const": "AwaitUserConfirmation"
+              },
+              "owner": {
+                "const": "User"
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "decision": {
+            "const": "Blocked"
+          }
+        },
+        "required": [
+          "decision"
+        ]
+      },
+      "then": {
+        "properties": {
+          "requiredGatesSatisfied": {
+            "const": false
+          },
+          "blockingCondition": {
+            "$ref": "#/$defs/blockingCondition"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "decision": {
+            "const": "GoalComplete"
+          }
+        },
+        "required": [
+          "decision"
+        ]
+      },
+      "then": {
+        "properties": {
+          "week": {
+            "const": 92
+          },
+          "lane": {
+            "const": "acceptance"
+          },
+          "finalDecision": {
+            "const": "RefactorAccepted"
+          },
+          "nextWeek": {
+            "type": "null"
+          },
+          "nextLanes": {
+            "maxItems": 0
+          },
+          "requiredGatesSatisfied": {
+            "const": true
+          },
+          "gateResults": {
+            "items": {
+              "properties": {
+                "required": {
+                  "const": true
+                },
+                "status": {
+                  "const": "Passed"
+                }
+              },
+              "required": [
+                "required",
+                "status"
+              ]
+            }
+          },
+          "gateCounts": {
+            "properties": {
+              "failed": {
+                "const": 0
+              },
+              "notRun": {
+                "const": 0
+              },
+              "notApplicable": {
+                "const": 0
+              },
+              "countsBalanced": {
+                "const": true
+              }
+            }
+          },
+          "cleanup": {
+            "properties": {
+              "status": {
+                "const": "Passed"
+              },
+              "trackedResidueCount": {
+                "const": 0
+              },
+              "untrackedResidueCount": {
+                "const": 0
+              },
+              "tempArtifactCount": {
+                "const": 0
+              },
+              "processResidueCount": {
+                "const": 0
+              },
+              "countsBalanced": {
+                "const": true
+              }
+            }
+          },
+          "authorizationBudget": {
+            "properties": {
+              "controlledWriteUsedThisWeek": {
+                "const": true
+              },
+              "controlledWriteShapeVerified": {
+                "const": true
+              },
+              "controlledWriteExecutionCountThisWeek": {
+                "const": 1
+              },
+              "controlledWriteNonWritePreconditionsPassed": {
+                "const": true
+              },
+              "controlledWriteEvidenceRefs": {
+                "minItems": 1
+              },
+              "controlledWriteHistory": {
+                "properties": {
+                  "w84": {
+                    "properties": {
+                      "status": {
+                        "const": "Passed"
+                      },
+                      "executionCount": {
+                        "const": 1
+                      },
+                      "shapeVerified": {
+                        "const": true
+                      },
+                      "nonWritePreconditionsPassed": {
+                        "const": true
+                      },
+                      "evidenceRefs": {
+                        "minItems": 1
+                      }
+                    }
+                  },
+                  "w92": {
+                    "properties": {
+                      "status": {
+                        "const": "Passed"
+                      },
+                      "executionCount": {
+                        "const": 1
+                      },
+                      "shapeVerified": {
+                        "const": true
+                      },
+                      "nonWritePreconditionsPassed": {
+                        "const": true
+                      },
+                      "evidenceRefs": {
+                        "minItems": 1
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "openIssues": {
+            "properties": {
+              "p0": {
+                "const": 0
+              },
+              "p1": {
+                "const": 0
+              }
+            }
+          },
+          "blockingCondition": {
+            "type": "null"
+          },
+          "identity": {
+            "properties": {
+              "dirtyState": { "const": "Clean" },
+              "productCandidate": { "$ref": "#/$defs/gitSha" },
+              "checkpointCommit": { "$ref": "#/$defs/gitSha" }
+            }
+          },
+          "userAcceptances": {
+            "allOf": [
+              {
+                "contains": {
+                  "properties": {
+                    "acceptanceId": {
+                      "const": "W86-USER-VISUAL"
+                    },
+                    "status": {
+                      "const": "Passed"
+                    }
+                  },
+                  "required": [
+                    "acceptanceId",
+                    "status"
+                  ]
+                }
+              },
+              {
+                "contains": {
+                  "properties": {
+                    "acceptanceId": {
+                      "const": "W89-USER-VISUAL"
+                    },
+                    "status": {
+                      "const": "Passed"
+                    }
+                  },
+                  "required": [
+                    "acceptanceId",
+                    "status"
+                  ]
+                }
+              },
+              {
+                "contains": {
+                  "properties": {
+                    "acceptanceId": {
+                      "const": "W92-USER-VISUAL"
+                    },
+                    "status": {
+                      "const": "Passed"
+                    }
+                  },
+                  "required": [
+                    "acceptanceId",
+                    "status"
+                  ]
+                }
+              }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "week": {
+            "maximum": 91
+          }
+        },
+        "required": [
+          "week"
+        ]
+      },
+      "then": {
+        "properties": {
+          "finalDecision": {
+            "type": "null"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "week": {
+            "const": 92
+          }
+        },
+        "required": [
+          "week"
+        ]
+      },
+      "then": {
+        "properties": {
+          "decision": {
+            "enum": [
+              "AwaitingUserConfirmation",
+              "Blocked",
+              "GoalComplete"
+            ]
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "week": {
+            "const": 92
+          },
+          "decision": {
+            "const": "AwaitingUserConfirmation"
+          }
+        },
+        "required": [
+          "week",
+          "decision"
+        ]
+      },
+      "then": {
+        "properties": {
+          "finalDecision": {
+            "const": "CandidateReady"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "week": {
+            "const": 92
+          },
+          "decision": {
+            "const": "Blocked"
+          }
+        },
+        "required": [
+          "week",
+          "decision"
+        ]
+      },
+      "then": {
+        "properties": {
+          "finalDecision": {
+            "const": "Blocked"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "authorizationBudget": {
+            "properties": {
+              "controlledWriteUsedThisWeek": {
+                "const": true
+              }
+            },
+            "required": [
+              "controlledWriteUsedThisWeek"
+            ]
+          }
+        },
+        "required": [
+          "authorizationBudget"
+        ]
+      },
+      "then": {
+        "properties": {
+          "week": {
+            "enum": [
+              84,
+              92
+            ]
+          },
+          "authorizationBudget": {
+            "properties": {
+              "controlledWriteShapeVerified": {
+                "const": true
+              },
+              "controlledWriteExecutionCountThisWeek": {
+                "const": 1
+              },
+              "controlledWriteNonWritePreconditionsPassed": {
+                "const": true
+              },
+              "controlledWriteEvidenceRefs": {
+                "minItems": 1
+              }
+            }
+          }
+        }
+      },
+      "else": {
+        "properties": {
+          "authorizationBudget": {
+            "properties": {
+              "controlledWriteExecutionCountThisWeek": {
+                "const": 0
+              },
+              "controlledWriteEvidenceRefs": {
+                "maxItems": 0
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "week": {
+            "const": 84
+          },
+          "decision": {
+            "const": "ReadyForNextCheckpoint"
+          }
+        },
+        "required": [
+          "week",
+          "decision"
+        ]
+      },
+      "then": {
+        "properties": {
+          "authorizationBudget": {
+            "properties": {
+              "controlledWriteUsedThisWeek": {
+                "const": true
+              },
+              "controlledWriteShapeVerified": {
+                "const": true
+              },
+              "controlledWriteExecutionCountThisWeek": {
+                "const": 1
+              },
+              "controlledWriteNonWritePreconditionsPassed": {
+                "const": true
+              },
+              "controlledWriteEvidenceRefs": {
+                "minItems": 1
+              },
+              "controlledWriteHistory": {
+                "properties": {
+                  "w84": {
+                    "properties": {
+                      "status": {
+                        "const": "Passed"
+                      },
+                      "executionCount": {
+                        "const": 1
+                      },
+                      "shapeVerified": {
+                        "const": true
+                      },
+                      "nonWritePreconditionsPassed": {
+                        "const": true
+                      },
+                      "evidenceRefs": {
+                        "minItems": 1
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "week": {
+            "const": 86
+          },
+          "decision": {
+            "const": "ReadyForNextCheckpoint"
+          }
+        },
+        "required": [
+          "week",
+          "decision"
+        ]
+      },
+      "then": {
+        "properties": {
+          "userAcceptances": {
+            "contains": {
+              "properties": {
+                "acceptanceId": {
+                  "const": "W86-USER-VISUAL"
+                },
+                "status": {
+                  "const": "Passed"
+                }
+              },
+              "required": [
+                "acceptanceId",
+                "status"
+              ]
+            }
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "week": {
+            "const": 89
+          },
+          "decision": {
+            "const": "ReadyForNextCheckpoint"
+          }
+        },
+        "required": [
+          "week",
+          "decision"
+        ]
+      },
+      "then": {
+        "properties": {
+          "userAcceptances": {
+            "contains": {
+              "properties": {
+                "acceptanceId": {
+                  "const": "W89-USER-VISUAL"
+                },
+                "status": {
+                  "const": "Passed"
+                }
+              },
+              "required": [
+                "acceptanceId",
+                "status"
+              ]
+            }
+          }
+        }
+      }
+    },
+    {
+      "oneOf": [
+        {
+          "properties": {
+            "week": {
+              "const": 84
+            },
+            "checkpoint": {
+              "const": "W84"
+            },
+            "lane": {
+              "const": "baseline"
+            },
+            "nextWeek": {
+              "const": 85
+            },
+            "nextLanes": {
+              "prefixItems": [
+                {
+                  "const": "renderer"
+                },
+                {
+                  "const": "cli"
+                }
+              ],
+              "items": false,
+              "minItems": 2,
+              "maxItems": 2
+            },
+            "gateResults": {
+              "prefixItems": [
+                {
+                  "properties": {
+                    "gateId": {
+                      "const": "W84-G0"
+                    },
+                    "resultPath": {
+                      "const": "artifacts/week84-renderer-listener-retention/gates/W84-G0.json"
+                    }
+                  },
+                  "required": [
+                    "gateId",
+                    "resultPath"
+                  ]
+                },
+                {
+                  "properties": {
+                    "gateId": {
+                      "const": "W84-G1"
+                    },
+                    "resultPath": {
+                      "const": "artifacts/week84-renderer-listener-retention/gates/W84-G1.json"
+                    }
+                  },
+                  "required": [
+                    "gateId",
+                    "resultPath"
+                  ]
+                },
+                {
+                  "properties": {
+                    "gateId": {
+                      "const": "W84-G2"
+                    },
+                    "resultPath": {
+                      "const": "artifacts/week84-renderer-listener-retention/gates/W84-G2.json"
+                    }
+                  },
+                  "required": [
+                    "gateId",
+                    "resultPath"
+                  ]
+                },
+                {
+                  "properties": {
+                    "gateId": {
+                      "const": "W84-G3"
+                    },
+                    "resultPath": {
+                      "const": "artifacts/week84-renderer-listener-retention/gates/W84-G3.json"
+                    }
+                  },
+                  "required": [
+                    "gateId",
+                    "resultPath"
+                  ]
+                },
+                {
+                  "properties": {
+                    "gateId": {
+                      "const": "W84-G4"
+                    },
+                    "resultPath": {
+                      "const": "artifacts/week84-renderer-listener-retention/gates/W84-G4.json"
+                    }
+                  },
+                  "required": [
+                    "gateId",
+                    "resultPath"
+                  ]
+                },
+                {
+                  "properties": {
+                    "gateId": {
+                      "const": "W84-G5"
+                    },
+                    "resultPath": {
+                      "const": "artifacts/week84-renderer-listener-retention/gates/W84-G5.json"
+                    }
+                  },
+                  "required": [
+                    "gateId",
+                    "resultPath"
+                  ]
+                },
+                {
+                  "properties": {
+                    "gateId": {
+                      "const": "W84-G6"
+                    },
+                    "resultPath": {
+                      "const": "artifacts/week84-renderer-listener-retention/gates/W84-G6.json"
+                    }
+                  },
+                  "required": [
+                    "gateId",
+                    "resultPath"
+                  ]
+                },
+                {
+                  "properties": {
+                    "gateId": {
+                      "const": "W84-G7"
+                    },
+                    "resultPath": {
+                      "const": "artifacts/week84-renderer-listener-retention/gates/W84-G7.json"
+                    }
+                  },
+                  "required": [
+                    "gateId",
+                    "resultPath"
+                  ]
+                },
+                {
+                  "properties": {
+                    "gateId": {
+                      "const": "W84-G8"
+                    },
+                    "resultPath": {
+                      "const": "artifacts/week84-renderer-listener-retention/gates/W84-G8.json"
+                    }
+                  },
+                  "required": [
+                    "gateId",
+                    "resultPath"
+                  ]
+                },
+                {
+                  "properties": {
+                    "gateId": {
+                      "const": "W84-G9"
+                    },
+                    "resultPath": {
+                      "const": "artifacts/week84-renderer-listener-retention/gates/W84-G9.json"
+                    }
+                  },
+                  "required": [
+                    "gateId",
+                    "resultPath"
+                  ]
+                }
+              ],
+              "items": false,
+              "minItems": 10,
+              "maxItems": 10
+            },
+            "gateCounts": {
+              "properties": {
+                "total": {
+                  "const": 10
+                },
+                "countsBalanced": {
+                  "const": true
+                }
+              }
+            }
+          },
+          "required": [
+            "week",
+            "checkpoint",
+            "lane",
+            "nextWeek",
+            "nextLanes",
+            "gateResults",
+            "gateCounts"
+          ],
+          "allOf": [
+            {
+              "if": {
+                "properties": {
+                  "decision": {
+                    "const": "ReadyForNextCheckpoint"
+                  }
+                },
+                "required": [
+                  "decision"
+                ]
+              },
+              "then": {
+                "properties": {
+                  "gateCounts": {
+                    "properties": {
+                      "passed": {
+                        "const": 10
+                      },
+                      "failed": {
+                        "const": 0
+                      },
+                      "notRun": {
+                        "const": 0
+                      },
+                      "notApplicable": {
+                        "const": 0
+                      },
+                      "countsBalanced": {
+                        "const": true
+                      }
+                    }
+                  },
+                  "laneOutput": {
+                    "properties": {
+                      "summary": {
+                        "const": "Baseline Ready for Refactor"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          ]
+        },
+        {
+          "properties": {
+            "week": {
+              "const": 85
+            },
+            "checkpoint": {
+              "const": "W85"
+            },
+            "lane": {
+              "const": "renderer"
+            },
+            "nextWeek": {
+              "const": 86
+            },
+            "nextLanes": {
+              "prefixItems": [
+                {
+                  "const": "renderer"
+                }
+              ],
+              "items": false,
+              "minItems": 1,
+              "maxItems": 1
+            },
+            "gateResults": {
+              "prefixItems": [
+                {
+                  "properties": {
+                    "gateId": {
+                      "const": "W85-R0"
+                    },
+                    "resultPath": {
+                      "const": "artifacts/week85-renderer-feature-boundaries/gates/W85-R0.json"
+                    }
+                  },
+                  "required": [
+                    "gateId",
+                    "resultPath"
+                  ]
+                },
+                {
+                  "properties": {
+                    "gateId": {
+                      "const": "W85-R1"
+                    },
+                    "resultPath": {
+                      "const": "artifacts/week85-renderer-feature-boundaries/gates/W85-R1.json"
+                    }
+                  },
+                  "required": [
+                    "gateId",
+                    "resultPath"
+                  ]
+                },
+                {
+                  "properties": {
+                    "gateId": {
+                      "const": "W85-R2"
+                    },
+                    "resultPath": {
+                      "const": "artifacts/week85-renderer-feature-boundaries/gates/W85-R2.json"
+                    }
+                  },
+                  "required": [
+                    "gateId",
+                    "resultPath"
+                  ]
+                },
+                {
+                  "properties": {
+                    "gateId": {
+                      "const": "W85-R3"
+                    },
+                    "resultPath": {
+                      "const": "artifacts/week85-renderer-feature-boundaries/gates/W85-R3.json"
+                    }
+                  },
+                  "required": [
+                    "gateId",
+                    "resultPath"
+                  ]
+                },
+                {
+                  "properties": {
+                    "gateId": {
+                      "const": "W85-R4"
+                    },
+                    "resultPath": {
+                      "const": "artifacts/week85-renderer-feature-boundaries/gates/W85-R4.json"
+                    }
+                  },
+                  "required": [
+                    "gateId",
+                    "resultPath"
+                  ]
+                },
+                {
+                  "properties": {
+                    "gateId": {
+                      "const": "W85-R5"
+                    },
+                    "resultPath": {
+                      "const": "artifacts/week85-renderer-feature-boundaries/gates/W85-R5.json"
+                    }
+                  },
+                  "required": [
+                    "gateId",
+                    "resultPath"
+                  ]
+                },
+                {
+                  "properties": {
+                    "gateId": {
+                      "const": "W85-R6"
+                    },
+                    "resultPath": {
+                      "const": "artifacts/week85-renderer-feature-boundaries/gates/W85-R6.json"
+                    }
+                  },
+                  "required": [
+                    "gateId",
+                    "resultPath"
+                  ]
+                },
+                {
+                  "properties": {
+                    "gateId": {
+                      "const": "W85-R7"
+                    },
+                    "resultPath": {
+                      "const": "artifacts/week85-renderer-feature-boundaries/gates/W85-R7.json"
+                    }
+                  },
+                  "required": [
+                    "gateId",
+                    "resultPath"
+                  ]
+                }
+              ],
+              "items": false,
+              "minItems": 8,
+              "maxItems": 8
+            },
+            "gateCounts": {
+              "properties": {
+                "total": {
+                  "const": 8
+                },
+                "countsBalanced": {
+                  "const": true
+                }
+              }
+            }
+          },
+          "required": [
+            "week",
+            "checkpoint",
+            "lane",
+            "nextWeek",
+            "nextLanes",
+            "gateResults",
+            "gateCounts"
+          ],
+          "allOf": [
+            {
+              "if": {
+                "properties": {
+                  "decision": {
+                    "const": "ReadyForNextCheckpoint"
+                  }
+                },
+                "required": [
+                  "decision"
+                ]
+              },
+              "then": {
+                "properties": {
+                  "gateCounts": {
+                    "properties": {
+                      "passed": {
+                        "const": 8
+                      },
+                      "failed": {
+                        "const": 0
+                      },
+                      "notRun": {
+                        "const": 0
+                      },
+                      "notApplicable": {
+                        "const": 0
+                      },
+                      "countsBalanced": {
+                        "const": true
+                      }
+                    }
+                  },
+                  "laneOutput": {
+                    "properties": {
+                      "summary": {
+                        "const": "State Boundary Ready"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          ]
+        },
+        {
+          "properties": {
+            "week": {
+              "const": 85
+            },
+            "checkpoint": {
+              "const": "W85"
+            },
+            "lane": {
+              "const": "cli"
+            },
+            "nextWeek": {
+              "const": 86
+            },
+            "nextLanes": {
+              "prefixItems": [
+                {
+                  "const": "cli"
+                }
+              ],
+              "items": false,
+              "minItems": 1,
+              "maxItems": 1
+            },
+            "gateResults": {
+              "prefixItems": [
+                {
+                  "properties": {
+                    "gateId": {
+                      "const": "W85-C0"
+                    },
+                    "resultPath": {
+                      "const": "artifacts/week85-cli-composition/gates/W85-C0.json"
+                    }
+                  },
+                  "required": [
+                    "gateId",
+                    "resultPath"
+                  ]
+                },
+                {
+                  "properties": {
+                    "gateId": {
+                      "const": "W85-C1"
+                    },
+                    "resultPath": {
+                      "const": "artifacts/week85-cli-composition/gates/W85-C1.json"
+                    }
+                  },
+                  "required": [
+                    "gateId",
+                    "resultPath"
+                  ]
+                },
+                {
+                  "properties": {
+                    "gateId": {
+                      "const": "W85-C2"
+                    },
+                    "resultPath": {
+                      "const": "artifacts/week85-cli-composition/gates/W85-C2.json"
+                    }
+                  },
+                  "required": [
+                    "gateId",
+                    "resultPath"
+                  ]
+                },
+                {
+                  "properties": {
+                    "gateId": {
+                      "const": "W85-C3"
+                    },
+                    "resultPath": {
+                      "const": "artifacts/week85-cli-composition/gates/W85-C3.json"
+                    }
+                  },
+                  "required": [
+                    "gateId",
+                    "resultPath"
+                  ]
+                },
+                {
+                  "properties": {
+                    "gateId": {
+                      "const": "W85-C4"
+                    },
+                    "resultPath": {
+                      "const": "artifacts/week85-cli-composition/gates/W85-C4.json"
+                    }
+                  },
+                  "required": [
+                    "gateId",
+                    "resultPath"
+                  ]
+                },
+                {
+                  "properties": {
+                    "gateId": {
+                      "const": "W85-C5"
+                    },
+                    "resultPath": {
+                      "const": "artifacts/week85-cli-composition/gates/W85-C5.json"
+                    }
+                  },
+                  "required": [
+                    "gateId",
+                    "resultPath"
+                  ]
+                }
+              ],
+              "items": false,
+              "minItems": 6,
+              "maxItems": 6
+            },
+            "gateCounts": {
+              "properties": {
+                "total": {
+                  "const": 6
+                },
+                "countsBalanced": {
+                  "const": true
+                }
+              }
+            }
+          },
+          "required": [
+            "week",
+            "checkpoint",
+            "lane",
+            "nextWeek",
+            "nextLanes",
+            "gateResults",
+            "gateCounts"
+          ],
+          "allOf": [
+            {
+              "if": {
+                "properties": {
+                  "decision": {
+                    "const": "ReadyForNextCheckpoint"
+                  }
+                },
+                "required": [
+                  "decision"
+                ]
+              },
+              "then": {
+                "properties": {
+                  "gateCounts": {
+                    "properties": {
+                      "passed": {
+                        "const": 6
+                      },
+                      "failed": {
+                        "const": 0
+                      },
+                      "notRun": {
+                        "const": 0
+                      },
+                      "notApplicable": {
+                        "const": 0
+                      },
+                      "countsBalanced": {
+                        "const": true
+                      }
+                    }
+                  },
+                  "laneOutput": {
+                    "properties": {
+                      "summary": {
+                        "const": "CLI Composition Ready"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          ]
+        },
+        {
+          "properties": {
+            "week": {
+              "const": 86
+            },
+            "checkpoint": {
+              "const": "W86"
+            },
+            "lane": {
+              "const": "renderer"
+            },
+            "nextWeek": {
+              "const": 87
+            },
+            "nextLanes": {
+              "prefixItems": [
+                {
+                  "const": "renderer"
+                }
+              ],
+              "items": false,
+              "minItems": 1,
+              "maxItems": 1
+            },
+            "gateResults": {
+              "prefixItems": [
+                {
+                  "properties": {
+                    "gateId": {
+                      "const": "W86-R0"
+                    },
+                    "resultPath": {
+                      "const": "artifacts/week86-renderer-chat-first-shell/gates/W86-R0.json"
+                    }
+                  },
+                  "required": [
+                    "gateId",
+                    "resultPath"
+                  ]
+                },
+                {
+                  "properties": {
+                    "gateId": {
+                      "const": "W86-R1"
+                    },
+                    "resultPath": {
+                      "const": "artifacts/week86-renderer-chat-first-shell/gates/W86-R1.json"
+                    }
+                  },
+                  "required": [
+                    "gateId",
+                    "resultPath"
+                  ]
+                },
+                {
+                  "properties": {
+                    "gateId": {
+                      "const": "W86-R2"
+                    },
+                    "resultPath": {
+                      "const": "artifacts/week86-renderer-chat-first-shell/gates/W86-R2.json"
+                    }
+                  },
+                  "required": [
+                    "gateId",
+                    "resultPath"
+                  ]
+                },
+                {
+                  "properties": {
+                    "gateId": {
+                      "const": "W86-R3"
+                    },
+                    "resultPath": {
+                      "const": "artifacts/week86-renderer-chat-first-shell/gates/W86-R3.json"
+                    }
+                  },
+                  "required": [
+                    "gateId",
+                    "resultPath"
+                  ]
+                },
+                {
+                  "properties": {
+                    "gateId": {
+                      "const": "W86-R4"
+                    },
+                    "resultPath": {
+                      "const": "artifacts/week86-renderer-chat-first-shell/gates/W86-R4.json"
+                    }
+                  },
+                  "required": [
+                    "gateId",
+                    "resultPath"
+                  ]
+                },
+                {
+                  "properties": {
+                    "gateId": {
+                      "const": "W86-R5"
+                    },
+                    "resultPath": {
+                      "const": "artifacts/week86-renderer-chat-first-shell/gates/W86-R5.json"
+                    }
+                  },
+                  "required": [
+                    "gateId",
+                    "resultPath"
+                  ]
+                },
+                {
+                  "properties": {
+                    "gateId": {
+                      "const": "W86-R6"
+                    },
+                    "resultPath": {
+                      "const": "artifacts/week86-renderer-chat-first-shell/gates/W86-R6.json"
+                    }
+                  },
+                  "required": [
+                    "gateId",
+                    "resultPath"
+                  ]
+                },
+                {
+                  "properties": {
+                    "gateId": {
+                      "const": "W86-R7"
+                    },
+                    "resultPath": {
+                      "const": "artifacts/week86-renderer-chat-first-shell/gates/W86-R7.json"
+                    }
+                  },
+                  "required": [
+                    "gateId",
+                    "resultPath"
+                  ]
+                }
+              ],
+              "items": false,
+              "minItems": 8,
+              "maxItems": 8
+            },
+            "gateCounts": {
+              "properties": {
+                "total": {
+                  "const": 8
+                },
+                "countsBalanced": {
+                  "const": true
+                }
+              }
+            }
+          },
+          "required": [
+            "week",
+            "checkpoint",
+            "lane",
+            "nextWeek",
+            "nextLanes",
+            "gateResults",
+            "gateCounts"
+          ],
+          "allOf": [
+            {
+              "if": {
+                "properties": {
+                  "decision": {
+                    "const": "ReadyForNextCheckpoint"
+                  }
+                },
+                "required": [
+                  "decision"
+                ]
+              },
+              "then": {
+                "properties": {
+                  "gateCounts": {
+                    "properties": {
+                      "passed": {
+                        "const": 8
+                      },
+                      "failed": {
+                        "const": 0
+                      },
+                      "notRun": {
+                        "const": 0
+                      },
+                      "notApplicable": {
+                        "const": 0
+                      },
+                      "countsBalanced": {
+                        "const": true
+                      }
+                    }
+                  },
+                  "laneOutput": {
+                    "properties": {
+                      "summary": {
+                        "const": "Shell Ready for Feature Migration"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          ]
+        },
+        {
+          "properties": {
+            "week": {
+              "const": 86
+            },
+            "checkpoint": {
+              "const": "W86"
+            },
+            "lane": {
+              "const": "cli"
+            },
+            "nextWeek": {
+              "const": 87
+            },
+            "nextLanes": {
+              "prefixItems": [
+                {
+                  "const": "cli"
+                }
+              ],
+              "items": false,
+              "minItems": 1,
+              "maxItems": 1
+            },
+            "gateResults": {
+              "prefixItems": [
+                {
+                  "properties": {
+                    "gateId": {
+                      "const": "W86-C0"
+                    },
+                    "resultPath": {
+                      "const": "artifacts/week86-cli-jobs-review-session/gates/W86-C0.json"
+                    }
+                  },
+                  "required": [
+                    "gateId",
+                    "resultPath"
+                  ]
+                },
+                {
+                  "properties": {
+                    "gateId": {
+                      "const": "W86-C1"
+                    },
+                    "resultPath": {
+                      "const": "artifacts/week86-cli-jobs-review-session/gates/W86-C1.json"
+                    }
+                  },
+                  "required": [
+                    "gateId",
+                    "resultPath"
+                  ]
+                },
+                {
+                  "properties": {
+                    "gateId": {
+                      "const": "W86-C2"
+                    },
+                    "resultPath": {
+                      "const": "artifacts/week86-cli-jobs-review-session/gates/W86-C2.json"
+                    }
+                  },
+                  "required": [
+                    "gateId",
+                    "resultPath"
+                  ]
+                },
+                {
+                  "properties": {
+                    "gateId": {
+                      "const": "W86-C3"
+                    },
+                    "resultPath": {
+                      "const": "artifacts/week86-cli-jobs-review-session/gates/W86-C3.json"
+                    }
+                  },
+                  "required": [
+                    "gateId",
+                    "resultPath"
+                  ]
+                },
+                {
+                  "properties": {
+                    "gateId": {
+                      "const": "W86-C4"
+                    },
+                    "resultPath": {
+                      "const": "artifacts/week86-cli-jobs-review-session/gates/W86-C4.json"
+                    }
+                  },
+                  "required": [
+                    "gateId",
+                    "resultPath"
+                  ]
+                },
+                {
+                  "properties": {
+                    "gateId": {
+                      "const": "W86-C5"
+                    },
+                    "resultPath": {
+                      "const": "artifacts/week86-cli-jobs-review-session/gates/W86-C5.json"
+                    }
+                  },
+                  "required": [
+                    "gateId",
+                    "resultPath"
+                  ]
+                }
+              ],
+              "items": false,
+              "minItems": 6,
+              "maxItems": 6
+            },
+            "gateCounts": {
+              "properties": {
+                "total": {
+                  "const": 6
+                },
+                "countsBalanced": {
+                  "const": true
+                }
+              }
+            }
+          },
+          "required": [
+            "week",
+            "checkpoint",
+            "lane",
+            "nextWeek",
+            "nextLanes",
+            "gateResults",
+            "gateCounts"
+          ],
+          "allOf": [
+            {
+              "if": {
+                "properties": {
+                  "decision": {
+                    "const": "ReadyForNextCheckpoint"
+                  }
+                },
+                "required": [
+                  "decision"
+                ]
+              },
+              "then": {
+                "properties": {
+                  "gateCounts": {
+                    "properties": {
+                      "passed": {
+                        "const": 6
+                      },
+                      "failed": {
+                        "const": 0
+                      },
+                      "notRun": {
+                        "const": 0
+                      },
+                      "notApplicable": {
+                        "const": 0
+                      },
+                      "countsBalanced": {
+                        "const": true
+                      }
+                    }
+                  },
+                  "laneOutput": {
+                    "properties": {
+                      "summary": {
+                        "const": "CLI Session/Query Modules Ready"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          ]
+        },
+        {
+          "properties": {
+            "week": {
+              "const": 87
+            },
+            "checkpoint": {
+              "const": "W87"
+            },
+            "lane": {
+              "const": "renderer"
+            },
+            "nextWeek": {
+              "const": 88
+            },
+            "nextLanes": {
+              "prefixItems": [
+                {
+                  "const": "renderer"
+                }
+              ],
+              "items": false,
+              "minItems": 1,
+              "maxItems": 1
+            },
+            "gateResults": {
+              "prefixItems": [
+                {
+                  "properties": {
+                    "gateId": {
+                      "const": "W87-R0"
+                    },
+                    "resultPath": {
+                      "const": "artifacts/week87-renderer-conversation-projection/gates/W87-R0.json"
+                    }
+                  },
+                  "required": [
+                    "gateId",
+                    "resultPath"
+                  ]
+                },
+                {
+                  "properties": {
+                    "gateId": {
+                      "const": "W87-R1"
+                    },
+                    "resultPath": {
+                      "const": "artifacts/week87-renderer-conversation-projection/gates/W87-R1.json"
+                    }
+                  },
+                  "required": [
+                    "gateId",
+                    "resultPath"
+                  ]
+                },
+                {
+                  "properties": {
+                    "gateId": {
+                      "const": "W87-R2"
+                    },
+                    "resultPath": {
+                      "const": "artifacts/week87-renderer-conversation-projection/gates/W87-R2.json"
+                    }
+                  },
+                  "required": [
+                    "gateId",
+                    "resultPath"
+                  ]
+                },
+                {
+                  "properties": {
+                    "gateId": {
+                      "const": "W87-R3"
+                    },
+                    "resultPath": {
+                      "const": "artifacts/week87-renderer-conversation-projection/gates/W87-R3.json"
+                    }
+                  },
+                  "required": [
+                    "gateId",
+                    "resultPath"
+                  ]
+                },
+                {
+                  "properties": {
+                    "gateId": {
+                      "const": "W87-R4"
+                    },
+                    "resultPath": {
+                      "const": "artifacts/week87-renderer-conversation-projection/gates/W87-R4.json"
+                    }
+                  },
+                  "required": [
+                    "gateId",
+                    "resultPath"
+                  ]
+                },
+                {
+                  "properties": {
+                    "gateId": {
+                      "const": "W87-R5"
+                    },
+                    "resultPath": {
+                      "const": "artifacts/week87-renderer-conversation-projection/gates/W87-R5.json"
+                    }
+                  },
+                  "required": [
+                    "gateId",
+                    "resultPath"
+                  ]
+                }
+              ],
+              "items": false,
+              "minItems": 6,
+              "maxItems": 6
+            },
+            "gateCounts": {
+              "properties": {
+                "total": {
+                  "const": 6
+                },
+                "countsBalanced": {
+                  "const": true
+                }
+              }
+            }
+          },
+          "required": [
+            "week",
+            "checkpoint",
+            "lane",
+            "nextWeek",
+            "nextLanes",
+            "gateResults",
+            "gateCounts"
+          ],
+          "allOf": [
+            {
+              "if": {
+                "properties": {
+                  "decision": {
+                    "const": "ReadyForNextCheckpoint"
+                  }
+                },
+                "required": [
+                  "decision"
+                ]
+              },
+              "then": {
+                "properties": {
+                  "gateCounts": {
+                    "properties": {
+                      "passed": {
+                        "const": 6
+                      },
+                      "failed": {
+                        "const": 0
+                      },
+                      "notRun": {
+                        "const": 0
+                      },
+                      "notApplicable": {
+                        "const": 0
+                      },
+                      "countsBalanced": {
+                        "const": true
+                      }
+                    }
+                  },
+                  "laneOutput": {
+                    "properties": {
+                      "summary": {
+                        "const": "Conversation Projection Ready"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          ]
+        },
+        {
+          "properties": {
+            "week": {
+              "const": 87
+            },
+            "checkpoint": {
+              "const": "W87"
+            },
+            "lane": {
+              "const": "cli"
+            },
+            "nextWeek": {
+              "const": 88
+            },
+            "nextLanes": {
+              "prefixItems": [
+                {
+                  "const": "cli"
+                }
+              ],
+              "items": false,
+              "minItems": 1,
+              "maxItems": 1
+            },
+            "gateResults": {
+              "prefixItems": [
+                {
+                  "properties": {
+                    "gateId": {
+                      "const": "W87-C0"
+                    },
+                    "resultPath": {
+                      "const": "artifacts/week87-cli-exec-skills-queue/gates/W87-C0.json"
+                    }
+                  },
+                  "required": [
+                    "gateId",
+                    "resultPath"
+                  ]
+                },
+                {
+                  "properties": {
+                    "gateId": {
+                      "const": "W87-C1"
+                    },
+                    "resultPath": {
+                      "const": "artifacts/week87-cli-exec-skills-queue/gates/W87-C1.json"
+                    }
+                  },
+                  "required": [
+                    "gateId",
+                    "resultPath"
+                  ]
+                },
+                {
+                  "properties": {
+                    "gateId": {
+                      "const": "W87-C2"
+                    },
+                    "resultPath": {
+                      "const": "artifacts/week87-cli-exec-skills-queue/gates/W87-C2.json"
+                    }
+                  },
+                  "required": [
+                    "gateId",
+                    "resultPath"
+                  ]
+                },
+                {
+                  "properties": {
+                    "gateId": {
+                      "const": "W87-C3"
+                    },
+                    "resultPath": {
+                      "const": "artifacts/week87-cli-exec-skills-queue/gates/W87-C3.json"
+                    }
+                  },
+                  "required": [
+                    "gateId",
+                    "resultPath"
+                  ]
+                },
+                {
+                  "properties": {
+                    "gateId": {
+                      "const": "W87-C4"
+                    },
+                    "resultPath": {
+                      "const": "artifacts/week87-cli-exec-skills-queue/gates/W87-C4.json"
+                    }
+                  },
+                  "required": [
+                    "gateId",
+                    "resultPath"
+                  ]
+                },
+                {
+                  "properties": {
+                    "gateId": {
+                      "const": "W87-C5"
+                    },
+                    "resultPath": {
+                      "const": "artifacts/week87-cli-exec-skills-queue/gates/W87-C5.json"
+                    }
+                  },
+                  "required": [
+                    "gateId",
+                    "resultPath"
+                  ]
+                }
+              ],
+              "items": false,
+              "minItems": 6,
+              "maxItems": 6
+            },
+            "gateCounts": {
+              "properties": {
+                "total": {
+                  "const": 6
+                },
+                "countsBalanced": {
+                  "const": true
+                }
+              }
+            }
+          },
+          "required": [
+            "week",
+            "checkpoint",
+            "lane",
+            "nextWeek",
+            "nextLanes",
+            "gateResults",
+            "gateCounts"
+          ],
+          "allOf": [
+            {
+              "if": {
+                "properties": {
+                  "decision": {
+                    "const": "ReadyForNextCheckpoint"
+                  }
+                },
+                "required": [
+                  "decision"
+                ]
+              },
+              "then": {
+                "properties": {
+                  "gateCounts": {
+                    "properties": {
+                      "passed": {
+                        "const": 6
+                      },
+                      "failed": {
+                        "const": 0
+                      },
+                      "notRun": {
+                        "const": 0
+                      },
+                      "notApplicable": {
+                        "const": 0
+                      },
+                      "countsBalanced": {
+                        "const": true
+                      }
+                    }
+                  },
+                  "laneOutput": {
+                    "properties": {
+                      "summary": {
+                        "const": "CLI Agent/Queue Modules Ready"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          ]
+        },
+        {
+          "properties": {
+            "week": {
+              "const": 88
+            },
+            "checkpoint": {
+              "const": "W88"
+            },
+            "lane": {
+              "const": "renderer"
+            },
+            "nextWeek": {
+              "const": 89
+            },
+            "nextLanes": {
+              "prefixItems": [
+                {
+                  "const": "renderer"
+                }
+              ],
+              "items": false,
+              "minItems": 1,
+              "maxItems": 1
+            },
+            "gateResults": {
+              "prefixItems": [
+                {
+                  "properties": {
+                    "gateId": {
+                      "const": "W88-R0"
+                    },
+                    "resultPath": {
+                      "const": "artifacts/week88-renderer-composer-approval/gates/W88-R0.json"
+                    }
+                  },
+                  "required": [
+                    "gateId",
+                    "resultPath"
+                  ]
+                },
+                {
+                  "properties": {
+                    "gateId": {
+                      "const": "W88-R1"
+                    },
+                    "resultPath": {
+                      "const": "artifacts/week88-renderer-composer-approval/gates/W88-R1.json"
+                    }
+                  },
+                  "required": [
+                    "gateId",
+                    "resultPath"
+                  ]
+                },
+                {
+                  "properties": {
+                    "gateId": {
+                      "const": "W88-R2"
+                    },
+                    "resultPath": {
+                      "const": "artifacts/week88-renderer-composer-approval/gates/W88-R2.json"
+                    }
+                  },
+                  "required": [
+                    "gateId",
+                    "resultPath"
+                  ]
+                },
+                {
+                  "properties": {
+                    "gateId": {
+                      "const": "W88-R3"
+                    },
+                    "resultPath": {
+                      "const": "artifacts/week88-renderer-composer-approval/gates/W88-R3.json"
+                    }
+                  },
+                  "required": [
+                    "gateId",
+                    "resultPath"
+                  ]
+                },
+                {
+                  "properties": {
+                    "gateId": {
+                      "const": "W88-R4"
+                    },
+                    "resultPath": {
+                      "const": "artifacts/week88-renderer-composer-approval/gates/W88-R4.json"
+                    }
+                  },
+                  "required": [
+                    "gateId",
+                    "resultPath"
+                  ]
+                },
+                {
+                  "properties": {
+                    "gateId": {
+                      "const": "W88-R5"
+                    },
+                    "resultPath": {
+                      "const": "artifacts/week88-renderer-composer-approval/gates/W88-R5.json"
+                    }
+                  },
+                  "required": [
+                    "gateId",
+                    "resultPath"
+                  ]
+                }
+              ],
+              "items": false,
+              "minItems": 6,
+              "maxItems": 6
+            },
+            "gateCounts": {
+              "properties": {
+                "total": {
+                  "const": 6
+                },
+                "countsBalanced": {
+                  "const": true
+                }
+              }
+            }
+          },
+          "required": [
+            "week",
+            "checkpoint",
+            "lane",
+            "nextWeek",
+            "nextLanes",
+            "gateResults",
+            "gateCounts"
+          ],
+          "allOf": [
+            {
+              "if": {
+                "properties": {
+                  "decision": {
+                    "const": "ReadyForNextCheckpoint"
+                  }
+                },
+                "required": [
+                  "decision"
+                ]
+              },
+              "then": {
+                "properties": {
+                  "gateCounts": {
+                    "properties": {
+                      "passed": {
+                        "const": 6
+                      },
+                      "failed": {
+                        "const": 0
+                      },
+                      "notRun": {
+                        "const": 0
+                      },
+                      "notApplicable": {
+                        "const": 0
+                      },
+                      "countsBalanced": {
+                        "const": true
+                      }
+                    }
+                  },
+                  "laneOutput": {
+                    "properties": {
+                      "summary": {
+                        "const": "Core Chat Interaction Ready"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          ]
+        },
+        {
+          "properties": {
+            "week": {
+              "const": 88
+            },
+            "checkpoint": {
+              "const": "W88"
+            },
+            "lane": {
+              "const": "cli"
+            },
+            "nextWeek": {
+              "const": 89
+            },
+            "nextLanes": {
+              "prefixItems": [
+                {
+                  "const": "cli"
+                }
+              ],
+              "items": false,
+              "minItems": 1,
+              "maxItems": 1
+            },
+            "gateResults": {
+              "prefixItems": [
+                {
+                  "properties": {
+                    "gateId": {
+                      "const": "W88-C0"
+                    },
+                    "resultPath": {
+                      "const": "artifacts/week88-cli-packs-artifacts/gates/W88-C0.json"
+                    }
+                  },
+                  "required": [
+                    "gateId",
+                    "resultPath"
+                  ]
+                },
+                {
+                  "properties": {
+                    "gateId": {
+                      "const": "W88-C1"
+                    },
+                    "resultPath": {
+                      "const": "artifacts/week88-cli-packs-artifacts/gates/W88-C1.json"
+                    }
+                  },
+                  "required": [
+                    "gateId",
+                    "resultPath"
+                  ]
+                },
+                {
+                  "properties": {
+                    "gateId": {
+                      "const": "W88-C2"
+                    },
+                    "resultPath": {
+                      "const": "artifacts/week88-cli-packs-artifacts/gates/W88-C2.json"
+                    }
+                  },
+                  "required": [
+                    "gateId",
+                    "resultPath"
+                  ]
+                },
+                {
+                  "properties": {
+                    "gateId": {
+                      "const": "W88-C3"
+                    },
+                    "resultPath": {
+                      "const": "artifacts/week88-cli-packs-artifacts/gates/W88-C3.json"
+                    }
+                  },
+                  "required": [
+                    "gateId",
+                    "resultPath"
+                  ]
+                },
+                {
+                  "properties": {
+                    "gateId": {
+                      "const": "W88-C4"
+                    },
+                    "resultPath": {
+                      "const": "artifacts/week88-cli-packs-artifacts/gates/W88-C4.json"
+                    }
+                  },
+                  "required": [
+                    "gateId",
+                    "resultPath"
+                  ]
+                },
+                {
+                  "properties": {
+                    "gateId": {
+                      "const": "W88-C5"
+                    },
+                    "resultPath": {
+                      "const": "artifacts/week88-cli-packs-artifacts/gates/W88-C5.json"
+                    }
+                  },
+                  "required": [
+                    "gateId",
+                    "resultPath"
+                  ]
+                }
+              ],
+              "items": false,
+              "minItems": 6,
+              "maxItems": 6
+            },
+            "gateCounts": {
+              "properties": {
+                "total": {
+                  "const": 6
+                },
+                "countsBalanced": {
+                  "const": true
+                }
+              }
+            }
+          },
+          "required": [
+            "week",
+            "checkpoint",
+            "lane",
+            "nextWeek",
+            "nextLanes",
+            "gateResults",
+            "gateCounts"
+          ],
+          "allOf": [
+            {
+              "if": {
+                "properties": {
+                  "decision": {
+                    "const": "ReadyForNextCheckpoint"
+                  }
+                },
+                "required": [
+                  "decision"
+                ]
+              },
+              "then": {
+                "properties": {
+                  "gateCounts": {
+                    "properties": {
+                      "passed": {
+                        "const": 6
+                      },
+                      "failed": {
+                        "const": 0
+                      },
+                      "notRun": {
+                        "const": 0
+                      },
+                      "notApplicable": {
+                        "const": 0
+                      },
+                      "countsBalanced": {
+                        "const": true
+                      }
+                    }
+                  },
+                  "laneOutput": {
+                    "properties": {
+                      "summary": {
+                        "const": "CLI Packs/Artifacts Modules Ready"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          ]
+        },
+        {
+          "properties": {
+            "week": {
+              "const": 89
+            },
+            "checkpoint": {
+              "const": "W89"
+            },
+            "lane": {
+              "const": "renderer"
+            },
+            "nextWeek": {
+              "const": 90
+            },
+            "nextLanes": {
+              "prefixItems": [
+                {
+                  "const": "integration"
+                }
+              ],
+              "items": false,
+              "minItems": 1,
+              "maxItems": 1
+            },
+            "gateResults": {
+              "prefixItems": [
+                {
+                  "properties": {
+                    "gateId": {
+                      "const": "W89-R0"
+                    },
+                    "resultPath": {
+                      "const": "artifacts/week89-context-review-workspace/gates/W89-R0.json"
+                    }
+                  },
+                  "required": [
+                    "gateId",
+                    "resultPath"
+                  ]
+                },
+                {
+                  "properties": {
+                    "gateId": {
+                      "const": "W89-R1"
+                    },
+                    "resultPath": {
+                      "const": "artifacts/week89-context-review-workspace/gates/W89-R1.json"
+                    }
+                  },
+                  "required": [
+                    "gateId",
+                    "resultPath"
+                  ]
+                },
+                {
+                  "properties": {
+                    "gateId": {
+                      "const": "W89-R2"
+                    },
+                    "resultPath": {
+                      "const": "artifacts/week89-context-review-workspace/gates/W89-R2.json"
+                    }
+                  },
+                  "required": [
+                    "gateId",
+                    "resultPath"
+                  ]
+                },
+                {
+                  "properties": {
+                    "gateId": {
+                      "const": "W89-R3"
+                    },
+                    "resultPath": {
+                      "const": "artifacts/week89-context-review-workspace/gates/W89-R3.json"
+                    }
+                  },
+                  "required": [
+                    "gateId",
+                    "resultPath"
+                  ]
+                },
+                {
+                  "properties": {
+                    "gateId": {
+                      "const": "W89-R4"
+                    },
+                    "resultPath": {
+                      "const": "artifacts/week89-context-review-workspace/gates/W89-R4.json"
+                    }
+                  },
+                  "required": [
+                    "gateId",
+                    "resultPath"
+                  ]
+                },
+                {
+                  "properties": {
+                    "gateId": {
+                      "const": "W89-R5"
+                    },
+                    "resultPath": {
+                      "const": "artifacts/week89-context-review-workspace/gates/W89-R5.json"
+                    }
+                  },
+                  "required": [
+                    "gateId",
+                    "resultPath"
+                  ]
+                },
+                {
+                  "properties": {
+                    "gateId": {
+                      "const": "W89-R6"
+                    },
+                    "resultPath": {
+                      "const": "artifacts/week89-context-review-workspace/gates/W89-R6.json"
+                    }
+                  },
+                  "required": [
+                    "gateId",
+                    "resultPath"
+                  ]
+                },
+                {
+                  "properties": {
+                    "gateId": {
+                      "const": "W89-R7"
+                    },
+                    "resultPath": {
+                      "const": "artifacts/week89-context-review-workspace/gates/W89-R7.json"
+                    }
+                  },
+                  "required": [
+                    "gateId",
+                    "resultPath"
+                  ]
+                }
+              ],
+              "items": false,
+              "minItems": 8,
+              "maxItems": 8
+            },
+            "gateCounts": {
+              "properties": {
+                "total": {
+                  "const": 8
+                },
+                "countsBalanced": {
+                  "const": true
+                }
+              }
+            }
+          },
+          "required": [
+            "week",
+            "checkpoint",
+            "lane",
+            "nextWeek",
+            "nextLanes",
+            "gateResults",
+            "gateCounts"
+          ],
+          "allOf": [
+            {
+              "if": {
+                "properties": {
+                  "decision": {
+                    "const": "ReadyForNextCheckpoint"
+                  }
+                },
+                "required": [
+                  "decision"
+                ]
+              },
+              "then": {
+                "properties": {
+                  "gateCounts": {
+                    "properties": {
+                      "passed": {
+                        "const": 8
+                      },
+                      "failed": {
+                        "const": 0
+                      },
+                      "notRun": {
+                        "const": 0
+                      },
+                      "notApplicable": {
+                        "const": 0
+                      },
+                      "countsBalanced": {
+                        "const": true
+                      }
+                    }
+                  },
+                  "laneOutput": {
+                    "properties": {
+                      "summary": {
+                        "const": "Desktop Experience Lane Ready for Integration"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          ]
+        },
+        {
+          "properties": {
+            "week": {
+              "const": 89
+            },
+            "checkpoint": {
+              "const": "W89"
+            },
+            "lane": {
+              "const": "cli"
+            },
+            "nextWeek": {
+              "const": 90
+            },
+            "nextLanes": {
+              "prefixItems": [
+                {
+                  "const": "integration"
+                }
+              ],
+              "items": false,
+              "minItems": 1,
+              "maxItems": 1
+            },
+            "gateResults": {
+              "prefixItems": [
+                {
+                  "properties": {
+                    "gateId": {
+                      "const": "W89-C0"
+                    },
+                    "resultPath": {
+                      "const": "artifacts/week89-cli-automation-pipeline/gates/W89-C0.json"
+                    }
+                  },
+                  "required": [
+                    "gateId",
+                    "resultPath"
+                  ]
+                },
+                {
+                  "properties": {
+                    "gateId": {
+                      "const": "W89-C1"
+                    },
+                    "resultPath": {
+                      "const": "artifacts/week89-cli-automation-pipeline/gates/W89-C1.json"
+                    }
+                  },
+                  "required": [
+                    "gateId",
+                    "resultPath"
+                  ]
+                },
+                {
+                  "properties": {
+                    "gateId": {
+                      "const": "W89-C2"
+                    },
+                    "resultPath": {
+                      "const": "artifacts/week89-cli-automation-pipeline/gates/W89-C2.json"
+                    }
+                  },
+                  "required": [
+                    "gateId",
+                    "resultPath"
+                  ]
+                },
+                {
+                  "properties": {
+                    "gateId": {
+                      "const": "W89-C3"
+                    },
+                    "resultPath": {
+                      "const": "artifacts/week89-cli-automation-pipeline/gates/W89-C3.json"
+                    }
+                  },
+                  "required": [
+                    "gateId",
+                    "resultPath"
+                  ]
+                },
+                {
+                  "properties": {
+                    "gateId": {
+                      "const": "W89-C4"
+                    },
+                    "resultPath": {
+                      "const": "artifacts/week89-cli-automation-pipeline/gates/W89-C4.json"
+                    }
+                  },
+                  "required": [
+                    "gateId",
+                    "resultPath"
+                  ]
+                },
+                {
+                  "properties": {
+                    "gateId": {
+                      "const": "W89-C5"
+                    },
+                    "resultPath": {
+                      "const": "artifacts/week89-cli-automation-pipeline/gates/W89-C5.json"
+                    }
+                  },
+                  "required": [
+                    "gateId",
+                    "resultPath"
+                  ]
+                },
+                {
+                  "properties": {
+                    "gateId": {
+                      "const": "W89-C6"
+                    },
+                    "resultPath": {
+                      "const": "artifacts/week89-cli-automation-pipeline/gates/W89-C6.json"
+                    }
+                  },
+                  "required": [
+                    "gateId",
+                    "resultPath"
+                  ]
+                },
+                {
+                  "properties": {
+                    "gateId": {
+                      "const": "W89-C7"
+                    },
+                    "resultPath": {
+                      "const": "artifacts/week89-cli-automation-pipeline/gates/W89-C7.json"
+                    }
+                  },
+                  "required": [
+                    "gateId",
+                    "resultPath"
+                  ]
+                }
+              ],
+              "items": false,
+              "minItems": 8,
+              "maxItems": 8
+            },
+            "gateCounts": {
+              "properties": {
+                "total": {
+                  "const": 8
+                },
+                "countsBalanced": {
+                  "const": true
+                }
+              }
+            }
+          },
+          "required": [
+            "week",
+            "checkpoint",
+            "lane",
+            "nextWeek",
+            "nextLanes",
+            "gateResults",
+            "gateCounts"
+          ],
+          "allOf": [
+            {
+              "if": {
+                "properties": {
+                  "decision": {
+                    "const": "ReadyForNextCheckpoint"
+                  }
+                },
+                "required": [
+                  "decision"
+                ]
+              },
+              "then": {
+                "properties": {
+                  "gateCounts": {
+                    "properties": {
+                      "passed": {
+                        "const": 8
+                      },
+                      "failed": {
+                        "const": 0
+                      },
+                      "notRun": {
+                        "const": 0
+                      },
+                      "notApplicable": {
+                        "const": 0
+                      },
+                      "countsBalanced": {
+                        "const": true
+                      }
+                    }
+                  },
+                  "laneOutput": {
+                    "properties": {
+                      "summary": {
+                        "const": "CLI Lane Ready for Integration"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          ]
+        },
+        {
+          "properties": {
+            "week": {
+              "const": 90
+            },
+            "checkpoint": {
+              "const": "W90"
+            },
+            "lane": {
+              "const": "integration"
+            },
+            "nextWeek": {
+              "const": 91
+            },
+            "nextLanes": {
+              "prefixItems": [
+                {
+                  "const": "hardening"
+                }
+              ],
+              "items": false,
+              "minItems": 1,
+              "maxItems": 1
+            },
+            "gateResults": {
+              "prefixItems": [
+                {
+                  "properties": {
+                    "gateId": {
+                      "const": "W90-G0"
+                    },
+                    "resultPath": {
+                      "const": "artifacts/week90-cli-desktop-integration/gates/W90-G0.json"
+                    }
+                  },
+                  "required": [
+                    "gateId",
+                    "resultPath"
+                  ]
+                },
+                {
+                  "properties": {
+                    "gateId": {
+                      "const": "W90-G1"
+                    },
+                    "resultPath": {
+                      "const": "artifacts/week90-cli-desktop-integration/gates/W90-G1.json"
+                    }
+                  },
+                  "required": [
+                    "gateId",
+                    "resultPath"
+                  ]
+                },
+                {
+                  "properties": {
+                    "gateId": {
+                      "const": "W90-G2"
+                    },
+                    "resultPath": {
+                      "const": "artifacts/week90-cli-desktop-integration/gates/W90-G2.json"
+                    }
+                  },
+                  "required": [
+                    "gateId",
+                    "resultPath"
+                  ]
+                },
+                {
+                  "properties": {
+                    "gateId": {
+                      "const": "W90-G3"
+                    },
+                    "resultPath": {
+                      "const": "artifacts/week90-cli-desktop-integration/gates/W90-G3.json"
+                    }
+                  },
+                  "required": [
+                    "gateId",
+                    "resultPath"
+                  ]
+                },
+                {
+                  "properties": {
+                    "gateId": {
+                      "const": "W90-G4"
+                    },
+                    "resultPath": {
+                      "const": "artifacts/week90-cli-desktop-integration/gates/W90-G4.json"
+                    }
+                  },
+                  "required": [
+                    "gateId",
+                    "resultPath"
+                  ]
+                },
+                {
+                  "properties": {
+                    "gateId": {
+                      "const": "W90-G5"
+                    },
+                    "resultPath": {
+                      "const": "artifacts/week90-cli-desktop-integration/gates/W90-G5.json"
+                    }
+                  },
+                  "required": [
+                    "gateId",
+                    "resultPath"
+                  ]
+                },
+                {
+                  "properties": {
+                    "gateId": {
+                      "const": "W90-G6"
+                    },
+                    "resultPath": {
+                      "const": "artifacts/week90-cli-desktop-integration/gates/W90-G6.json"
+                    }
+                  },
+                  "required": [
+                    "gateId",
+                    "resultPath"
+                  ]
+                },
+                {
+                  "properties": {
+                    "gateId": {
+                      "const": "W90-G7"
+                    },
+                    "resultPath": {
+                      "const": "artifacts/week90-cli-desktop-integration/gates/W90-G7.json"
+                    }
+                  },
+                  "required": [
+                    "gateId",
+                    "resultPath"
+                  ]
+                }
+              ],
+              "items": false,
+              "minItems": 8,
+              "maxItems": 8
+            },
+            "gateCounts": {
+              "properties": {
+                "total": {
+                  "const": 8
+                },
+                "countsBalanced": {
+                  "const": true
+                }
+              }
+            }
+          },
+          "required": [
+            "week",
+            "checkpoint",
+            "lane",
+            "nextWeek",
+            "nextLanes",
+            "gateResults",
+            "gateCounts"
+          ],
+          "allOf": [
+            {
+              "if": {
+                "properties": {
+                  "decision": {
+                    "const": "ReadyForNextCheckpoint"
+                  }
+                },
+                "required": [
+                  "decision"
+                ]
+              },
+              "then": {
+                "properties": {
+                  "gateCounts": {
+                    "properties": {
+                      "passed": {
+                        "const": 8
+                      },
+                      "failed": {
+                        "const": 0
+                      },
+                      "notRun": {
+                        "const": 0
+                      },
+                      "notApplicable": {
+                        "const": 0
+                      },
+                      "countsBalanced": {
+                        "const": true
+                      }
+                    }
+                  },
+                  "laneOutput": {
+                    "properties": {
+                      "summary": {
+                        "const": "Integration Candidate Ready for Hardening"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          ]
+        },
+        {
+          "properties": {
+            "week": {
+              "const": 91
+            },
+            "checkpoint": {
+              "const": "W91"
+            },
+            "lane": {
+              "const": "hardening"
+            },
+            "nextWeek": {
+              "const": 92
+            },
+            "nextLanes": {
+              "prefixItems": [
+                {
+                  "const": "acceptance"
+                }
+              ],
+              "items": false,
+              "minItems": 1,
+              "maxItems": 1
+            },
+            "gateResults": {
+              "prefixItems": [
+                {
+                  "properties": {
+                    "gateId": {
+                      "const": "W91-G0"
+                    },
+                    "resultPath": {
+                      "const": "artifacts/week91-refactor-hardening/gates/W91-G0.json"
+                    }
+                  },
+                  "required": [
+                    "gateId",
+                    "resultPath"
+                  ]
+                },
+                {
+                  "properties": {
+                    "gateId": {
+                      "const": "W91-G1"
+                    },
+                    "resultPath": {
+                      "const": "artifacts/week91-refactor-hardening/gates/W91-G1.json"
+                    }
+                  },
+                  "required": [
+                    "gateId",
+                    "resultPath"
+                  ]
+                },
+                {
+                  "properties": {
+                    "gateId": {
+                      "const": "W91-G2"
+                    },
+                    "resultPath": {
+                      "const": "artifacts/week91-refactor-hardening/gates/W91-G2.json"
+                    }
+                  },
+                  "required": [
+                    "gateId",
+                    "resultPath"
+                  ]
+                },
+                {
+                  "properties": {
+                    "gateId": {
+                      "const": "W91-G3"
+                    },
+                    "resultPath": {
+                      "const": "artifacts/week91-refactor-hardening/gates/W91-G3.json"
+                    }
+                  },
+                  "required": [
+                    "gateId",
+                    "resultPath"
+                  ]
+                },
+                {
+                  "properties": {
+                    "gateId": {
+                      "const": "W91-G4"
+                    },
+                    "resultPath": {
+                      "const": "artifacts/week91-refactor-hardening/gates/W91-G4.json"
+                    }
+                  },
+                  "required": [
+                    "gateId",
+                    "resultPath"
+                  ]
+                },
+                {
+                  "properties": {
+                    "gateId": {
+                      "const": "W91-G5"
+                    },
+                    "resultPath": {
+                      "const": "artifacts/week91-refactor-hardening/gates/W91-G5.json"
+                    }
+                  },
+                  "required": [
+                    "gateId",
+                    "resultPath"
+                  ]
+                },
+                {
+                  "properties": {
+                    "gateId": {
+                      "const": "W91-G6"
+                    },
+                    "resultPath": {
+                      "const": "artifacts/week91-refactor-hardening/gates/W91-G6.json"
+                    }
+                  },
+                  "required": [
+                    "gateId",
+                    "resultPath"
+                  ]
+                },
+                {
+                  "properties": {
+                    "gateId": {
+                      "const": "W91-G7"
+                    },
+                    "resultPath": {
+                      "const": "artifacts/week91-refactor-hardening/gates/W91-G7.json"
+                    }
+                  },
+                  "required": [
+                    "gateId",
+                    "resultPath"
+                  ]
+                }
+              ],
+              "items": false,
+              "minItems": 8,
+              "maxItems": 8
+            },
+            "gateCounts": {
+              "properties": {
+                "total": {
+                  "const": 8
+                },
+                "countsBalanced": {
+                  "const": true
+                }
+              }
+            }
+          },
+          "required": [
+            "week",
+            "checkpoint",
+            "lane",
+            "nextWeek",
+            "nextLanes",
+            "gateResults",
+            "gateCounts"
+          ],
+          "allOf": [
+            {
+              "if": {
+                "properties": {
+                  "decision": {
+                    "const": "ReadyForNextCheckpoint"
+                  }
+                },
+                "required": [
+                  "decision"
+                ]
+              },
+              "then": {
+                "properties": {
+                  "gateCounts": {
+                    "properties": {
+                      "passed": {
+                        "const": 8
+                      },
+                      "failed": {
+                        "const": 0
+                      },
+                      "notRun": {
+                        "const": 0
+                      },
+                      "notApplicable": {
+                        "const": 0
+                      },
+                      "countsBalanced": {
+                        "const": true
+                      }
+                    }
+                  },
+                  "laneOutput": {
+                    "properties": {
+                      "summary": {
+                        "const": "Candidate Ready for Final Acceptance"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          ]
+        },
+        {
+          "properties": {
+            "week": {
+              "const": 92
+            },
+            "checkpoint": {
+              "const": "W92"
+            },
+            "lane": {
+              "const": "acceptance"
+            },
+            "nextWeek": {
+              "type": "null"
+            },
+          "nextLanes": {
+            "items": false,
+              "minItems": 0,
+              "maxItems": 0
+            },
+            "gateResults": {
+              "prefixItems": [
+                {
+                  "properties": {
+                    "gateId": {
+                      "const": "W92-G0"
+                    },
+                    "resultPath": {
+                      "const": "artifacts/week92-refactor-acceptance/gates/W92-G0.json"
+                    }
+                  },
+                  "required": [
+                    "gateId",
+                    "resultPath"
+                  ]
+                },
+                {
+                  "properties": {
+                    "gateId": {
+                      "const": "W92-G1"
+                    },
+                    "resultPath": {
+                      "const": "artifacts/week92-refactor-acceptance/gates/W92-G1.json"
+                    }
+                  },
+                  "required": [
+                    "gateId",
+                    "resultPath"
+                  ]
+                },
+                {
+                  "properties": {
+                    "gateId": {
+                      "const": "W92-G2"
+                    },
+                    "resultPath": {
+                      "const": "artifacts/week92-refactor-acceptance/gates/W92-G2.json"
+                    }
+                  },
+                  "required": [
+                    "gateId",
+                    "resultPath"
+                  ]
+                },
+                {
+                  "properties": {
+                    "gateId": {
+                      "const": "W92-G3"
+                    },
+                    "resultPath": {
+                      "const": "artifacts/week92-refactor-acceptance/gates/W92-G3.json"
+                    }
+                  },
+                  "required": [
+                    "gateId",
+                    "resultPath"
+                  ]
+                },
+                {
+                  "properties": {
+                    "gateId": {
+                      "const": "W92-G4"
+                    },
+                    "resultPath": {
+                      "const": "artifacts/week92-refactor-acceptance/gates/W92-G4.json"
+                    }
+                  },
+                  "required": [
+                    "gateId",
+                    "resultPath"
+                  ]
+                },
+                {
+                  "properties": {
+                    "gateId": {
+                      "const": "W92-G5"
+                    },
+                    "resultPath": {
+                      "const": "artifacts/week92-refactor-acceptance/gates/W92-G5.json"
+                    }
+                  },
+                  "required": [
+                    "gateId",
+                    "resultPath"
+                  ]
+                },
+                {
+                  "properties": {
+                    "gateId": {
+                      "const": "W92-G6"
+                    },
+                    "resultPath": {
+                      "const": "artifacts/week92-refactor-acceptance/gates/W92-G6.json"
+                    }
+                  },
+                  "required": [
+                    "gateId",
+                    "resultPath"
+                  ]
+                },
+                {
+                  "properties": {
+                    "gateId": {
+                      "const": "W92-G7"
+                    },
+                    "resultPath": {
+                      "const": "artifacts/week92-refactor-acceptance/gates/W92-G7.json"
+                    }
+                  },
+                  "required": [
+                    "gateId",
+                    "resultPath"
+                  ]
+                },
+                {
+                  "properties": {
+                    "gateId": {
+                      "const": "W92-G8"
+                    },
+                    "resultPath": {
+                      "const": "artifacts/week92-refactor-acceptance/gates/W92-G8.json"
+                    }
+                  },
+                  "required": [
+                    "gateId",
+                    "resultPath"
+                  ]
+                },
+                {
+                  "properties": {
+                    "gateId": {
+                      "const": "W92-G9"
+                    },
+                    "resultPath": {
+                      "const": "artifacts/week92-refactor-acceptance/gates/W92-G9.json"
+                    }
+                  },
+                  "required": [
+                    "gateId",
+                    "resultPath"
+                  ]
+                }
+              ],
+              "items": false,
+              "minItems": 10,
+              "maxItems": 10
+            },
+            "gateCounts": {
+              "properties": {
+                "total": {
+                  "const": 10
+                },
+                "countsBalanced": {
+                  "const": true
+                }
+              }
+            }
+          },
+          "required": [
+            "week",
+            "checkpoint",
+            "lane",
+            "nextWeek",
+            "nextLanes",
+            "gateResults",
+            "gateCounts"
+          ],
+          "allOf": [
+            {
+              "if": {
+                "properties": {
+                  "decision": {
+                    "const": "GoalComplete"
+                  }
+                },
+                "required": [
+                  "decision"
+                ]
+              },
+              "then": {
+                "properties": {
+                  "gateCounts": {
+                    "properties": {
+                      "passed": {
+                        "const": 10
+                      },
+                      "failed": {
+                        "const": 0
+                      },
+                      "notRun": {
+                        "const": 0
+                      },
+                      "notApplicable": {
+                        "const": 0
+                      },
+                      "countsBalanced": {
+                        "const": true
+                      }
+                    }
+                  },
+                  "laneOutput": {
+                    "properties": {
+                      "summary": {
+                        "const": "Refactor Accepted"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "$defs": {
+    "dateTime": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "sha256": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "gitSha": {
+      "type": "string",
+      "pattern": "^[0-9a-fA-F]{7,64}$"
+    },
+    "checkpoint": {
+      "enum": [
+        "W84",
+        "W85",
+        "W86",
+        "W87",
+        "W88",
+        "W89",
+        "W90",
+        "W91",
+        "W92"
+      ]
+    },
+    "lane": {
+      "enum": [
+        "baseline",
+        "renderer",
+        "cli",
+        "integration",
+        "hardening",
+        "acceptance"
+      ]
+    },
+    "gateStatus": {
+      "enum": [
+        "Passed",
+        "Failed",
+        "NotRun",
+        "NotApplicable"
+      ]
+    },
+    "identity": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "branch",
+        "worktree",
+        "sourceHead",
+        "dirtyState",
+        "baseline",
+        "productCandidate",
+        "checkpointCommit",
+        "packageIdentityRefs"
+      ],
+      "properties": {
+        "branch": {
+          "type": "string",
+          "pattern": "^codex/"
+        },
+        "worktree": {
+          "type": "string",
+          "minLength": 1
+        },
+        "sourceHead": {
+          "$ref": "#/$defs/gitSha"
+        },
+        "dirtyState": {
+          "enum": [
+            "Clean",
+            "ExpectedPlanBootstrapChanges",
+            "DirtyControlled",
+            "DirtyUnexpected"
+          ]
+        },
+        "baseline": {
+          "oneOf": [
+            {
+              "type": "null"
+            },
+            {
+              "$ref": "#/$defs/gitSha"
+            }
+          ]
+        },
+        "productCandidate": {
+          "oneOf": [
+            {
+              "type": "null"
+            },
+            {
+              "$ref": "#/$defs/gitSha"
+            }
+          ]
+        },
+        "checkpointCommit": {
+          "oneOf": [
+            {
+              "type": "null"
+            },
+            {
+              "$ref": "#/$defs/gitSha"
+            }
+          ]
+        },
+        "packageIdentityRefs": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          },
+          "uniqueItems": true
+        }
+      }
+    },
+    "gateReference": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "gateId",
+        "required",
+        "status",
+        "resultPath",
+        "resultSha256",
+        "firstFailureId"
+      ],
+      "properties": {
+        "gateId": {
+          "type": "string",
+          "pattern": "^W(8[4-9]|9[0-2])-[A-Z0-9][A-Z0-9-]*$"
+        },
+        "required": {
+          "const": true
+        },
+        "status": {
+          "$ref": "#/$defs/gateStatus"
+        },
+        "resultPath": {
+          "type": "string",
+          "minLength": 1
+        },
+        "resultSha256": {
+          "$ref": "#/$defs/sha256"
+        },
+        "firstFailureId": {
+          "oneOf": [
+            {
+              "type": "null"
+            },
+            {
+              "type": "string",
+              "minLength": 1
+            }
+          ]
+        }
+      }
+    },
+    "gateCounts": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "total",
+        "passed",
+        "failed",
+        "notRun",
+        "notApplicable",
+        "countsBalanced"
+      ],
+      "properties": {
+        "total": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "passed": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "failed": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "notRun": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "notApplicable": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "countsBalanced": {
+          "const": true
+        }
+      }
+    },
+    "handoffParentReference": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "week",
+        "lane",
+        "path",
+        "sha256",
+        "productCandidate"
+      ],
+      "properties": {
+        "week": {
+          "type": "integer",
+          "minimum": 84,
+          "maximum": 91
+        },
+        "lane": {
+          "$ref": "#/$defs/lane"
+        },
+        "path": {
+          "type": "string",
+          "pattern": "^artifacts/week(?:8[4-9]|9[0-1])-[a-z0-9-]+/week(?:8[4-9]|9[0-1])-[a-z0-9-]+-handoff\\.json$"
+        },
+        "sha256": {
+          "$ref": "#/$defs/sha256"
+        },
+        "productCandidate": {
+          "$ref": "#/$defs/gitSha"
+        }
+      }
+    },
+    "firstFailureReference": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "failureId",
+        "gateId",
+        "classification",
+        "evidenceRefs",
+        "preserved",
+        "resolved"
+      ],
+      "properties": {
+        "failureId": {
+          "type": "string",
+          "minLength": 1
+        },
+        "gateId": {
+          "type": "string",
+          "minLength": 1
+        },
+        "classification": {
+          "enum": [
+            "Product",
+            "Test",
+            "Harness",
+            "Observer",
+            "Environment",
+            "Authorization",
+            "Unknown"
+          ]
+        },
+        "evidenceRefs": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          },
+          "minItems": 1,
+          "uniqueItems": true
+        },
+        "preserved": {
+          "const": true
+        },
+        "resolved": {
+          "type": "boolean"
+        }
+      }
+    },
+    "authorizationBudget": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "confirmedItems1Through8",
+        "providerTurnBudget",
+        "providerTurnsUsed",
+        "providerTurnsRemaining",
+        "providerTurnLedgerBalanced",
+        "providerLedgerPath",
+        "providerLedgerSha256",
+        "providerLedgerSequence",
+        "controlledWriteUsedThisWeek",
+        "controlledWriteShapeVerified",
+        "controlledWriteExecutionCountThisWeek",
+        "controlledWriteNonWritePreconditionsPassed",
+        "controlledWriteEvidenceRefs",
+        "controlledWriteHistory",
+        "unauthorizedScopesUsed"
+      ],
+      "properties": {
+        "confirmedItems1Through8": {
+          "const": true
+        },
+        "providerTurnBudget": {
+          "const": 120
+        },
+        "providerTurnsUsed": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 120
+        },
+        "providerTurnsRemaining": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 120
+        },
+        "providerTurnLedgerBalanced": {
+          "const": true
+        },
+        "providerLedgerPath": {
+          "const": "artifacts/week84-92-goal-control/provider-turn-ledger.json"
+        },
+        "providerLedgerSha256": {
+          "$ref": "#/$defs/sha256"
+        },
+        "providerLedgerSequence": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "controlledWriteUsedThisWeek": {
+          "type": "boolean"
+        },
+        "controlledWriteShapeVerified": {
+          "type": "boolean"
+        },
+        "controlledWriteExecutionCountThisWeek": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 1
+        },
+        "controlledWriteNonWritePreconditionsPassed": {
+          "type": "boolean"
+        },
+        "controlledWriteEvidenceRefs": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          },
+          "uniqueItems": true
+        },
+        "controlledWriteHistory": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "w84",
+            "w92"
+          ],
+          "properties": {
+            "w84": {
+              "allOf": [
+                {
+                  "$ref": "#/$defs/controlledWriteRecord"
+                },
+                {
+                  "properties": {
+                    "week": {
+                      "const": 84
+                    },
+                    "gateId": {
+                      "const": "W84-G8"
+                    }
+                  }
+                }
+              ]
+            },
+            "w92": {
+              "allOf": [
+                {
+                  "$ref": "#/$defs/controlledWriteRecord"
+                },
+                {
+                  "properties": {
+                    "week": {
+                      "const": 92
+                    },
+                    "gateId": {
+                      "const": "W92-G7"
+                    }
+                  }
+                }
+              ]
+            }
+          }
+        },
+        "unauthorizedScopesUsed": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          },
+          "maxItems": 0
+        }
+      }
+    },
+    "controlledWriteRecord": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "week",
+        "gateId",
+        "status",
+        "executionCount",
+        "shapeVerified",
+        "nonWritePreconditionsPassed",
+        "evidenceRefs"
+      ],
+      "properties": {
+        "week": {
+          "enum": [
+            84,
+            92
+          ]
+        },
+        "gateId": {
+          "enum": [
+            "W84-G8",
+            "W92-G7"
+          ]
+        },
+        "status": {
+          "$ref": "#/$defs/gateStatus"
+        },
+        "executionCount": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 1
+        },
+        "shapeVerified": {
+          "type": "boolean"
+        },
+        "nonWritePreconditionsPassed": {
+          "type": "boolean"
+        },
+        "evidenceRefs": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          },
+          "uniqueItems": true
+        }
+      }
+    },
+    "cleanup": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "status",
+        "trackedResidueCount",
+        "untrackedResidueCount",
+        "tempArtifactCount",
+        "processResidueCount",
+        "countsBalanced",
+        "evidenceRefs"
+      ],
+      "properties": {
+        "status": {
+          "enum": [
+            "Passed",
+            "Failed",
+            "NotRun"
+          ]
+        },
+        "trackedResidueCount": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "untrackedResidueCount": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "tempArtifactCount": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "processResidueCount": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "countsBalanced": {
+          "const": true
+        },
+        "evidenceRefs": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          },
+          "uniqueItems": true
+        }
+      }
+    },
+    "freezeIntegrity": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "zonesChecked",
+        "unauthorizedChangeCount",
+        "authorizedExceptionBoundaryRequestIds",
+        "rendererOutOfLaneChangeCount",
+        "cliOutOfLaneChangeCount"
+      ],
+      "properties": {
+        "zonesChecked": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          },
+          "minItems": 1,
+          "uniqueItems": true
+        },
+        "unauthorizedChangeCount": {
+          "const": 0
+        },
+        "authorizedExceptionBoundaryRequestIds": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "pattern": "^BR-[0-9]{3,}$"
+          },
+          "uniqueItems": true
+        },
+        "rendererOutOfLaneChangeCount": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "cliOutOfLaneChangeCount": {
+          "type": "integer",
+          "minimum": 0
+        }
+      }
+    },
+    "userAcceptance": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "acceptanceId",
+        "kind",
+        "checkpoint",
+        "required",
+        "status",
+        "decidedAt",
+        "decisionRequestId",
+        "manifestSha256",
+        "challengeCode",
+        "userResponseCanonical",
+        "userMessageSha256",
+        "confirmedBy",
+        "userStatementSummary",
+        "evidenceRefs"
+      ],
+      "properties": {
+        "acceptanceId": {
+          "enum": [
+            "W86-USER-VISUAL",
+            "W89-USER-VISUAL",
+            "W92-USER-VISUAL"
+          ]
+        },
+        "kind": {
+          "enum": [
+            "Visual"
+          ]
+        },
+        "checkpoint": {
+          "$ref": "#/$defs/checkpoint"
+        },
+        "required": {
+          "const": true
+        },
+        "status": {
+          "$ref": "#/$defs/gateStatus"
+        },
+        "decidedAt": {
+          "oneOf": [
+            {
+              "type": "null"
+            },
+            {
+              "$ref": "#/$defs/dateTime"
+            }
+          ]
+        },
+        "decisionRequestId": {
+          "oneOf": [
+            { "type": "null" },
+            { "type": "string", "minLength": 1 }
+          ]
+        },
+        "manifestSha256": {
+          "oneOf": [
+            { "type": "null" },
+            { "$ref": "#/$defs/sha256" }
+          ]
+        },
+        "challengeCode": {
+          "oneOf": [
+            { "type": "null" },
+            { "type": "string", "pattern": "^CH-[A-Z0-9]{8,32}$" }
+          ]
+        },
+        "userResponseCanonical": {
+          "oneOf": [
+            { "type": "null" },
+            { "type": "string", "minLength": 1 }
+          ]
+        },
+        "userMessageSha256": {
+          "oneOf": [
+            { "type": "null" },
+            { "$ref": "#/$defs/sha256" }
+          ]
+        },
+        "confirmedBy": {
+          "oneOf": [
+            { "type": "null" },
+            { "const": "User" }
+          ]
+        },
+        "userStatementSummary": {
+          "oneOf": [
+            {
+              "type": "null"
+            },
+            {
+              "type": "string",
+              "minLength": 1
+            }
+          ]
+        },
+        "evidenceRefs": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          },
+          "uniqueItems": true
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "status": { "enum": ["Passed", "Failed"] }
+            },
+            "required": [
+              "status"
+            ]
+          },
+          "then": {
+            "properties": {
+              "decidedAt": {
+                "$ref": "#/$defs/dateTime"
+              },
+              "decisionRequestId": {
+                "type": "string",
+                "minLength": 1
+              },
+              "manifestSha256": {
+                "$ref": "#/$defs/sha256"
+              },
+              "challengeCode": {
+                "type": "string",
+                "pattern": "^CH-[A-Z0-9]{8,32}$"
+              },
+              "userResponseCanonical": {
+                "type": "string",
+                "minLength": 1
+              },
+              "userMessageSha256": {
+                "$ref": "#/$defs/sha256"
+              },
+              "confirmedBy": {
+                "const": "User"
+              },
+              "userStatementSummary": {
+                "type": "string",
+                "minLength": 1
+              },
+              "evidenceRefs": {
+                "minItems": 1
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "status": { "enum": ["NotRun", "NotApplicable"] }
+            },
+            "required": ["status"]
+          },
+          "then": {
+            "properties": {
+              "decidedAt": { "type": "null" },
+              "decisionRequestId": { "type": "null" },
+              "manifestSha256": { "type": "null" },
+              "challengeCode": { "type": "null" },
+              "userResponseCanonical": { "type": "null" },
+              "userMessageSha256": { "type": "null" },
+              "confirmedBy": { "type": "null" },
+              "userStatementSummary": { "type": "null" },
+              "evidenceRefs": { "maxItems": 0 }
+            }
+          }
+        }
+      ]
+    },
+    "boundaryRequestReference": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "requestId",
+        "status",
+        "summary",
+        "goalWorkCanContinue"
+      ],
+      "properties": {
+        "requestId": {
+          "type": "string",
+          "pattern": "^BR-[0-9]{3,}$"
+        },
+        "status": {
+          "enum": [
+            "Pending",
+            "Approved",
+            "Denied",
+            "Withdrawn"
+          ]
+        },
+        "summary": {
+          "type": "string",
+          "minLength": 1
+        },
+        "goalWorkCanContinue": {
+          "type": "boolean"
+        }
+      }
+    },
+    "blockingCondition": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "conditionKey",
+        "summary",
+        "consecutiveGoalTurns",
+        "safeWorkRemaining",
+        "alternativePathRemaining",
+        "pendingBoundaryRequestIds",
+        "goalBlockEligible"
+      ],
+      "properties": {
+        "conditionKey": {
+          "type": "string",
+          "minLength": 1
+        },
+        "summary": {
+          "type": "string",
+          "minLength": 1
+        },
+        "consecutiveGoalTurns": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "safeWorkRemaining": {
+          "type": "boolean"
+        },
+        "alternativePathRemaining": {
+          "type": "boolean"
+        },
+        "pendingBoundaryRequestIds": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "pattern": "^BR-[0-9]{3,}$"
+          },
+          "uniqueItems": true
+        },
+        "goalBlockEligible": {
+          "type": "boolean"
+        }
+      }
+    },
+    "nextAction": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "kind",
+        "owner",
+        "checkpoint",
+        "summary",
+        "blockedBy"
+      ],
+      "properties": {
+        "kind": {
+          "enum": [
+            "Continue",
+            "RunGate",
+            "FixFailure",
+            "AwaitUserConfirmation",
+            "MergeLane",
+            "StartNextCheckpoint",
+            "FinalizeGoal"
+          ]
+        },
+        "owner": {
+          "enum": [
+            "GoalAgent",
+            "RendererLane",
+            "CliLane",
+            "IntegrationOwner",
+            "User"
+          ]
+        },
+        "checkpoint": {
+          "$ref": "#/$defs/checkpoint"
+        },
+        "summary": {
+          "type": "string",
+          "minLength": 1
+        },
+        "blockedBy": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          },
+          "uniqueItems": true
+        }
+      }
+    }
+  }
+}

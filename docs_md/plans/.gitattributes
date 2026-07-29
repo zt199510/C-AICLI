@@ -1,0 +1,3 @@
+# Bootstrap control bytes are immutable across checkout platforms.
+.gitattributes -text
+07_cli_desktop_experience_refactor.plan.md -text
