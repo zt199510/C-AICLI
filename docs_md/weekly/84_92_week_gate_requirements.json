@@ -1,0 +1,1474 @@
+{
+  "schemaVersion": "1.0.0",
+  "registryVersion": "w84-w92-gate-requirements-v1",
+  "goalId": "c-aicli-cli-desktop-refactor-w84-w92",
+  "description": "Fail-closed semantic acceptance requirements for every Week84-92 Gate. A Gate cannot pass from an arbitrary green command: every required commandId, assertionId, evidence basename, minimum count, and applicable frozen policy must be satisfied.",
+  "fieldSemantics": {
+    "requiredCommandIds": "Gate result commands must contain every exact semantic commandId and be Passed. goal-evidence-semantic-validate binds the unique frozen semantic test-report; every other command binds both its Gate-local adapter observation report and at least one independent oracle/test verifier report. The verifier must raw-hash-bind the adapter report, exact candidate checkout, commandId, exit, source and test counts. Adapter output never self-attests Passed and never contributes Gate counts before verifier acceptance. Generic Passed JSON is not command execution evidence.",
+    "requiredAssertionIds": "Gate result acceptanceAssertions must contain every exact semantic assertionId, be Passed, and bind at least one resolved in-Gate evidenceRef.",
+    "minimumCommandCount": "Lower bound for executed command receipts; it is never smaller than requiredCommandIds length.",
+    "minimumTestCount": "Lower bound that both discovered and passed tests must satisfy. Every positive value requires a Gate-local test-report emitted by the bootstrap-frozen executor, bound to its source hash, exact Gate/candidate/allowed command/timestamps/exit and distinct hash-bound UTF-8 stdout/stderr; counts must be parsed from frozen runner output rather than supplied as an untrusted claim. A zero value requires zeroMinimumTestBasis.",
+    "requiredEvidenceKinds": "Required Gate-result evidence kinds from 84_92_week_gate_result.schema.json; each kind must resolve to a hash-bound item at the exact Gate-local canonical path under <group-root>/gate-evidence/<gateId>/, except the separately frozen provider-ledger-binding path.",
+    "requiredEvidenceBasenames": "Required evidence file basenames declared by the source plan; each basename must appear exactly once for its Gate, its path must be globally unique across Gate results, and each raw file hash plus JSON/test-report payload must reconcile with the Gate result and exact candidate.",
+    "commandControl": "The Gate-local prior-sealed command-control document, predecessor mode, source trust, source verification mapping, and role policy. Every nonsemantic product command requires one exact observation-only adapter plus an independent oracle/test with exact fully-qualified unittest arguments and verifiesCommandIds coverage. Provider runtimeDrivers must be strict-prior W84-G5 fixture/parser sources and cannot contribute verifier authority.",
+    "frozen": "References immutable numeric policies, viewport sets, workload shapes, and compatibility conditions defined in this manifest.",
+    "providerRequirement": "Null unless the source plan mandates real-provider or controlled-write turns for this Gate. Provider Gates also freeze the immutable boundary-decision path, allowed boundary modes, and exact package-launch receipt count.",
+    "controlledWrite": "True only for the two user-authorized controlled-write Gates."
+  },
+  "sourcePlans": [
+    "84_week_renderer_listener_retention_refactor_baseline.plan.md",
+    "85_week_renderer_feature_boundaries_state_split.plan.md",
+    "85_week_cli_composition_diagnostics_modules.plan.md",
+    "86_week_chat_first_shell_design_system.plan.md",
+    "86_week_cli_jobs_review_session_modules.plan.md",
+    "87_week_conversation_projection_timeline.plan.md",
+    "87_week_cli_exec_skills_queue_modules.plan.md",
+    "88_week_composer_inline_approval_task_controls.plan.md",
+    "88_week_cli_packs_artifacts_modules.plan.md",
+    "89_week_context_panel_terminal_review_workspace.plan.md",
+    "89_week_cli_automation_pipeline_compatibility.plan.md",
+    "90_week_cli_desktop_cross_lane_integration.plan.md",
+    "91_week_refactor_security_resource_hardening.plan.md",
+    "92_week_refactor_final_acceptance.plan.md"
+  ],
+  "frozenPolicies": {
+    "trusted-executor": {
+      "runnerId": "week84-92-trusted-executor-v1",
+      "sourcePath": "tools/week84_92_trusted_executor.py",
+      "sourceSha256": "7a1821e174d25e9456cd9d8f52a2397612a72cb5c64c653a7f81fc33050b1171",
+      "shellAllowed": false
+    },
+    "trusted-test-command": {
+      "policyId": "week84-92-semantic-test-v1",
+      "commandId": "goal-evidence-semantic-validate",
+      "executableRole": "python-current-isolated",
+      "arguments": [
+        "-I",
+        "-S",
+        "-E",
+        "-B",
+        "-X",
+        "utf8",
+        "-c",
+        "\nimport builtins\nimport hashlib\nimport importlib.machinery\nimport importlib.util\nimport json\nimport io\nimport os\nfrom pathlib import Path\nimport sys\nimport sysconfig\nimport tempfile\nimport types\nimport unittest\n\nLOADER_PROTOCOL = \"week84-92-isolated-repo-tools-loader-v1\"\nSITE_PROTOCOL = \"week84-92-semantic-site-modules-v1\"\nSITE_MARKER = \"CAICLI_SEMANTIC_SITE_MODULES=\"\nROOT_ENV = \"CAICLI_GOAL_REPO_ROOT\"\nENTRIES = (\n    (\"tools.week84_92_goal_integrity\", \"tools/week84_92_goal_integrity.py\"),\n    (\"tools.week84_92_evidence_anchor\", \"tools/week84_92_evidence_anchor.py\"),\n    (\"tools.week84_92_trusted_executor\", \"tools/week84_92_trusted_executor.py\"),\n    (\"tools.week84_92_provider_turn_harness\", \"tools/week84_92_provider_turn_harness.py\"),\n    (\"tools.week84_92_goal_validator\", \"tools/validate-week84-92-goal-evidence.py\"),\n    (\"tools.test_validate_week84_92_goal_evidence\", \"tools/test_validate_week84_92_goal_evidence.py\"),\n    (\"tools.test_week84_92_goal_integrity\", \"tools/test_week84_92_goal_integrity.py\"),\n    (\"tools.test_week84_92_gate_requirements\", \"tools/test_week84_92_gate_requirements.py\"),\n    (\"tools.test_week84_92_evidence_anchor\", \"tools/test_week84_92_evidence_anchor.py\"),\n    (\"tools.test_week84_92_trusted_executor\", \"tools/test_week84_92_trusted_executor.py\"),\n)\nREAD_SOURCES = (\n    \"tools/week84_92_commands/goal-contract-unittest.py\",\n    \"tools/week84_92_commands/goal-control-schema-validate.py\",\n    \"tools/week84_92_commands/prior-handoff-schema-validate.py\",\n    \"tools/week84_92_commands/trusted-executor-unittest.py\",\n    \"tools/week84_92_commands/week83-lineage-identity-verify.py\",\n)\nTEST_NAMES = tuple(name for name, _path in ENTRIES if name.startswith(\"tools.test_\"))\nALLOWED_SITE_ROOTS = (\n    (\"attr\", \"directory\"), (\"attrs\", \"directory\"),\n    (\"idna\", \"directory\"), (\"jsonpointer.py\", \"file\"),\n    (\"jsonschema\", \"directory\"),\n    (\"jsonschema_specifications\", \"directory\"),\n    (\"referencing\", \"directory\"),\n    (\"rfc3339_validator.py\", \"file\"),\n    (\"rfc3986_validator.py\", \"file\"),\n    (\"rpds\", \"directory\"), (\"six.py\", \"file\"),\n)\nsys.dont_write_bytecode = True\n\ndef canonical(value):\n    return json.dumps(value, ensure_ascii=False, sort_keys=True,\n                      separators=(\",\", \":\"), allow_nan=False).encode(\"utf-8\")\n\nraw_descriptor = sys.stdin.buffer.read(1024 * 1024 + 1)\nif len(raw_descriptor) > 1024 * 1024:\n    raise SystemExit(97)\ntry:\n    descriptor = json.loads(raw_descriptor.decode(\"utf-8\"))\nexcept (UnicodeDecodeError, json.JSONDecodeError):\n    raise SystemExit(97)\nexpected_descriptor_keys = {\n    \"protocol\", \"repoRoot\", \"entrySources\", \"readSources\"\n}\nif (\n    not isinstance(descriptor, dict)\n    or set(descriptor) != expected_descriptor_keys\n    or raw_descriptor != canonical(descriptor)\n    or descriptor.get(\"protocol\") != LOADER_PROTOCOL\n):\n    raise SystemExit(97)\ndeclared_sources = descriptor.get(\"entrySources\")\nif not isinstance(declared_sources, list) or len(declared_sources) != len(ENTRIES):\n    raise SystemExit(97)\ndeclared_reads = descriptor.get(\"readSources\")\nif not isinstance(declared_reads, list) or len(declared_reads) != len(READ_SOURCES):\n    raise SystemExit(97)\n\nroot_value = os.environ.pop(ROOT_ENV, None)\nif (\n    not isinstance(root_value, str)\n    or root_value != descriptor.get(\"repoRoot\")\n    or not os.path.isabs(root_value)\n):\n    raise SystemExit(97)\nroot = Path(os.path.realpath(root_value))\nif str(root) != os.path.abspath(root_value) or not root.is_dir():\n    raise SystemExit(97)\ntool_root = root / \"tools\"\nif not tool_root.is_dir() or tool_root.is_symlink():\n    raise SystemExit(97)\n\npurelib_value = sysconfig.get_path(\"purelib\")\nif not isinstance(purelib_value, str) or not os.path.isabs(purelib_value):\n    raise SystemExit(97)\npurelib = os.path.realpath(purelib_value)\nif purelib != os.path.abspath(purelib_value) or not os.path.isdir(purelib):\n    raise SystemExit(97)\ntry:\n    if os.path.commonpath((str(root), purelib)) == str(root):\n        raise SystemExit(97)\nexcept ValueError:\n    pass\npycache_guard = tempfile.TemporaryDirectory(prefix=\"caicli-semantic-pycache-\")\npycache_root = os.path.realpath(pycache_guard.name)\ntry:\n    if os.path.commonpath((str(root), pycache_root)) == str(root):\n        raise SystemExit(97)\nexcept ValueError:\n    pass\nsys.pycache_prefix = pycache_root\nsys.path.append(purelib)\nimport jsonschema\n\ntools_package = types.ModuleType(\"tools\")\ntools_package.__package__ = \"tools\"\ntools_package.__path__ = []\ntools_package.__spec__ = importlib.machinery.ModuleSpec(\n    \"tools\", loader=None, is_package=True\n)\nsys.modules[\"tools\"] = tools_package\n\nsource_by_path = {}\nfor declared, expected in zip(declared_sources, ENTRIES):\n    if (\n        not isinstance(declared, dict)\n        or set(declared) != {\"moduleName\", \"path\", \"sha256\"}\n        or declared.get(\"moduleName\") != expected[0]\n        or declared.get(\"path\") != expected[1]\n        or not isinstance(declared.get(\"sha256\"), str)\n        or len(declared[\"sha256\"]) != 64\n        or any(character not in \"0123456789abcdef\" for character in declared[\"sha256\"])\n    ):\n        raise SystemExit(97)\n    source_by_path[expected[1]] = declared\nfor declared, expected_path in zip(declared_reads, READ_SOURCES):\n    if (\n        not isinstance(declared, dict)\n        or set(declared) != {\"path\", \"sha256\"}\n        or declared.get(\"path\") != expected_path\n        or not isinstance(declared.get(\"sha256\"), str)\n        or len(declared[\"sha256\"]) != 64\n        or any(character not in \"0123456789abcdef\" for character in declared[\"sha256\"])\n    ):\n        raise SystemExit(97)\n    source_by_path[expected_path] = declared\n\nreal_open = open\nreal_spec_from_file_location = importlib.util.spec_from_file_location\n\ndef read_declared(relative):\n    declared = source_by_path.get(relative)\n    if declared is None:\n        raise SystemExit(97)\n    target = root.joinpath(*relative.split(\"/\"))\n    if (\n        not target.is_file()\n        or target.is_symlink()\n        or target.resolve() != target\n        or target.parent.resolve() != target.parent\n    ):\n        raise SystemExit(97)\n    with real_open(target, \"rb\") as handle:\n        raw = handle.read(16 * 1024 * 1024 + 1)\n    if (\n        len(raw) > 16 * 1024 * 1024\n        or hashlib.sha256(raw).hexdigest() != declared[\"sha256\"]\n    ):\n        raise SystemExit(97)\n    try:\n        text = raw.decode(\"utf-8\")\n    except UnicodeDecodeError:\n        raise SystemExit(97)\n    return target, text\n\nclass RawDeclaredLoader:\n    def __init__(self, name, relative):\n        self.name = name\n        self.relative = relative\n    def create_module(self, spec):\n        return None\n    def exec_module(self, module):\n        target, text = read_declared(self.relative)\n        module.__file__ = str(target)\n        exec(compile(text, str(target), \"exec\"), module.__dict__)\n\ndef guarded_spec_from_file_location(name, location, *args, **kwargs):\n    absolute = Path(os.path.realpath(os.fspath(location)))\n    try:\n        inside = os.path.commonpath((str(root), str(absolute))) == str(root)\n    except ValueError:\n        inside = False\n    if not inside:\n        return real_spec_from_file_location(name, location, *args, **kwargs)\n    relative = absolute.relative_to(root).as_posix()\n    declared = source_by_path.get(relative)\n    if declared is None:\n        raise ImportError(\"undeclared repository-local source\")\n    loader = RawDeclaredLoader(name, relative)\n    spec = importlib.machinery.ModuleSpec(name, loader, origin=str(absolute))\n    spec.has_location = True\n    return spec\n\nimportlib.util.spec_from_file_location = guarded_spec_from_file_location\n\nloaded = {}\nfor module_name, relative in ENTRIES:\n    target, text = read_declared(relative)\n    loader = RawDeclaredLoader(module_name, relative)\n    spec = importlib.machinery.ModuleSpec(module_name, loader, origin=str(target))\n    spec.has_location = True\n    module = importlib.util.module_from_spec(spec)\n    sys.modules[module_name] = module\n    setattr(tools_package, module_name.rsplit(\".\", 1)[1], module)\n    loader.exec_module(module)\n    if Path(module.__file__).resolve() != target:\n        raise SystemExit(97)\n    loaded[module_name] = module\n\nreal_builtin_open = builtins.open\nreal_io_open = io.open\ndef guarded_repo_python_open(real_function, file, mode=\"r\", *args, **kwargs):\n    if isinstance(file, int):\n        return real_function(file, mode, *args, **kwargs)\n    try:\n        absolute = Path(os.path.realpath(os.fspath(file)))\n        inside = os.path.commonpath((str(root), str(absolute))) == str(root)\n    except (TypeError, ValueError):\n        inside = False\n    if inside and absolute.suffix.casefold() == \".py\":\n        relative = absolute.relative_to(root).as_posix()\n        if any(flag in mode for flag in \"wax+\") or relative not in source_by_path:\n            raise PermissionError(\"undeclared repository-local Python access\")\n        read_declared(relative)\n    return real_function(file, mode, *args, **kwargs)\ndef guarded_builtin_open(file, mode=\"r\", *args, **kwargs):\n    return guarded_repo_python_open(real_builtin_open, file, mode, *args, **kwargs)\ndef guarded_io_open(file, mode=\"r\", *args, **kwargs):\n    return guarded_repo_python_open(real_io_open, file, mode, *args, **kwargs)\nbuiltins.open = guarded_builtin_open\nio.open = guarded_io_open\n\nvalidator = loaded[\"tools.week84_92_goal_validator\"]\nsemantic_exit = validator.run_cli([\"--repo-root\", str(root)])\nsuite = unittest.defaultTestLoader.loadTestsFromNames(list(TEST_NAMES))\nresult = unittest.TextTestRunner(stream=sys.stdout, verbosity=1).run(suite)\n\nfor _module_name, relative in ENTRIES:\n    read_declared(relative)\nfor relative in READ_SOURCES:\n    read_declared(relative)\n\npaths = set()\nallowed_module_tops = {\n    \"attr\", \"attrs\", \"idna\", \"jsonpointer\", \"jsonschema\",\n    \"jsonschema_specifications\", \"referencing\", \"rfc3339_validator\",\n    \"rfc3986_validator\", \"rpds\", \"six\",\n}\ndef allowed_site_relative(relative):\n    return any(\n        relative == root_name\n        if root_kind == \"file\"\n        else relative.startswith(root_name + \"/\")\n        for root_name, root_kind in ALLOWED_SITE_ROOTS\n    )\nfor required_name in sorted(allowed_module_tops):\n    required_module = sys.modules.get(required_name)\n    if required_module is None:\n        raise SystemExit(97)\n    required_spec = getattr(required_module, \"__spec__\", None)\n    required_origin = getattr(required_spec, \"origin\", None)\n    if not isinstance(required_origin, str):\n        raise SystemExit(97)\n    required_absolute = os.path.realpath(required_origin)\n    try:\n        required_inside = (\n            os.path.commonpath((purelib, required_absolute)) == purelib\n        )\n    except ValueError:\n        required_inside = False\n    if not required_inside or not os.path.isfile(required_absolute):\n        raise SystemExit(97)\n\nfor module in tuple(sys.modules.values()):\n    spec = getattr(module, \"__spec__\", None)\n    candidates = [getattr(module, \"__file__\", None),\n                  getattr(module, \"__cached__\", None),\n                  getattr(spec, \"origin\", None)]\n    for value in candidates:\n        if not isinstance(value, str):\n            continue\n        if value in {\"built-in\", \"frozen\", \"namespace\"}:\n            continue\n        absolute = os.path.realpath(value)\n        try:\n            inside = os.path.commonpath((purelib, absolute)) == purelib\n        except ValueError:\n            inside = False\n        if not inside:\n            continue\n        if not os.path.isfile(absolute):\n            raise SystemExit(97)\n        relative = os.path.relpath(absolute, purelib).replace(os.sep, \"/\")\n        if (\n            relative.startswith(\"../\")\n            or relative in {\"\", \".\", \"..\"}\n            or not allowed_site_relative(relative)\n        ):\n            raise SystemExit(97)\n        paths.add(relative)\n    locations = []\n    module_path = getattr(module, \"__path__\", None)\n    if module_path is not None:\n        locations.extend(list(module_path))\n    spec_locations = getattr(spec, \"submodule_search_locations\", None)\n    if spec_locations is not None:\n        locations.extend(list(spec_locations))\n    for value in locations:\n        if not isinstance(value, str):\n            continue\n        absolute = os.path.realpath(value)\n        try:\n            inside = os.path.commonpath((purelib, absolute)) == purelib\n        except ValueError:\n            inside = False\n        if not inside:\n            continue\n        if not os.path.isdir(absolute):\n            raise SystemExit(97)\n        relative = os.path.relpath(absolute, purelib).replace(os.sep, \"/\")\n        if not any(\n            root_kind == \"directory\"\n            and (relative == root_name or relative.startswith(root_name + \"/\"))\n            for root_name, root_kind in ALLOWED_SITE_ROOTS\n        ):\n            raise SystemExit(97)\npayload = {\"protocol\": SITE_PROTOCOL, \"paths\": sorted(paths)}\nprint(SITE_MARKER + json.dumps(payload, ensure_ascii=False, sort_keys=True,\n                               separators=(\",\", \":\"), allow_nan=False))\npycache_guard.cleanup()\nraise SystemExit(0 if semantic_exit == 0 and result.wasSuccessful() else 1)\n"
+      ],
+      "redactedInvocation": "python-current -I -S -E -B -X utf8 -c <week84-92-isolated-repo-tools-loader-v1>",
+      "countsSource": "python-unittest-output",
+      "shellAllowed": false,
+      "loaderProtocol": "week84-92-isolated-repo-tools-loader-v1",
+      "entrySources": [
+        {
+          "moduleName": "tools.week84_92_goal_integrity",
+          "path": "tools/week84_92_goal_integrity.py",
+          "sha256": "2276e3d2acd4b66c863e2f11a1458c811a7e6c37631365c77498e365a795feff"
+        },
+        {
+          "moduleName": "tools.week84_92_evidence_anchor",
+          "path": "tools/week84_92_evidence_anchor.py",
+          "sha256": "795ab1f9d8f300dafa90a1fc01a7757a3fbfd41699c001556b934473a00502ba"
+        },
+        {
+          "moduleName": "tools.week84_92_trusted_executor",
+          "path": "tools/week84_92_trusted_executor.py",
+          "sha256": "7a1821e174d25e9456cd9d8f52a2397612a72cb5c64c653a7f81fc33050b1171"
+        },
+        {
+          "moduleName": "tools.week84_92_provider_turn_harness",
+          "path": "tools/week84_92_provider_turn_harness.py",
+          "sha256": "6e3e7f5e6e9b5e09a0b58a00c632f0800f20f409407458d4fa07f874b9ba80ff"
+        },
+        {
+          "moduleName": "tools.week84_92_goal_validator",
+          "path": "tools/validate-week84-92-goal-evidence.py",
+          "sha256": "d3fee729ba22c407db9ff421e2921ad6304fb702cc3efbf5f5e76c49c4a91af5"
+        },
+        {
+          "moduleName": "tools.test_validate_week84_92_goal_evidence",
+          "path": "tools/test_validate_week84_92_goal_evidence.py",
+          "sha256": "a196223cfc5f2ff90c3fee473f1c3b3d7e421f61009cf59d4cca007b95564475"
+        },
+        {
+          "moduleName": "tools.test_week84_92_goal_integrity",
+          "path": "tools/test_week84_92_goal_integrity.py",
+          "sha256": "51bb2f19abb9a869b281e288c839d53485961083e44cea37b1f36fb99d816a75"
+        },
+        {
+          "moduleName": "tools.test_week84_92_gate_requirements",
+          "path": "tools/test_week84_92_gate_requirements.py",
+          "sha256": "ba66466d342ae77e0c34c5a121b5e73b59d0b2a3da932f3b50dd82aba8740198"
+        },
+        {
+          "moduleName": "tools.test_week84_92_evidence_anchor",
+          "path": "tools/test_week84_92_evidence_anchor.py",
+          "sha256": "b83ae8d4749d12cc57affb028c52c8523d6b02d9f11cdb7e399c939ee75c7f2e"
+        },
+        {
+          "moduleName": "tools.test_week84_92_trusted_executor",
+          "path": "tools/test_week84_92_trusted_executor.py",
+          "sha256": "f642819332d4a04429d3d445bd3a6adb14a14552857b746aaad64b112381ca0d"
+        }
+      ],
+      "readSources": [
+        {
+          "path": "tools/week84_92_commands/goal-contract-unittest.py",
+          "sha256": "aa45ef91d76ed8bf9ea5548c0d6970782379df1e7a041855f0db3cec9f9c84c2"
+        },
+        {
+          "path": "tools/week84_92_commands/goal-control-schema-validate.py",
+          "sha256": "eb84d98f26ce99acca13b87bc8ba7f7031229973ba95bf92ef5d07c657fd6e5b"
+        },
+        {
+          "path": "tools/week84_92_commands/prior-handoff-schema-validate.py",
+          "sha256": "b15e6e05bb3211fe4f032843b989820c712878c50376d54caa9bec0101390d20"
+        },
+        {
+          "path": "tools/week84_92_commands/trusted-executor-unittest.py",
+          "sha256": "f66f06a9671487dacacd6f9d24bb329d1f50c6935f14a41eb4e6a25a6e6d88c8"
+        },
+        {
+          "path": "tools/week84_92_commands/week83-lineage-identity-verify.py",
+          "sha256": "51cdc8cda5be5ad1735120274c6ccd5fd29f814ec1361d7e403f9a0f609ec1d0"
+        }
+      ]
+    },
+    "trusted-product-command": {
+      "policyId": "week84-92-product-command-v1",
+      "executableRole": "python-current-isolated",
+      "scriptRoot": "tools/week84_92_commands",
+      "argumentsTemplate": [
+        "-I",
+        "-S",
+        "-E",
+        "-B",
+        "-X",
+        "utf8",
+        "-c",
+        "import builtins\nimport hashlib\nimport importlib.abc\nimport importlib.util\nimport io\nimport json\nimport os\nimport sys\nimport types\n\nLIMIT = 8 * 1024 * 1024\nPROTOCOL = \"week84-92-adapter-invocation-v1\"\n\nclass DuplicateKey(ValueError):\n    pass\n\ndef pairs(values):\n    result = {}\n    for key, value in values:\n        if key in result:\n            raise DuplicateKey(key)\n        result[key] = value\n    return result\n\ndef canonical(value):\n    return json.dumps(\n        value, ensure_ascii=False, sort_keys=True, separators=(\",\", \":\"),\n        allow_nan=False,\n    ).encode(\"utf-8\")\n\ndef reject():\n    raise SystemExit(126)\n\ndef relative(value):\n    if not isinstance(value, str) or not value or \"\\\\\" in value:\n        reject()\n    parts = value.split(\"/\")\n    if any(part in {\"\", \".\", \"..\"} for part in parts):\n        reject()\n    return parts\n\ndef read_bound(root, path, expected):\n    parts = relative(path)\n    target = os.path.realpath(os.path.join(root, *parts))\n    try:\n        if os.path.commonpath((root, target)) != root or os.path.islink(target):\n            reject()\n        with open(target, \"rb\") as handle:\n            raw = handle.read(LIMIT + 1)\n    except OSError:\n        reject()\n    if len(raw) > LIMIT or hashlib.sha256(raw).hexdigest() != expected:\n        reject()\n    return target, raw\n\nif len(sys.argv) != 3:\n    reject()\nscript_path = sys.argv[1]\nscript_sha = sys.argv[2]\nroot = os.path.realpath(os.getcwd())\nscript_target, script_raw = read_bound(root, script_path, script_sha)\ninvocation_raw = sys.stdin.buffer.read(LIMIT + 1)\ntry:\n    invocation = json.loads(\n        invocation_raw.decode(\"utf-8\"), object_pairs_hook=pairs\n    )\nexcept (UnicodeDecodeError, ValueError, DuplicateKey):\n    reject()\nif canonical(invocation) != invocation_raw or set(invocation) != {\n    \"protocol\", \"sourceDependencies\", \"runtimeInputs\"\n} or invocation.get(\"protocol\") != PROTOCOL:\n    reject()\ndependencies = invocation.get(\"sourceDependencies\")\nruntime_inputs = invocation.get(\"runtimeInputs\")\nif (\n    not isinstance(dependencies, list)\n    or any(\n        not isinstance(item, dict)\n        or set(item) != {\"role\", \"path\", \"sha256\", \"gitBlobSha\", \"controlRevision\"}\n        or item.get(\"role\") not in {\"adapter\", \"oracle\", \"test\", \"fixture\", \"parser\"}\n        for item in dependencies\n    )\n    or not isinstance(runtime_inputs, list)\n    or any(\n        not isinstance(item, dict)\n        or set(item) != {\"path\", \"sha256\", \"kind\"}\n        or item.get(\"kind\") not in {\n            \"goal-state\", \"entry-snapshot\", \"handoff\",\n            \"handoff-verification\", \"gate-evidence\",\n        }\n        for item in runtime_inputs\n    )\n):\n    reject()\nallowed_repo_reads = {script_target: script_sha}\nbindings = {}\nfor item in dependencies:\n    target, raw = read_bound(root, item[\"path\"], item[\"sha256\"])\n    allowed_repo_reads[target] = item[\"sha256\"]\n    if item[\"path\"].endswith(\".py\"):\n        name = item[\"path\"][:-3].replace(\"/\", \".\")\n        if name in bindings and bindings[name][:2] != (item[\"path\"], item[\"sha256\"]):\n            reject()\n        bindings[name] = (item[\"path\"], item[\"sha256\"], raw)\nfor item in runtime_inputs:\n    target, raw = read_bound(root, item[\"path\"], item[\"sha256\"])\n    allowed_repo_reads[target] = hashlib.sha256(raw).hexdigest()\nfor module_name, (path, _expected, _raw) in tuple(bindings.items()):\n    components = module_name.split(\".\")[:-1]\n    for index in range(1, len(components) + 1):\n        parent = \".\".join(components[:index])\n        if parent not in sys.modules:\n            package = types.ModuleType(parent)\n            package.__package__ = parent\n            package.__path__ = [os.path.join(root, *components[:index])]\n            sys.modules[parent] = package\n\nclass Loader(importlib.abc.Loader):\n    def __init__(self, name):\n        self.name = name\n    def create_module(self, spec):\n        return None\n    def exec_module(self, module):\n        path, expected, frozen = bindings[self.name]\n        _target, current = read_bound(root, path, expected)\n        if current != frozen:\n            reject()\n        module.__file__ = path\n        module.__package__ = self.name.rpartition(\".\")[0]\n        exec(compile(current.decode(\"utf-8\"), path, \"exec\", dont_inherit=True), module.__dict__)\n\nclass Finder(importlib.abc.MetaPathFinder):\n    def find_spec(self, fullname, path=None, target=None):\n        if fullname in bindings:\n            return importlib.util.spec_from_loader(fullname, Loader(fullname))\n        local_file = os.path.join(root, *fullname.split(\".\")) + \".py\"\n        local_package = os.path.join(root, *fullname.split(\".\"), \"__init__.py\")\n        if os.path.isfile(local_file) or os.path.isfile(local_package):\n            raise ImportError(\"undeclared repository-local import\")\n        return None\n\nsys.meta_path.insert(0, Finder())\nreal_open = builtins.open\nreal_io_open = io.open\ndef guarded(real, file, mode, args, kwargs):\n    if isinstance(file, int):\n        return real(file, mode, *args, **kwargs)\n    value = os.fspath(file)\n    absolute = os.path.realpath(\n        value if os.path.isabs(value) else os.path.join(root, value)\n    )\n    try:\n        inside = os.path.commonpath((root, absolute)) == root\n    except ValueError:\n        inside = False\n    if inside and (\n        absolute not in allowed_repo_reads or any(flag in mode for flag in \"wax+\")\n    ):\n        raise PermissionError(\"undeclared repository-local file access\")\n    return real(file, mode, *args, **kwargs)\ndef guarded_open(file, mode=\"r\", *args, **kwargs):\n    return guarded(real_open, file, mode, args, kwargs)\ndef guarded_io_open(file, mode=\"r\", *args, **kwargs):\n    return guarded(real_io_open, file, mode, args, kwargs)\nbuiltins.open = guarded_open\nio.open = guarded_io_open\ntry:\n    source = script_raw.decode(\"utf-8\")\nexcept UnicodeDecodeError:\n    reject()\nnamespace = {\n    \"__name__\": \"__main__\", \"__file__\": script_path,\n    \"__package__\": None, \"__cached__\": None, \"__spec__\": None,\n}\nsys.argv = [script_path]\nexec(compile(source, script_path, \"exec\", dont_inherit=True), namespace, namespace)\n",
+        "{scriptPath}",
+        "{scriptSha256}"
+      ],
+      "redactedInvocationTemplate": "python-current -I -S -E -B -X utf8 -c <week84-92-in-memory-command-adapter-v1:{commandId}>",
+      "shellAllowed": false
+    },
+    "trusted-provider-command": {
+      "policyId": "week84-92-provider-turn-v1",
+      "executableRole": "python-current-isolated",
+      "sourcePath": "tools/week84_92_provider_turn_harness.py",
+      "sourceSha256": "6e3e7f5e6e9b5e09a0b58a00c632f0800f20f409407458d4fa07f874b9ba80ff",
+      "scenarioSources": {
+        "provider-read-only": {
+          "path": "tools/week84_92_provider_scenarios/provider_read_only.py",
+          "sha256": "6d9465ddf0c382b6523f6270296450d48b36f2cda6845b806ccd3c6d47f68a1d"
+        },
+        "provider-recovery": {
+          "path": "tools/week84_92_provider_scenarios/provider_recovery.py",
+          "sha256": "d689301600bcd9226030408e1217744aea7af8aecf2ef340d0b39531704cb44c"
+        },
+        "provider-resource": {
+          "path": "tools/week84_92_provider_scenarios/provider_resource.py",
+          "sha256": "e4b9388993b9d3e13658ed81a833c67755e27b325bcdee9647fc3d8cb59f850d"
+        },
+        "controlled-write": {
+          "path": "tools/week84_92_provider_scenarios/controlled_write.py",
+          "sha256": "457c7eaf8973e7b6330ceb34e5b53f4382a66f50057a37e14797c67280620a81"
+        }
+      },
+      "argumentsTemplate": [
+        "-I",
+        "-S",
+        "-E",
+        "-B",
+        "-X",
+        "utf8",
+        "{sourcePath}",
+        "--descriptor",
+        "{descriptorPath}",
+        "--observation",
+        "{observationPath}"
+      ],
+      "redactedInvocation": "python-current -I -S -E -B -X utf8 <trusted-provider-command> --descriptor <trusted-descriptor> --observation <trusted-observation>",
+      "shellAllowed": false,
+      "allowedBatchSizes": {
+        "provider-read-only": [
+          1
+        ],
+        "provider-recovery": [
+          2
+        ],
+        "provider-resource": [
+          6
+        ],
+        "controlled-write": [
+          1
+        ]
+      },
+      "observedRequestProtocol": "week84-92-observed-provider-request-v1"
+    },
+    "trusted-git": {
+      "policyId": "week84-92-git-tool-v1",
+      "executableRole": "git-frozen-core",
+      "version": "2.47.1.windows.2",
+      "executableBytes": 4151144,
+      "executableSha256": "99aa707073dc30ae0f2259dac777041e69ee90bbb8977174a1832a708b1fbb61",
+      "shellAllowed": false
+    },
+    "no-open-critical-issues": {
+      "openP0Max": 0,
+      "openP1Max": 0
+    },
+    "owned-cleanup-zero": {
+      "ownedProcessDeltaMax": 0,
+      "ownedTempDeltaMax": 0,
+      "ownedConfigDeltaMax": 0
+    },
+    "desktop-protocol-v1": {
+      "invokeCount": 39,
+      "eventCount": 2,
+      "canonicalHashMustMatchBaseline": true
+    },
+    "cli-command-tree": {
+      "topLevelCommandCount": 26,
+      "registrationOrderMustMatchBaseline": true,
+      "unreviewedDifferenceMax": 0
+    },
+    "compatibility-zero": {
+      "unreviewedDifferenceMax": 0,
+      "commandHelpOutputExitMismatchMax": 0
+    },
+    "renderer-resource": {
+      "listenerDeltaMax": 40,
+      "rendererPrivateBytesDeltaPercentMax": 15,
+      "domObservedMustNotExceedEntryLimit": true,
+      "resyncObservedMustNotExceedEntryLimit": true,
+      "forcedGcAllowed": false,
+      "rendererReloadAllowed": false,
+      "extendedIdleAllowed": false,
+      "workloadReductionAllowed": false
+    },
+    "desktop-three-viewports": {
+      "viewports": [
+        "1440x900",
+        "1024x768",
+        "800x900"
+      ],
+      "horizontalOverflowPixelsMax": 0,
+      "criticalOverlapCountMax": 0,
+      "unreachableControlCountMax": 0
+    },
+    "chat-shell-visual-matrix": {
+      "fixtureCount": 5,
+      "viewportCount": 3,
+      "caseCount": 15
+    },
+    "conversation-bounds": {
+      "unitItemCount": 2000,
+      "e2eItemCount": 240,
+      "observedMustNotExceedEntryLimit": true
+    },
+    "terminal-bounds": {
+      "rendererTailBytes": 8192,
+      "protocolBoundaryBytes": 65536
+    },
+    "provider-budget": {
+      "goalTurnCap": 120,
+      "reservationBeforeChildRequired": true,
+      "crashAndFailedReservationsCount": true,
+      "attemptCompletionAndFinalizationRequired": true,
+      "profileCount": 5,
+      "warmupTurnsPerProfile": 1,
+      "measuredTurnsPerProfile": 5,
+      "profilesMustBeConsecutive": true
+    },
+    "controlled-write-shape": {
+      "maximumRunsPerAuthorizedWeek": 1,
+      "workspacePattern": "caicli-week*-write-*",
+      "onlyChangedPath": "result.txt",
+      "transition": "fail-to-pass",
+      "verificationCommandKind": "frozen-dotnet-msbuild",
+      "durableApprovalCount": 2,
+      "trackedConsumedTombstoneRequired": true,
+      "tombstoneSingleFirstAddImmutable": true,
+      "writeReservationConsumesLease": true,
+      "automaticReplayMax": 0,
+      "cleanupRequired": true
+    },
+    "exact-candidate-identity": {
+      "sourceRevisionRequired": true,
+      "cleanWorktreeRequired": true,
+      "dependencyLockRequired": true,
+      "rawEvidenceHashesRequired": true
+    },
+    "shared-freeze-reviewed": {
+      "unreviewedDifferenceMax": 0,
+      "sourceLaneReasonAndEvidenceRequired": true
+    }
+  },
+  "workloads": {
+    "week84-listener-ownership": "Frozen approval/interruption/recovery/cancel and symmetric two-frame observation sequence.",
+    "week77-five-profile": "Existing five-profile Desktop resource qualification.",
+    "week80-c0-c7": "Existing Week80 C0-C7 resource controls.",
+    "week81-83-projection": "Existing projection and recovery regressions.",
+    "provider-five-profile": "Five consecutive profiles, each one warm-up plus five measured turns.",
+    "desktop-shell-15-cases": "Five frozen fixtures across the three frozen viewports.",
+    "conversation-2000-240": "2,000-item unit fixture and 240-item E2E fixture.",
+    "terminal-lifecycle": "Open/input/cancel/close and panel unmount/remount ownership scenarios.",
+    "cli-full-scenario-manifest": "Baseline and candidate command/help/output/error/schema/exit scenarios with identical fixtures.",
+    "cross-surface-matrix": "Equivalent CLI and AppHost safety conclusions plus package/store/config isolation.",
+    "independent-dual-build": "Two clean build roots from the exact Week92 candidate."
+  },
+  "gateCount": 104,
+  "gates": [
+    {
+      "week": 84, "lane": "baseline", "gateId": "W84-G0", "resultPath": "artifacts/week84-renderer-listener-retention/gates/W84-G0.json",
+      "commandControl": {"path": "docs_md/weekly/84_92_command_control/W84-G0.json", "sourceTrust": "bootstrap-external-review", "predecessorMode": "w84-bootstrap-exception", "rolePolicy": {"requiredAll": ["adapter"], "requiredAny": [["oracle", "test"]], "optional": ["fixture", "parser"]}},
+      "sourcePlan": "84_week_renderer_listener_retention_refactor_baseline.plan.md", "gateKind": "entry-lineage",
+      "requiredCommandIds": ["goal-contract-unittest", "trusted-executor-unittest", "goal-control-schema-validate", "prior-handoff-schema-validate", "week83-lineage-identity-verify", "goal-evidence-semantic-validate"],
+      "requiredAssertionIds": ["W84-G0.lineage-complete", "W84-G0.identity-hashes-match", "W84-G0.bootstrap-diff-control-plane-only", "W84-G0.trusted-executor-runtime-controls-passed", "evidence-hashes-match"],
+      "minimumCommandCount": 6, "minimumTestCount": 1, "zeroMinimumTestBasis": null,
+      "requiredEvidenceKinds": ["identity", "json", "plan-reference", "test-report"], "requiredEvidenceBasenames": ["entry.json", "baseline-identity.json", "week83-handoff-verification.json", "goal-contract-unittest.json", "trusted-executor-unittest.json"],
+      "manualAcceptanceId": null, "providerRequirement": null, "controlledWrite": false,
+      "frozen": {"thresholdRefs": ["exact-candidate-identity"], "viewportSet": null, "workloadRefs": [], "compatibilityFlags": ["bootstrap-control-candidate-exact", "week83-product-input-tree-exact", "week83-documentation-closure-exact", "bootstrap-product-diff-zero"]}
+    },
+    {
+      "week": 84, "lane": "baseline", "gateId": "W84-G1", "resultPath": "artifacts/week84-renderer-listener-retention/gates/W84-G1.json",
+      "commandControl": {"path": "docs_md/weekly/84_92_command_control/W84-G1.json", "sourceTrust": "prior-sealed", "predecessorMode": "prior-gate", "rolePolicy": {"requiredAll": ["adapter"], "requiredAny": [["oracle", "test"]], "optional": ["fixture", "parser"]}},
+      "sourcePlan": "84_week_renderer_listener_retention_refactor_baseline.plan.md", "gateKind": "regression-baseline",
+      "requiredCommandIds": ["listener-ownership-regression-baseline", "listener-census-collect", "first-failure-preservation-validate", "goal-evidence-semantic-validate"],
+      "requiredAssertionIds": ["W84-G1.baseline-stably-red", "W84-G1.frozen-scenario-complete", "W84-G1.symmetric-observation", "first-failure-preserved"],
+      "minimumCommandCount": 4, "minimumTestCount": 1, "zeroMinimumTestBasis": null,
+      "requiredEvidenceKinds": ["test-report", "json", "text-log"], "requiredEvidenceBasenames": ["regression-before.json", "listener-ownership.json"],
+      "manualAcceptanceId": null, "providerRequirement": null, "controlledWrite": false,
+      "frozen": {"thresholdRefs": ["renderer-resource"], "viewportSet": null, "workloadRefs": ["week84-listener-ownership"], "compatibilityFlags": ["credential-free", "week83-scenario-semantic-parity"]}
+    },
+    {
+      "week": 84, "lane": "baseline", "gateId": "W84-G2", "resultPath": "artifacts/week84-renderer-listener-retention/gates/W84-G2.json",
+      "commandControl": {"path": "docs_md/weekly/84_92_command_control/W84-G2.json", "sourceTrust": "prior-sealed", "predecessorMode": "prior-gate", "rolePolicy": {"requiredAll": ["adapter"], "requiredAny": [["oracle", "test"]], "optional": ["fixture", "parser"]}},
+      "sourcePlan": "84_week_renderer_listener_retention_refactor_baseline.plan.md", "gateKind": "ownership-classification",
+      "requiredCommandIds": ["listener-ownership-regression-baseline", "listener-owner-classification-verify", "minimal-diff-scope-verify", "goal-evidence-semantic-validate"],
+      "requiredAssertionIds": ["W84-G2.listener-ownership-classified", "W84-G2.product-observer-measurement-separated", "W84-G2.remediation-scope-evidence-bound"],
+      "minimumCommandCount": 4, "minimumTestCount": 1, "zeroMinimumTestBasis": null,
+      "requiredEvidenceKinds": ["json", "diff", "test-report"], "requiredEvidenceBasenames": ["listener-ownership.json", "regression-before.json", "regression-after.json"],
+      "manualAcceptanceId": null, "providerRequirement": null, "controlledWrite": false,
+      "frozen": {"thresholdRefs": ["renderer-resource"], "viewportSet": null, "workloadRefs": ["week84-listener-ownership"], "compatibilityFlags": ["observer-fix-not-product-revision", "minimal-owner-scoped-change"]}
+    },
+    {
+      "week": 84, "lane": "baseline", "gateId": "W84-G3", "resultPath": "artifacts/week84-renderer-listener-retention/gates/W84-G3.json",
+      "commandControl": {"path": "docs_md/weekly/84_92_command_control/W84-G3.json", "sourceTrust": "prior-sealed", "predecessorMode": "prior-gate", "rolePolicy": {"requiredAll": ["adapter"], "requiredAny": [["oracle", "test"]], "optional": ["fixture", "parser"]}},
+      "sourcePlan": "84_week_renderer_listener_retention_refactor_baseline.plan.md", "gateKind": "targeted-regression",
+      "requiredCommandIds": ["listener-ownership-regression-candidate", "renderer-semantic-regression", "resource-bound-verify", "goal-evidence-semantic-validate"],
+      "requiredAssertionIds": ["W84-G3.targeted-regression-green", "W84-G3.listener-dom-resync-within-frozen-bound", "W84-G3.observable-semantics-unchanged"],
+      "minimumCommandCount": 4, "minimumTestCount": 1, "zeroMinimumTestBasis": null,
+      "requiredEvidenceKinds": ["test-report", "json", "diff"], "requiredEvidenceBasenames": ["regression-after.json", "listener-ownership.json"],
+      "manualAcceptanceId": null, "providerRequirement": null, "controlledWrite": false,
+      "frozen": {"thresholdRefs": ["renderer-resource"], "viewportSet": null, "workloadRefs": ["week84-listener-ownership"], "compatibilityFlags": ["baseline-red-candidate-green", "desktop-behavior-parity"]}
+    },
+    {
+      "week": 84, "lane": "baseline", "gateId": "W84-G4", "resultPath": "artifacts/week84-renderer-listener-retention/gates/W84-G4.json",
+      "commandControl": {"path": "docs_md/weekly/84_92_command_control/W84-G4.json", "sourceTrust": "prior-sealed", "predecessorMode": "prior-gate", "rolePolicy": {"requiredAll": ["adapter"], "requiredAny": [["oracle", "test"]], "optional": ["fixture", "parser"]}},
+      "sourcePlan": "84_week_renderer_listener_retention_refactor_baseline.plan.md", "gateKind": "credential-free-full-matrix",
+      "requiredCommandIds": ["dotnet-release-build", "dotnet-release-full-test", "desktop-verify", "desktop-e2e-unpacked", "desktop-e2e-packaged", "dependency-package-security-audit", "desktop-accessibility-protocol-three-round", "resource-control-full-matrix", "owned-cleanup-verify", "goal-evidence-semantic-validate"],
+      "requiredAssertionIds": ["W84-G4.full-matrix-all-green", "W84-G4.no-provider-or-env-read", "W84-G4.first-run-results-preserved", "open-p0-p1-zero", "owned-cleanup-zero"],
+      "minimumCommandCount": 10, "minimumTestCount": 1, "zeroMinimumTestBasis": null,
+      "requiredEvidenceKinds": ["test-report", "json", "text-log"], "requiredEvidenceBasenames": ["credential-free.json", "regression-after.json", "final-summary.json"],
+      "manualAcceptanceId": null, "providerRequirement": null, "controlledWrite": false,
+      "frozen": {"thresholdRefs": ["no-open-critical-issues", "owned-cleanup-zero", "renderer-resource", "desktop-protocol-v1"], "viewportSet": null, "workloadRefs": ["week77-five-profile", "week80-c0-c7", "week81-83-projection", "week84-listener-ownership"], "compatibilityFlags": ["credential-free", "serial-first-result-recording", "applicable-matrix-complete"]}
+    },
+    {
+      "week": 84, "lane": "baseline", "gateId": "W84-G5", "resultPath": "artifacts/week84-renderer-listener-retention/gates/W84-G5.json",
+      "commandControl": {"path": "docs_md/weekly/84_92_command_control/W84-G5.json", "sourceTrust": "prior-sealed", "predecessorMode": "prior-gate", "rolePolicy": {"requiredAll": ["adapter"], "requiredAny": [["oracle", "test"]], "optional": ["fixture", "parser"]}},
+      "sourcePlan": "84_week_renderer_listener_retention_refactor_baseline.plan.md", "gateKind": "exact-candidate-package",
+      "requiredCommandIds": ["clean-candidate-revision-verify", "desktop-package-rebuild", "package-identity-inventory", "raw-evidence-sha256-reconcile", "goal-evidence-semantic-validate"],
+      "requiredAssertionIds": ["W84-G5.candidate-clean", "W84-G5.package-tree-appasar-apphost-renderer-bound", "W84-G5.package-built-from-exact-source"],
+      "minimumCommandCount": 5, "minimumTestCount": 1, "zeroMinimumTestBasis": null,
+      "requiredEvidenceKinds": ["identity", "json", "test-report"], "requiredEvidenceBasenames": ["baseline-identity.json", "credential-free.json"],
+      "manualAcceptanceId": null, "providerRequirement": null, "controlledWrite": false,
+      "frozen": {"thresholdRefs": ["exact-candidate-identity"], "viewportSet": null, "workloadRefs": [], "compatibilityFlags": ["exact-package-identity", "no-skip-build", "clean-revision", "provider-runtime-drivers-first-add-sealed"]}
+    },
+    {
+      "week": 84, "lane": "baseline", "gateId": "W84-G6", "resultPath": "artifacts/week84-renderer-listener-retention/gates/W84-G6.json",
+      "commandControl": {"path": "docs_md/weekly/84_92_command_control/W84-G6.json", "sourceTrust": "prior-sealed", "predecessorMode": "prior-gate", "rolePolicy": {"requiredAll": ["adapter"], "requiredAny": [["oracle", "test"]], "optional": ["fixture", "parser"]}},
+      "sourcePlan": "84_week_renderer_listener_retention_refactor_baseline.plan.md", "gateKind": "provider-non-write",
+      "requiredCommandIds": ["provider-budget-preflight", "provider-runtime-journal-validate", "provider-read-only-harness", "provider-recovery-harness", "provider-receipt-validate", "goal-evidence-semantic-validate"],
+      "requiredAssertionIds": ["W84-G6.provider-read-only-passed", "W84-G6.provider-recovery-passed", "W84-G6.minimum-three-turns-ledgered", "W84-G6.write-ahead-reservations-finalized", "W84-G6.secrets-absent-from-evidence"],
+      "minimumCommandCount": 6, "minimumTestCount": 2, "zeroMinimumTestBasis": null,
+      "requiredEvidenceKinds": ["json", "test-report"], "requiredEvidenceBasenames": ["provider-ledger-binding.json", "provider-readonly.json", "provider-recovery.json"],
+      "manualAcceptanceId": null,
+      "providerRequirement": {"minimumTurns": 3, "scopes": ["provider-read-only", "provider-recovery"], "receiptBasenames": ["provider-readonly.json", "provider-recovery.json"], "consecutiveProfileCount": 0, "warmupTurnsPerProfile": 0, "measuredTurnsPerProfile": 0, "boundaryDecisionPath": "docs_md/weekly/84_92_provider_boundary_decisions/W84-G6.json", "allowedBoundaryModes": ["strong-isolation", "cooperative-candidate"], "packageLaunchReceiptCount": 2},
+      "controlledWrite": false,
+      "frozen": {"thresholdRefs": ["provider-budget", "exact-candidate-identity"], "viewportSet": null, "workloadRefs": ["week84-listener-ownership"], "compatibilityFlags": ["declared-provider-boundary-mode", "exact-package-tree-launched", "package-launch-receipt", "provider-runtime-drivers-prior-sealed", "same-recovery-semantics", "secret-redaction"]}
+    },
+    {
+      "week": 84, "lane": "baseline", "gateId": "W84-G7", "resultPath": "artifacts/week84-renderer-listener-retention/gates/W84-G7.json",
+      "commandControl": {"path": "docs_md/weekly/84_92_command_control/W84-G7.json", "sourceTrust": "prior-sealed", "predecessorMode": "prior-gate", "rolePolicy": {"requiredAll": ["adapter"], "requiredAny": [["oracle", "test"]], "optional": ["fixture", "parser"]}},
+      "sourcePlan": "84_week_renderer_listener_retention_refactor_baseline.plan.md", "gateKind": "provider-resource",
+      "requiredCommandIds": ["provider-budget-preflight", "provider-runtime-journal-validate", "provider-five-profile-harness", "provider-resource-receipts-validate", "goal-evidence-semantic-validate"],
+      "requiredAssertionIds": ["W84-G7.five-profiles-consecutive", "W84-G7.each-profile-one-warmup-five-measured", "W84-G7.minimum-thirty-turns-ledgered", "W84-G7.write-ahead-reservations-finalized", "W84-G7.all-resource-bounds-passed"],
+      "minimumCommandCount": 5, "minimumTestCount": 5, "zeroMinimumTestBasis": null,
+      "requiredEvidenceKinds": ["json", "test-report"], "requiredEvidenceBasenames": ["provider-ledger-binding.json", "provider-resource-profile-1.json", "provider-resource-profile-2.json", "provider-resource-profile-3.json", "provider-resource-profile-4.json", "provider-resource-profile-5.json"],
+      "manualAcceptanceId": null,
+      "providerRequirement": {"minimumTurns": 30, "scopes": ["provider-resource"], "receiptBasenames": ["provider-resource-profile-1.json", "provider-resource-profile-2.json", "provider-resource-profile-3.json", "provider-resource-profile-4.json", "provider-resource-profile-5.json"], "consecutiveProfileCount": 5, "warmupTurnsPerProfile": 1, "measuredTurnsPerProfile": 5, "boundaryDecisionPath": "docs_md/weekly/84_92_provider_boundary_decisions/W84-G6.json", "allowedBoundaryModes": ["strong-isolation", "cooperative-candidate"], "packageLaunchReceiptCount": 5},
+      "controlledWrite": false,
+      "frozen": {"thresholdRefs": ["provider-budget", "renderer-resource"], "viewportSet": null, "workloadRefs": ["provider-five-profile"], "compatibilityFlags": ["declared-provider-boundary-mode", "exact-package-tree-launched", "package-launch-receipt", "provider-runtime-drivers-prior-sealed", "no-partial-profile-rerun", "failed-attempts-ledgered", "secret-redaction"]}
+    },
+    {
+      "week": 84, "lane": "baseline", "gateId": "W84-G8", "resultPath": "artifacts/week84-renderer-listener-retention/gates/W84-G8.json",
+      "commandControl": {"path": "docs_md/weekly/84_92_command_control/W84-G8.json", "sourceTrust": "prior-sealed", "predecessorMode": "prior-gate", "rolePolicy": {"requiredAll": ["adapter"], "requiredAny": [["oracle", "test"]], "optional": ["fixture", "parser"]}},
+      "sourcePlan": "84_week_renderer_listener_retention_refactor_baseline.plan.md", "gateKind": "controlled-write",
+      "requiredCommandIds": ["non-write-gates-precondition-verify", "controlled-write-tombstone-validate", "provider-runtime-journal-validate", "controlled-write-harness", "controlled-write-receipt-validate", "goal-evidence-semantic-validate"],
+      "requiredAssertionIds": ["W84-G8.single-controlled-write-passed", "W84-G8.only-result-txt-fail-to-pass", "W84-G8.two-distinct-durable-approvals", "W84-G8.tombstone-first-add-immutable", "W84-G8.write-reserved-before-child", "W84-G8.no-replay-and-cleanup-zero"],
+      "minimumCommandCount": 6, "minimumTestCount": 1, "zeroMinimumTestBasis": null,
+      "requiredEvidenceKinds": ["json", "test-report"], "requiredEvidenceBasenames": ["provider-ledger-binding.json", "controlled-write.json"],
+      "manualAcceptanceId": null,
+      "providerRequirement": {"minimumTurns": 1, "scopes": ["controlled-write"], "receiptBasenames": ["controlled-write.json"], "consecutiveProfileCount": 0, "warmupTurnsPerProfile": 0, "measuredTurnsPerProfile": 0, "boundaryDecisionPath": "docs_md/weekly/84_92_provider_boundary_decisions/W84-G6.json", "allowedBoundaryModes": ["strong-isolation", "cooperative-candidate"], "packageLaunchReceiptCount": 1},
+      "controlledWrite": true,
+      "frozen": {"thresholdRefs": ["provider-budget", "controlled-write-shape", "owned-cleanup-zero", "exact-candidate-identity"], "viewportSet": null, "workloadRefs": [], "compatibilityFlags": ["declared-provider-boundary-mode", "exact-package-tree-launched", "package-launch-receipt", "provider-runtime-drivers-prior-sealed", "all-non-write-gates-passed-first", "harness-owned-path-only", "single-frozen-msbuild-command"]}
+    },
+    {
+      "week": 84, "lane": "baseline", "gateId": "W84-G9", "resultPath": "artifacts/week84-renderer-listener-retention/gates/W84-G9.json",
+      "commandControl": {"path": "docs_md/weekly/84_92_command_control/W84-G9.json", "sourceTrust": "prior-sealed", "predecessorMode": "prior-gate", "rolePolicy": {"requiredAll": ["adapter"], "requiredAny": [["oracle", "test"]], "optional": ["fixture", "parser"]}},
+      "sourcePlan": "84_week_renderer_listener_retention_refactor_baseline.plan.md", "gateKind": "closure-handoff",
+      "requiredCommandIds": ["prior-week-gates-reconcile", "owned-cleanup-verify", "documentation-evidence-reconcile", "handoff-readiness-validate", "handoff-alias-plan-validate", "goal-evidence-semantic-validate"],
+      "requiredAssertionIds": ["W84-G9.prior-gates-passed", "open-p0-p1-zero", "owned-cleanup-zero", "W84-G9.baseline-ready-summary", "W84-G9.handoff-alias-plan-complete"],
+      "minimumCommandCount": 6, "minimumTestCount": 1, "zeroMinimumTestBasis": null,
+      "requiredEvidenceKinds": ["json", "identity", "plan-reference", "test-report"], "requiredEvidenceBasenames": ["final-summary.json", "handoff-readiness.json"],
+      "manualAcceptanceId": null, "providerRequirement": null, "controlledWrite": false,
+      "frozen": {"thresholdRefs": ["no-open-critical-issues", "owned-cleanup-zero", "exact-candidate-identity"], "viewportSet": null, "workloadRefs": [], "compatibilityFlags": ["all-w84-gates-passed", "baseline-ready-for-refactor", "handoff-content-canonical-equivalence"]}
+    },
+    {
+      "week": 85, "lane": "renderer", "gateId": "W85-R0", "resultPath": "artifacts/week85-renderer-feature-boundaries/gates/W85-R0.json",
+      "commandControl": {"path": "docs_md/weekly/84_92_command_control/W85-R0.json", "sourceTrust": "prior-sealed", "predecessorMode": "entry-base", "rolePolicy": {"requiredAll": ["adapter"], "requiredAny": [["oracle", "test"]], "optional": ["fixture", "parser"]}},
+      "sourcePlan": "85_week_renderer_feature_boundaries_state_split.plan.md", "gateKind": "entry-lineage",
+      "requiredCommandIds": ["goal-control-schema-validate", "prior-handoff-schema-validate", "week84-gates-reconcile", "goal-evidence-semantic-validate"],
+      "requiredAssertionIds": ["W85-R0.week84-clean-handoff-valid", "W85-R0.protocol-inventory-39-plus-2", "W85-R0.renderer-worktree-clean", "open-p0-p1-zero"],
+      "minimumCommandCount": 4, "minimumTestCount": 1, "zeroMinimumTestBasis": null,
+      "requiredEvidenceKinds": ["identity", "json", "test-report"], "requiredEvidenceBasenames": ["baseline-identity.json", "week84-baseline-handoff.json"],
+      "manualAcceptanceId": null, "providerRequirement": null, "controlledWrite": false,
+      "frozen": {"thresholdRefs": ["exact-candidate-identity", "desktop-protocol-v1", "no-open-critical-issues"], "viewportSet": null, "workloadRefs": [], "compatibilityFlags": ["week84-handoff-ready", "renderer-cli-worktree-isolation"]}
+    },
+    {
+      "week": 85, "lane": "renderer", "gateId": "W85-R1", "resultPath": "artifacts/week85-renderer-feature-boundaries/gates/W85-R1.json",
+      "commandControl": {"path": "docs_md/weekly/84_92_command_control/W85-R1.json", "sourceTrust": "prior-sealed", "predecessorMode": "prior-gate", "rolePolicy": {"requiredAll": ["adapter"], "requiredAny": [["oracle", "test"]], "optional": ["fixture", "parser"]}},
+      "sourcePlan": "85_week_renderer_feature_boundaries_state_split.plan.md", "gateKind": "characterization",
+      "requiredCommandIds": ["renderer-characterization-suite", "notification-stale-cleanup-characterization", "characterization-inventory-validate", "goal-evidence-semantic-validate"],
+      "requiredAssertionIds": ["W85-R1.migration-paths-covered", "W85-R1.races-characterized-before-migration", "W85-R1.public-facade-shape-frozen"],
+      "minimumCommandCount": 4, "minimumTestCount": 1, "zeroMinimumTestBasis": null,
+      "requiredEvidenceKinds": ["test-report", "json"], "requiredEvidenceBasenames": ["characterization-results.json", "test-results.json"],
+      "manualAcceptanceId": null, "providerRequirement": null, "controlledWrite": false,
+      "frozen": {"thresholdRefs": ["desktop-protocol-v1"], "viewportSet": null, "workloadRefs": ["week81-83-projection", "week84-listener-ownership"], "compatibilityFlags": ["existing-behavior-frozen", "compatibility-facade-shape-frozen"]}
+    },
+    {
+      "week": 85, "lane": "renderer", "gateId": "W85-R2", "resultPath": "artifacts/week85-renderer-feature-boundaries/gates/W85-R2.json",
+      "commandControl": {"path": "docs_md/weekly/84_92_command_control/W85-R2.json", "sourceTrust": "prior-sealed", "predecessorMode": "prior-gate", "rolePolicy": {"requiredAll": ["adapter"], "requiredAny": [["oracle", "test"]], "optional": ["fixture", "parser"]}},
+      "sourcePlan": "85_week_renderer_feature_boundaries_state_split.plan.md", "gateKind": "architecture-implementation",
+      "requiredCommandIds": ["desktop-gateway-validation-test", "renderer-global-bridge-architecture-test", "desktop-gateway-fake-contract-test", "goal-evidence-semantic-validate"],
+      "requiredAssertionIds": ["W85-R2.global-bridge-only-through-adapter", "W85-R2.gateway-production-fake-contract-equal", "W85-R2.no-business-policy-in-fake"],
+      "minimumCommandCount": 4, "minimumTestCount": 1, "zeroMinimumTestBasis": null,
+      "requiredEvidenceKinds": ["test-report", "json"], "requiredEvidenceBasenames": ["characterization-results.json", "test-results.json"],
+      "manualAcceptanceId": null, "providerRequirement": null, "controlledWrite": false,
+      "frozen": {"thresholdRefs": ["desktop-protocol-v1"], "viewportSet": null, "workloadRefs": [], "compatibilityFlags": ["no-direct-window-caicli-in-features", "no-new-protocol"]}
+    },
+    {
+      "week": 85, "lane": "renderer", "gateId": "W85-R3", "resultPath": "artifacts/week85-renderer-feature-boundaries/gates/W85-R3.json",
+      "commandControl": {"path": "docs_md/weekly/84_92_command_control/W85-R3.json", "sourceTrust": "prior-sealed", "predecessorMode": "prior-gate", "rolePolicy": {"requiredAll": ["adapter"], "requiredAny": [["oracle", "test"]], "optional": ["fixture", "parser"]}},
+      "sourcePlan": "85_week_renderer_feature_boundaries_state_split.plan.md", "gateKind": "read-side-implementation",
+      "requiredCommandIds": ["renderer-read-feature-suite", "strictmode-subscription-cleanup-test", "rapid-switch-stale-response-test", "goal-evidence-semantic-validate"],
+      "requiredAssertionIds": ["W85-R3.read-side-split-complete", "W85-R3.external-subscription-owner-count-one", "W85-R3.duplicate-and-unmatched-subscription-zero", "W85-R3.stale-commit-zero"],
+      "minimumCommandCount": 4, "minimumTestCount": 1, "zeroMinimumTestBasis": null,
+      "requiredEvidenceKinds": ["test-report", "json", "diff"], "requiredEvidenceBasenames": ["subscription-ownership.before.json", "subscription-ownership.after.json", "subscription-ownership.diff.json", "characterization-results.json"],
+      "manualAcceptanceId": null, "providerRequirement": null, "controlledWrite": false,
+      "frozen": {"thresholdRefs": ["renderer-resource"], "viewportSet": null, "workloadRefs": ["week84-listener-ownership"], "compatibilityFlags": ["single-subscription-owner", "bounded-resync", "no-dual-reducer"]}
+    },
+    {
+      "week": 85, "lane": "renderer", "gateId": "W85-R4", "resultPath": "artifacts/week85-renderer-feature-boundaries/gates/W85-R4.json",
+      "commandControl": {"path": "docs_md/weekly/84_92_command_control/W85-R4.json", "sourceTrust": "prior-sealed", "predecessorMode": "prior-gate", "rolePolicy": {"requiredAll": ["adapter"], "requiredAny": [["oracle", "test"]], "optional": ["fixture", "parser"]}},
+      "sourcePlan": "85_week_renderer_feature_boundaries_state_split.plan.md", "gateKind": "write-side-implementation",
+      "requiredCommandIds": ["renderer-write-feature-suite", "mutation-identity-revision-test", "compatibility-facade-characterization", "goal-evidence-semantic-validate"],
+      "requiredAssertionIds": ["W85-R4.write-side-split-complete", "W85-R4.command-identity-revision-clientmutationid-unchanged", "W85-R4.compatibility-facade-behavior-equal"],
+      "minimumCommandCount": 4, "minimumTestCount": 1, "zeroMinimumTestBasis": null,
+      "requiredEvidenceKinds": ["test-report", "json"], "requiredEvidenceBasenames": ["characterization-results.json", "test-results.json"],
+      "manualAcceptanceId": null, "providerRequirement": null, "controlledWrite": false,
+      "frozen": {"thresholdRefs": ["desktop-protocol-v1"], "viewportSet": null, "workloadRefs": ["week81-83-projection"], "compatibilityFlags": ["mutation-authority-unchanged", "no-apphost-change", "no-provider-change"]}
+    },
+    {
+      "week": 85, "lane": "renderer", "gateId": "W85-R5", "resultPath": "artifacts/week85-renderer-feature-boundaries/gates/W85-R5.json",
+      "commandControl": {"path": "docs_md/weekly/84_92_command_control/W85-R5.json", "sourceTrust": "prior-sealed", "predecessorMode": "prior-gate", "rolePolicy": {"requiredAll": ["adapter"], "requiredAny": [["oracle", "test"]], "optional": ["fixture", "parser"]}},
+      "sourcePlan": "85_week_renderer_feature_boundaries_state_split.plan.md", "gateKind": "resource-regression",
+      "requiredCommandIds": ["renderer-resource-control-harness", "listener-ownership-regression-candidate", "subscription-ownership-diff-validate", "goal-evidence-semantic-validate"],
+      "requiredAssertionIds": ["W85-R5.listener-delta-at-most-40", "W85-R5.private-bytes-delta-at-most-15-percent", "W85-R5.dom-resync-within-frozen-limits", "W85-R5.no-workload-relaxation"],
+      "minimumCommandCount": 4, "minimumTestCount": 1, "zeroMinimumTestBasis": null,
+      "requiredEvidenceKinds": ["test-report", "json", "diff"], "requiredEvidenceBasenames": ["resource-controls.json", "subscription-ownership.diff.json"],
+      "manualAcceptanceId": null, "providerRequirement": null, "controlledWrite": false,
+      "frozen": {"thresholdRefs": ["renderer-resource"], "viewportSet": null, "workloadRefs": ["week84-listener-ownership"], "compatibilityFlags": ["week84-workload-identical", "owner-count-restores-to-baseline"]}
+    },
+    {
+      "week": 85, "lane": "renderer", "gateId": "W85-R6", "resultPath": "artifacts/week85-renderer-feature-boundaries/gates/W85-R6.json",
+      "commandControl": {"path": "docs_md/weekly/84_92_command_control/W85-R6.json", "sourceTrust": "prior-sealed", "predecessorMode": "prior-gate", "rolePolicy": {"requiredAll": ["adapter"], "requiredAny": [["oracle", "test"]], "optional": ["fixture", "parser"]}},
+      "sourcePlan": "85_week_renderer_feature_boundaries_state_split.plan.md", "gateKind": "protocol-compatibility",
+      "requiredCommandIds": ["desktop-protocol-inventory-before", "desktop-protocol-inventory-after", "desktop-protocol-canonical-compare", "goal-evidence-semantic-validate"],
+      "requiredAssertionIds": ["W85-R6.protocol-exact-39-invoke-2-event", "W85-R6.protocol-canonical-hash-unchanged", "W85-R6.no-new-method-or-event"],
+      "minimumCommandCount": 4, "minimumTestCount": 1, "zeroMinimumTestBasis": null,
+      "requiredEvidenceKinds": ["json", "diff", "test-report"], "requiredEvidenceBasenames": ["desktop-protocol-inventory.before.json", "desktop-protocol-inventory.after.json"],
+      "manualAcceptanceId": null, "providerRequirement": null, "controlledWrite": false,
+      "frozen": {"thresholdRefs": ["desktop-protocol-v1"], "viewportSet": null, "workloadRefs": [], "compatibilityFlags": ["protocol-inventory-exact", "generated-contract-unchanged"]}
+    },
+    {
+      "week": 85, "lane": "renderer", "gateId": "W85-R7", "resultPath": "artifacts/week85-renderer-feature-boundaries/gates/W85-R7.json",
+      "commandControl": {"path": "docs_md/weekly/84_92_command_control/W85-R7.json", "sourceTrust": "prior-sealed", "predecessorMode": "prior-gate", "rolePolicy": {"requiredAll": ["adapter"], "requiredAny": [["oracle", "test"]], "optional": ["fixture", "parser"]}},
+      "sourcePlan": "85_week_renderer_feature_boundaries_state_split.plan.md", "gateKind": "full-matrix-handoff",
+      "requiredCommandIds": ["dotnet-release-build", "dotnet-release-full-test", "desktop-verify", "desktop-e2e-unpacked", "desktop-e2e-performance", "git-diff-check", "owned-cleanup-verify", "handoff-readiness-validate", "goal-evidence-semantic-validate"],
+      "requiredAssertionIds": ["W85-R7.full-matrix-all-green", "W85-R7.three-viewports-no-overflow-overlap-unreachable", "W85-R7.accessibility-violations-zero", "open-p0-p1-zero", "owned-cleanup-zero", "W85-R7.handoff-state-boundary-ready"],
+      "minimumCommandCount": 9, "minimumTestCount": 1, "zeroMinimumTestBasis": null,
+      "requiredEvidenceKinds": ["test-report", "json", "identity"], "requiredEvidenceBasenames": ["viewport-matrix.json", "accessibility.json", "test-results.json", "final-summary.json", "handoff-readiness.json"],
+      "manualAcceptanceId": null, "providerRequirement": null, "controlledWrite": false,
+      "frozen": {"thresholdRefs": ["no-open-critical-issues", "owned-cleanup-zero", "renderer-resource", "desktop-three-viewports", "desktop-protocol-v1", "exact-candidate-identity"], "viewportSet": "desktop-three-viewports", "workloadRefs": ["week84-listener-ownership"], "compatibilityFlags": ["full-rerun", "renderer-cli-worktree-isolation", "state-boundary-ready"]}
+    },
+    {
+      "week": 85, "lane": "cli", "gateId": "W85-C0", "resultPath": "artifacts/week85-cli-composition/gates/W85-C0.json",
+      "commandControl": {"path": "docs_md/weekly/84_92_command_control/W85-C0.json", "sourceTrust": "prior-sealed", "predecessorMode": "entry-base", "rolePolicy": {"requiredAll": ["adapter"], "requiredAny": [["oracle", "test"]], "optional": ["fixture", "parser"]}},
+      "sourcePlan": "85_week_cli_composition_diagnostics_modules.plan.md", "gateKind": "entry-characterization",
+      "requiredCommandIds": ["goal-control-schema-validate", "prior-handoff-schema-validate", "cli-baseline-inventory-capture", "cli-baseline-scenario-harness", "goal-evidence-semantic-validate"],
+      "requiredAssertionIds": ["W85-C0.week84-clean-handoff-valid", "W85-C0.top-level-command-count-26", "W85-C0.command-help-output-exit-baseline-complete", "W85-C0.cli-worktree-clean"],
+      "minimumCommandCount": 5, "minimumTestCount": 1, "zeroMinimumTestBasis": null,
+      "requiredEvidenceKinds": ["identity", "json", "test-report"], "requiredEvidenceBasenames": ["baseline-identity.json", "command-inventory.before.json", "help-inventory.before.json", "output-exit-inventory.before.json"],
+      "manualAcceptanceId": null, "providerRequirement": null, "controlledWrite": false,
+      "frozen": {"thresholdRefs": ["cli-command-tree", "exact-candidate-identity"], "viewportSet": null, "workloadRefs": ["cli-full-scenario-manifest"], "compatibilityFlags": ["independent-cli-worktree", "shared-freeze-unchanged", "exit-policy-0-1-2"]}
+    },
+    {
+      "week": 85, "lane": "cli", "gateId": "W85-C1", "resultPath": "artifacts/week85-cli-composition/gates/W85-C1.json",
+      "commandControl": {"path": "docs_md/weekly/84_92_command_control/W85-C1.json", "sourceTrust": "prior-sealed", "predecessorMode": "prior-gate", "rolePolicy": {"requiredAll": ["adapter"], "requiredAny": [["oracle", "test"]], "optional": ["fixture", "parser"]}},
+      "sourcePlan": "85_week_cli_composition_diagnostics_modules.plan.md", "gateKind": "composition-implementation",
+      "requiredCommandIds": ["cli-create-overload-injection-matrix", "cli-composition-context-test", "cli-command-tree-compare", "goal-evidence-semantic-validate"],
+      "requiredAssertionIds": ["W85-C1.all-public-create-overloads-preserved", "W85-C1.dependency-fake-injection-equal", "W85-C1.single-dependency-truth"],
+      "minimumCommandCount": 4, "minimumTestCount": 1, "zeroMinimumTestBasis": null,
+      "requiredEvidenceKinds": ["test-report", "json", "diff"], "requiredEvidenceBasenames": ["command-inventory.before.json", "command-inventory.after.json", "compatibility-diff.json"],
+      "manualAcceptanceId": null, "providerRequirement": null, "controlledWrite": false,
+      "frozen": {"thresholdRefs": ["cli-command-tree", "compatibility-zero"], "viewportSet": null, "workloadRefs": ["cli-full-scenario-manifest"], "compatibilityFlags": ["public-facade-preserved", "fake-injection-observable-sequence-equal"]}
+    },
+    {
+      "week": 85, "lane": "cli", "gateId": "W85-C2", "resultPath": "artifacts/week85-cli-composition/gates/W85-C2.json",
+      "commandControl": {"path": "docs_md/weekly/84_92_command_control/W85-C2.json", "sourceTrust": "prior-sealed", "predecessorMode": "prior-gate", "rolePolicy": {"requiredAll": ["adapter"], "requiredAny": [["oracle", "test"]], "optional": ["fixture", "parser"]}},
+      "sourcePlan": "85_week_cli_composition_diagnostics_modules.plan.md", "gateKind": "global-option-compatibility",
+      "requiredCommandIds": ["cli-global-option-recursion-test", "cli-command-tree-compare", "cli-help-canonical-compare", "goal-evidence-semantic-validate"],
+      "requiredAssertionIds": ["W85-C2.global-option-instance-single", "W85-C2.workspace-verbose-trace-recursive-behavior-equal", "W85-C2.option-attachment-diff-zero"],
+      "minimumCommandCount": 4, "minimumTestCount": 1, "zeroMinimumTestBasis": null,
+      "requiredEvidenceKinds": ["test-report", "json", "diff"], "requiredEvidenceBasenames": ["command-inventory.before.json", "command-inventory.after.json", "help-inventory.before.json", "help-inventory.after.json", "compatibility-diff.json"],
+      "manualAcceptanceId": null, "providerRequirement": null, "controlledWrite": false,
+      "frozen": {"thresholdRefs": ["cli-command-tree", "compatibility-zero"], "viewportSet": null, "workloadRefs": ["cli-full-scenario-manifest"], "compatibilityFlags": ["recursive-global-options-exact", "no-second-root"]}
+    },
+    {
+      "week": 85, "lane": "cli", "gateId": "W85-C3", "resultPath": "artifacts/week85-cli-composition/gates/W85-C3.json",
+      "commandControl": {"path": "docs_md/weekly/84_92_command_control/W85-C3.json", "sourceTrust": "prior-sealed", "predecessorMode": "prior-gate", "rolePolicy": {"requiredAll": ["adapter"], "requiredAny": [["oracle", "test"]], "optional": ["fixture", "parser"]}},
+      "sourcePlan": "85_week_cli_composition_diagnostics_modules.plan.md", "gateKind": "module-implementation",
+      "requiredCommandIds": ["cli-low-risk-module-suite", "cli-baseline-after-scenario-harness", "cli-compatibility-diff-validate", "goal-evidence-semantic-validate"],
+      "requiredAssertionIds": ["W85-C3.low-risk-domains-migrated", "W85-C3.command-help-output-exit-schema-diff-zero", "W85-C3.validator-text-and-order-unchanged"],
+      "minimumCommandCount": 4, "minimumTestCount": 1, "zeroMinimumTestBasis": null,
+      "requiredEvidenceKinds": ["test-report", "json", "diff"], "requiredEvidenceBasenames": ["command-inventory.after.json", "help-inventory.after.json", "output-exit-inventory.after.json", "compatibility-diff.json"],
+      "manualAcceptanceId": null, "providerRequirement": null, "controlledWrite": false,
+      "frozen": {"thresholdRefs": ["cli-command-tree", "compatibility-zero"], "viewportSet": null, "workloadRefs": ["cli-full-scenario-manifest"], "compatibilityFlags": ["same-fixtures-and-environment", "stdout-stderr-json-ndjson-exit-exact"]}
+    },
+    {
+      "week": 85, "lane": "cli", "gateId": "W85-C4", "resultPath": "artifacts/week85-cli-composition/gates/W85-C4.json",
+      "commandControl": {"path": "docs_md/weekly/84_92_command_control/W85-C4.json", "sourceTrust": "prior-sealed", "predecessorMode": "prior-gate", "rolePolicy": {"requiredAll": ["adapter"], "requiredAny": [["oracle", "test"]], "optional": ["fixture", "parser"]}},
+      "sourcePlan": "85_week_cli_composition_diagnostics_modules.plan.md", "gateKind": "architecture",
+      "requiredCommandIds": ["cli-command-file-architecture-scan", "cli-layer-dependency-test", "cli-public-facade-test", "goal-evidence-semantic-validate"],
+      "requiredAssertionIds": ["W85-C4.all-command-files-scanned", "W85-C4.no-electron-apphost-dependency", "W85-C4.no-internal-builder-cross-import", "W85-C4.public-facade-retained"],
+      "minimumCommandCount": 4, "minimumTestCount": 1, "zeroMinimumTestBasis": null,
+      "requiredEvidenceKinds": ["test-report", "json"], "requiredEvidenceBasenames": ["architecture-tests.json", "test-results.json"],
+      "manualAcceptanceId": null, "providerRequirement": null, "controlledWrite": false,
+      "frozen": {"thresholdRefs": ["shared-freeze-reviewed"], "viewportSet": null, "workloadRefs": [], "compatibilityFlags": ["commands-recursive-scan", "allowed-layer-dependencies-only"]}
+    },
+    {
+      "week": 85, "lane": "cli", "gateId": "W85-C5", "resultPath": "artifacts/week85-cli-composition/gates/W85-C5.json",
+      "commandControl": {"path": "docs_md/weekly/84_92_command_control/W85-C5.json", "sourceTrust": "prior-sealed", "predecessorMode": "prior-gate", "rolePolicy": {"requiredAll": ["adapter"], "requiredAny": [["oracle", "test"]], "optional": ["fixture", "parser"]}},
+      "sourcePlan": "85_week_cli_composition_diagnostics_modules.plan.md", "gateKind": "full-matrix-handoff",
+      "requiredCommandIds": ["dotnet-release-build", "dotnet-release-full-test", "cli-release-build", "cli-default-smoke", "git-diff-check", "owned-cleanup-verify", "handoff-readiness-validate", "goal-evidence-semantic-validate"],
+      "requiredAssertionIds": ["W85-C5.full-dotnet-cli-release-smoke-green", "W85-C5.compatibility-diff-zero", "open-p0-p1-zero", "owned-cleanup-zero", "W85-C5.handoff-cli-composition-ready"],
+      "minimumCommandCount": 8, "minimumTestCount": 1, "zeroMinimumTestBasis": null,
+      "requiredEvidenceKinds": ["test-report", "json", "identity"], "requiredEvidenceBasenames": ["compatibility-diff.json", "test-results.json", "final-summary.json", "handoff-readiness.json"],
+      "manualAcceptanceId": null, "providerRequirement": null, "controlledWrite": false,
+      "frozen": {"thresholdRefs": ["cli-command-tree", "compatibility-zero", "owned-cleanup-zero", "no-open-critical-issues", "exact-candidate-identity"], "viewportSet": null, "workloadRefs": ["cli-full-scenario-manifest"], "compatibilityFlags": ["full-rerun", "renderer-cli-worktree-isolation", "cli-composition-ready"]}
+    },
+    {
+      "week": 86, "lane": "renderer", "gateId": "W86-R0", "resultPath": "artifacts/week86-renderer-chat-first-shell/gates/W86-R0.json",
+      "commandControl": {"path": "docs_md/weekly/84_92_command_control/W86-R0.json", "sourceTrust": "prior-sealed", "predecessorMode": "entry-base", "rolePolicy": {"requiredAll": ["adapter"], "requiredAny": [["oracle", "test"]], "optional": ["fixture", "parser"]}},
+      "sourcePlan": "86_week_chat_first_shell_design_system.plan.md", "gateKind": "entry-lineage",
+      "requiredCommandIds": ["goal-control-schema-validate", "prior-handoff-schema-validate", "week85-renderer-gates-reconcile", "goal-evidence-semantic-validate"],
+      "requiredAssertionIds": ["W86-R0.week85-renderer-handoff-valid", "W86-R0.single-subscription-ownership-retained", "W86-R0.protocol-39-plus-2", "W86-R0.compatibility-facade-green"],
+      "minimumCommandCount": 4, "minimumTestCount": 1, "zeroMinimumTestBasis": null,
+      "requiredEvidenceKinds": ["identity", "json", "test-report"], "requiredEvidenceBasenames": ["baseline-identity.json", "week85-renderer-handoff.json"],
+      "manualAcceptanceId": null, "providerRequirement": null, "controlledWrite": false,
+      "frozen": {"thresholdRefs": ["exact-candidate-identity", "desktop-protocol-v1", "renderer-resource"], "viewportSet": null, "workloadRefs": ["week84-listener-ownership"], "compatibilityFlags": ["state-boundary-ready", "renderer-cli-worktree-isolation"]}
+    },
+    {
+      "week": 86, "lane": "renderer", "gateId": "W86-R1", "resultPath": "artifacts/week86-renderer-chat-first-shell/gates/W86-R1.json",
+      "commandControl": {"path": "docs_md/weekly/84_92_command_control/W86-R1.json", "sourceTrust": "prior-sealed", "predecessorMode": "prior-gate", "rolePolicy": {"requiredAll": ["adapter"], "requiredAny": [["oracle", "test"]], "optional": ["fixture", "parser"]}},
+      "sourcePlan": "86_week_chat_first_shell_design_system.plan.md", "gateKind": "design-system-implementation",
+      "requiredCommandIds": ["design-token-contract-test", "ui-primitive-accessibility-test", "accessibility-token-check", "goal-evidence-semantic-validate"],
+      "requiredAssertionIds": ["W86-R1.contrast-not-reduced", "W86-R1.focus-visible-retained", "W86-R1.high-contrast-and-reduced-motion-supported", "W86-R1.primitive-accessible-names-complete"],
+      "minimumCommandCount": 4, "minimumTestCount": 1, "zeroMinimumTestBasis": null,
+      "requiredEvidenceKinds": ["test-report", "json"], "requiredEvidenceBasenames": ["accessibility.json", "test-results.json"],
+      "manualAcceptanceId": null, "providerRequirement": null, "controlledWrite": false,
+      "frozen": {"thresholdRefs": [], "viewportSet": null, "workloadRefs": [], "compatibilityFlags": ["light-plus-system-high-contrast-only", "no-large-unreviewed-component-library"]}
+    },
+    {
+      "week": 86, "lane": "renderer", "gateId": "W86-R2", "resultPath": "artifacts/week86-renderer-chat-first-shell/gates/W86-R2.json",
+      "commandControl": {"path": "docs_md/weekly/84_92_command_control/W86-R2.json", "sourceTrust": "prior-sealed", "predecessorMode": "prior-gate", "rolePolicy": {"requiredAll": ["adapter"], "requiredAny": [["oracle", "test"]], "optional": ["fixture", "parser"]}},
+      "sourcePlan": "86_week_chat_first_shell_design_system.plan.md", "gateKind": "responsive-shell-implementation",
+      "requiredCommandIds": ["appshell-responsive-e2e", "desktop-viewport-matrix-validate", "screenshot-manifest-validate", "goal-evidence-semantic-validate"],
+      "requiredAssertionIds": ["W86-R2.case-count-15", "W86-R2.conversation-and-composer-usable-all-viewports", "W86-R2.overflow-overlap-unreachable-zero"],
+      "minimumCommandCount": 4, "minimumTestCount": 15, "zeroMinimumTestBasis": null,
+      "requiredEvidenceKinds": ["test-report", "json", "screenshot"], "requiredEvidenceBasenames": ["viewport-matrix.json", "screenshot-manifest.json", "test-results.json"],
+      "manualAcceptanceId": null, "providerRequirement": null, "controlledWrite": false,
+      "frozen": {"thresholdRefs": ["desktop-three-viewports", "chat-shell-visual-matrix"], "viewportSet": "desktop-three-viewports", "workloadRefs": ["desktop-shell-15-cases"], "compatibilityFlags": ["five-frozen-fixtures", "central-chat-surface-primary"]}
+    },
+    {
+      "week": 86, "lane": "renderer", "gateId": "W86-R3", "resultPath": "artifacts/week86-renderer-chat-first-shell/gates/W86-R3.json",
+      "commandControl": {"path": "docs_md/weekly/84_92_command_control/W86-R3.json", "sourceTrust": "prior-sealed", "predecessorMode": "prior-gate", "rolePolicy": {"requiredAll": ["adapter"], "requiredAny": [["oracle", "test"]], "optional": ["fixture", "parser"]}},
+      "sourcePlan": "86_week_chat_first_shell_design_system.plan.md", "gateKind": "drawer-focus-implementation",
+      "requiredCommandIds": ["appshell-drawer-focus-test", "desktop-viewport-matrix-validate", "desktop-accessibility-check", "goal-evidence-semantic-validate"],
+      "requiredAssertionIds": ["W86-R3.escape-closes-drawer", "W86-R3.trigger-focus-restored", "W86-R3.1024-right-drawer-correct", "W86-R3.800-left-right-drawers-mutually-exclusive"],
+      "minimumCommandCount": 4, "minimumTestCount": 1, "zeroMinimumTestBasis": null,
+      "requiredEvidenceKinds": ["test-report", "json"], "requiredEvidenceBasenames": ["viewport-matrix.json", "accessibility.json", "test-results.json"],
+      "manualAcceptanceId": null, "providerRequirement": null, "controlledWrite": false,
+      "frozen": {"thresholdRefs": ["desktop-three-viewports"], "viewportSet": "desktop-three-viewports", "workloadRefs": ["desktop-shell-15-cases"], "compatibilityFlags": ["escape-focus-aria-expanded", "drawers-mutually-exclusive"]}
+    },
+    {
+      "week": 86, "lane": "renderer", "gateId": "W86-R4", "resultPath": "artifacts/week86-renderer-chat-first-shell/gates/W86-R4.json",
+      "commandControl": {"path": "docs_md/weekly/84_92_command_control/W86-R4.json", "sourceTrust": "prior-sealed", "predecessorMode": "prior-gate", "rolePolicy": {"requiredAll": ["adapter"], "requiredAny": [["oracle", "test"]], "optional": ["fixture", "parser"]}},
+      "sourcePlan": "86_week_chat_first_shell_design_system.plan.md", "gateKind": "feature-protocol-compatibility",
+      "requiredCommandIds": ["desktop-protocol-canonical-compare", "shell-feature-parity-harness", "subscription-ownership-diff-validate", "goal-evidence-semantic-validate"],
+      "requiredAssertionIds": ["W86-R4.protocol-exact-39-invoke-2-event", "W86-R4.timeline-composer-approval-review-outcomes-equal", "W86-R4.duplicate-unmatched-subscriptions-zero"],
+      "minimumCommandCount": 4, "minimumTestCount": 1, "zeroMinimumTestBasis": null,
+      "requiredEvidenceKinds": ["json", "diff", "test-report"], "requiredEvidenceBasenames": ["desktop-protocol-inventory.before.json", "desktop-protocol-inventory.after.json", "subscription-ownership.diff.json", "test-results.json"],
+      "manualAcceptanceId": null, "providerRequirement": null, "controlledWrite": false,
+      "frozen": {"thresholdRefs": ["desktop-protocol-v1", "compatibility-zero"], "viewportSet": null, "workloadRefs": [], "compatibilityFlags": ["feature-outcome-parity", "no-protocol-change", "single-subscription-owner"]}
+    },
+    {
+      "week": 86, "lane": "renderer", "gateId": "W86-R5", "resultPath": "artifacts/week86-renderer-chat-first-shell/gates/W86-R5.json",
+      "commandControl": {"path": "docs_md/weekly/84_92_command_control/W86-R5.json", "sourceTrust": "prior-sealed", "predecessorMode": "prior-gate", "rolePolicy": {"requiredAll": ["adapter"], "requiredAny": [["oracle", "test"]], "optional": ["fixture", "parser"]}},
+      "sourcePlan": "86_week_chat_first_shell_design_system.plan.md", "gateKind": "resource-regression",
+      "requiredCommandIds": ["renderer-resource-control-harness", "listener-ownership-regression-candidate", "subscription-ownership-diff-validate", "goal-evidence-semantic-validate"],
+      "requiredAssertionIds": ["W86-R5.listener-delta-at-most-40", "W86-R5.private-bytes-delta-at-most-15-percent", "W86-R5.dom-resync-within-week85-limit", "W86-R5.workload-identical"],
+      "minimumCommandCount": 4, "minimumTestCount": 1, "zeroMinimumTestBasis": null,
+      "requiredEvidenceKinds": ["test-report", "json", "diff"], "requiredEvidenceBasenames": ["resource-controls.json", "subscription-ownership.diff.json"],
+      "manualAcceptanceId": null, "providerRequirement": null, "controlledWrite": false,
+      "frozen": {"thresholdRefs": ["renderer-resource"], "viewportSet": null, "workloadRefs": ["week84-listener-ownership", "week77-five-profile", "week80-c0-c7"], "compatibilityFlags": ["no-resource-threshold-relaxation", "same-workload"]}
+    },
+    {
+      "week": 86, "lane": "renderer", "gateId": "W86-R6", "resultPath": "artifacts/week86-renderer-chat-first-shell/gates/W86-R6.json",
+      "commandControl": {"path": "docs_md/weekly/84_92_command_control/W86-R6.json", "sourceTrust": "prior-sealed", "predecessorMode": "prior-gate", "rolePolicy": {"requiredAll": ["adapter"], "requiredAny": [["oracle", "test"]], "optional": ["fixture", "parser"]}},
+      "sourcePlan": "86_week_chat_first_shell_design_system.plan.md", "gateKind": "full-matrix",
+      "requiredCommandIds": ["dotnet-release-build", "dotnet-release-full-test", "desktop-verify", "desktop-e2e-unpacked", "desktop-e2e-performance", "git-diff-check", "owned-cleanup-verify", "goal-evidence-semantic-validate"],
+      "requiredAssertionIds": ["W86-R6.full-build-verify-e2e-green", "W86-R6.accessibility-violations-zero", "owned-cleanup-zero", "open-p0-p1-zero"],
+      "minimumCommandCount": 8, "minimumTestCount": 1, "zeroMinimumTestBasis": null,
+      "requiredEvidenceKinds": ["test-report", "json"], "requiredEvidenceBasenames": ["accessibility.json", "test-results.json", "final-summary.json"],
+      "manualAcceptanceId": null, "providerRequirement": null, "controlledWrite": false,
+      "frozen": {"thresholdRefs": ["owned-cleanup-zero", "no-open-critical-issues", "desktop-three-viewports"], "viewportSet": "desktop-three-viewports", "workloadRefs": ["desktop-shell-15-cases"], "compatibilityFlags": ["full-rerun", "all-command-exits-zero"]}
+    },
+    {
+      "week": 86, "lane": "renderer", "gateId": "W86-R7", "resultPath": "artifacts/week86-renderer-chat-first-shell/gates/W86-R7.json",
+      "commandControl": {"path": "docs_md/weekly/84_92_command_control/W86-R7.json", "sourceTrust": "prior-sealed", "predecessorMode": "prior-gate", "rolePolicy": {"requiredAll": ["adapter"], "requiredAny": [["oracle", "test"]], "optional": ["fixture", "parser"]}},
+      "sourcePlan": "86_week_chat_first_shell_design_system.plan.md", "gateKind": "manual-visual-handoff",
+      "requiredCommandIds": ["screenshot-manifest-validate", "manual-acceptance-receipt-validate", "handoff-readiness-validate", "goal-evidence-semantic-validate"],
+      "requiredAssertionIds": ["W86-R7.user-visual-status-passed", "W86-R7.exact-15-screenshot-hashes-bound", "W86-R7.agent-automation-not-substituted", "W86-R7.handoff-shell-ready"],
+      "minimumCommandCount": 4, "minimumTestCount": 0, "zeroMinimumTestBasis": "The Gate is an independent user visual attestation over already-automated W86-R1 through W86-R6 evidence.",
+      "requiredEvidenceKinds": ["manual-attestation", "screenshot", "json", "identity"], "requiredEvidenceBasenames": ["screenshot-manifest.json", "user-visual-confirmation.json", "final-summary.json", "handoff-readiness.json"],
+      "manualAcceptanceId": "W86-USER-VISUAL", "providerRequirement": null, "controlledWrite": false,
+      "frozen": {"thresholdRefs": ["chat-shell-visual-matrix", "exact-candidate-identity"], "viewportSet": "desktop-three-viewports", "workloadRefs": ["desktop-shell-15-cases"], "compatibilityFlags": ["user-decision-required", "exact-screenshot-hashes", "shell-ready-for-feature-migration"]}
+    },
+    {
+      "week": 86, "lane": "cli", "gateId": "W86-C0", "resultPath": "artifacts/week86-cli-jobs-review-session/gates/W86-C0.json",
+      "commandControl": {"path": "docs_md/weekly/84_92_command_control/W86-C0.json", "sourceTrust": "prior-sealed", "predecessorMode": "entry-base", "rolePolicy": {"requiredAll": ["adapter"], "requiredAny": [["oracle", "test"]], "optional": ["fixture", "parser"]}},
+      "sourcePlan": "86_week_cli_jobs_review_session_modules.plan.md", "gateKind": "entry-lineage",
+      "requiredCommandIds": ["goal-control-schema-validate", "prior-handoff-schema-validate", "week85-cli-gates-reconcile", "goal-evidence-semantic-validate"],
+      "requiredAssertionIds": ["W86-C0.week85-cli-handoff-valid", "W86-C0.compatibility-diff-zero", "W86-C0.baseline-inventory-hashes-bound", "W86-C0.shared-freeze-clean"],
+      "minimumCommandCount": 4, "minimumTestCount": 1, "zeroMinimumTestBasis": null,
+      "requiredEvidenceKinds": ["identity", "json", "test-report"], "requiredEvidenceBasenames": ["baseline-identity.json", "week85-cli-handoff.json", "compatibility-diff.json"],
+      "manualAcceptanceId": null, "providerRequirement": null, "controlledWrite": false,
+      "frozen": {"thresholdRefs": ["cli-command-tree", "compatibility-zero", "exact-candidate-identity", "shared-freeze-reviewed"], "viewportSet": null, "workloadRefs": [], "compatibilityFlags": ["cli-composition-ready", "renderer-cli-worktree-isolation"]}
+    },
+    {
+      "week": 86, "lane": "cli", "gateId": "W86-C1", "resultPath": "artifacts/week86-cli-jobs-review-session/gates/W86-C1.json",
+      "commandControl": {"path": "docs_md/weekly/84_92_command_control/W86-C1.json", "sourceTrust": "prior-sealed", "predecessorMode": "prior-gate", "rolePolicy": {"requiredAll": ["adapter"], "requiredAny": [["oracle", "test"]], "optional": ["fixture", "parser"]}},
+      "sourcePlan": "86_week_cli_jobs_review_session_modules.plan.md", "gateKind": "module-compatibility",
+      "requiredCommandIds": ["cli-jobs-ci-review-tools-suite", "cli-baseline-after-scenario-harness", "cli-compatibility-diff-validate", "goal-evidence-semantic-validate"],
+      "requiredAssertionIds": ["W86-C1.jobs-ci-review-tools-mismatch-zero", "W86-C1.command-help-output-exit-equal", "W86-C1.job-artifact-and-fail-policy-preserved"],
+      "minimumCommandCount": 4, "minimumTestCount": 1, "zeroMinimumTestBasis": null,
+      "requiredEvidenceKinds": ["test-report", "json", "diff"], "requiredEvidenceBasenames": ["command-inventory.before.json", "command-inventory.after.json", "help-inventory.before.json", "help-inventory.after.json", "output-exit-inventory.before.json", "output-exit-inventory.after.json", "compatibility-diff.json"],
+      "manualAcceptanceId": null, "providerRequirement": null, "controlledWrite": false,
+      "frozen": {"thresholdRefs": ["cli-command-tree", "compatibility-zero"], "viewportSet": null, "workloadRefs": ["cli-full-scenario-manifest"], "compatibilityFlags": ["same-job-session-fixtures", "same-output-channels-and-exits"]}
+    },
+    {
+      "week": 86, "lane": "cli", "gateId": "W86-C2", "resultPath": "artifacts/week86-cli-jobs-review-session/gates/W86-C2.json",
+      "commandControl": {"path": "docs_md/weekly/84_92_command_control/W86-C2.json", "sourceTrust": "prior-sealed", "predecessorMode": "prior-gate", "rolePolicy": {"requiredAll": ["adapter"], "requiredAny": [["oracle", "test"]], "optional": ["fixture", "parser"]}},
+      "sourcePlan": "86_week_cli_jobs_review_session_modules.plan.md", "gateKind": "module-compatibility",
+      "requiredCommandIds": ["cli-run-session-chat-suite", "cli-streaming-output-compare", "cli-compatibility-diff-validate", "goal-evidence-semantic-validate"],
+      "requiredAssertionIds": ["W86-C2.run-session-chat-mismatch-zero", "W86-C2.text-json-ndjson-streaming-equal", "W86-C2.session-schema-and-model-selection-preserved"],
+      "minimumCommandCount": 4, "minimumTestCount": 1, "zeroMinimumTestBasis": null,
+      "requiredEvidenceKinds": ["test-report", "json", "diff"], "requiredEvidenceBasenames": ["output-exit-inventory.before.json", "output-exit-inventory.after.json", "compatibility-diff.json"],
+      "manualAcceptanceId": null, "providerRequirement": null, "controlledWrite": false,
+      "frozen": {"thresholdRefs": ["compatibility-zero"], "viewportSet": null, "workloadRefs": ["cli-full-scenario-manifest"], "compatibilityFlags": ["json-output-no-plain-text-mix", "stream-sequence-exact"]}
+    },
+    {
+      "week": 86, "lane": "cli", "gateId": "W86-C3", "resultPath": "artifacts/week86-cli-jobs-review-session/gates/W86-C3.json",
+      "commandControl": {"path": "docs_md/weekly/84_92_command_control/W86-C3.json", "sourceTrust": "prior-sealed", "predecessorMode": "prior-gate", "rolePolicy": {"requiredAll": ["adapter"], "requiredAny": [["oracle", "test"]], "optional": ["fixture", "parser"]}},
+      "sourcePlan": "86_week_cli_jobs_review_session_modules.plan.md", "gateKind": "injection-compatibility",
+      "requiredCommandIds": ["cli-injection-matrix-harness", "cli-facade-composer-equivalence-test", "cli-observable-call-sequence-compare", "goal-evidence-semantic-validate"],
+      "requiredAssertionIds": ["W86-C3.store-clock-environment-input-identity-equal", "W86-C3.model-conversation-textwriter-injection-equal", "W86-C3.observable-call-sequence-mismatch-zero", "W86-C3.facade-composer-hashes-equal"],
+      "minimumCommandCount": 4, "minimumTestCount": 1, "zeroMinimumTestBasis": null,
+      "requiredEvidenceKinds": ["test-report", "json", "diff"], "requiredEvidenceBasenames": ["injection-matrix.json", "compatibility-diff.json"],
+      "manualAcceptanceId": null, "providerRequirement": null, "controlledWrite": false,
+      "frozen": {"thresholdRefs": ["compatibility-zero"], "viewportSet": null, "workloadRefs": ["cli-full-scenario-manifest"], "compatibilityFlags": ["dependency-identity-preserved", "old-and-new-entry-equivalent"]}
+    },
+    {
+      "week": 86, "lane": "cli", "gateId": "W86-C4", "resultPath": "artifacts/week86-cli-jobs-review-session/gates/W86-C4.json",
+      "commandControl": {"path": "docs_md/weekly/84_92_command_control/W86-C4.json", "sourceTrust": "prior-sealed", "predecessorMode": "prior-gate", "rolePolicy": {"requiredAll": ["adapter"], "requiredAny": [["oracle", "test"]], "optional": ["fixture", "parser"]}},
+      "sourcePlan": "86_week_cli_jobs_review_session_modules.plan.md", "gateKind": "test-architecture",
+      "requiredCommandIds": ["cli-domain-test-layout-verify", "cli-public-compatibility-suite", "cli-command-file-architecture-scan", "goal-evidence-semantic-validate"],
+      "requiredAssertionIds": ["W86-C4.tests-split-by-domain", "W86-C4.common-compatibility-suite-retained", "W86-C4.old-create-and-composer-covered"],
+      "minimumCommandCount": 4, "minimumTestCount": 1, "zeroMinimumTestBasis": null,
+      "requiredEvidenceKinds": ["test-report", "json"], "requiredEvidenceBasenames": ["test-results.json", "compatibility-diff.json"],
+      "manualAcceptanceId": null, "providerRequirement": null, "controlledWrite": false,
+      "frozen": {"thresholdRefs": ["cli-command-tree"], "viewportSet": null, "workloadRefs": ["cli-full-scenario-manifest"], "compatibilityFlags": ["compatibility-suite-not-removed", "all-command-files-scanned"]}
+    },
+    {
+      "week": 86, "lane": "cli", "gateId": "W86-C5", "resultPath": "artifacts/week86-cli-jobs-review-session/gates/W86-C5.json",
+      "commandControl": {"path": "docs_md/weekly/84_92_command_control/W86-C5.json", "sourceTrust": "prior-sealed", "predecessorMode": "prior-gate", "rolePolicy": {"requiredAll": ["adapter"], "requiredAny": [["oracle", "test"]], "optional": ["fixture", "parser"]}},
+      "sourcePlan": "86_week_cli_jobs_review_session_modules.plan.md", "gateKind": "full-matrix-handoff",
+      "requiredCommandIds": ["dotnet-release-build", "dotnet-release-full-test", "cli-release-build", "cli-default-smoke", "git-diff-check", "owned-cleanup-verify", "handoff-readiness-validate", "goal-evidence-semantic-validate"],
+      "requiredAssertionIds": ["W86-C5.full-dotnet-cli-release-smoke-green", "W86-C5.compatibility-diff-zero", "open-p0-p1-zero", "owned-cleanup-zero", "W86-C5.handoff-session-query-ready"],
+      "minimumCommandCount": 8, "minimumTestCount": 1, "zeroMinimumTestBasis": null,
+      "requiredEvidenceKinds": ["test-report", "json", "identity"], "requiredEvidenceBasenames": ["compatibility-diff.json", "test-results.json", "final-summary.json", "handoff-readiness.json"],
+      "manualAcceptanceId": null, "providerRequirement": null, "controlledWrite": false,
+      "frozen": {"thresholdRefs": ["cli-command-tree", "compatibility-zero", "owned-cleanup-zero", "no-open-critical-issues", "exact-candidate-identity"], "viewportSet": null, "workloadRefs": ["cli-full-scenario-manifest"], "compatibilityFlags": ["full-rerun", "renderer-cli-worktree-isolation", "cli-session-query-ready"]}
+    },
+    {
+      "week": 87, "lane": "renderer", "gateId": "W87-R0", "resultPath": "artifacts/week87-renderer-conversation-projection/gates/W87-R0.json",
+      "commandControl": {"path": "docs_md/weekly/84_92_command_control/W87-R0.json", "sourceTrust": "prior-sealed", "predecessorMode": "entry-base", "rolePolicy": {"requiredAll": ["adapter"], "requiredAny": [["oracle", "test"]], "optional": ["fixture", "parser"]}},
+      "sourcePlan": "87_week_conversation_projection_timeline.plan.md", "gateKind": "entry-contract-inventory",
+      "requiredCommandIds": ["goal-control-schema-validate", "prior-handoff-schema-validate", "timeline-contract-inventory-generate", "projection-exhaustiveness-test", "goal-evidence-semantic-validate"],
+      "requiredAssertionIds": ["W87-R0.week86-renderer-handoff-valid", "W87-R0.each-frozen-type-one-projection-case", "W87-R0.unknown-type-one-audit-fallback", "W87-R0.new-type-fails-closed"],
+      "minimumCommandCount": 5, "minimumTestCount": 1, "zeroMinimumTestBasis": null,
+      "requiredEvidenceKinds": ["identity", "json", "test-report"], "requiredEvidenceBasenames": ["baseline-identity.json", "timeline-contract-inventory.json", "week86-renderer-handoff.json"],
+      "manualAcceptanceId": null, "providerRequirement": null, "controlledWrite": false,
+      "frozen": {"thresholdRefs": ["desktop-protocol-v1", "exact-candidate-identity"], "viewportSet": null, "workloadRefs": [], "compatibilityFlags": ["week86-visual-passed", "durable-timeline-truth-unchanged"]}
+    },
+    {
+      "week": 87, "lane": "renderer", "gateId": "W87-R1", "resultPath": "artifacts/week87-renderer-conversation-projection/gates/W87-R1.json",
+      "commandControl": {"path": "docs_md/weekly/84_92_command_control/W87-R1.json", "sourceTrust": "prior-sealed", "predecessorMode": "prior-gate", "rolePolicy": {"requiredAll": ["adapter"], "requiredAny": [["oracle", "test"]], "optional": ["fixture", "parser"]}},
+      "sourcePlan": "87_week_conversation_projection_timeline.plan.md", "gateKind": "projection-implementation",
+      "requiredCommandIds": ["conversation-projector-golden-test", "projection-ordering-property-test", "projection-canonical-diff-validate", "goal-evidence-semantic-validate"],
+      "requiredAssertionIds": ["W87-R1.message-tool-approval-result-grouping-correct", "W87-R1.block-order-and-identity-diff-zero", "W87-R1.failure-warning-result-not-lost", "W87-R1.redacted-payload-not-expanded"],
+      "minimumCommandCount": 4, "minimumTestCount": 1, "zeroMinimumTestBasis": null,
+      "requiredEvidenceKinds": ["test-report", "json", "diff"], "requiredEvidenceBasenames": ["projection-golden-results.json", "timeline-contract-inventory.json"],
+      "manualAcceptanceId": null, "providerRequirement": null, "controlledWrite": false,
+      "frozen": {"thresholdRefs": ["compatibility-zero"], "viewportSet": null, "workloadRefs": ["week81-83-projection"], "compatibilityFlags": ["pure-projector", "canonical-fixture-diff-zero", "audit-fallback-required"]}
+    },
+    {
+      "week": 87, "lane": "renderer", "gateId": "W87-R2", "resultPath": "artifacts/week87-renderer-conversation-projection/gates/W87-R2.json",
+      "commandControl": {"path": "docs_md/weekly/84_92_command_control/W87-R2.json", "sourceTrust": "prior-sealed", "predecessorMode": "prior-gate", "rolePolicy": {"requiredAll": ["adapter"], "requiredAny": [["oracle", "test"]], "optional": ["fixture", "parser"]}},
+      "sourcePlan": "87_week_conversation_projection_timeline.plan.md", "gateKind": "audit-traceability",
+      "requiredCommandIds": ["projection-audit-traceability-test", "projection-corrupt-redacted-unknown-test", "accessibility-state-label-test", "goal-evidence-semantic-validate"],
+      "requiredAssertionIds": ["W87-R2.sequence-source-status-redaction-traceable", "W87-R2.every-raw-item-reachable", "W87-R2.corrupt-truncated-redacted-states-visible", "W87-R2.unknown-item-not-dropped"],
+      "minimumCommandCount": 4, "minimumTestCount": 1, "zeroMinimumTestBasis": null,
+      "requiredEvidenceKinds": ["test-report", "json"], "requiredEvidenceBasenames": ["projection-golden-results.json", "accessibility.json"],
+      "manualAcceptanceId": null, "providerRequirement": null, "controlledWrite": false,
+      "frozen": {"thresholdRefs": [], "viewportSet": null, "workloadRefs": ["week81-83-projection"], "compatibilityFlags": ["source-pointers-preserved", "bounded-raw-payload", "redaction-preserved"]}
+    },
+    {
+      "week": 87, "lane": "renderer", "gateId": "W87-R3", "resultPath": "artifacts/week87-renderer-conversation-projection/gates/W87-R3.json",
+      "commandControl": {"path": "docs_md/weekly/84_92_command_control/W87-R3.json", "sourceTrust": "prior-sealed", "predecessorMode": "prior-gate", "rolePolicy": {"requiredAll": ["adapter"], "requiredAny": [["oracle", "test"]], "optional": ["fixture", "parser"]}},
+      "sourcePlan": "87_week_conversation_projection_timeline.plan.md", "gateKind": "bounded-history-resource",
+      "requiredCommandIds": ["conversation-2000-item-unit-bound", "conversation-240-item-e2e-bound", "projection-cache-owner-cleanup-test", "goal-evidence-semantic-validate"],
+      "requiredAssertionIds": ["W87-R3.unit-2000-observed-within-limit", "W87-R3.e2e-240-observed-within-limit", "W87-R3.document-listener-cache-survivors-within-limit", "W87-R3.projection-cache-released-on-owner-change"],
+      "minimumCommandCount": 4, "minimumTestCount": 2, "zeroMinimumTestBasis": null,
+      "requiredEvidenceKinds": ["test-report", "json"], "requiredEvidenceBasenames": ["dom-resource-bounds.json", "resource-controls.json"],
+      "manualAcceptanceId": null, "providerRequirement": null, "controlledWrite": false,
+      "frozen": {"thresholdRefs": ["conversation-bounds", "renderer-resource"], "viewportSet": null, "workloadRefs": ["conversation-2000-240"], "compatibilityFlags": ["bounded-turn-window", "no-virtualizer-scope-expansion"]}
+    },
+    {
+      "week": 87, "lane": "renderer", "gateId": "W87-R4", "resultPath": "artifacts/week87-renderer-conversation-projection/gates/W87-R4.json",
+      "commandControl": {"path": "docs_md/weekly/84_92_command_control/W87-R4.json", "sourceTrust": "prior-sealed", "predecessorMode": "prior-gate", "rolePolicy": {"requiredAll": ["adapter"], "requiredAny": [["oracle", "test"]], "optional": ["fixture", "parser"]}},
+      "sourcePlan": "87_week_conversation_projection_timeline.plan.md", "gateKind": "notification-resync-regression",
+      "requiredCommandIds": ["projection-notification-ordering-test", "projection-load-more-replace-test", "stale-response-resync-test", "subscription-ownership-diff-validate", "goal-evidence-semantic-validate"],
+      "requiredAssertionIds": ["W87-R4.duplicate-block-count-zero", "W87-R4.resync-over-limit-zero", "W87-R4.stale-response-commit-zero", "W87-R4.subscription-duplicate-unmatched-zero"],
+      "minimumCommandCount": 5, "minimumTestCount": 1, "zeroMinimumTestBasis": null,
+      "requiredEvidenceKinds": ["test-report", "json", "diff"], "requiredEvidenceBasenames": ["projection-golden-results.json", "subscription-ownership.diff.json", "resource-controls.json"],
+      "manualAcceptanceId": null, "providerRequirement": null, "controlledWrite": false,
+      "frozen": {"thresholdRefs": ["renderer-resource"], "viewportSet": null, "workloadRefs": ["week81-83-projection", "conversation-2000-240"], "compatibilityFlags": ["authoritative-replace-no-duplicates", "bounded-resync", "single-subscription-owner"]}
+    },
+    {
+      "week": 87, "lane": "renderer", "gateId": "W87-R5", "resultPath": "artifacts/week87-renderer-conversation-projection/gates/W87-R5.json",
+      "commandControl": {"path": "docs_md/weekly/84_92_command_control/W87-R5.json", "sourceTrust": "prior-sealed", "predecessorMode": "prior-gate", "rolePolicy": {"requiredAll": ["adapter"], "requiredAny": [["oracle", "test"]], "optional": ["fixture", "parser"]}},
+      "sourcePlan": "87_week_conversation_projection_timeline.plan.md", "gateKind": "full-matrix-handoff",
+      "requiredCommandIds": ["dotnet-release-build", "dotnet-release-full-test", "desktop-verify", "desktop-e2e-unpacked", "desktop-e2e-performance", "desktop-accessibility-check", "desktop-protocol-canonical-compare", "owned-cleanup-verify", "handoff-readiness-validate", "goal-evidence-semantic-validate"],
+      "requiredAssertionIds": ["W87-R5.full-verify-e2e-a11y-green", "W87-R5.three-viewports-clean", "W87-R5.protocol-39-plus-2", "open-p0-p1-zero", "owned-cleanup-zero", "W87-R5.handoff-conversation-projection-ready"],
+      "minimumCommandCount": 10, "minimumTestCount": 1, "zeroMinimumTestBasis": null,
+      "requiredEvidenceKinds": ["test-report", "json", "identity"], "requiredEvidenceBasenames": ["viewport-matrix.json", "accessibility.json", "resource-controls.json", "test-results.json", "final-summary.json", "handoff-readiness.json"],
+      "manualAcceptanceId": null, "providerRequirement": null, "controlledWrite": false,
+      "frozen": {"thresholdRefs": ["desktop-three-viewports", "desktop-protocol-v1", "renderer-resource", "owned-cleanup-zero", "no-open-critical-issues", "exact-candidate-identity"], "viewportSet": "desktop-three-viewports", "workloadRefs": ["conversation-2000-240"], "compatibilityFlags": ["scroll-anchoring-green", "conversation-projection-ready", "full-rerun"]}
+    },
+    {
+      "week": 87, "lane": "cli", "gateId": "W87-C0", "resultPath": "artifacts/week87-cli-exec-skills-queue/gates/W87-C0.json",
+      "commandControl": {"path": "docs_md/weekly/84_92_command_control/W87-C0.json", "sourceTrust": "prior-sealed", "predecessorMode": "entry-base", "rolePolicy": {"requiredAll": ["adapter"], "requiredAny": [["oracle", "test"]], "optional": ["fixture", "parser"]}},
+      "sourcePlan": "87_week_cli_exec_skills_queue_modules.plan.md", "gateKind": "entry-delegation-baseline",
+      "requiredCommandIds": ["goal-control-schema-validate", "prior-handoff-schema-validate", "cli-delegation-baseline-capture", "cli-required-scenario-coverage-validate", "goal-evidence-semantic-validate"],
+      "requiredAssertionIds": ["W87-C0.week86-cli-handoff-valid", "W87-C0.required-delegation-scenarios-missing-zero", "W87-C0.baseline-inventory-hashes-bound", "W87-C0.shared-freeze-clean"],
+      "minimumCommandCount": 5, "minimumTestCount": 1, "zeroMinimumTestBasis": null,
+      "requiredEvidenceKinds": ["identity", "json", "test-report"], "requiredEvidenceBasenames": ["baseline-identity.json", "delegation-matrix.before.json", "week86-cli-handoff.json"],
+      "manualAcceptanceId": null, "providerRequirement": null, "controlledWrite": false,
+      "frozen": {"thresholdRefs": ["cli-command-tree", "exact-candidate-identity", "shared-freeze-reviewed"], "viewportSet": null, "workloadRefs": ["cli-full-scenario-manifest"], "compatibilityFlags": ["same-queue-exec-skills-fixtures", "approval-policy-and-workspace-identity-frozen"]}
+    },
+    {
+      "week": 87, "lane": "cli", "gateId": "W87-C1", "resultPath": "artifacts/week87-cli-exec-skills-queue/gates/W87-C1.json",
+      "commandControl": {"path": "docs_md/weekly/84_92_command_control/W87-C1.json", "sourceTrust": "prior-sealed", "predecessorMode": "prior-gate", "rolePolicy": {"requiredAll": ["adapter"], "requiredAny": [["oracle", "test"]], "optional": ["fixture", "parser"]}},
+      "sourcePlan": "87_week_cli_exec_skills_queue_modules.plan.md", "gateKind": "module-compatibility",
+      "requiredCommandIds": ["cli-exec-module-suite", "cli-exec-failure-matrix", "cli-compatibility-diff-validate", "goal-evidence-semantic-validate"],
+      "requiredAssertionIds": ["W87-C1.exec-command-help-output-error-exit-mismatch-zero", "W87-C1.approval-timeout-disabled-dirty-outcomes-equal", "W87-C1.runner-limits-and-workspace-semantics-preserved"],
+      "minimumCommandCount": 4, "minimumTestCount": 1, "zeroMinimumTestBasis": null,
+      "requiredEvidenceKinds": ["test-report", "json", "diff"], "requiredEvidenceBasenames": ["command-inventory.before.json", "command-inventory.after.json", "output-exit-inventory.before.json", "output-exit-inventory.after.json", "compatibility-diff.json"],
+      "manualAcceptanceId": null, "providerRequirement": null, "controlledWrite": false,
+      "frozen": {"thresholdRefs": ["cli-command-tree", "compatibility-zero"], "viewportSet": null, "workloadRefs": ["cli-full-scenario-manifest"], "compatibilityFlags": ["exec-observable-behavior-exact", "security-context-preserved"]}
+    },
+    {
+      "week": 87, "lane": "cli", "gateId": "W87-C2", "resultPath": "artifacts/week87-cli-exec-skills-queue/gates/W87-C2.json",
+      "commandControl": {"path": "docs_md/weekly/84_92_command_control/W87-C2.json", "sourceTrust": "prior-sealed", "predecessorMode": "prior-gate", "rolePolicy": {"requiredAll": ["adapter"], "requiredAny": [["oracle", "test"]], "optional": ["fixture", "parser"]}},
+      "sourcePlan": "87_week_cli_exec_skills_queue_modules.plan.md", "gateKind": "module-compatibility",
+      "requiredCommandIds": ["cli-skills-module-suite", "cli-skills-failure-matrix", "cli-compatibility-diff-validate", "goal-evidence-semantic-validate"],
+      "requiredAssertionIds": ["W87-C2.skills-command-help-output-error-exit-mismatch-zero", "W87-C2.skill-not-found-invalid-disabled-errors-stable", "W87-C2.tool-project-instruction-approval-boundaries-preserved"],
+      "minimumCommandCount": 4, "minimumTestCount": 1, "zeroMinimumTestBasis": null,
+      "requiredEvidenceKinds": ["test-report", "json", "diff"], "requiredEvidenceBasenames": ["command-inventory.before.json", "command-inventory.after.json", "compatibility-diff.json"],
+      "manualAcceptanceId": null, "providerRequirement": null, "controlledWrite": false,
+      "frozen": {"thresholdRefs": ["cli-command-tree", "compatibility-zero"], "viewportSet": null, "workloadRefs": ["cli-full-scenario-manifest"], "compatibilityFlags": ["skills-observable-behavior-exact", "approval-policy-preserved"]}
+    },
+    {
+      "week": 87, "lane": "cli", "gateId": "W87-C3", "resultPath": "artifacts/week87-cli-exec-skills-queue/gates/W87-C3.json",
+      "commandControl": {"path": "docs_md/weekly/84_92_command_control/W87-C3.json", "sourceTrust": "prior-sealed", "predecessorMode": "prior-gate", "rolePolicy": {"requiredAll": ["adapter"], "requiredAny": [["oracle", "test"]], "optional": ["fixture", "parser"]}},
+      "sourcePlan": "87_week_cli_exec_skills_queue_modules.plan.md", "gateKind": "recursive-delegation",
+      "requiredCommandIds": ["cli-queue-current-root-delegation-suite", "cli-delegation-identity-compare", "duplicate-root-owner-scan", "goal-evidence-semantic-validate"],
+      "requiredAssertionIds": ["W87-C3.queue-current-root-delegation-mismatch-zero", "W87-C3.duplicate-root-state-zero", "W87-C3.global-options-logger-textwriter-identity-equal", "W87-C3.single-composition-owner"],
+      "minimumCommandCount": 4, "minimumTestCount": 1, "zeroMinimumTestBasis": null,
+      "requiredEvidenceKinds": ["test-report", "json", "diff"], "requiredEvidenceBasenames": ["delegation-matrix.before.json", "delegation-matrix.after.json", "compatibility-diff.json"],
+      "manualAcceptanceId": null, "providerRequirement": null, "controlledWrite": false,
+      "frozen": {"thresholdRefs": ["compatibility-zero"], "viewportSet": null, "workloadRefs": ["cli-full-scenario-manifest"], "compatibilityFlags": ["current-root-reused", "no-hidden-root", "single-logger-and-resource-owner"]}
+    },
+    {
+      "week": 87, "lane": "cli", "gateId": "W87-C4", "resultPath": "artifacts/week87-cli-exec-skills-queue/gates/W87-C4.json",
+      "commandControl": {"path": "docs_md/weekly/84_92_command_control/W87-C4.json", "sourceTrust": "prior-sealed", "predecessorMode": "prior-gate", "rolePolicy": {"requiredAll": ["adapter"], "requiredAny": [["oracle", "test"]], "optional": ["fixture", "parser"]}},
+      "sourcePlan": "87_week_cli_exec_skills_queue_modules.plan.md", "gateKind": "event-compatibility",
+      "requiredCommandIds": ["cli-delegation-failure-matrix", "cli-ndjson-correlation-compare", "cli-exit-policy-compare", "goal-evidence-semantic-validate"],
+      "requiredAssertionIds": ["W87-C4.ndjson-event-order-diff-zero", "W87-C4.session-job-report-correlation-diff-zero", "W87-C4.exit-code-snapshot-diff-zero", "W87-C4.stdout-stderr-channel-diff-zero"],
+      "minimumCommandCount": 4, "minimumTestCount": 1, "zeroMinimumTestBasis": null,
+      "requiredEvidenceKinds": ["test-report", "json", "diff"], "requiredEvidenceBasenames": ["delegation-matrix.before.json", "delegation-matrix.after.json", "output-exit-inventory.before.json", "output-exit-inventory.after.json", "compatibility-diff.json"],
+      "manualAcceptanceId": null, "providerRequirement": null, "controlledWrite": false,
+      "frozen": {"thresholdRefs": ["compatibility-zero"], "viewportSet": null, "workloadRefs": ["cli-full-scenario-manifest"], "compatibilityFlags": ["ndjson-order-exact", "correlation-identities-exact", "exit-policy-0-1-2"]}
+    },
+    {
+      "week": 87, "lane": "cli", "gateId": "W87-C5", "resultPath": "artifacts/week87-cli-exec-skills-queue/gates/W87-C5.json",
+      "commandControl": {"path": "docs_md/weekly/84_92_command_control/W87-C5.json", "sourceTrust": "prior-sealed", "predecessorMode": "prior-gate", "rolePolicy": {"requiredAll": ["adapter"], "requiredAny": [["oracle", "test"]], "optional": ["fixture", "parser"]}},
+      "sourcePlan": "87_week_cli_exec_skills_queue_modules.plan.md", "gateKind": "full-matrix-handoff",
+      "requiredCommandIds": ["dotnet-release-build", "dotnet-release-full-test", "cli-release-build", "cli-default-smoke", "cli-command-file-architecture-scan", "owned-cleanup-verify", "handoff-readiness-validate", "goal-evidence-semantic-validate"],
+      "requiredAssertionIds": ["W87-C5.full-dotnet-smoke-architecture-green", "W87-C5.compatibility-diff-zero", "open-p0-p1-zero", "owned-cleanup-zero", "W87-C5.handoff-agent-queue-ready"],
+      "minimumCommandCount": 8, "minimumTestCount": 1, "zeroMinimumTestBasis": null,
+      "requiredEvidenceKinds": ["test-report", "json", "identity"], "requiredEvidenceBasenames": ["compatibility-diff.json", "test-results.json", "final-summary.json", "handoff-readiness.json"],
+      "manualAcceptanceId": null, "providerRequirement": null, "controlledWrite": false,
+      "frozen": {"thresholdRefs": ["cli-command-tree", "compatibility-zero", "owned-cleanup-zero", "no-open-critical-issues", "exact-candidate-identity"], "viewportSet": null, "workloadRefs": ["cli-full-scenario-manifest"], "compatibilityFlags": ["full-rerun", "renderer-cli-worktree-isolation", "cli-agent-queue-ready"]}
+    },
+    {
+      "week": 88, "lane": "renderer", "gateId": "W88-R0", "resultPath": "artifacts/week88-renderer-composer-approval/gates/W88-R0.json",
+      "commandControl": {"path": "docs_md/weekly/84_92_command_control/W88-R0.json", "sourceTrust": "prior-sealed", "predecessorMode": "entry-base", "rolePolicy": {"requiredAll": ["adapter"], "requiredAny": [["oracle", "test"]], "optional": ["fixture", "parser"]}},
+      "sourcePlan": "88_week_composer_inline_approval_task_controls.plan.md", "gateKind": "entry-interaction-contract",
+      "requiredCommandIds": ["goal-control-schema-validate", "prior-handoff-schema-validate", "interaction-contract-baseline-capture", "mutation-revision-matrix-validate", "goal-evidence-semantic-validate"],
+      "requiredAssertionIds": ["W88-R0.week87-renderer-handoff-valid", "W88-R0.authoritative-ids-revisions-frozen", "W88-R0.disabled-reasons-frozen", "W88-R0.protocol-39-plus-2"],
+      "minimumCommandCount": 5, "minimumTestCount": 1, "zeroMinimumTestBasis": null,
+      "requiredEvidenceKinds": ["identity", "json", "test-report"], "requiredEvidenceBasenames": ["baseline-identity.json", "interaction-contract.before.json", "mutation-revision-matrix.json", "week87-renderer-handoff.json"],
+      "manualAcceptanceId": null, "providerRequirement": null, "controlledWrite": false,
+      "frozen": {"thresholdRefs": ["desktop-protocol-v1", "exact-candidate-identity"], "viewportSet": null, "workloadRefs": [], "compatibilityFlags": ["authority-revision-contract-frozen", "week87-resource-gates-passed"]}
+    },
+    {
+      "week": 88, "lane": "renderer", "gateId": "W88-R1", "resultPath": "artifacts/week88-renderer-composer-approval/gates/W88-R1.json",
+      "commandControl": {"path": "docs_md/weekly/84_92_command_control/W88-R1.json", "sourceTrust": "prior-sealed", "predecessorMode": "prior-gate", "rolePolicy": {"requiredAll": ["adapter"], "requiredAny": [["oracle", "test"]], "optional": ["fixture", "parser"]}},
+      "sourcePlan": "88_week_composer_inline_approval_task_controls.plan.md", "gateKind": "composer-implementation",
+      "requiredCommandIds": ["composer-interaction-rtl-suite", "composer-contract-canonical-compare", "controlled-context-ownership-test", "goal-evidence-semantic-validate"],
+      "requiredAssertionIds": ["W88-R1.queue-draft-context-outcome-mismatch-zero", "W88-R1.pending-intent-rules-unchanged", "W88-R1.disabled-reasons-unchanged", "W88-R1.context-path-ownership-preserved"],
+      "minimumCommandCount": 4, "minimumTestCount": 1, "zeroMinimumTestBasis": null,
+      "requiredEvidenceKinds": ["test-report", "json", "diff"], "requiredEvidenceBasenames": ["interaction-contract.before.json", "interaction-contract.after.json", "mutation-revision-matrix.json"],
+      "manualAcceptanceId": null, "providerRequirement": null, "controlledWrite": false,
+      "frozen": {"thresholdRefs": ["compatibility-zero"], "viewportSet": null, "workloadRefs": [], "compatibilityFlags": ["composer-authority-contract-equal", "no-context-resolution-change"]}
+    },
+    {
+      "week": 88, "lane": "renderer", "gateId": "W88-R2", "resultPath": "artifacts/week88-renderer-composer-approval/gates/W88-R2.json",
+      "commandControl": {"path": "docs_md/weekly/84_92_command_control/W88-R2.json", "sourceTrust": "prior-sealed", "predecessorMode": "prior-gate", "rolePolicy": {"requiredAll": ["adapter"], "requiredAny": [["oracle", "test"]], "optional": ["fixture", "parser"]}},
+      "sourcePlan": "88_week_composer_inline_approval_task_controls.plan.md", "gateKind": "inline-approval-implementation",
+      "requiredCommandIds": ["approval-card-rtl-suite", "approval-authority-failure-matrix", "mutation-revision-matrix-validate", "goal-evidence-semantic-validate"],
+      "requiredAssertionIds": ["W88-R2.approval-visible-and-keyboard-operable", "W88-R2.stale-double-late-thread-switch-fail-closed", "W88-R2.stale-accepted-count-zero", "W88-R2.duplicate-mutation-count-zero"],
+      "minimumCommandCount": 4, "minimumTestCount": 1, "zeroMinimumTestBasis": null,
+      "requiredEvidenceKinds": ["test-report", "json"], "requiredEvidenceBasenames": ["mutation-revision-matrix.json", "accessibility.json", "test-results.json"],
+      "manualAcceptanceId": null, "providerRequirement": null, "controlledWrite": false,
+      "frozen": {"thresholdRefs": [], "viewportSet": null, "workloadRefs": [], "compatibilityFlags": ["authoritative-state-only", "approval-contract-unchanged", "fail-closed-stale-actions"]}
+    },
+    {
+      "week": 88, "lane": "renderer", "gateId": "W88-R3", "resultPath": "artifacts/week88-renderer-composer-approval/gates/W88-R3.json",
+      "commandControl": {"path": "docs_md/weekly/84_92_command_control/W88-R3.json", "sourceTrust": "prior-sealed", "predecessorMode": "prior-gate", "rolePolicy": {"requiredAll": ["adapter"], "requiredAny": [["oracle", "test"]], "optional": ["fixture", "parser"]}},
+      "sourcePlan": "88_week_composer_inline_approval_task_controls.plan.md", "gateKind": "turn-control-recovery",
+      "requiredCommandIds": ["inline-turn-control-suite", "desktop-recovery-e2e", "mutation-revision-matrix-validate", "goal-evidence-semantic-validate"],
+      "requiredAssertionIds": ["W88-R3.cancel-resume-restart-authority-results-equal", "W88-R3.automatic-replay-count-zero", "W88-R3.old-approval-reuse-count-zero", "W88-R3.new-attempt-identity-distinct"],
+      "minimumCommandCount": 4, "minimumTestCount": 1, "zeroMinimumTestBasis": null,
+      "requiredEvidenceKinds": ["test-report", "json"], "requiredEvidenceBasenames": ["mutation-revision-matrix.json", "recovery-results.json"],
+      "manualAcceptanceId": null, "providerRequirement": null, "controlledWrite": false,
+      "frozen": {"thresholdRefs": [], "viewportSet": null, "workloadRefs": ["week81-83-projection"], "compatibilityFlags": ["no-automatic-replay", "attempt-and-approval-identity-not-reused", "apphost-authority-unchanged"]}
+    },
+    {
+      "week": 88, "lane": "renderer", "gateId": "W88-R4", "resultPath": "artifacts/week88-renderer-composer-approval/gates/W88-R4.json",
+      "commandControl": {"path": "docs_md/weekly/84_92_command_control/W88-R4.json", "sourceTrust": "prior-sealed", "predecessorMode": "prior-gate", "rolePolicy": {"requiredAll": ["adapter"], "requiredAny": [["oracle", "test"]], "optional": ["fixture", "parser"]}},
+      "sourcePlan": "88_week_composer_inline_approval_task_controls.plan.md", "gateKind": "keyboard-accessibility",
+      "requiredCommandIds": ["composer-ime-keyboard-test", "inline-control-focus-aria-live-test", "desktop-accessibility-check", "goal-evidence-semantic-validate"],
+      "requiredAssertionIds": ["W88-R4.enter-shiftenter-ime-failure-zero", "W88-R4.focus-restore-failure-zero", "W88-R4.screen-reader-status-failure-zero", "W88-R4.keyboard-actions-equal-visible-actions"],
+      "minimumCommandCount": 4, "minimumTestCount": 1, "zeroMinimumTestBasis": null,
+      "requiredEvidenceKinds": ["test-report", "json"], "requiredEvidenceBasenames": ["accessibility.json", "test-results.json"],
+      "manualAcceptanceId": null, "providerRequirement": null, "controlledWrite": false,
+      "frozen": {"thresholdRefs": ["desktop-three-viewports"], "viewportSet": "desktop-three-viewports", "workloadRefs": [], "compatibilityFlags": ["ime-does-not-send", "focus-and-aria-live-preserved"]}
+    },
+    {
+      "week": 88, "lane": "renderer", "gateId": "W88-R5", "resultPath": "artifacts/week88-renderer-composer-approval/gates/W88-R5.json",
+      "commandControl": {"path": "docs_md/weekly/84_92_command_control/W88-R5.json", "sourceTrust": "prior-sealed", "predecessorMode": "prior-gate", "rolePolicy": {"requiredAll": ["adapter"], "requiredAny": [["oracle", "test"]], "optional": ["fixture", "parser"]}},
+      "sourcePlan": "88_week_composer_inline_approval_task_controls.plan.md", "gateKind": "resource-full-matrix-handoff",
+      "requiredCommandIds": ["dotnet-release-build", "dotnet-release-full-test", "desktop-verify", "desktop-e2e-unpacked", "desktop-e2e-performance", "renderer-resource-control-harness", "desktop-protocol-canonical-compare", "owned-cleanup-verify", "handoff-readiness-validate", "goal-evidence-semantic-validate"],
+      "requiredAssertionIds": ["W88-R5.listener-delta-at-most-40", "W88-R5.private-bytes-delta-at-most-15-percent", "W88-R5.dom-resync-within-frozen-limit", "W88-R5.full-e2e-verify-green", "open-p0-p1-zero", "owned-cleanup-zero", "W88-R5.handoff-core-chat-ready"],
+      "minimumCommandCount": 10, "minimumTestCount": 1, "zeroMinimumTestBasis": null,
+      "requiredEvidenceKinds": ["test-report", "json", "identity"], "requiredEvidenceBasenames": ["subscription-ownership.diff.json", "viewport-matrix.json", "accessibility.json", "resource-controls.json", "test-results.json", "final-summary.json", "handoff-readiness.json"],
+      "manualAcceptanceId": null, "providerRequirement": null, "controlledWrite": false,
+      "frozen": {"thresholdRefs": ["renderer-resource", "desktop-protocol-v1", "desktop-three-viewports", "owned-cleanup-zero", "no-open-critical-issues", "exact-candidate-identity"], "viewportSet": "desktop-three-viewports", "workloadRefs": ["week84-listener-ownership"], "compatibilityFlags": ["full-rerun", "protocol-39-plus-2", "core-chat-interaction-ready"]}
+    },
+    {
+      "week": 88, "lane": "cli", "gateId": "W88-C0", "resultPath": "artifacts/week88-cli-packs-artifacts/gates/W88-C0.json",
+      "commandControl": {"path": "docs_md/weekly/84_92_command_control/W88-C0.json", "sourceTrust": "prior-sealed", "predecessorMode": "entry-base", "rolePolicy": {"requiredAll": ["adapter"], "requiredAny": [["oracle", "test"]], "optional": ["fixture", "parser"]}},
+      "sourcePlan": "88_week_cli_packs_artifacts_modules.plan.md", "gateKind": "entry-characterization",
+      "requiredCommandIds": ["goal-control-schema-validate", "prior-handoff-schema-validate", "packs-artifacts-baseline-capture", "cli-required-scenario-coverage-validate", "goal-evidence-semantic-validate"],
+      "requiredAssertionIds": ["W88-C0.week87-cli-handoff-valid", "W88-C0.required-inventory-snapshot-missing-zero", "W88-C0.fake-tool-and-path-fixtures-frozen", "W88-C0.shared-freeze-clean"],
+      "minimumCommandCount": 5, "minimumTestCount": 1, "zeroMinimumTestBasis": null,
+      "requiredEvidenceKinds": ["identity", "json", "test-report"], "requiredEvidenceBasenames": ["baseline-identity.json", "command-inventory.before.json", "help-inventory.before.json", "output-exit-inventory.before.json", "packs-artifacts-matrix.before.json", "week87-cli-handoff.json"],
+      "manualAcceptanceId": null, "providerRequirement": null, "controlledWrite": false,
+      "frozen": {"thresholdRefs": ["cli-command-tree", "exact-candidate-identity", "shared-freeze-reviewed"], "viewportSet": null, "workloadRefs": ["cli-full-scenario-manifest"], "compatibilityFlags": ["same-fake-tool-and-identity", "path-and-managed-ownership-fixtures-frozen"]}
+    },
+    {
+      "week": 88, "lane": "cli", "gateId": "W88-C1", "resultPath": "artifacts/week88-cli-packs-artifacts/gates/W88-C1.json",
+      "commandControl": {"path": "docs_md/weekly/84_92_command_control/W88-C1.json", "sourceTrust": "prior-sealed", "predecessorMode": "prior-gate", "rolePolicy": {"requiredAll": ["adapter"], "requiredAny": [["oracle", "test"]], "optional": ["fixture", "parser"]}},
+      "sourcePlan": "88_week_cli_packs_artifacts_modules.plan.md", "gateKind": "project-packs-compatibility",
+      "requiredCommandIds": ["cli-project-packs-module-suite", "packs-schema-output-exit-compare", "cli-compatibility-diff-validate", "goal-evidence-semantic-validate"],
+      "requiredAssertionIds": ["W88-C1.packs-schema-output-exit-mismatch-zero", "W88-C1.tool-identity-hash-checkpoint-equal", "W88-C1.manual-reapproval-and-correctness-boundary-preserved"],
+      "minimumCommandCount": 4, "minimumTestCount": 1, "zeroMinimumTestBasis": null,
+      "requiredEvidenceKinds": ["test-report", "json", "diff"], "requiredEvidenceBasenames": ["packs-artifacts-matrix.before.json", "packs-artifacts-matrix.after.json", "compatibility-diff.json"],
+      "manualAcceptanceId": null, "providerRequirement": null, "controlledWrite": false,
+      "frozen": {"thresholdRefs": ["compatibility-zero"], "viewportSet": null, "workloadRefs": ["cli-full-scenario-manifest"], "compatibilityFlags": ["project-pack-runtime-not-redesigned", "json-markdown-text-exact"]}
+    },
+    {
+      "week": 88, "lane": "cli", "gateId": "W88-C2", "resultPath": "artifacts/week88-cli-packs-artifacts/gates/W88-C2.json",
+      "commandControl": {"path": "docs_md/weekly/84_92_command_control/W88-C2.json", "sourceTrust": "prior-sealed", "predecessorMode": "prior-gate", "rolePolicy": {"requiredAll": ["adapter"], "requiredAny": [["oracle", "test"]], "optional": ["fixture", "parser"]}},
+      "sourcePlan": "88_week_cli_packs_artifacts_modules.plan.md", "gateKind": "artifact-safety-compatibility",
+      "requiredCommandIds": ["cli-artifacts-module-suite", "artifact-ownership-path-hash-matrix", "cli-compatibility-diff-validate", "goal-evidence-semantic-validate"],
+      "requiredAssertionIds": ["W88-C2.ownership-path-hash-retention-mismatch-zero", "W88-C2.missing-corrupt-tamper-outcomes-equal", "W88-C2.no-overwrite-preserved", "W88-C2.outside-root-write-zero"],
+      "minimumCommandCount": 4, "minimumTestCount": 1, "zeroMinimumTestBasis": null,
+      "requiredEvidenceKinds": ["test-report", "json", "diff"], "requiredEvidenceBasenames": ["packs-artifacts-matrix.before.json", "packs-artifacts-matrix.after.json", "compatibility-diff.json"],
+      "manualAcceptanceId": null, "providerRequirement": null, "controlledWrite": false,
+      "frozen": {"thresholdRefs": ["compatibility-zero"], "viewportSet": null, "workloadRefs": ["cli-full-scenario-manifest"], "compatibilityFlags": ["managed-ownership-preserved", "relative-path-only", "delete-overwrite-fail-closed"]}
+    },
+    {
+      "week": 88, "lane": "cli", "gateId": "W88-C3", "resultPath": "artifacts/week88-cli-packs-artifacts/gates/W88-C3.json",
+      "commandControl": {"path": "docs_md/weekly/84_92_command_control/W88-C3.json", "sourceTrust": "prior-sealed", "predecessorMode": "prior-gate", "rolePolicy": {"requiredAll": ["adapter"], "requiredAny": [["oracle", "test"]], "optional": ["fixture", "parser"]}},
+      "sourcePlan": "88_week_cli_packs_artifacts_modules.plan.md", "gateKind": "fake-default-matrix",
+      "requiredCommandIds": ["packs-artifacts-fake-default-matrix", "packs-artifacts-required-case-validate", "cli-compatibility-diff-validate", "goal-evidence-semantic-validate"],
+      "requiredAssertionIds": ["W88-C3.fake-default-failed-case-zero", "W88-C3.fake-default-missing-case-zero", "W88-C3.unreviewed-executable-zero", "W88-C3.ownership-bypass-zero"],
+      "minimumCommandCount": 4, "minimumTestCount": 1, "zeroMinimumTestBasis": null,
+      "requiredEvidenceKinds": ["test-report", "json", "diff"], "requiredEvidenceBasenames": ["packs-artifacts-matrix.before.json", "packs-artifacts-matrix.after.json", "compatibility-diff.json"],
+      "manualAcceptanceId": null, "providerRequirement": null, "controlledWrite": false,
+      "frozen": {"thresholdRefs": ["compatibility-zero"], "viewportSet": null, "workloadRefs": ["cli-full-scenario-manifest"], "compatibilityFlags": ["fake-default-is-correctness-gate", "optional-real-tool-not-substitute"]}
+    },
+    {
+      "week": 88, "lane": "cli", "gateId": "W88-C4", "resultPath": "artifacts/week88-cli-packs-artifacts/gates/W88-C4.json",
+      "commandControl": {"path": "docs_md/weekly/84_92_command_control/W88-C4.json", "sourceTrust": "prior-sealed", "predecessorMode": "prior-gate", "rolePolicy": {"requiredAll": ["adapter"], "requiredAny": [["oracle", "test"]], "optional": ["fixture", "parser"]}},
+      "sourcePlan": "88_week_cli_packs_artifacts_modules.plan.md", "gateKind": "optional-real-tool-receipt",
+      "requiredCommandIds": ["optional-real-tool-environment-authorization-check", "optional-real-tool-status-receipt-validate", "goal-evidence-semantic-validate"],
+      "requiredAssertionIds": ["W88-C4.status-passed-failed-or-reasoned-notrun", "W88-C4.authorization-environment-command-result-recorded", "W88-C4.notrun-not-claimed-as-correctness"],
+      "minimumCommandCount": 3, "minimumTestCount": 0, "zeroMinimumTestBasis": "The plan explicitly permits a reasoned NotRun when the optional real tool or authorization is unavailable; fake/default correctness is independently required by W88-C3.",
+      "requiredEvidenceKinds": ["json"], "requiredEvidenceBasenames": ["optional-real-tool.json"],
+      "manualAcceptanceId": null, "providerRequirement": null, "controlledWrite": false,
+      "frozen": {"thresholdRefs": [], "viewportSet": null, "workloadRefs": [], "compatibilityFlags": ["optional-status-recorded-exactly", "notrun-not-correctness", "no-tool-download"]}
+    },
+    {
+      "week": 88, "lane": "cli", "gateId": "W88-C5", "resultPath": "artifacts/week88-cli-packs-artifacts/gates/W88-C5.json",
+      "commandControl": {"path": "docs_md/weekly/84_92_command_control/W88-C5.json", "sourceTrust": "prior-sealed", "predecessorMode": "prior-gate", "rolePolicy": {"requiredAll": ["adapter"], "requiredAny": [["oracle", "test"]], "optional": ["fixture", "parser"]}},
+      "sourcePlan": "88_week_cli_packs_artifacts_modules.plan.md", "gateKind": "full-matrix-handoff",
+      "requiredCommandIds": ["dotnet-release-build", "dotnet-release-full-test", "cli-release-build", "cli-default-smoke", "git-diff-check", "owned-cleanup-verify", "handoff-readiness-validate", "goal-evidence-semantic-validate"],
+      "requiredAssertionIds": ["W88-C5.full-dotnet-smoke-release-package-green", "W88-C5.compatibility-diff-zero", "open-p0-p1-zero", "owned-cleanup-zero", "W88-C5.handoff-packs-artifacts-ready"],
+      "minimumCommandCount": 8, "minimumTestCount": 1, "zeroMinimumTestBasis": null,
+      "requiredEvidenceKinds": ["test-report", "json", "identity"], "requiredEvidenceBasenames": ["compatibility-diff.json", "optional-real-tool.json", "test-results.json", "final-summary.json", "handoff-readiness.json"],
+      "manualAcceptanceId": null, "providerRequirement": null, "controlledWrite": false,
+      "frozen": {"thresholdRefs": ["cli-command-tree", "compatibility-zero", "owned-cleanup-zero", "no-open-critical-issues", "exact-candidate-identity"], "viewportSet": null, "workloadRefs": ["cli-full-scenario-manifest"], "compatibilityFlags": ["full-rerun", "renderer-cli-worktree-isolation", "cli-packs-artifacts-ready"]}
+    },
+    {
+      "week": 89, "lane": "renderer", "gateId": "W89-R0", "resultPath": "artifacts/week89-context-review-workspace/gates/W89-R0.json",
+      "commandControl": {"path": "docs_md/weekly/84_92_command_control/W89-R0.json", "sourceTrust": "prior-sealed", "predecessorMode": "entry-base", "rolePolicy": {"requiredAll": ["adapter"], "requiredAny": [["oracle", "test"]], "optional": ["fixture", "parser"]}},
+      "sourcePlan": "89_week_context_panel_terminal_review_workspace.plan.md", "gateKind": "entry-lineage",
+      "requiredCommandIds": ["goal-control-schema-validate", "prior-handoff-schema-validate", "renderer-lineage-identity-authorization-verify", "goal-evidence-semantic-validate"],
+      "requiredAssertionIds": ["W89-R0.week88-renderer-handoff-valid", "W89-R0.week84-resource-and-week86-visual-still-passed", "W89-R0.protocol-and-shared-freeze-clean", "W89-R0.authorization-within-boundary"],
+      "minimumCommandCount": 4, "minimumTestCount": 1, "zeroMinimumTestBasis": null,
+      "requiredEvidenceKinds": ["identity", "json", "test-report"], "requiredEvidenceBasenames": ["entry-gate.json", "candidate-identity.json", "week88-renderer-handoff.json"],
+      "manualAcceptanceId": null, "providerRequirement": null, "controlledWrite": false,
+      "frozen": {"thresholdRefs": ["exact-candidate-identity", "desktop-protocol-v1", "shared-freeze-reviewed", "no-open-critical-issues"], "viewportSet": null, "workloadRefs": [], "compatibilityFlags": ["week86-user-visual-passed", "no-provider-turns", "renderer-cli-worktree-isolation"]}
+    },
+    {
+      "week": 89, "lane": "renderer", "gateId": "W89-R1", "resultPath": "artifacts/week89-context-review-workspace/gates/W89-R1.json",
+      "commandControl": {"path": "docs_md/weekly/84_92_command_control/W89-R1.json", "sourceTrust": "prior-sealed", "predecessorMode": "prior-gate", "rolePolicy": {"requiredAll": ["adapter"], "requiredAny": [["oracle", "test"]], "optional": ["fixture", "parser"]}},
+      "sourcePlan": "89_week_context_panel_terminal_review_workspace.plan.md", "gateKind": "context-query-implementation",
+      "requiredCommandIds": ["context-panel-contract-test", "query-epoch-stale-result-test", "single-query-owner-architecture-test", "goal-evidence-semantic-validate"],
+      "requiredAssertionIds": ["W89-R1.context-selection-query-owner-single", "W89-R1.stale-result-commit-zero", "W89-R1.leaf-panel-no-global-bridge", "W89-R1.focus-state-contract-complete"],
+      "minimumCommandCount": 4, "minimumTestCount": 1, "zeroMinimumTestBasis": null,
+      "requiredEvidenceKinds": ["test-report", "json"], "requiredEvidenceBasenames": ["commands.json", "final-summary.json"],
+      "manualAcceptanceId": null, "providerRequirement": null, "controlledWrite": false,
+      "frozen": {"thresholdRefs": [], "viewportSet": null, "workloadRefs": [], "compatibilityFlags": ["single-context-query-owner", "selection-epoch-stale-safe", "desktop-gateway-boundary"]}
+    },
+    {
+      "week": 89, "lane": "renderer", "gateId": "W89-R2", "resultPath": "artifacts/week89-context-review-workspace/gates/W89-R2.json",
+      "commandControl": {"path": "docs_md/weekly/84_92_command_control/W89-R2.json", "sourceTrust": "prior-sealed", "predecessorMode": "prior-gate", "rolePolicy": {"requiredAll": ["adapter"], "requiredAny": [["oracle", "test"]], "optional": ["fixture", "parser"]}},
+      "sourcePlan": "89_week_context_panel_terminal_review_workspace.plan.md", "gateKind": "context-panel-parity",
+      "requiredCommandIds": ["changes-reports-artifacts-panel-suite", "result-summary-panel-navigation-test", "context-switch-parity-harness", "goal-evidence-semantic-validate"],
+      "requiredAssertionIds": ["W89-R2.changes-reports-artifacts-parity", "W89-R2.bounded-safe-content-retained", "W89-R2.result-summary-target-navigation-correct", "W89-R2.old-query-does-not-overwrite-new-context"],
+      "minimumCommandCount": 4, "minimumTestCount": 1, "zeroMinimumTestBasis": null,
+      "requiredEvidenceKinds": ["test-report", "json"], "requiredEvidenceBasenames": ["commands.json", "final-summary.json"],
+      "manualAcceptanceId": null, "providerRequirement": null, "controlledWrite": false,
+      "frozen": {"thresholdRefs": ["compatibility-zero"], "viewportSet": null, "workloadRefs": [], "compatibilityFlags": ["changes-reports-artifacts-observable-parity", "bounded-diff-and-safe-content"]}
+    },
+    {
+      "week": 89, "lane": "renderer", "gateId": "W89-R3", "resultPath": "artifacts/week89-context-review-workspace/gates/W89-R3.json",
+      "commandControl": {"path": "docs_md/weekly/84_92_command_control/W89-R3.json", "sourceTrust": "prior-sealed", "predecessorMode": "prior-gate", "rolePolicy": {"requiredAll": ["adapter"], "requiredAny": [["oracle", "test"]], "optional": ["fixture", "parser"]}},
+      "sourcePlan": "89_week_context_panel_terminal_review_workspace.plan.md", "gateKind": "preview-safety",
+      "requiredCommandIds": ["artifact-preview-safety-suite", "preview-decision-failure-matrix", "apphost-path-allowlist-test", "goal-evidence-semantic-validate"],
+      "requiredAssertionIds": ["W89-R3.correctness-claim-boundary-not-expanded", "W89-R3.ownership-boundary-not-expanded", "W89-R3.missing-tamper-stale-double-decision-fail-closed", "W89-R3.no-arbitrary-path-api"],
+      "minimumCommandCount": 4, "minimumTestCount": 1, "zeroMinimumTestBasis": null,
+      "requiredEvidenceKinds": ["test-report", "json"], "requiredEvidenceBasenames": ["commands.json", "final-summary.json"],
+      "manualAcceptanceId": null, "providerRequirement": null, "controlledWrite": false,
+      "frozen": {"thresholdRefs": [], "viewportSet": null, "workloadRefs": [], "compatibilityFlags": ["preview-not-hard-verification", "human-decision-eligibility-explicit", "reviewed-apphost-methods-only"]}
+    },
+    {
+      "week": 89, "lane": "renderer", "gateId": "W89-R4", "resultPath": "artifacts/week89-context-review-workspace/gates/W89-R4.json",
+      "commandControl": {"path": "docs_md/weekly/84_92_command_control/W89-R4.json", "sourceTrust": "prior-sealed", "predecessorMode": "prior-gate", "rolePolicy": {"requiredAll": ["adapter"], "requiredAny": [["oracle", "test"]], "optional": ["fixture", "parser"]}},
+      "sourcePlan": "89_week_context_panel_terminal_review_workspace.plan.md", "gateKind": "terminal-lifecycle",
+      "requiredCommandIds": ["terminal-panel-migration-suite", "terminal-lifecycle-e2e", "terminal-owner-listener-scan", "goal-evidence-semantic-validate"],
+      "requiredAssertionIds": ["W89-R4.no-terminal-approval-bypass", "W89-R4.orphan-process-zero", "W89-R4.duplicate-listener-zero", "W89-R4.panel-close-not-implicit-kill", "W89-R4.tail-and-protocol-bounds-unchanged"],
+      "minimumCommandCount": 4, "minimumTestCount": 1, "zeroMinimumTestBasis": null,
+      "requiredEvidenceKinds": ["test-report", "json"], "requiredEvidenceBasenames": ["commands.json", "final-summary.json"],
+      "manualAcceptanceId": null, "providerRequirement": null, "controlledWrite": false,
+      "frozen": {"thresholdRefs": ["terminal-bounds", "renderer-resource"], "viewportSet": null, "workloadRefs": ["terminal-lifecycle"], "compatibilityFlags": ["open-input-cancel-close-semantics-preserved", "single-terminal-owner"]}
+    },
+    {
+      "week": 89, "lane": "renderer", "gateId": "W89-R5", "resultPath": "artifacts/week89-context-review-workspace/gates/W89-R5.json",
+      "commandControl": {"path": "docs_md/weekly/84_92_command_control/W89-R5.json", "sourceTrust": "prior-sealed", "predecessorMode": "prior-gate", "rolePolicy": {"requiredAll": ["adapter"], "requiredAny": [["oracle", "test"]], "optional": ["fixture", "parser"]}},
+      "sourcePlan": "89_week_context_panel_terminal_review_workspace.plan.md", "gateKind": "responsive-accessibility-manual-visual",
+      "requiredCommandIds": ["context-panel-viewport-e2e", "desktop-accessibility-check", "visual-evidence-capture", "manual-acceptance-receipt-validate", "goal-evidence-semantic-validate"],
+      "requiredAssertionIds": ["W89-R5.drawer-resize-focus-a11y-automation-passed", "W89-R5.user-visual-status-passed", "W89-R5.panel-closed-open-drawer-overlay-approval-visible-covered", "W89-R5.exact-screenshot-hashes-bound"],
+      "minimumCommandCount": 5, "minimumTestCount": 1, "zeroMinimumTestBasis": null,
+      "requiredEvidenceKinds": ["test-report", "manual-attestation", "screenshot", "json"], "requiredEvidenceBasenames": ["screenshot-manifest.json", "visual-acceptance.json", "commands.json"],
+      "manualAcceptanceId": "W89-USER-VISUAL", "providerRequirement": null, "controlledWrite": false,
+      "frozen": {"thresholdRefs": ["desktop-three-viewports"], "viewportSet": "desktop-three-viewports", "workloadRefs": [], "compatibilityFlags": ["user-decision-required", "automation-not-substitute", "composer-and-approval-not-covered"]}
+    },
+    {
+      "week": 89, "lane": "renderer", "gateId": "W89-R6", "resultPath": "artifacts/week89-context-review-workspace/gates/W89-R6.json",
+      "commandControl": {"path": "docs_md/weekly/84_92_command_control/W89-R6.json", "sourceTrust": "prior-sealed", "predecessorMode": "prior-gate", "rolePolicy": {"requiredAll": ["adapter"], "requiredAny": [["oracle", "test"]], "optional": ["fixture", "parser"]}},
+      "sourcePlan": "89_week_context_panel_terminal_review_workspace.plan.md", "gateKind": "full-matrix-resource",
+      "requiredCommandIds": ["dotnet-release-full-test", "desktop-verify", "desktop-e2e-unpacked", "desktop-e2e-packaged-applicable", "renderer-resource-control-harness", "owned-cleanup-verify", "goal-evidence-semantic-validate"],
+      "requiredAssertionIds": ["W89-R6.full-verify-e2e-green", "W89-R6.listener-dom-private-bytes-within-bounds", "W89-R6.process-terminal-cleanup-zero", "owned-cleanup-zero"],
+      "minimumCommandCount": 7, "minimumTestCount": 1, "zeroMinimumTestBasis": null,
+      "requiredEvidenceKinds": ["test-report", "json"], "requiredEvidenceBasenames": ["commands.json", "final-summary.json"],
+      "manualAcceptanceId": null, "providerRequirement": null, "controlledWrite": false,
+      "frozen": {"thresholdRefs": ["renderer-resource", "owned-cleanup-zero"], "viewportSet": "desktop-three-viewports", "workloadRefs": ["week84-listener-ownership", "terminal-lifecycle"], "compatibilityFlags": ["read-only-recovery-artifact-gerber-e2e", "full-rerun"]}
+    },
+    {
+      "week": 89, "lane": "renderer", "gateId": "W89-R7", "resultPath": "artifacts/week89-context-review-workspace/gates/W89-R7.json",
+      "commandControl": {"path": "docs_md/weekly/84_92_command_control/W89-R7.json", "sourceTrust": "prior-sealed", "predecessorMode": "prior-gate", "rolePolicy": {"requiredAll": ["adapter"], "requiredAny": [["oracle", "test"]], "optional": ["fixture", "parser"]}},
+      "sourcePlan": "89_week_context_panel_terminal_review_workspace.plan.md", "gateKind": "closure-handoff",
+      "requiredCommandIds": ["prior-week-gates-reconcile", "candidate-identity-verify", "documentation-evidence-reconcile", "handoff-readiness-validate", "goal-evidence-semantic-validate"],
+      "requiredAssertionIds": ["W89-R7.all-prior-renderer-gates-passed", "open-p0-p1-zero", "W89-R7.exact-clean-revision", "W89-R7.final-summary-complete", "W89-R7.handoff-desktop-lane-ready"],
+      "minimumCommandCount": 5, "minimumTestCount": 1, "zeroMinimumTestBasis": null,
+      "requiredEvidenceKinds": ["identity", "json", "manual-attestation", "test-report"], "requiredEvidenceBasenames": ["candidate-identity.json", "visual-acceptance.json", "final-summary.json", "handoff-readiness.json"],
+      "manualAcceptanceId": null, "providerRequirement": null, "controlledWrite": false,
+      "frozen": {"thresholdRefs": ["exact-candidate-identity", "no-open-critical-issues", "desktop-protocol-v1", "shared-freeze-reviewed"], "viewportSet": null, "workloadRefs": [], "compatibilityFlags": ["desktop-experience-lane-ready", "all-gate-evidence-hashes-bound"]}
+    },
+    {
+      "week": 89, "lane": "cli", "gateId": "W89-C0", "resultPath": "artifacts/week89-cli-automation-pipeline/gates/W89-C0.json",
+      "commandControl": {"path": "docs_md/weekly/84_92_command_control/W89-C0.json", "sourceTrust": "prior-sealed", "predecessorMode": "entry-base", "rolePolicy": {"requiredAll": ["adapter"], "requiredAny": [["oracle", "test"]], "optional": ["fixture", "parser"]}},
+      "sourcePlan": "89_week_cli_automation_pipeline_compatibility.plan.md", "gateKind": "entry-lineage",
+      "requiredCommandIds": ["goal-control-schema-validate", "prior-handoff-schema-validate", "cli-lineage-identity-authorization-verify", "goal-evidence-semantic-validate"],
+      "requiredAssertionIds": ["W89-C0.week88-cli-handoff-valid", "W89-C0.week85-88-snapshots-traceable", "W89-C0.cli-worktree-and-shared-freeze-clean", "W89-C0.no-provider-or-external-write"],
+      "minimumCommandCount": 4, "minimumTestCount": 1, "zeroMinimumTestBasis": null,
+      "requiredEvidenceKinds": ["identity", "json", "test-report"], "requiredEvidenceBasenames": ["entry-gate.json", "candidate-identity.json", "week88-cli-handoff.json"],
+      "manualAcceptanceId": null, "providerRequirement": null, "controlledWrite": false,
+      "frozen": {"thresholdRefs": ["exact-candidate-identity", "shared-freeze-reviewed", "no-open-critical-issues"], "viewportSet": null, "workloadRefs": [], "compatibilityFlags": ["renderer-lane-files-unchanged", "no-real-provider", "local-only-authority"]}
+    },
+    {
+      "week": 89, "lane": "cli", "gateId": "W89-C1", "resultPath": "artifacts/week89-cli-automation-pipeline/gates/W89-C1.json",
+      "commandControl": {"path": "docs_md/weekly/84_92_command_control/W89-C1.json", "sourceTrust": "prior-sealed", "predecessorMode": "prior-gate", "rolePolicy": {"requiredAll": ["adapter"], "requiredAny": [["oracle", "test"]], "optional": ["fixture", "parser"]}},
+      "sourcePlan": "89_week_cli_automation_pipeline_compatibility.plan.md", "gateKind": "recursive-flow-baseline",
+      "requiredCommandIds": ["automation-pipeline-baseline-capture", "recursive-flow-failure-matrix", "cli-required-scenario-coverage-validate", "goal-evidence-semantic-validate"],
+      "requiredAssertionIds": ["W89-C1.automation-pipeline-baseline-complete", "W89-C1.recursive-delegation-scenarios-complete", "W89-C1.correlation-and-exit-baseline-bound", "W89-C1.first-failure-preserved"],
+      "minimumCommandCount": 4, "minimumTestCount": 1, "zeroMinimumTestBasis": null,
+      "requiredEvidenceKinds": ["test-report", "json", "text-log"], "requiredEvidenceBasenames": ["command-inventory-before.json", "commands.json"],
+      "manualAcceptanceId": null, "providerRequirement": null, "controlledWrite": false,
+      "frozen": {"thresholdRefs": ["cli-command-tree"], "viewportSet": null, "workloadRefs": ["cli-full-scenario-manifest"], "compatibilityFlags": ["automation-pipeline-recursive-baseline", "failure-approval-mcp-cleanup-covered"]}
+    },
+    {
+      "week": 89, "lane": "cli", "gateId": "W89-C2", "resultPath": "artifacts/week89-cli-automation-pipeline/gates/W89-C2.json",
+      "commandControl": {"path": "docs_md/weekly/84_92_command_control/W89-C2.json", "sourceTrust": "prior-sealed", "predecessorMode": "prior-gate", "rolePolicy": {"requiredAll": ["adapter"], "requiredAny": [["oracle", "test"]], "optional": ["fixture", "parser"]}},
+      "sourcePlan": "89_week_cli_automation_pipeline_compatibility.plan.md", "gateKind": "recursive-delegation-implementation",
+      "requiredCommandIds": ["automation-pipeline-module-suite", "recursive-composition-identity-compare", "duplicate-root-owner-scan", "goal-evidence-semantic-validate"],
+      "requiredAssertionIds": ["W89-C2.delegation-composition-identity-equal", "W89-C2.root-global-options-dependencies-equal", "W89-C2.clock-environment-textwriter-store-equal", "W89-C2.second-container-count-zero"],
+      "minimumCommandCount": 4, "minimumTestCount": 1, "zeroMinimumTestBasis": null,
+      "requiredEvidenceKinds": ["test-report", "json", "diff"], "requiredEvidenceBasenames": ["command-inventory-before.json", "command-inventory-after.json", "compatibility-diff.json"],
+      "manualAcceptanceId": null, "providerRequirement": null, "controlledWrite": false,
+      "frozen": {"thresholdRefs": ["compatibility-zero"], "viewportSet": null, "workloadRefs": ["cli-full-scenario-manifest"], "compatibilityFlags": ["composition-context-only-delegation", "single-dependency-truth"]}
+    },
+    {
+      "week": 89, "lane": "cli", "gateId": "W89-C3", "resultPath": "artifacts/week89-cli-automation-pipeline/gates/W89-C3.json",
+      "commandControl": {"path": "docs_md/weekly/84_92_command_control/W89-C3.json", "sourceTrust": "prior-sealed", "predecessorMode": "prior-gate", "rolePolicy": {"requiredAll": ["adapter"], "requiredAny": [["oracle", "test"]], "optional": ["fixture", "parser"]}},
+      "sourcePlan": "89_week_cli_automation_pipeline_compatibility.plan.md", "gateKind": "factory-cleanup-architecture",
+      "requiredCommandIds": ["cli-public-facade-compatibility-test", "cli-command-file-architecture-scan", "duplicate-command-root-scan", "goal-evidence-semantic-validate"],
+      "requiredAssertionIds": ["W89-C3.public-create-overloads-retained", "W89-C3.test-compatibility-not-broken", "W89-C3.duplicate-command-registration-zero", "W89-C3.hidden-root-and-second-container-zero"],
+      "minimumCommandCount": 4, "minimumTestCount": 1, "zeroMinimumTestBasis": null,
+      "requiredEvidenceKinds": ["test-report", "json"], "requiredEvidenceBasenames": ["commands.json", "compatibility-diff.json"],
+      "manualAcceptanceId": null, "providerRequirement": null, "controlledWrite": false,
+      "frozen": {"thresholdRefs": ["cli-command-tree"], "viewportSet": null, "workloadRefs": [], "compatibilityFlags": ["public-facade-preserved", "no-duplicate-registration", "architecture-generator-updated"]}
+    },
+    {
+      "week": 89, "lane": "cli", "gateId": "W89-C4", "resultPath": "artifacts/week89-cli-automation-pipeline/gates/W89-C4.json",
+      "commandControl": {"path": "docs_md/weekly/84_92_command_control/W89-C4.json", "sourceTrust": "prior-sealed", "predecessorMode": "prior-gate", "rolePolicy": {"requiredAll": ["adapter"], "requiredAny": [["oracle", "test"]], "optional": ["fixture", "parser"]}},
+      "sourcePlan": "89_week_cli_automation_pipeline_compatibility.plan.md", "gateKind": "full-compatibility",
+      "requiredCommandIds": ["cli-full-inventory-compare", "cli-full-scenario-harness", "cli-output-schema-exit-compare", "cli-compatibility-diff-validate", "goal-evidence-semantic-validate"],
+      "requiredAssertionIds": ["W89-C4.top-level-command-count-26", "W89-C4.all-subcommands-help-options-validators-equal", "W89-C4.output-channel-schema-exit-diff-zero", "W89-C4.unreviewed-difference-zero"],
+      "minimumCommandCount": 5, "minimumTestCount": 1, "zeroMinimumTestBasis": null,
+      "requiredEvidenceKinds": ["test-report", "json", "diff"], "requiredEvidenceBasenames": ["command-inventory-before.json", "command-inventory-after.json", "compatibility-diff.json", "commands.json"],
+      "manualAcceptanceId": null, "providerRequirement": null, "controlledWrite": false,
+      "frozen": {"thresholdRefs": ["cli-command-tree", "compatibility-zero"], "viewportSet": null, "workloadRefs": ["cli-full-scenario-manifest"], "compatibilityFlags": ["all-command-domains-covered", "schema-and-correlation-exact"]}
+    },
+    {
+      "week": 89, "lane": "cli", "gateId": "W89-C5", "resultPath": "artifacts/week89-cli-automation-pipeline/gates/W89-C5.json",
+      "commandControl": {"path": "docs_md/weekly/84_92_command_control/W89-C5.json", "sourceTrust": "prior-sealed", "predecessorMode": "prior-gate", "rolePolicy": {"requiredAll": ["adapter"], "requiredAny": [["oracle", "test"]], "optional": ["fixture", "parser"]}},
+      "sourcePlan": "89_week_cli_automation_pipeline_compatibility.plan.md", "gateKind": "full-matrix",
+      "requiredCommandIds": ["dotnet-release-build", "dotnet-release-full-test", "cli-release-build", "cli-default-smoke", "cli-package-applicable-test", "goal-evidence-semantic-validate"],
+      "requiredAssertionIds": ["W89-C5.full-dotnet-cli-smoke-release-package-green", "W89-C5.all-command-exits-zero", "W89-C5.applicable-matrix-complete"],
+      "minimumCommandCount": 6, "minimumTestCount": 1, "zeroMinimumTestBasis": null,
+      "requiredEvidenceKinds": ["test-report", "json"], "requiredEvidenceBasenames": ["commands.json", "final-summary.json"],
+      "manualAcceptanceId": null, "providerRequirement": null, "controlledWrite": false,
+      "frozen": {"thresholdRefs": ["cli-command-tree"], "viewportSet": null, "workloadRefs": ["cli-full-scenario-manifest"], "compatibilityFlags": ["full-rerun", "release-and-package-applicable-matrix"]}
+    },
+    {
+      "week": 89, "lane": "cli", "gateId": "W89-C6", "resultPath": "artifacts/week89-cli-automation-pipeline/gates/W89-C6.json",
+      "commandControl": {"path": "docs_md/weekly/84_92_command_control/W89-C6.json", "sourceTrust": "prior-sealed", "predecessorMode": "prior-gate", "rolePolicy": {"requiredAll": ["adapter"], "requiredAny": [["oracle", "test"]], "optional": ["fixture", "parser"]}},
+      "sourcePlan": "89_week_cli_automation_pipeline_compatibility.plan.md", "gateKind": "isolation-cleanup-redaction",
+      "requiredCommandIds": ["shared-freeze-diff-validate", "renderer-lane-isolation-verify", "owned-cleanup-verify", "evidence-secret-scan", "goal-evidence-semantic-validate"],
+      "requiredAssertionIds": ["W89-C6.shared-freeze-unreviewed-difference-zero", "W89-C6.renderer-isolation-clean", "owned-cleanup-zero", "W89-C6.secret-leak-count-zero"],
+      "minimumCommandCount": 5, "minimumTestCount": 1, "zeroMinimumTestBasis": null,
+      "requiredEvidenceKinds": ["json", "diff", "test-report"], "requiredEvidenceBasenames": ["candidate-identity.json", "commands.json", "final-summary.json"],
+      "manualAcceptanceId": null, "providerRequirement": null, "controlledWrite": false,
+      "frozen": {"thresholdRefs": ["shared-freeze-reviewed", "owned-cleanup-zero"], "viewportSet": null, "workloadRefs": [], "compatibilityFlags": ["renderer-lane-unchanged", "raw-secret-scan", "owned-path-cleanup-only"]}
+    },
+    {
+      "week": 89, "lane": "cli", "gateId": "W89-C7", "resultPath": "artifacts/week89-cli-automation-pipeline/gates/W89-C7.json",
+      "commandControl": {"path": "docs_md/weekly/84_92_command_control/W89-C7.json", "sourceTrust": "prior-sealed", "predecessorMode": "prior-gate", "rolePolicy": {"requiredAll": ["adapter"], "requiredAny": [["oracle", "test"]], "optional": ["fixture", "parser"]}},
+      "sourcePlan": "89_week_cli_automation_pipeline_compatibility.plan.md", "gateKind": "closure-handoff",
+      "requiredCommandIds": ["prior-week-gates-reconcile", "candidate-identity-verify", "documentation-evidence-reconcile", "handoff-readiness-validate", "goal-evidence-semantic-validate"],
+      "requiredAssertionIds": ["W89-C7.all-prior-cli-gates-passed", "open-p0-p1-zero", "W89-C7.exact-clean-revision", "W89-C7.final-summary-complete", "W89-C7.handoff-cli-lane-ready"],
+      "minimumCommandCount": 5, "minimumTestCount": 1, "zeroMinimumTestBasis": null,
+      "requiredEvidenceKinds": ["identity", "json", "test-report"], "requiredEvidenceBasenames": ["candidate-identity.json", "compatibility-diff.json", "final-summary.json", "handoff-readiness.json"],
+      "manualAcceptanceId": null, "providerRequirement": null, "controlledWrite": false,
+      "frozen": {"thresholdRefs": ["exact-candidate-identity", "no-open-critical-issues", "cli-command-tree", "shared-freeze-reviewed"], "viewportSet": null, "workloadRefs": [], "compatibilityFlags": ["cli-lane-ready", "all-gate-evidence-hashes-bound"]}
+    },
+    {
+      "week": 90, "lane": "integration", "gateId": "W90-G0", "resultPath": "artifacts/week90-cli-desktop-integration/gates/W90-G0.json",
+      "commandControl": {"path": "docs_md/weekly/84_92_command_control/W90-G0.json", "sourceTrust": "prior-sealed", "predecessorMode": "w90-integration-entry-base", "rolePolicy": {"requiredAll": ["adapter"], "requiredAny": [["oracle", "test"]], "optional": ["fixture", "parser"]}},
+      "sourcePlan": "90_week_cli_desktop_cross_lane_integration.plan.md", "gateKind": "dual-lane-entry",
+      "requiredCommandIds": ["goal-control-schema-validate", "renderer-lane-handoff-schema-validate", "cli-lane-handoff-schema-validate", "dual-lane-lineage-identity-compare", "provider-ledger-cap-validate", "goal-evidence-semantic-validate"],
+      "requiredAssertionIds": ["W90-G0.both-lane-handoffs-ready", "W90-G0.both-lanes-exact-clean", "W90-G0.same-week84-ancestry-lock-and-freeze", "W90-G0.week89-user-visual-passed", "W90-G0.provider-turns-at-most-120", "open-p0-p1-zero"],
+      "minimumCommandCount": 6, "minimumTestCount": 1, "zeroMinimumTestBasis": null,
+      "requiredEvidenceKinds": ["identity", "json", "test-report"], "requiredEvidenceBasenames": ["entry-gate.json", "week89-renderer-handoff.json", "week89-cli-handoff.json", "provider-ledger-binding.json"],
+      "manualAcceptanceId": null, "providerRequirement": null, "controlledWrite": false,
+      "frozen": {"thresholdRefs": ["exact-candidate-identity", "provider-budget", "shared-freeze-reviewed", "no-open-critical-issues"], "viewportSet": null, "workloadRefs": [], "compatibilityFlags": ["both-lanes-required", "single-lane-merge-forbidden", "no-new-provider-turns-by-default"]}
+    },
+    {
+      "week": 90, "lane": "integration", "gateId": "W90-G1", "resultPath": "artifacts/week90-cli-desktop-integration/gates/W90-G1.json",
+      "commandControl": {"path": "docs_md/weekly/84_92_command_control/W90-G1.json", "sourceTrust": "prior-sealed", "predecessorMode": "prior-gate", "rolePolicy": {"requiredAll": ["adapter"], "requiredAny": [["oracle", "test"]], "optional": ["fixture", "parser"]}},
+      "sourcePlan": "90_week_cli_desktop_cross_lane_integration.plan.md", "gateKind": "staged-merge",
+      "requiredCommandIds": ["integration-base-identity-verify", "cli-lane-staged-merge", "cli-post-merge-targeted-full-test", "renderer-lane-staged-merge", "renderer-post-merge-targeted-test", "merge-ledger-validate", "goal-evidence-semantic-validate"],
+      "requiredAssertionIds": ["W90-G1.week84-base-recorded", "W90-G1.cli-pre-post-revisions-recorded", "W90-G1.renderer-pre-post-revisions-recorded", "W90-G1.each-step-first-failure-preserved", "W90-G1.both-lanes-merged"],
+      "minimumCommandCount": 7, "minimumTestCount": 2, "zeroMinimumTestBasis": null,
+      "requiredEvidenceKinds": ["json", "identity", "text-log", "test-report"], "requiredEvidenceBasenames": ["merge-ledger.json", "commands.json"],
+      "manualAcceptanceId": null, "providerRequirement": null, "controlledWrite": false,
+      "frozen": {"thresholdRefs": ["exact-candidate-identity"], "viewportSet": null, "workloadRefs": [], "compatibilityFlags": ["cli-then-renderer-order", "per-step-test-before-next-merge", "first-failure-append-only"]}
+    },
+    {
+      "week": 90, "lane": "integration", "gateId": "W90-G2", "resultPath": "artifacts/week90-cli-desktop-integration/gates/W90-G2.json",
+      "commandControl": {"path": "docs_md/weekly/84_92_command_control/W90-G2.json", "sourceTrust": "prior-sealed", "predecessorMode": "prior-gate", "rolePolicy": {"requiredAll": ["adapter"], "requiredAny": [["oracle", "test"]], "optional": ["fixture", "parser"]}},
+      "sourcePlan": "90_week_cli_desktop_cross_lane_integration.plan.md", "gateKind": "shared-freeze-review",
+      "requiredCommandIds": ["shared-freeze-diff-generate", "shared-freeze-source-lane-reconcile", "shared-freeze-review-evidence-validate", "goal-evidence-semantic-validate"],
+      "requiredAssertionIds": ["W90-G2.every-shared-diff-has-source-lane", "W90-G2.every-shared-diff-has-reason-review-test", "W90-G2.unreviewed-shared-difference-zero"],
+      "minimumCommandCount": 4, "minimumTestCount": 1, "zeroMinimumTestBasis": null,
+      "requiredEvidenceKinds": ["diff", "json", "test-report"], "requiredEvidenceBasenames": ["shared-freeze-diff.json", "merge-ledger.json"],
+      "manualAcceptanceId": null, "providerRequirement": null, "controlledWrite": false,
+      "frozen": {"thresholdRefs": ["shared-freeze-reviewed"], "viewportSet": null, "workloadRefs": [], "compatibilityFlags": ["application-core-apphost-projectpacks-reviewed", "protocol-generated-release-scripts-reviewed"]}
+    },
+    {
+      "week": 90, "lane": "integration", "gateId": "W90-G3", "resultPath": "artifacts/week90-cli-desktop-integration/gates/W90-G3.json",
+      "commandControl": {"path": "docs_md/weekly/84_92_command_control/W90-G3.json", "sourceTrust": "prior-sealed", "predecessorMode": "prior-gate", "rolePolicy": {"requiredAll": ["adapter"], "requiredAny": [["oracle", "test"]], "optional": ["fixture", "parser"]}},
+      "sourcePlan": "90_week_cli_desktop_cross_lane_integration.plan.md", "gateKind": "architecture",
+      "requiredCommandIds": ["cross-lane-architecture-test", "desktop-gateway-boundary-test", "cli-composition-owner-test", "documentation-inventory-compare", "goal-evidence-semantic-validate"],
+      "requiredAssertionIds": ["W90-G3.cli-layer-dependencies-allowed", "W90-G3.apphost-does-not-depend-on-cli", "W90-G3.renderer-no-direct-global-bridge", "W90-G3.single-subscription-and-composition-owner", "W90-G3.docs-inventories-match"],
+      "minimumCommandCount": 5, "minimumTestCount": 1, "zeroMinimumTestBasis": null,
+      "requiredEvidenceKinds": ["test-report", "json"], "requiredEvidenceBasenames": ["architecture-boundaries.json", "commands.json"],
+      "manualAcceptanceId": null, "providerRequirement": null, "controlledWrite": false,
+      "frozen": {"thresholdRefs": ["desktop-protocol-v1", "cli-command-tree"], "viewportSet": null, "workloadRefs": [], "compatibilityFlags": ["desktop-gateway-only", "single-dependency-truth", "docs-match-code"]}
+    },
+    {
+      "week": 90, "lane": "integration", "gateId": "W90-G4", "resultPath": "artifacts/week90-cli-desktop-integration/gates/W90-G4.json",
+      "commandControl": {"path": "docs_md/weekly/84_92_command_control/W90-G4.json", "sourceTrust": "prior-sealed", "predecessorMode": "prior-gate", "rolePolicy": {"requiredAll": ["adapter"], "requiredAny": [["oracle", "test"]], "optional": ["fixture", "parser"]}},
+      "sourcePlan": "90_week_cli_desktop_cross_lane_integration.plan.md", "gateKind": "cli-full-compatibility",
+      "requiredCommandIds": ["dotnet-release-build", "dotnet-release-full-test", "cli-full-inventory-compare", "cli-full-scenario-harness", "cli-default-smoke", "cli-release-build", "goal-evidence-semantic-validate"],
+      "requiredAssertionIds": ["W90-G4.cli-command-help-output-exit-diff-zero", "W90-G4.recursive-delegation-green", "W90-G4.agent-approval-session-artifact-pack-flows-green", "W90-G4.top-level-command-count-26"],
+      "minimumCommandCount": 7, "minimumTestCount": 1, "zeroMinimumTestBasis": null,
+      "requiredEvidenceKinds": ["test-report", "json", "diff"], "requiredEvidenceBasenames": ["cli-compatibility.json", "commands.json"],
+      "manualAcceptanceId": null, "providerRequirement": null, "controlledWrite": false,
+      "frozen": {"thresholdRefs": ["cli-command-tree", "compatibility-zero"], "viewportSet": null, "workloadRefs": ["cli-full-scenario-manifest"], "compatibilityFlags": ["post-merge-full-rerun", "all-cli-domains-covered"]}
+    },
+    {
+      "week": 90, "lane": "integration", "gateId": "W90-G5", "resultPath": "artifacts/week90-cli-desktop-integration/gates/W90-G5.json",
+      "commandControl": {"path": "docs_md/weekly/84_92_command_control/W90-G5.json", "sourceTrust": "prior-sealed", "predecessorMode": "prior-gate", "rolePolicy": {"requiredAll": ["adapter"], "requiredAny": [["oracle", "test"]], "optional": ["fixture", "parser"]}},
+      "sourcePlan": "90_week_cli_desktop_cross_lane_integration.plan.md", "gateKind": "desktop-full-matrix",
+      "requiredCommandIds": ["desktop-verify", "desktop-e2e-unpacked", "desktop-e2e-packaged-applicable", "desktop-responsive-visual-a11y-matrix", "renderer-resource-control-harness", "desktop-protocol-canonical-compare", "goal-evidence-semantic-validate"],
+      "requiredAssertionIds": ["W90-G5.desktop-feature-matrix-green", "W90-G5.visual-a11y-fixtures-green", "W90-G5.listener-dom-resync-private-bytes-within-bounds", "W90-G5.protocol-39-plus-2"],
+      "minimumCommandCount": 7, "minimumTestCount": 1, "zeroMinimumTestBasis": null,
+      "requiredEvidenceKinds": ["test-report", "json", "screenshot"], "requiredEvidenceBasenames": ["desktop-integration.json", "screenshot-manifest.json", "commands.json"],
+      "manualAcceptanceId": null, "providerRequirement": null, "controlledWrite": false,
+      "frozen": {"thresholdRefs": ["desktop-three-viewports", "renderer-resource", "desktop-protocol-v1"], "viewportSet": "desktop-three-viewports", "workloadRefs": ["week84-listener-ownership", "terminal-lifecycle"], "compatibilityFlags": ["post-merge-full-rerun", "week89-user-visual-remains-bound"]}
+    },
+    {
+      "week": 90, "lane": "integration", "gateId": "W90-G6", "resultPath": "artifacts/week90-cli-desktop-integration/gates/W90-G6.json",
+      "commandControl": {"path": "docs_md/weekly/84_92_command_control/W90-G6.json", "sourceTrust": "prior-sealed", "predecessorMode": "prior-gate", "rolePolicy": {"requiredAll": ["adapter"], "requiredAny": [["oracle", "test"]], "optional": ["fixture", "parser"]}},
+      "sourcePlan": "90_week_cli_desktop_cross_lane_integration.plan.md", "gateKind": "cross-surface-cleanup",
+      "requiredCommandIds": ["cross-surface-equivalence-harness", "desktop-package-resolution-verify", "cli-store-config-release-isolation-verify", "owned-cleanup-verify", "goal-evidence-semantic-validate"],
+      "requiredAssertionIds": ["W90-G6.cli-apphost-safety-conclusions-equal", "W90-G6.cli-refactor-does-not-change-desktop-resolution", "W90-G6.renderer-refactor-does-not-change-cli-state", "owned-cleanup-zero"],
+      "minimumCommandCount": 5, "minimumTestCount": 1, "zeroMinimumTestBasis": null,
+      "requiredEvidenceKinds": ["test-report", "json"], "requiredEvidenceBasenames": ["cross-surface.json", "commands.json"],
+      "manualAcceptanceId": null, "providerRequirement": null, "controlledWrite": false,
+      "frozen": {"thresholdRefs": ["owned-cleanup-zero", "compatibility-zero"], "viewportSet": null, "workloadRefs": ["cross-surface-matrix"], "compatibilityFlags": ["same-application-use-case", "package-store-config-isolation"]}
+    },
+    {
+      "week": 90, "lane": "integration", "gateId": "W90-G7", "resultPath": "artifacts/week90-cli-desktop-integration/gates/W90-G7.json",
+      "commandControl": {"path": "docs_md/weekly/84_92_command_control/W90-G7.json", "sourceTrust": "prior-sealed", "predecessorMode": "prior-gate", "rolePolicy": {"requiredAll": ["adapter"], "requiredAny": [["oracle", "test"]], "optional": ["fixture", "parser"]}},
+      "sourcePlan": "90_week_cli_desktop_cross_lane_integration.plan.md", "gateKind": "closure-handoff",
+      "requiredCommandIds": ["prior-week-gates-reconcile", "candidate-identity-verify", "owned-cleanup-verify", "handoff-readiness-validate", "goal-evidence-semantic-validate"],
+      "requiredAssertionIds": ["W90-G7.all-prior-integration-gates-passed", "W90-G7.both-parent-handoffs-bound", "W90-G7.exact-clean-integration-candidate", "open-p0-p1-zero", "owned-cleanup-zero", "W90-G7.handoff-integration-ready-for-hardening"],
+      "minimumCommandCount": 5, "minimumTestCount": 1, "zeroMinimumTestBasis": null,
+      "requiredEvidenceKinds": ["identity", "json", "test-report"], "requiredEvidenceBasenames": ["candidate-identity.json", "final-summary.json", "handoff-readiness.json"],
+      "manualAcceptanceId": null, "providerRequirement": null, "controlledWrite": false,
+      "frozen": {"thresholdRefs": ["exact-candidate-identity", "no-open-critical-issues", "owned-cleanup-zero", "shared-freeze-reviewed"], "viewportSet": null, "workloadRefs": [], "compatibilityFlags": ["both-lanes-integrated", "integration-candidate-ready-for-hardening"]}
+    },
+    {
+      "week": 91, "lane": "hardening", "gateId": "W91-G0", "resultPath": "artifacts/week91-refactor-hardening/gates/W91-G0.json",
+      "commandControl": {"path": "docs_md/weekly/84_92_command_control/W91-G0.json", "sourceTrust": "prior-sealed", "predecessorMode": "entry-base", "rolePolicy": {"requiredAll": ["adapter"], "requiredAny": [["oracle", "test"]], "optional": ["fixture", "parser"]}},
+      "sourcePlan": "91_week_refactor_security_resource_hardening.plan.md", "gateKind": "entry-candidate-budget",
+      "requiredCommandIds": ["goal-control-schema-validate", "prior-handoff-schema-validate", "hardening-candidate-identity-freeze", "provider-ledger-cap-validate", "resource-budget-freeze", "goal-evidence-semantic-validate"],
+      "requiredAssertionIds": ["W91-G0.week90-integration-handoff-valid", "W91-G0.source-lock-package-identities-match", "W91-G0.resource-and-viewport-budgets-frozen", "W91-G0.provider-turns-at-most-120", "open-p0-p1-zero"],
+      "minimumCommandCount": 6, "minimumTestCount": 1, "zeroMinimumTestBasis": null,
+      "requiredEvidenceKinds": ["identity", "json", "test-report"], "requiredEvidenceBasenames": ["entry-gate.json", "candidate-identity-before.json", "provider-ledger-binding.json", "week90-integration-handoff.json"],
+      "manualAcceptanceId": null, "providerRequirement": null, "controlledWrite": false,
+      "frozen": {"thresholdRefs": ["exact-candidate-identity", "provider-budget", "renderer-resource", "desktop-three-viewports", "no-open-critical-issues"], "viewportSet": "desktop-three-viewports", "workloadRefs": [], "compatibilityFlags": ["week86-and-week89-visual-passed", "narrator-authority-recorded"]}
+    },
+    {
+      "week": 91, "lane": "hardening", "gateId": "W91-G1", "resultPath": "artifacts/week91-refactor-hardening/gates/W91-G1.json",
+      "commandControl": {"path": "docs_md/weekly/84_92_command_control/W91-G1.json", "sourceTrust": "prior-sealed", "predecessorMode": "prior-gate", "rolePolicy": {"requiredAll": ["adapter"], "requiredAny": [["oracle", "test"]], "optional": ["fixture", "parser"]}},
+      "sourcePlan": "91_week_refactor_security_resource_hardening.plan.md", "gateKind": "security-review",
+      "requiredCommandIds": ["desktop-security-boundary-review", "cli-security-boundary-review", "security-architecture-test", "evidence-secret-scan", "goal-evidence-semantic-validate"],
+      "requiredAssertionIds": ["W91-G1.desktop-high-risk-open-zero", "W91-G1.cli-high-risk-open-zero", "W91-G1.no-generic-ipc-node-secret-or-arbitrary-path", "W91-G1.approval-shell-mcp-workspace-guards-not-bypassed", "W91-G1.json-ndjson-secret-leak-zero"],
+      "minimumCommandCount": 5, "minimumTestCount": 1, "zeroMinimumTestBasis": null,
+      "requiredEvidenceKinds": ["json", "test-report"], "requiredEvidenceBasenames": ["security-review.json", "commands.json"],
+      "manualAcceptanceId": null, "providerRequirement": null, "controlledWrite": false,
+      "frozen": {"thresholdRefs": ["shared-freeze-reviewed"], "viewportSet": null, "workloadRefs": [], "compatibilityFlags": ["desktop-electron-security-boundaries", "cli-security-context-preserved", "secret-redaction"]}
+    },
+    {
+      "week": 91, "lane": "hardening", "gateId": "W91-G2", "resultPath": "artifacts/week91-refactor-hardening/gates/W91-G2.json",
+      "commandControl": {"path": "docs_md/weekly/84_92_command_control/W91-G2.json", "sourceTrust": "prior-sealed", "predecessorMode": "prior-gate", "rolePolicy": {"requiredAll": ["adapter"], "requiredAny": [["oracle", "test"]], "optional": ["fixture", "parser"]}},
+      "sourcePlan": "91_week_refactor_security_resource_hardening.plan.md", "gateKind": "accessibility-manual-ux",
+      "requiredCommandIds": ["automated-accessibility-full-matrix", "keyboard-only-ux-flow", "narrator-manual-receipt-validate", "operator-ux-receipt-validate", "goal-evidence-semantic-validate"],
+      "requiredAssertionIds": ["W91-G2.automated-accessibility-passed", "W91-G2.windows-narrator-status-passed", "W91-G2.operator-ux-status-passed", "W91-G2.checklist-candidate-observations-issues-bound", "W91-G2.automation-not-substitute"],
+      "minimumCommandCount": 5, "minimumTestCount": 1, "zeroMinimumTestBasis": null,
+      "requiredEvidenceKinds": ["test-report", "manual-attestation", "json"], "requiredEvidenceBasenames": ["automated-accessibility.json", "narrator-manual.json", "operator-ux-attestation.json"],
+      "manualAcceptanceId": null, "providerRequirement": null, "controlledWrite": false,
+      "frozen": {"thresholdRefs": ["desktop-three-viewports"], "viewportSet": "desktop-three-viewports", "workloadRefs": [], "compatibilityFlags": ["goal-owned-narrator-operator-observation-required", "w92-user-reviews-w91-evidence", "keyboard-screenreader-highcontrast-zoom-longtext"]}
+    },
+    {
+      "week": 91, "lane": "hardening", "gateId": "W91-G3", "resultPath": "artifacts/week91-refactor-hardening/gates/W91-G3.json",
+      "commandControl": {"path": "docs_md/weekly/84_92_command_control/W91-G3.json", "sourceTrust": "prior-sealed", "predecessorMode": "prior-gate", "rolePolicy": {"requiredAll": ["adapter"], "requiredAny": [["oracle", "test"]], "optional": ["fixture", "parser"]}},
+      "sourcePlan": "91_week_refactor_security_resource_hardening.plan.md", "gateKind": "resource-long-session",
+      "requiredCommandIds": ["week77-five-profile-harness", "week80-c0-c7-harness", "listener-ownership-regression-candidate", "conversation-long-session-resource-harness", "terminal-panel-lifecycle-resource-harness", "goal-evidence-semantic-validate"],
+      "requiredAssertionIds": ["W91-G3.week77-week80-week84-controls-passed", "W91-G3.listener-privatebytes-dom-resync-within-bounds", "W91-G3.workers-retries-within-frozen-limits", "W91-G3.no-threshold-or-workload-relaxation"],
+      "minimumCommandCount": 6, "minimumTestCount": 1, "zeroMinimumTestBasis": null,
+      "requiredEvidenceKinds": ["test-report", "json"], "requiredEvidenceBasenames": ["resource-requalification.json", "commands.json"],
+      "manualAcceptanceId": null, "providerRequirement": null, "controlledWrite": false,
+      "frozen": {"thresholdRefs": ["renderer-resource", "conversation-bounds"], "viewportSet": null, "workloadRefs": ["week77-five-profile", "week80-c0-c7", "week84-listener-ownership", "conversation-2000-240", "terminal-lifecycle"], "compatibilityFlags": ["long-session-complete", "first-overlimit-evidence-preserved"]}
+    },
+    {
+      "week": 91, "lane": "hardening", "gateId": "W91-G4", "resultPath": "artifacts/week91-refactor-hardening/gates/W91-G4.json",
+      "commandControl": {"path": "docs_md/weekly/84_92_command_control/W91-G4.json", "sourceTrust": "prior-sealed", "predecessorMode": "prior-gate", "rolePolicy": {"requiredAll": ["adapter"], "requiredAny": [["oracle", "test"]], "optional": ["fixture", "parser"]}},
+      "sourcePlan": "91_week_refactor_security_resource_hardening.plan.md", "gateKind": "package-e2e-audit",
+      "requiredCommandIds": ["clean-desktop-package-build", "dependency-license-notice-security-audit", "desktop-e2e-unpacked", "desktop-e2e-packaged-applicable", "cli-release-build", "cli-default-smoke", "package-inventory-verify", "provider-ledger-zero-turn-validate", "goal-evidence-semantic-validate"],
+      "requiredAssertionIds": ["W91-G4.unpacked-packaged-cli-smoke-green", "W91-G4.package-audits-green", "W91-G4.package-inventory-exact", "W91-G4.provider-facing-smoke-credential-free-mock-zero-turn", "W91-G4.secrets-absent-from-evidence"],
+      "minimumCommandCount": 9, "minimumTestCount": 1, "zeroMinimumTestBasis": null,
+      "requiredEvidenceKinds": ["test-report", "json", "identity"], "requiredEvidenceBasenames": ["package-e2e.json", "provider-ledger-binding.json", "commands.json"],
+      "manualAcceptanceId": null, "providerRequirement": null, "controlledWrite": false,
+      "frozen": {"thresholdRefs": ["exact-candidate-identity", "provider-budget"], "viewportSet": null, "workloadRefs": [], "compatibilityFlags": ["provider-facing-smoke-credential-free-deterministic-mock", "provider-turn-delta-zero", "no-env-local-read", "no-secret-evidence"]}
+    },
+    {
+      "week": 91, "lane": "hardening", "gateId": "W91-G5", "resultPath": "artifacts/week91-refactor-hardening/gates/W91-G5.json",
+      "commandControl": {"path": "docs_md/weekly/84_92_command_control/W91-G5.json", "sourceTrust": "prior-sealed", "predecessorMode": "prior-gate", "rolePolicy": {"requiredAll": ["adapter"], "requiredAny": [["oracle", "test"]], "optional": ["fixture", "parser"]}},
+      "sourcePlan": "91_week_refactor_security_resource_hardening.plan.md", "gateKind": "cleanup-redaction",
+      "requiredCommandIds": ["owned-process-tree-verify", "owned-temp-config-cleanup-verify", "evidence-secret-scan", "cleanup-receipt-validate", "goal-evidence-semantic-validate"],
+      "requiredAssertionIds": ["W91-G5.process-temp-config-cleanup-zero", "W91-G5.evidence-secret-leak-zero", "W91-G5.only-owned-validated-paths-cleaned", "W91-G5.cleanup-receipt-hash-bound"],
+      "minimumCommandCount": 5, "minimumTestCount": 1, "zeroMinimumTestBasis": null,
+      "requiredEvidenceKinds": ["json", "test-report"], "requiredEvidenceBasenames": ["cleanup.json", "commands.json"],
+      "manualAcceptanceId": null, "providerRequirement": null, "controlledWrite": false,
+      "frozen": {"thresholdRefs": ["owned-cleanup-zero"], "viewportSet": null, "workloadRefs": [], "compatibilityFlags": ["owned-path-validation", "secret-redaction", "cleanup-raw-hash-bound"]}
+    },
+    {
+      "week": 91, "lane": "hardening", "gateId": "W91-G6", "resultPath": "artifacts/week91-refactor-hardening/gates/W91-G6.json",
+      "commandControl": {"path": "docs_md/weekly/84_92_command_control/W91-G6.json", "sourceTrust": "prior-sealed", "predecessorMode": "prior-gate", "rolePolicy": {"requiredAll": ["adapter"], "requiredAny": [["oracle", "test"]], "optional": ["fixture", "parser"]}},
+      "sourcePlan": "91_week_refactor_security_resource_hardening.plan.md", "gateKind": "bounded-remediation",
+      "requiredCommandIds": ["remediation-scope-ledger-validate", "remediation-baseline-red-verify", "remediation-candidate-green-verify", "affected-upstream-full-rerun", "goal-evidence-semantic-validate"],
+      "requiredAssertionIds": ["W91-G6.every-remediation-red-green-bound", "W91-G6.every-remediation-full-upstream-rerun", "W91-G6.no-scope-expansion", "W91-G6.protocol-runtime-redesign-zero"],
+      "minimumCommandCount": 5, "minimumTestCount": 1, "zeroMinimumTestBasis": null,
+      "requiredEvidenceKinds": ["diff", "test-report", "json"], "requiredEvidenceBasenames": ["commands.json", "candidate-identity-before.json", "candidate-identity-after.json"],
+      "manualAcceptanceId": null, "providerRequirement": null, "controlledWrite": false,
+      "frozen": {"thresholdRefs": ["shared-freeze-reviewed"], "viewportSet": null, "workloadRefs": [], "compatibilityFlags": ["p0-p1-only-remediation", "baseline-red-candidate-green", "scope-expansion-blocks"]}
+    },
+    {
+      "week": 91, "lane": "hardening", "gateId": "W91-G7", "resultPath": "artifacts/week91-refactor-hardening/gates/W91-G7.json",
+      "commandControl": {"path": "docs_md/weekly/84_92_command_control/W91-G7.json", "sourceTrust": "prior-sealed", "predecessorMode": "prior-gate", "rolePolicy": {"requiredAll": ["adapter"], "requiredAny": [["oracle", "test"]], "optional": ["fixture", "parser"]}},
+      "sourcePlan": "91_week_refactor_security_resource_hardening.plan.md", "gateKind": "closure-handoff",
+      "requiredCommandIds": ["prior-week-gates-reconcile", "candidate-identity-verify", "provider-ledger-cap-and-zero-delta-validate", "owned-cleanup-verify", "handoff-readiness-validate", "goal-evidence-semantic-validate"],
+      "requiredAssertionIds": ["W91-G7.all-prior-hardening-gates-passed", "W91-G7.narrator-human-ux-evidence-valid", "W91-G7.provider-turns-at-most-120", "W91-G7.provider-turn-delta-zero", "open-p0-p1-zero", "owned-cleanup-zero", "W91-G7.handoff-candidate-ready-for-final-acceptance"],
+      "minimumCommandCount": 6, "minimumTestCount": 1, "zeroMinimumTestBasis": null,
+      "requiredEvidenceKinds": ["identity", "json", "manual-attestation", "test-report"], "requiredEvidenceBasenames": ["candidate-identity-after.json", "narrator-manual.json", "provider-ledger-binding.json", "final-summary.json", "handoff-readiness.json"],
+      "manualAcceptanceId": null, "providerRequirement": null, "controlledWrite": false,
+      "frozen": {"thresholdRefs": ["exact-candidate-identity", "provider-budget", "owned-cleanup-zero", "no-open-critical-issues"], "viewportSet": null, "workloadRefs": [], "compatibilityFlags": ["candidate-ready-for-final-acceptance", "all-gate-hashes-bound"]}
+    },
+    {
+      "week": 92, "lane": "acceptance", "gateId": "W92-G0", "resultPath": "artifacts/week92-refactor-acceptance/gates/W92-G0.json",
+      "commandControl": {"path": "docs_md/weekly/84_92_command_control/W92-G0.json", "sourceTrust": "prior-sealed", "predecessorMode": "entry-base", "rolePolicy": {"requiredAll": ["adapter"], "requiredAny": [["oracle", "test"]], "optional": ["fixture", "parser"]}},
+      "sourcePlan": "92_week_refactor_final_acceptance.plan.md", "gateKind": "entry-lineage",
+      "requiredCommandIds": ["goal-control-schema-validate", "prior-handoff-schema-validate", "week84-91-lineage-evidence-reconcile", "acceptance-candidate-identity-verify", "provider-ledger-cap-and-remaining-budget-validate", "goal-evidence-semantic-validate"],
+      "requiredAssertionIds": ["W92-G0.week91-handoff-valid", "W92-G0.week84-91-reviews-handoffs-evidence-complete", "W92-G0.source-lock-package-identities-match", "W92-G0.visual-and-narrator-prerequisites-passed", "W92-G0.remaining-provider-budget-sufficient", "open-p0-p1-zero"],
+      "minimumCommandCount": 6, "minimumTestCount": 1, "zeroMinimumTestBasis": null,
+      "requiredEvidenceKinds": ["identity", "json", "plan-reference", "test-report"], "requiredEvidenceBasenames": ["entry-gate.json", "week91-hardening-handoff.json", "provider-ledger-binding.json"],
+      "manualAcceptanceId": null, "providerRequirement": null, "controlledWrite": false,
+      "frozen": {"thresholdRefs": ["exact-candidate-identity", "provider-budget", "no-open-critical-issues"], "viewportSet": null, "workloadRefs": [], "compatibilityFlags": ["all-prior-checkpoints-traceable", "no-history-substitution", "worktree-clean"]}
+    },
+    {
+      "week": 92, "lane": "acceptance", "gateId": "W92-G1", "resultPath": "artifacts/week92-refactor-acceptance/gates/W92-G1.json",
+      "commandControl": {"path": "docs_md/weekly/84_92_command_control/W92-G1.json", "sourceTrust": "prior-sealed", "predecessorMode": "prior-gate", "rolePolicy": {"requiredAll": ["adapter"], "requiredAny": [["oracle", "test"]], "optional": ["fixture", "parser"]}},
+      "sourcePlan": "92_week_refactor_final_acceptance.plan.md", "gateKind": "independent-dual-build",
+      "requiredCommandIds": ["independent-build-root-a", "independent-build-root-b", "dotnet-release-full-test", "desktop-verify", "independent-build-identity-compare", "package-inventory-compare", "goal-evidence-semantic-validate"],
+      "requiredAssertionIds": ["W92-G1.two-independent-build-roots", "W92-G1.no-skip-build", "W92-G1.build-output-package-identity-match", "W92-G1.apphost-appasar-renderer-size-hash-match"],
+      "minimumCommandCount": 7, "minimumTestCount": 2, "zeroMinimumTestBasis": null,
+      "requiredEvidenceKinds": ["identity", "test-report", "json", "diff"], "requiredEvidenceBasenames": ["independent-build-a.json", "independent-build-b.json"],
+      "manualAcceptanceId": null, "providerRequirement": null, "controlledWrite": false,
+      "frozen": {"thresholdRefs": ["exact-candidate-identity"], "viewportSet": null, "workloadRefs": ["independent-dual-build"], "compatibilityFlags": ["clean-build-roots", "same-exact-candidate", "smoked-payload-not-modified"]}
+    },
+    {
+      "week": 92, "lane": "acceptance", "gateId": "W92-G2", "resultPath": "artifacts/week92-refactor-acceptance/gates/W92-G2.json",
+      "commandControl": {"path": "docs_md/weekly/84_92_command_control/W92-G2.json", "sourceTrust": "prior-sealed", "predecessorMode": "prior-gate", "rolePolicy": {"requiredAll": ["adapter"], "requiredAny": [["oracle", "test"]], "optional": ["fixture", "parser"]}},
+      "sourcePlan": "92_week_refactor_final_acceptance.plan.md", "gateKind": "cli-final-compatibility",
+      "requiredCommandIds": ["cli-full-inventory-compare", "cli-full-scenario-harness", "cli-public-injection-matrix", "cli-release-build", "cli-default-smoke", "owned-cleanup-verify", "goal-evidence-semantic-validate"],
+      "requiredAssertionIds": ["W92-G2.top-level-command-count-26", "W92-G2.all-subcommands-help-options-validators-equal", "W92-G2.public-create-injection-equal", "W92-G2.output-schema-correlation-exit-diff-zero", "W92-G2.unreviewed-difference-zero"],
+      "minimumCommandCount": 7, "minimumTestCount": 1, "zeroMinimumTestBasis": null,
+      "requiredEvidenceKinds": ["test-report", "json", "diff"], "requiredEvidenceBasenames": ["cli-compatibility.json", "commands.json"],
+      "manualAcceptanceId": null, "providerRequirement": null, "controlledWrite": false,
+      "frozen": {"thresholdRefs": ["cli-command-tree", "compatibility-zero", "owned-cleanup-zero"], "viewportSet": null, "workloadRefs": ["cli-full-scenario-manifest"], "compatibilityFlags": ["baseline-vs-week92-candidate", "all-command-domains-and-schemas-covered"]}
+    },
+    {
+      "week": 92, "lane": "acceptance", "gateId": "W92-G3", "resultPath": "artifacts/week92-refactor-acceptance/gates/W92-G3.json",
+      "commandControl": {"path": "docs_md/weekly/84_92_command_control/W92-G3.json", "sourceTrust": "prior-sealed", "predecessorMode": "prior-gate", "rolePolicy": {"requiredAll": ["adapter"], "requiredAny": [["oracle", "test"]], "optional": ["fixture", "parser"]}},
+      "sourcePlan": "92_week_refactor_final_acceptance.plan.md", "gateKind": "desktop-final-acceptance",
+      "requiredCommandIds": ["desktop-verify", "desktop-chat-first-feature-matrix", "desktop-three-viewport-interaction-matrix", "desktop-accessibility-full-matrix", "desktop-e2e-unpacked", "desktop-e2e-packaged-applicable", "desktop-protocol-canonical-compare", "visual-evidence-capture", "goal-evidence-semantic-validate"],
+      "requiredAssertionIds": ["W92-G3.chat-first-full-feature-matrix-green", "W92-G3.three-viewports-clean", "W92-G3.audit-redaction-corrupt-unknown-fallback-green", "W92-G3.keyboard-screenreader-highcontrast-reducedmotion-green", "W92-G3.protocol-39-plus-2"],
+      "minimumCommandCount": 9, "minimumTestCount": 1, "zeroMinimumTestBasis": null,
+      "requiredEvidenceKinds": ["test-report", "json", "screenshot"], "requiredEvidenceBasenames": ["desktop-acceptance.json", "screenshot-manifest.json", "visual-acceptance.json", "commands.json"],
+      "manualAcceptanceId": null, "providerRequirement": null, "controlledWrite": false,
+      "frozen": {"thresholdRefs": ["desktop-three-viewports", "desktop-protocol-v1"], "viewportSet": "desktop-three-viewports", "workloadRefs": ["terminal-lifecycle", "conversation-2000-240"], "compatibilityFlags": ["week92-exact-candidate", "historical-visual-not-substitute", "all-context-workspace-features-covered"]}
+    },
+    {
+      "week": 92, "lane": "acceptance", "gateId": "W92-G4", "resultPath": "artifacts/week92-refactor-acceptance/gates/W92-G4.json",
+      "commandControl": {"path": "docs_md/weekly/84_92_command_control/W92-G4.json", "sourceTrust": "prior-sealed", "predecessorMode": "prior-gate", "rolePolicy": {"requiredAll": ["adapter"], "requiredAny": [["oracle", "test"]], "optional": ["fixture", "parser"]}},
+      "sourcePlan": "92_week_refactor_final_acceptance.plan.md", "gateKind": "security-protocol-authority",
+      "requiredCommandIds": ["desktop-security-boundary-review", "cli-security-boundary-review", "desktop-protocol-canonical-compare", "authority-revision-replay-matrix", "evidence-secret-scan", "goal-evidence-semantic-validate"],
+      "requiredAssertionIds": ["W92-G4.security-boundaries-passed", "W92-G4.protocol-inventory-unchanged", "W92-G4.redaction-leak-zero", "W92-G4.approval-artifact-terminal-authority-not-expanded", "W92-G4.replay-and-stale-accept-zero"],
+      "minimumCommandCount": 6, "minimumTestCount": 1, "zeroMinimumTestBasis": null,
+      "requiredEvidenceKinds": ["test-report", "json"], "requiredEvidenceBasenames": ["security-protocol.json", "commands.json"],
+      "manualAcceptanceId": null, "providerRequirement": null, "controlledWrite": false,
+      "frozen": {"thresholdRefs": ["desktop-protocol-v1", "shared-freeze-reviewed"], "viewportSet": null, "workloadRefs": [], "compatibilityFlags": ["approval-authority-unchanged", "no-secret-evidence", "no-generic-ipc-or-path"]}
+    },
+    {
+      "week": 92, "lane": "acceptance", "gateId": "W92-G5", "resultPath": "artifacts/week92-refactor-acceptance/gates/W92-G5.json",
+      "commandControl": {"path": "docs_md/weekly/84_92_command_control/W92-G5.json", "sourceTrust": "prior-sealed", "predecessorMode": "prior-gate", "rolePolicy": {"requiredAll": ["adapter"], "requiredAny": [["oracle", "test"]], "optional": ["fixture", "parser"]}},
+      "sourcePlan": "92_week_refactor_final_acceptance.plan.md", "gateKind": "resource-requalification",
+      "requiredCommandIds": ["week77-five-profile-harness", "week80-c0-c7-harness", "listener-ownership-regression-candidate", "conversation-long-session-resource-harness", "terminal-panel-lifecycle-resource-harness", "resource-requalification-receipt-validate", "goal-evidence-semantic-validate"],
+      "requiredAssertionIds": ["W92-G5.listener-delta-at-most-40", "W92-G5.private-bytes-delta-at-most-15-percent", "W92-G5.dom-resync-long-session-within-bounds", "W92-G5.panel-terminal-cleanup-within-bounds", "W92-G5.no-workload-or-threshold-relaxation"],
+      "minimumCommandCount": 7, "minimumTestCount": 1, "zeroMinimumTestBasis": null,
+      "requiredEvidenceKinds": ["test-report", "json"], "requiredEvidenceBasenames": ["resource-requalification.json", "commands.json"],
+      "manualAcceptanceId": null, "providerRequirement": null, "controlledWrite": false,
+      "frozen": {"thresholdRefs": ["renderer-resource", "conversation-bounds"], "viewportSet": null, "workloadRefs": ["week77-five-profile", "week80-c0-c7", "week84-listener-ownership", "conversation-2000-240", "terminal-lifecycle"], "compatibilityFlags": ["credential-free-resource-controls", "first-overlimit-evidence-preserved"]}
+    },
+    {
+      "week": 92, "lane": "acceptance", "gateId": "W92-G6", "resultPath": "artifacts/week92-refactor-acceptance/gates/W92-G6.json",
+      "commandControl": {"path": "docs_md/weekly/84_92_command_control/W92-G6.json", "sourceTrust": "prior-sealed", "predecessorMode": "prior-gate", "rolePolicy": {"requiredAll": ["adapter"], "requiredAny": [["oracle", "test"]], "optional": ["fixture", "parser"]}},
+      "sourcePlan": "92_week_refactor_final_acceptance.plan.md", "gateKind": "package-smoke-cleanup",
+      "requiredCommandIds": ["desktop-e2e-unpacked", "desktop-e2e-packaged-applicable", "cli-release-build", "cli-default-smoke", "package-inventory-verify", "owned-process-tree-verify", "owned-temp-config-cleanup-verify", "goal-evidence-semantic-validate"],
+      "requiredAssertionIds": ["W92-G6.unpacked-packaged-cli-smoke-green", "W92-G6.package-inventory-exact", "W92-G6.process-temp-config-cleanup-zero", "W92-G6.all-command-exits-zero"],
+      "minimumCommandCount": 8, "minimumTestCount": 1, "zeroMinimumTestBasis": null,
+      "requiredEvidenceKinds": ["test-report", "json", "identity"], "requiredEvidenceBasenames": ["package-cleanup.json", "commands.json"],
+      "manualAcceptanceId": null, "providerRequirement": null, "controlledWrite": false,
+      "frozen": {"thresholdRefs": ["owned-cleanup-zero", "exact-candidate-identity"], "viewportSet": null, "workloadRefs": [], "compatibilityFlags": ["exact-week92-package", "owned-cleanup-only"]}
+    },
+    {
+      "week": 92, "lane": "acceptance", "gateId": "W92-G7", "resultPath": "artifacts/week92-refactor-acceptance/gates/W92-G7.json",
+      "commandControl": {"path": "docs_md/weekly/84_92_command_control/W92-G7.json", "sourceTrust": "prior-sealed", "predecessorMode": "prior-gate", "rolePolicy": {"requiredAll": ["adapter"], "requiredAny": [["oracle", "test"]], "optional": ["fixture", "parser"]}},
+      "sourcePlan": "92_week_refactor_final_acceptance.plan.md", "gateKind": "provider-and-controlled-write",
+      "requiredCommandIds": ["all-non-write-gates-precondition-verify", "controlled-write-tombstone-validate", "provider-budget-preflight", "provider-runtime-journal-validate", "provider-read-only-harness", "provider-recovery-harness", "provider-five-profile-harness", "controlled-write-harness", "provider-and-write-receipts-validate", "goal-evidence-semantic-validate"],
+      "requiredAssertionIds": ["W92-G7.provider-read-only-recovery-resource-passed", "W92-G7.five-profiles-consecutive-one-plus-five", "W92-G7.single-controlled-write-passed", "W92-G7.minimum-thirty-four-turns-ledgered", "W92-G7.tombstone-first-add-immutable", "W92-G7.write-ahead-reservations-finalized", "W92-G7.only-result-txt-two-approvals-no-replay", "W92-G7.secrets-absent-and-cleanup-zero"],
+      "minimumCommandCount": 10, "minimumTestCount": 8, "zeroMinimumTestBasis": null,
+      "requiredEvidenceKinds": ["json", "test-report"], "requiredEvidenceBasenames": ["provider-ledger-binding.json", "resource-requalification.json", "package-cleanup.json", "provider-readonly.json", "provider-recovery.json", "provider-resource-profile-1.json", "provider-resource-profile-2.json", "provider-resource-profile-3.json", "provider-resource-profile-4.json", "provider-resource-profile-5.json", "controlled-write.json"],
+      "manualAcceptanceId": null,
+      "providerRequirement": {"minimumTurns": 34, "scopes": ["provider-read-only", "provider-recovery", "provider-resource", "controlled-write"], "receiptBasenames": ["provider-readonly.json", "provider-recovery.json", "provider-resource-profile-1.json", "provider-resource-profile-2.json", "provider-resource-profile-3.json", "provider-resource-profile-4.json", "provider-resource-profile-5.json", "controlled-write.json"], "consecutiveProfileCount": 5, "warmupTurnsPerProfile": 1, "measuredTurnsPerProfile": 5, "boundaryDecisionPath": "docs_md/weekly/84_92_provider_boundary_decisions/W92-G7.json", "allowedBoundaryModes": ["strong-isolation", "cooperative-candidate"], "packageLaunchReceiptCount": 8},
+      "controlledWrite": true,
+      "frozen": {"thresholdRefs": ["provider-budget", "renderer-resource", "controlled-write-shape", "owned-cleanup-zero", "exact-candidate-identity"], "viewportSet": null, "workloadRefs": ["provider-five-profile"], "compatibilityFlags": ["declared-provider-boundary-mode", "exact-package-tree-launched", "package-launch-receipt", "provider-runtime-drivers-prior-sealed", "all-non-write-gates-passed-first", "failed-attempts-ledgered", "no-historical-evidence-substitution", "secret-redaction"]}
+    },
+    {
+      "week": 92, "lane": "acceptance", "gateId": "W92-G8", "resultPath": "artifacts/week92-refactor-acceptance/gates/W92-G8.json",
+      "commandControl": {"path": "docs_md/weekly/84_92_command_control/W92-G8.json", "sourceTrust": "prior-sealed", "predecessorMode": "prior-gate", "rolePolicy": {"requiredAll": ["adapter"], "requiredAny": [["oracle", "test"]], "optional": ["fixture", "parser"]}},
+      "sourcePlan": "92_week_refactor_final_acceptance.plan.md", "gateKind": "documentation-evidence-closure",
+      "requiredCommandIds": ["goal-contract-unittest", "week84-92-evidence-hash-reconcile", "candidate-package-identity-manifest-validate", "documentation-evidence-reconcile", "final-summary-reference-completeness-validate", "evidence-reconciliation-validate", "goal-evidence-semantic-validate"],
+      "requiredAssertionIds": ["W92-G8.prior-handoff-gate-evidence-hashes-reconciled", "W92-G8.current-candidate-reverification-not-history-copy", "W92-G8.docs-schedule-architecture-capability-facts-updated", "W92-G8.final-decision-fields-complete", "W92-G8.identity-manifest-complete"],
+      "minimumCommandCount": 7, "minimumTestCount": 1, "zeroMinimumTestBasis": null,
+      "requiredEvidenceKinds": ["json", "identity", "plan-reference", "test-report"], "requiredEvidenceBasenames": ["final-summary.json", "evidence-reconciliation.json"],
+      "manualAcceptanceId": null, "providerRequirement": null, "controlledWrite": false,
+      "frozen": {"thresholdRefs": ["exact-candidate-identity", "no-open-critical-issues"], "viewportSet": null, "workloadRefs": [], "compatibilityFlags": ["all-weeks-evidence-hashes-bound", "facts-only-no-release-claim"]}
+    },
+    {
+      "week": 92, "lane": "acceptance", "gateId": "W92-G9", "resultPath": "artifacts/week92-refactor-acceptance/gates/W92-G9.json",
+      "commandControl": {"path": "docs_md/weekly/84_92_command_control/W92-G9.json", "sourceTrust": "prior-sealed", "predecessorMode": "prior-gate", "rolePolicy": {"requiredAll": ["adapter"], "requiredAny": [["oracle", "test"]], "optional": ["fixture", "parser"]}},
+      "sourcePlan": "92_week_refactor_final_acceptance.plan.md", "gateKind": "manual-final-goal-closure",
+      "requiredCommandIds": ["goal-contract-unittest", "manual-acceptance-receipt-validate", "narrator-manual-receipt-validate", "provider-ledger-cap-validate", "goal-completion-preconditions-validate", "handoff-readiness-validate", "goal-evidence-semantic-validate"],
+      "requiredAssertionIds": ["W92-G9.week86-week89-week92-visual-passed", "W92-G9.week91-narrator-passed", "W92-G9.provider-turns-at-most-120", "W92-G9.all-prior-gates-passed-no-notrun", "open-p0-p1-zero", "owned-cleanup-zero", "W92-G9.goalcomplete-refactoraccepted-ready"],
+      "minimumCommandCount": 7, "minimumTestCount": 0, "zeroMinimumTestBasis": "The Gate is the independent user visual decision plus ledger and final-decision closure; all automated product acceptance is required by W92-G1 through W92-G8.",
+      "requiredEvidenceKinds": ["manual-attestation", "screenshot", "json", "identity"], "requiredEvidenceBasenames": ["screenshot-manifest.json", "visual-acceptance.json", "provider-ledger-binding.json", "final-summary.json", "handoff-readiness.json"],
+      "manualAcceptanceId": "W92-USER-VISUAL", "providerRequirement": null, "controlledWrite": false,
+      "frozen": {"thresholdRefs": ["provider-budget", "owned-cleanup-zero", "no-open-critical-issues", "exact-candidate-identity"], "viewportSet": "desktop-three-viewports", "workloadRefs": [], "compatibilityFlags": ["user-decision-required", "candidate-ready-not-goal-complete", "decision-goalcomplete-final-refactoraccepted"]}
+    }
+  ]
+}
