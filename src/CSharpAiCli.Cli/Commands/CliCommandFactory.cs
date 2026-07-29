@@ -266,16 +266,36 @@ public static class CliCommandFactory
         TextReader input,
         Func<string, string?>? environmentVariableProvider = null)
     {
+        CliDependencies dependencies = new(
+            snapshotProvider,
+            commandLogger,
+            chatModelClientFactory,
+            streamingRendererFactory,
+            conversationStoreFactory,
+            utcNowProvider,
+            execAgentRunnerFactory,
+            environmentVariableProvider ?? Environment.GetEnvironmentVariable);
+
+        return Create(output, dependencies, input);
+    }
+
+    private static RootCommand Create(
+        TextWriter output,
+        CliDependencies dependencies,
+        TextReader input)
+    {
         ArgumentNullException.ThrowIfNull(output);
-        ArgumentNullException.ThrowIfNull(snapshotProvider);
-        ArgumentNullException.ThrowIfNull(commandLogger);
-        ArgumentNullException.ThrowIfNull(chatModelClientFactory);
-        ArgumentNullException.ThrowIfNull(streamingRendererFactory);
-        ArgumentNullException.ThrowIfNull(conversationStoreFactory);
-        ArgumentNullException.ThrowIfNull(utcNowProvider);
-        ArgumentNullException.ThrowIfNull(execAgentRunnerFactory);
+        ArgumentNullException.ThrowIfNull(dependencies);
         ArgumentNullException.ThrowIfNull(input);
-        environmentVariableProvider ??= Environment.GetEnvironmentVariable;
+
+        Func<string?, string?, CliEnvironmentSnapshot> snapshotProvider = dependencies.SnapshotProvider;
+        Action<string, CliEnvironmentSnapshot> commandLogger = dependencies.CommandLogger;
+        Func<CliEnvironmentSnapshot, IChatModelClient> chatModelClientFactory = dependencies.ChatModelClientFactory;
+        Func<TextWriter, IChatStreamingRenderer> streamingRendererFactory = dependencies.StreamingRendererFactory;
+        Func<CliEnvironmentSnapshot, IConversationStore> conversationStoreFactory = dependencies.ConversationStoreFactory;
+        Func<DateTimeOffset> utcNowProvider = dependencies.UtcNowProvider;
+        Func<CliEnvironmentSnapshot, ToolRegistry, IToolExecutor, IAgentRunner> execAgentRunnerFactory = dependencies.ExecAgentRunnerFactory;
+        Func<string, string?> environmentVariableProvider = dependencies.EnvironmentVariableProvider;
 
         Func<string?, CliEnvironmentSnapshot> workspaceSnapshotProvider =
             workspacePath => snapshotProvider(workspacePath, null);

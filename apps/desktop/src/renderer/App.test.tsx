@@ -26,6 +26,7 @@ describe("desktop shell", () => {
     window.caicli = configured;
     render(<App />);
     await waitFor(() => expect(configured.getChanges).toHaveBeenCalledOnce());
+    await userEvent.click(screen.getByRole("button", { name: "Show review inspector" }));
     await userEvent.click(screen.getByRole("tab", { name: "Changes" }));
     expect(configured.getChanges).toHaveBeenCalledOnce();
   });
@@ -42,6 +43,7 @@ describe("desktop shell", () => {
     render(<App />);
     await userEvent.click(screen.getByRole("button", { name: "Collapse threads" }));
     expect(screen.getByRole("button", { name: "Show threads" })).toBeTruthy();
+    await userEvent.click(screen.getByRole("button", { name: "Show review inspector" }));
     await userEvent.click(screen.getByRole("button", { name: "Close review inspector" }));
     expect(screen.getByRole("button", { name: "Show review inspector" })).toBeTruthy();
   });
