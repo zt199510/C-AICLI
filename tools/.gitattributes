@@ -1,0 +1,15 @@
+# Bootstrap control bytes are immutable across checkout platforms.
+.gitattributes -text
+test_validate_week84_92_goal_evidence.py -text
+test_week84_92_evidence_anchor.py -text
+test_week84_92_gate_requirements.py -text
+test_week84_92_goal_integrity.py -text
+test_week84_92_trusted_executor.py -text
+validate-week84-92-goal-evidence.py -text
+week84_92_evidence_anchor.py -text
+week84_92_goal_integrity.py -text
+week84_92_provider_turn_harness.py -text
+week84_92_trusted_executor.py -text
+week84_92_commands/*.py -text
+week84_92_provider_scenarios/*.py -text
+week84_92_provider_drivers/*.mjs -text

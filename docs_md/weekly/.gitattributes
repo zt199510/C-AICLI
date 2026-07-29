@@ -1,0 +1,24 @@
+# Raw-byte identities for immutable Goal evidence must survive Windows checkout.
+.gitattributes -text
+84_92_week_* -text
+84_week_renderer_listener_retention_refactor_baseline.plan.md -text
+85_week_cli_composition_diagnostics_modules.plan.md -text
+85_week_renderer_feature_boundaries_state_split.plan.md -text
+86_week_chat_first_shell_design_system.plan.md -text
+86_week_cli_jobs_review_session_modules.plan.md -text
+87_week_cli_exec_skills_queue_modules.plan.md -text
+87_week_conversation_projection_timeline.plan.md -text
+88_week_cli_packs_artifacts_modules.plan.md -text
+88_week_composer_inline_approval_task_controls.plan.md -text
+89_week_cli_automation_pipeline_compatibility.plan.md -text
+89_week_context_panel_terminal_review_workspace.plan.md -text
+90_week_cli_desktop_cross_lane_integration.plan.md -text
+91_week_refactor_security_resource_hardening.plan.md -text
+92_week_refactor_final_acceptance.plan.md -text
+84_92_evidence_anchors/*.json -text
+84_92_user_acceptance_requests/*.json -text
+84_92_command_control/** -text
+84_92_anchor_registry/** -text
+84_92_provider_boundary_decisions/** -text
+84_92_controlled_write_authorizations/** -text
+84_92_controlled_write_tombstones/*.json -text
