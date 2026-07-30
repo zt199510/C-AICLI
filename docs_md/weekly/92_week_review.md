@@ -2,7 +2,7 @@
 
 更新时间：2026-07-30
 
-状态：`Candidate Ready / Awaiting W86, W89 and W92 visual acceptance`
+状态：`Refactor Accepted`
 
 产品候选：`4cba061`
 
@@ -14,6 +14,9 @@ Chat-first 架构，同时保留 C-AICLI 品牌、AppHost authority、`desktop-v
 `CliCommandFactory.Create` façade 保留，命令行为按 feature module 拆分。
 
 本阶段没有修改 `desktop-v1` 合同，没有调用真实 provider，没有 push、tag、部署或发布。
+
+用户于 2026-07-30 完成三个视觉检查点并确认：`W86 Passed`、`W89 Passed`、
+`W92 Passed`。
 
 ## 已完成产品切片
 
@@ -77,20 +80,11 @@ Week83 `provider-recovery-listener-retention` P1 继续保留为非阻塞技术�
 listener 诊断。后续只有相关生命周期被修改且一次不超过 5 分钟的同场景比较显示继续恶化时，
 才进入最小修复。
 
-## 待用户验收
+## 用户视觉验收
 
-启动 Renderer 预览：
+- W86 Chat-first Shell、三视口方向与 C-AICLI 品牌：`Passed`。
+- W89 Workspace Inspector、终端与上下文层级：`Passed`。
+- W92 最终候选整体布局与交互：`Passed`。
 
-```powershell
-cd D:\AI\C-AICLI\apps\desktop
-npm run dev:renderer
-```
-
-检查以下地址：
-
-- W86 Shell：`http://127.0.0.1:5173/?preview=week86`
-- W89 Workspace Inspector：`http://127.0.0.1:5173/?preview=week89`
-- W92 最终候选：使用 W89 fixture 完整检查当前最终布局、交互层级与 C-AICLI 品牌
-
-用户回复 `W86 Passed/Failed；W89 Passed/Failed；W92 Passed/Failed` 后，才能把总 Goal
-从 `Active` 标记为 `Complete`。
+自动验收、用户视觉验收和精简完成标准均已满足，本阶段最终决定为
+`Refactor Accepted`。
