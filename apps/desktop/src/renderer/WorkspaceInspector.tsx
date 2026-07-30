@@ -65,7 +65,7 @@ export function WorkspaceInspector({
         <span>Workspace context</span>
         <small title={`${workspaceLabel} · ${threadLabel} · ${turnLabel}`}>{threadLabel} · {turnLabel}</small>
       </div>
-      <button className="icon-button" type="button" title="Close workspace inspector" aria-label="Close review inspector" onClick={onClose}><X size={17} aria-hidden="true" /></button>
+      <button className="icon-button" type="button" title="Close workspace inspector" aria-label="Close workspace inspector" onClick={onClose}><X size={17} aria-hidden="true" /></button>
     </div>
 
     <div className="context-tabs" role="tablist" aria-label="Workspace tools">
