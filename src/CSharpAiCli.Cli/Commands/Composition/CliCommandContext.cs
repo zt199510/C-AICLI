@@ -33,9 +33,22 @@ internal sealed class CliCommandContext
 
     public CliGlobalOptions GlobalOptions { get; }
 
+    public RootCommand RootCommand { get; private set; } = null!;
+
     public Func<string?, CliEnvironmentSnapshot> WorkspaceSnapshotProvider { get; }
 
     public Func<CliEnvironmentSnapshot, ChangesApplicationService> ChangesServiceFactory { get; }
+
+    public void AttachRoot(RootCommand rootCommand)
+    {
+        ArgumentNullException.ThrowIfNull(rootCommand);
+        if (RootCommand is not null)
+        {
+            throw new InvalidOperationException("The CLI command context is already attached to a root command.");
+        }
+
+        RootCommand = rootCommand;
+    }
 
     public void WriteVerboseDiagnostics(
         ParseResult parseResult,
