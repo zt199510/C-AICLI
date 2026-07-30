@@ -364,174 +364,6 @@ public static class CliCommandFactory
             commandContext.TryWriteTraceExecResult(commandName, snapshot, context, result);
         }
 
-        Command jobsCommand = new("jobs", "Read local job history records.");
-        Command jobsListCommand = new("list", "List local job records.");
-        Option<bool> jobsListJsonOption = new("--json")
-        {
-            Description = "Write a single JSON jobs list object.",
-        };
-        Option<string> jobsListOutputOption = new("--output")
-        {
-            Description = "Select text or json output.",
-        };
-        Option<int?> jobsListLimitOption = new("--limit")
-        {
-            Description = "Maximum number of job records to list.",
-        };
-        jobsListOutputOption.DefaultValueFactory = _ => "text";
-        jobsListOutputOption.Validators.Add(result =>
-        {
-            string outputMode = result.GetValueOrDefault<string>() ?? "text";
-            if (!string.Equals(outputMode, "text", StringComparison.OrdinalIgnoreCase) &&
-                !string.Equals(outputMode, "json", StringComparison.OrdinalIgnoreCase))
-            {
-                result.AddError("Invalid value for --output. Allowed values are text and json.");
-            }
-        });
-        AddPositiveIntegerValidator(jobsListLimitOption, "--limit");
-        jobsListCommand.Options.Add(jobsListJsonOption);
-        jobsListCommand.Options.Add(jobsListOutputOption);
-        jobsListCommand.Options.Add(jobsListLimitOption);
-        jobsListCommand.SetAction(parseResult =>
-        {
-            string? workspacePath = parseResult.GetValue(workspaceOption);
-            bool jsonRequested = parseResult.GetValue(jobsListJsonOption);
-            string outputMode = parseResult.GetValue(jobsListOutputOption) ?? "text";
-            int? limit = parseResult.GetValue(jobsListLimitOption);
-            CliEnvironmentSnapshot snapshot = workspaceSnapshotProvider(workspacePath);
-            WriteVerboseDiagnostics(
-                parseResult,
-                "jobs list",
-                snapshot,
-                humanReadableOutput: !IsJsonOutputRequested(jsonRequested, outputMode));
-
-            JobRecordListResult result = JobRecordStore.Create(snapshot).List(limit);
-            if (IsJsonOutputRequested(jsonRequested, outputMode))
-            {
-                new JobsJsonRenderer(output).WriteList(result);
-            }
-            else
-            {
-                new JobsTextRenderer(output).WriteList(result);
-            }
-
-            return 0;
-        });
-
-        Command jobsShowCommand = new("show", "Show one local job record.");
-        Argument<string> jobsShowIdArgument = new("job-id")
-        {
-            Description = "Job id.",
-        };
-        Option<bool> jobsShowJsonOption = new("--json")
-        {
-            Description = "Write a single JSON jobs show object.",
-        };
-        Option<string> jobsShowOutputOption = new("--output")
-        {
-            Description = "Select text or json output.",
-        };
-        jobsShowOutputOption.DefaultValueFactory = _ => "text";
-        jobsShowOutputOption.Validators.Add(result =>
-        {
-            string outputMode = result.GetValueOrDefault<string>() ?? "text";
-            if (!string.Equals(outputMode, "text", StringComparison.OrdinalIgnoreCase) &&
-                !string.Equals(outputMode, "json", StringComparison.OrdinalIgnoreCase))
-            {
-                result.AddError("Invalid value for --output. Allowed values are text and json.");
-            }
-        });
-        jobsShowCommand.Arguments.Add(jobsShowIdArgument);
-        jobsShowCommand.Options.Add(jobsShowJsonOption);
-        jobsShowCommand.Options.Add(jobsShowOutputOption);
-        jobsShowCommand.SetAction(parseResult =>
-        {
-            string? workspacePath = parseResult.GetValue(workspaceOption);
-            string jobId = parseResult.GetValue(jobsShowIdArgument) ?? string.Empty;
-            bool jsonRequested = parseResult.GetValue(jobsShowJsonOption);
-            string outputMode = parseResult.GetValue(jobsShowOutputOption) ?? "text";
-            CliEnvironmentSnapshot snapshot = workspaceSnapshotProvider(workspacePath);
-            WriteVerboseDiagnostics(
-                parseResult,
-                "jobs show",
-                snapshot,
-                humanReadableOutput: !IsJsonOutputRequested(jsonRequested, outputMode));
-
-            JobRecordReadResult result = JobRecordStore.Create(snapshot).Read(jobId);
-            if (!result.Succeeded || result.Record is null)
-            {
-                WriteJobReadFailure(output, result.Diagnostic, IsJsonOutputRequested(jsonRequested, outputMode), "jobs.show");
-                return 1;
-            }
-
-            if (IsJsonOutputRequested(jsonRequested, outputMode))
-            {
-                new JobsJsonRenderer(output).WriteShow(result.Record);
-            }
-            else
-            {
-                new JobsTextRenderer(output).WriteShow(result.Record);
-            }
-
-            return 0;
-        });
-
-        Command jobsExportCommand = new("export", "Export one local job record.");
-        Argument<string> jobsExportIdArgument = new("job-id")
-        {
-            Description = "Job id.",
-        };
-        Option<string> jobsExportFormatOption = new("--format")
-        {
-            Description = "Select json or markdown export format.",
-        };
-        jobsExportFormatOption.DefaultValueFactory = _ => "json";
-        jobsExportFormatOption.Validators.Add(result =>
-        {
-            string format = result.GetValueOrDefault<string>() ?? "json";
-            if (!string.Equals(format, "json", StringComparison.OrdinalIgnoreCase) &&
-                !string.Equals(format, "markdown", StringComparison.OrdinalIgnoreCase))
-            {
-                result.AddError("Invalid value for --format. Allowed values are json and markdown.");
-            }
-        });
-        jobsExportCommand.Arguments.Add(jobsExportIdArgument);
-        jobsExportCommand.Options.Add(jobsExportFormatOption);
-        jobsExportCommand.SetAction(parseResult =>
-        {
-            string? workspacePath = parseResult.GetValue(workspaceOption);
-            string jobId = parseResult.GetValue(jobsExportIdArgument) ?? string.Empty;
-            string format = parseResult.GetValue(jobsExportFormatOption) ?? "json";
-            bool jsonOutput = string.Equals(format, "json", StringComparison.OrdinalIgnoreCase);
-            CliEnvironmentSnapshot snapshot = workspaceSnapshotProvider(workspacePath);
-            WriteVerboseDiagnostics(
-                parseResult,
-                "jobs export",
-                snapshot,
-                humanReadableOutput: !jsonOutput);
-
-            JobRecordReadResult result = JobRecordStore.Create(snapshot).Read(jobId);
-            if (!result.Succeeded || result.Record is null)
-            {
-                WriteJobReadFailure(output, result.Diagnostic, jsonOutput, "jobs.export");
-                return 1;
-            }
-
-            if (jsonOutput)
-            {
-                new JobsJsonRenderer(output).WriteExport(result.Record);
-            }
-            else
-            {
-                new JobsTextRenderer(output).WriteMarkdown(result.Record);
-            }
-
-            return 0;
-        });
-        jobsCommand.Subcommands.Add(jobsListCommand);
-        jobsCommand.Subcommands.Add(jobsShowCommand);
-        jobsCommand.Subcommands.Add(jobsExportCommand);
-
         Command ciCommand = new("ci", "Generate provider-neutral CI artifacts from local job records.");
         Command ciSummarizeCommand = new("summarize", "Generate a CI JSON or markdown summary for one job.");
         Option<string> ciSummarizeJobOption = new("--job")
@@ -5383,7 +5215,7 @@ public static class CliCommandFactory
         rootComposer.Add(new ModelsCommandModule(), commandContext);
         rootComposer.Add(new DiffCommandModule(), commandContext);
         rootComposer.Add(new ChangesCommandModule(), commandContext);
-        rootComposer.Add(jobsCommand);
+        rootComposer.Add(new JobsCommandModule(), commandContext);
         rootComposer.Add(ciCommand);
         rootComposer.Add(new DaemonCommandModule(), commandContext);
         rootComposer.Add(new ApiCommandModule(), commandContext);
@@ -6138,35 +5970,6 @@ public static class CliCommandFactory
         output.WriteLine($"errorCode: {errorCode}");
         output.WriteLine("summary:");
         output.WriteLine(summary);
-    }
-
-    private static void WriteJobReadFailure(
-        TextWriter output,
-        JobRecordDiagnostic? diagnostic,
-        bool jsonOutput,
-        string type)
-    {
-        string errorCode = diagnostic?.ErrorCode ?? "job-not-found";
-        string summary = diagnostic?.Summary ?? "Job record was not found.";
-        if (jsonOutput)
-        {
-            output.WriteLine(JsonSerializer.Serialize(new Dictionary<string, object?>
-            {
-                ["type"] = type,
-                ["status"] = "failed",
-                ["errorCode"] = DiagnosticSecretRedactor.Redact(errorCode),
-                ["summary"] = DiagnosticSecretRedactor.Redact(summary),
-                ["jobId"] = string.IsNullOrWhiteSpace(diagnostic?.JobId)
-                    ? null
-                    : DiagnosticSecretRedactor.Redact(diagnostic.JobId),
-                ["path"] = string.IsNullOrWhiteSpace(diagnostic?.Path)
-                    ? null
-                    : DiagnosticSecretRedactor.Redact(diagnostic.Path)
-            }, JsonOptions));
-            return;
-        }
-
-        WriteSafeFailure(output, errorCode, summary);
     }
 
     private static void WriteCiFailure(
