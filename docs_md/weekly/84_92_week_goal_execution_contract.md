@@ -2,7 +2,12 @@
 
 更新时间：2026-07-28
 
-状态：`Authorized / Ready for bootstrap`
+状态：`Superseded for default execution`
+
+> **2026-07-30 变更：** 本合同及 104 Gate 控制面保留为历史追溯和专项诊断工具，
+> 默认开发不再执行。当前权威验收规则为
+> `docs_md/plans/07_cli_desktop_experience_refactor_lean_acceptance.md`。
+> 未运行的旧 Gate 不得表述为 Passed，但也不再阻塞 UI/CLI 重构。
 
 适用计划：
 

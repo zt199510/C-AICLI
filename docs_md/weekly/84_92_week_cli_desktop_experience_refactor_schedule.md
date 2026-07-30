@@ -2,7 +2,11 @@
 
 更新时间：2026-07-28
 
-状态：`Planned；Week84 Entry Gate 尚未关闭`
+状态：`Active；采用精简验收`
+
+> **2026-07-30 变更：** 周排期保留，原逐 Gate 证据工作流不再作为周任务前置条件。
+> 验收以 `docs_md/plans/07_cli_desktop_experience_refactor_lean_acceptance.md`
+> 为准，优先推进产品代码。
 
 范围依据：
 

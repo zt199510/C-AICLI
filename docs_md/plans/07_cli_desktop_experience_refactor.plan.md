@@ -2,7 +2,11 @@
 
 更新时间：2026-07-28
 
-状态：`Planned`
+状态：`Active / Lean validation`
+
+> **2026-07-30 执行规则变更：** 原 104 Gate 重型证据流水线不再作为产品开发阻塞条件。后续按
+> `docs_md/plans/07_cli_desktop_experience_refactor_lean_acceptance.md`
+> 执行最小必要验证；W86、W89、W92 仍保留用户视觉验收。
 
 ## 结论
 
