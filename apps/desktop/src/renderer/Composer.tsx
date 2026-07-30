@@ -38,11 +38,14 @@ export function Composer(props: ComposerProps) {
 
   useEffect(() => { setActiveMentionIndex(0); }, [props.composer.mentions]);
   useLayoutEffect(() => {
-    if (textarea.current && textarea.current.value !== props.draft.text) textarea.current.value = props.draft.text;
+    if (!textarea.current) return;
+    if (textarea.current.value !== props.draft.text) textarea.current.value = props.draft.text;
+    resize(textarea.current);
   }, [props.draft.text]);
 
-  function change(text: string) {
+  function change(text: string, target: HTMLTextAreaElement) {
     props.onText(text);
+    resize(target);
     const match = /(?:^|\s)@([^\s@]*)$/u.exec(text);
     if (match) props.onSearch(match[1] ?? ""); else props.onCloseMentions();
   }
@@ -82,7 +85,7 @@ export function Composer(props: ComposerProps) {
         {props.draft.catalogSelections.map(item => <span className="composer-chip catalog-chip" key={`${item.kind}:${item.id}`}>{item.label}<button type="button" aria-label={`Remove ${item.label}`} onClick={() => props.onRemoveCatalog(item)}><X size={13} /></button></span>)}
       </div>}
       <div className="composer-input-wrap">
-        <textarea ref={textarea} defaultValue="" onChange={(event) => change(event.target.value)} onKeyDown={keyDown} onCompositionStart={() => setComposing(true)} onCompositionEnd={() => setComposing(false)} placeholder="Ask about this workspace… Use @ to add context" aria-label="Composer prompt" aria-describedby="composer-help composer-status" aria-autocomplete="list" aria-controls={mentionsOpen ? "composer-mentions" : undefined} aria-expanded={mentionsOpen} aria-activedescendant={mentionsOpen ? mentionOptions[activeMentionIndex]?.id : undefined} disabled={Boolean(pending) || Boolean(props.disabledReason)} />
+        <textarea ref={textarea} defaultValue="" onChange={(event) => change(event.target.value, event.currentTarget)} onKeyDown={keyDown} onCompositionStart={() => setComposing(true)} onCompositionEnd={() => setComposing(false)} placeholder="Ask about this workspace… Use @ to add context" aria-label="Composer prompt" aria-describedby="composer-help composer-status" aria-autocomplete="list" aria-controls={mentionsOpen ? "composer-mentions" : undefined} aria-expanded={mentionsOpen} aria-activedescendant={mentionsOpen ? mentionOptions[activeMentionIndex]?.id : undefined} disabled={Boolean(pending) || Boolean(props.disabledReason)} />
         {mentionsOpen ? <MentionMenu id="composer-mentions" value={props.composer.mentions} activeId={mentionOptions[activeMentionIndex]?.id ?? null} onActive={(id) => setActiveMentionIndex(Math.max(0, mentionOptions.findIndex((option) => option.id === id)))} onContext={props.onContext} onCatalog={props.onCatalog} onClose={() => { props.onCloseMentions(); textarea.current?.focus(); }} /> : null}
       </div>
       <div className="composer-footer">
@@ -93,4 +96,9 @@ export function Composer(props: ComposerProps) {
       <div id="composer-status" className={props.draft.error ? "composer-error" : "composer-status"} role={props.draft.error ? "alert" : "status"}>{props.draft.error ?? props.disabledReason ?? (props.draft.status === "queued" ? "Prompt queued." : "\u00a0")}</div>
     </section>
   );
+}
+
+function resize(textarea: HTMLTextAreaElement) {
+  textarea.style.height = "auto";
+  textarea.style.height = `${Math.min(Math.max(textarea.scrollHeight, 66), 220)}px`;
 }

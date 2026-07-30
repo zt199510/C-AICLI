@@ -430,6 +430,13 @@ body {
   background: var(--color-surface);
 }
 
+.inline-task-controls {
+  width: 100%;
+  margin-top: 14px;
+  border-radius: var(--radius-md);
+  box-shadow: 0 4px 16px rgb(39 54 45 / 5%);
+}
+
 .composer {
   margin: 0 0 18px;
   border: 1px solid var(--color-border-strong);

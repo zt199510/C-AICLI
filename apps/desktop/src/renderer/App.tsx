@@ -79,16 +79,23 @@ export function App() {
             ) : !workspacePath ? (
               <div className="state-card workspace-empty"><div className="state-kicker">Local AI workspace</div><h1>{state.runtime.state === "ready" ? "What should we build?" : state.runtime.message}</h1><p>Open a project to start a focused conversation with auditable tools, approvals, and results.</p>{workspaceError && <p role="alert">{workspaceError}</p>}<button className="primary-action" type="button" onClick={() => void openWorkspace()} disabled={opening || state.runtime.state !== "ready"}><FolderOpen size={17} aria-hidden="true" /> Open workspace</button></div>
             ) : (
-              <TimelineView detail={state.detail} status={state.detailStatus} error={state.detailError} onLoadMore={controller.loadMore} />
+              <TimelineView
+                detail={state.detail}
+                status={state.detailStatus}
+                error={state.detailError}
+                onLoadMore={controller.loadMore}
+                controls={(
+                  <TaskControls
+                    detail={state.detail}
+                    onCancel={controller.cancelTurn}
+                    onApproval={controller.resolveApproval}
+                    onResume={controller.resumeTurn}
+                    onRestart={controller.restartTurn}
+                  />
+                )}
+              />
             )}
           </section>
-          <TaskControls
-            detail={state.detail}
-            onCancel={controller.cancelTurn}
-            onApproval={controller.resolveApproval}
-            onResume={controller.resumeTurn}
-            onRestart={controller.restartTurn}
-          />
           <Composer
             draft={controller.composerDraft}
             composer={controller.composer}

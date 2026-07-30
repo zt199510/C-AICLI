@@ -38,6 +38,21 @@ describe("frozen timeline projection", () => {
     expect(screen.getByText("Type: future.event")).toBeTruthy();
   });
 
+  it("keeps active turn controls inside the conversation surface", () => {
+    render(
+      <TimelineView
+        detail={{ ...detail, timeline: [item(1, "user.message")] }}
+        status="ready"
+        error={null}
+        controls={<div data-testid="inline-controls">Controls</div>}
+        onLoadMore={vi.fn()}
+      />,
+    );
+    const controls = screen.getByTestId("inline-controls");
+    expect(controls.closest(".timeline-view")).not.toBeNull();
+    expect(controls.compareDocumentPosition(document.querySelector(".timeline-items")!) & Node.DOCUMENT_POSITION_PRECEDING).toBeTruthy();
+  });
+
   it("keeps a 2,000 item history DOM-bounded and loads only on request", async () => {
     const onLoadMore = vi.fn();
     const timeline = Array.from({ length: 2000 }, (_, index) => item(index + 1, types[index % types.length] as string));

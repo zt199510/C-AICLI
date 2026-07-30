@@ -36,10 +36,10 @@ export function TaskControls(props: TaskControlsProps) {
   }
 
   return (
-    <section className="task-controls" aria-label="Task controls" hidden={!current}>
+    <section className="task-controls inline-task-controls" aria-label="Task controls" data-turn-id={current?.turnId} hidden={!current}>
       <div className="task-control-row">
         <div className="task-control-summary">
-          <strong>{turn ? `Turn ${turn.ordinal}` : recovery ? "Recovery" : "No active turn"}</strong>
+          <strong>{turn ? `Turn ${turn.ordinal}: ${turn.taskSummary}` : recovery ? `Recovery: ${recovery.taskSummary}` : "No active turn"}</strong>
           <span className={`status-chip status-${current?.status.toLowerCase() ?? "idle"}`}>{current?.status ?? "idle"}</span>
         </div>
           <button className="command-button danger-command" type="button" hidden={!canCancel} disabled={busy !== null || !turn} onClick={() => { if (turn) void run("cancel", () => props.onCancel(turn.turnId, turn.revision)); }}>

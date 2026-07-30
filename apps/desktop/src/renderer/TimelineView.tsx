@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, type ReactNode } from "react";
 import type { ThreadDetailData, TimelineItemData } from "../generated/desktop-contracts";
 import type { QueryStatus } from "./desktop-state";
 import { TimelineProjectionBlock } from "./TimelineProjectionBlock";
@@ -10,10 +10,11 @@ export interface TimelineViewProps {
   detail: ThreadDetailData | null;
   status: QueryStatus;
   error: string | null;
+  controls?: ReactNode;
   onLoadMore(): void;
 }
 
-export function TimelineView({ detail, status, error, onLoadMore }: TimelineViewProps) {
+export function TimelineView({ detail, status, error, controls, onLoadMore }: TimelineViewProps) {
   const items = detail?.timeline ?? [];
 
   if (status === "error" && !detail) return <div className="state-card failure-card" role="alert"><h1>History unavailable</h1><p>{error}</p></div>;
@@ -29,6 +30,7 @@ export function TimelineView({ detail, status, error, onLoadMore }: TimelineView
       <div className="recovery-banner" role="alert" hidden={!detail.recoveryRequired}>Timeline consistency requires an authoritative reload.</div>
       {items.length === 0 ? <div className="empty-timeline">This thread has no timeline items.</div>
         : <TimelineTurnBrowser items={items} />}
+      {controls}
       {detail.timelineTruncated && detail.nextSequence !== null && (
         <div className="load-more"><button className="command-button" type="button" disabled={status === "loading"} onClick={onLoadMore}>{status === "loading" ? "Loading…" : "Load newer items"}</button></div>
       )}

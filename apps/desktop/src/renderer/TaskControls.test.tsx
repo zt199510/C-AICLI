@@ -1,4 +1,4 @@
-import { render } from "@testing-library/react";
+import { act, fireEvent, render, screen } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 import type { ThreadDetailData, TurnSummaryData } from "../generated/desktop-contracts";
 import { TaskControls } from "./TaskControls";
@@ -21,6 +21,39 @@ describe("TaskControls", () => {
     view.rerender(<TaskControls {...props} detail={detail(turn("completed"))} />);
     expect(document.querySelector(".task-controls")).toBe(stableNode);
     expect((stableNode as HTMLElement).hidden).toBe(true);
+  });
+
+  it("submits an approval revision once while the mutation is in flight", async () => {
+    let finish: ((value: string | null) => void) | null = null;
+    const onApproval = vi.fn(() => new Promise<string | null>((resolve) => { finish = resolve; }));
+    const waiting = {
+      ...turn("waiting-for-approval"),
+      approval: {
+        requestId: "approval-1",
+        workspaceId: "workspace-1",
+        threadId: "thread-1",
+        turnId: "turn-1",
+        turnRevision: 4,
+        approvalRevision: 2,
+        policyIdentity: "policy",
+        policyRevision: "1",
+        risk: "write",
+        operation: "workspace.apply_patch",
+        targetClass: "workspace",
+        safeSummary: "Apply the proposed patch",
+        createdAtUtc: "2026-07-17T00:00:00.000Z",
+        expiresAtUtc: "2026-07-17T00:30:00.000Z",
+      },
+    };
+    render(<TaskControls detail={detail(waiting)} onCancel={vi.fn(async () => null)} onApproval={onApproval} onResume={vi.fn(async () => null)} onRestart={vi.fn(async () => null)} />);
+
+    const approve = screen.getByRole("button", { name: "Approve" });
+    fireEvent.click(approve);
+    fireEvent.click(approve);
+    expect(onApproval).toHaveBeenCalledOnce();
+    expect(onApproval).toHaveBeenCalledWith("turn-1", "approval-1", 2, 4, "approve");
+    expect((approve as HTMLButtonElement).disabled).toBe(true);
+    await act(async () => { finish?.(null); });
   });
 });
 
