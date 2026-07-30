@@ -79,7 +79,9 @@ for (const dependency of dependencies) {
 const expected = `${lines.join("\n")}\n`;
 if (checkOnly) {
   const actual = await readFile(noticePath, "utf8").catch(() => "");
-  if (actual !== expected) throw new Error("THIRD_PARTY_NOTICES.md is stale.");
+  if (actual.replaceAll("\r\n", "\n") !== expected.replaceAll("\r\n", "\n")) {
+    throw new Error("THIRD_PARTY_NOTICES.md is stale.");
+  }
 } else {
   await writeFile(noticePath, expected, "utf8");
 }
