@@ -2,7 +2,7 @@ import { FileText, GitCompare, Package, ScanLine, SquareTerminal, X } from "luci
 import { useRef, type KeyboardEvent } from "react";
 import type { ReviewState } from "./desktop-state";
 import { ReviewPanel, type ReviewCommands } from "./ReviewInspector";
-import { TerminalPanel } from "./TerminalPanel";
+import { TerminalPanel, type TerminalCommands } from "./TerminalPanel";
 
 export type WorkspacePanel = "changes" | "terminal" | "reports" | "artifacts" | "preview";
 
@@ -23,6 +23,7 @@ interface WorkspaceInspectorProps {
   threadLabel: string;
   turnLabel: string;
   commands: ReviewCommands;
+  terminalCommands: TerminalCommands | undefined;
   onPanel(panel: WorkspacePanel): void;
   onReport(reportId: string): void;
   onArtifact(artifactId: string): void;
@@ -38,6 +39,7 @@ export function WorkspaceInspector({
   threadLabel,
   turnLabel,
   commands,
+  terminalCommands,
   onPanel,
   onReport,
   onArtifact,
@@ -102,7 +104,7 @@ export function WorkspaceInspector({
         tabIndex={0}
       >
         {panel.id === "terminal"
-          ? <TerminalPanel workspaceReady={workspaceReady} active={visible && activePanel === "terminal"} />
+          ? <TerminalPanel workspaceReady={workspaceReady} commands={terminalCommands} active={visible && activePanel === "terminal"} />
           : activePanel === panel.id
             ? <div className="review-content"><ReviewPanel
                 review={{ ...review, activeTab: panel.id }}

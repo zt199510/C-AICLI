@@ -1,8 +1,7 @@
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
-import type { DesktopBridge } from "../shared/bridge-contract";
-import { TerminalPanel } from "./TerminalPanel";
+import { TerminalPanel, type TerminalCommands } from "./TerminalPanel";
 
 describe("user terminal panel", () => {
   it("requires explicit open, input, cancel and close actions", async () => {
@@ -10,9 +9,9 @@ describe("user terminal panel", () => {
     const inputTerminal = vi.fn(async () => result("running", "terminal-user-sentinel\n"));
     const cancelTerminal = vi.fn(async () => result("exited", "terminal-user-sentinel\n", 130));
     const closeTerminal = vi.fn(async () => result("closed", "terminal-user-sentinel\n", 130));
-    window.caicli = { openTerminal, inputTerminal, cancelTerminal, closeTerminal,
-      getTerminal: vi.fn(async () => result("running", "terminal-user-sentinel\n")) } as unknown as DesktopBridge;
-    render(<TerminalPanel workspaceReady />);
+    const commands = { openTerminal, inputTerminal, cancelTerminal, closeTerminal,
+      getTerminal: vi.fn(async () => result("running", "terminal-user-sentinel\n")) } as TerminalCommands;
+    render(<TerminalPanel workspaceReady commands={commands} />);
 
     await userEvent.click(screen.getByRole("button", { name: "Open terminal" }));
     await userEvent.type(screen.getByRole("textbox", { name: "Terminal input" }), "echo terminal-user-sentinel");
@@ -31,14 +30,14 @@ describe("user terminal panel", () => {
   });
 
   it("preserves the terminal DOM structure across its full lifecycle", async () => {
-    window.caicli = {
+    const commands = {
       openTerminal: vi.fn(async () => result("running")),
       inputTerminal: vi.fn(async () => result("running", "terminal-user-sentinel\n")),
       cancelTerminal: vi.fn(async () => result("exited", "terminal-user-sentinel\n", 130)),
       closeTerminal: vi.fn(async () => result("closed", "terminal-user-sentinel\n", 130)),
       getTerminal: vi.fn(async () => result("running", "terminal-user-sentinel\n")),
-    } as unknown as DesktopBridge;
-    const view = render(<TerminalPanel workspaceReady />);
+    } as TerminalCommands;
+    const view = render(<TerminalPanel workspaceReady commands={commands} />);
     const output = view.container.querySelector(".terminal-output");
     const outputText = output?.firstChild;
     const structuralMutations: MutationRecord[] = [];
@@ -61,12 +60,14 @@ describe("user terminal panel", () => {
   it("materializes only a bounded tail of terminal scrollback", async () => {
     const tail = "terminal-tail-sentinel\n";
     const scrollback = `${"x".repeat((64 * 1024) - tail.length)}${tail}`;
-    window.caicli = {
+    const commands = {
       openTerminal: vi.fn(async () => result("running")),
       inputTerminal: vi.fn(async () => result("running", scrollback)),
+      cancelTerminal: vi.fn(async () => result("exited", scrollback, 130)),
+      closeTerminal: vi.fn(async () => result("closed", scrollback, 130)),
       getTerminal: vi.fn(async () => result("running", scrollback)),
-    } as unknown as DesktopBridge;
-    const view = render(<TerminalPanel workspaceReady />);
+    } as TerminalCommands;
+    const view = render(<TerminalPanel workspaceReady commands={commands} />);
 
     await userEvent.click(screen.getByRole("button", { name: "Open terminal" }));
     await userEvent.type(screen.getByRole("textbox", { name: "Terminal input" }), "long-output");
@@ -79,8 +80,7 @@ describe("user terminal panel", () => {
   });
 
   it("does not open without a workspace", () => {
-    window.caicli = {} as DesktopBridge;
-    render(<TerminalPanel workspaceReady={false} />);
+    render(<TerminalPanel workspaceReady={false} commands={undefined} />);
     expect((screen.getByRole("button", { name: "Open terminal" }) as HTMLButtonElement).disabled).toBe(true);
   });
 });

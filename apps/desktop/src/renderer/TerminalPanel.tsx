@@ -1,10 +1,23 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { TerminalStateData } from "../generated/desktop-contracts";
+import type { DesktopBridge } from "../shared/bridge-contract";
 
 const maxRenderedScrollbackCharacters = 8 * 1024;
 
-export function TerminalPanel({ workspaceReady, active = true }: { workspaceReady: boolean; active?: boolean }) {
-  const bridge = typeof window === "undefined" ? undefined : window.caicli;
+export type TerminalCommands = Pick<
+  DesktopBridge,
+  "openTerminal" | "inputTerminal" | "cancelTerminal" | "closeTerminal" | "getTerminal"
+>;
+
+export function TerminalPanel({
+  workspaceReady,
+  commands,
+  active = true,
+}: {
+  workspaceReady: boolean;
+  commands: TerminalCommands | undefined;
+  active?: boolean;
+}) {
   const [expanded, setExpanded] = useState(false);
   const [terminal, setTerminal] = useState<TerminalStateData | null>(null);
   const [input, setInput] = useState("");
@@ -31,9 +44,9 @@ export function TerminalPanel({ workspaceReady, active = true }: { workspaceRead
   }
 
   useEffect(() => {
-    if (!active || !expanded || !terminal || terminal.status !== "running" || !bridge) return;
+    if (!active || !expanded || !terminal || terminal.status !== "running" || !commands) return;
     const timer = window.setInterval(() => {
-      void bridge.getTerminal({ sessionId: terminal.sessionId, afterCursor: terminal.cursor }).then((result) => {
+      void commands.getTerminal({ sessionId: terminal.sessionId, afterCursor: terminal.cursor }).then((result) => {
         if (!result.succeeded || !result.data) return;
         if (result.data.cursor === terminal.cursor && result.data.status === terminal.status &&
             result.data.exitCode === terminal.exitCode && result.data.truncated === terminal.truncated) return;
@@ -41,13 +54,13 @@ export function TerminalPanel({ workspaceReady, active = true }: { workspaceRead
       }).catch(() => setError("Terminal status could not be refreshed."));
     }, 500);
     return () => window.clearInterval(timer);
-  }, [active, bridge, expanded, terminal?.sessionId, terminal?.status]);
+  }, [active, commands, expanded, terminal?.cursor, terminal?.sessionId, terminal?.status]);
 
   async function open() {
-    if (!bridge) return;
+    if (!commands) return;
     setBusy(true); setError(null);
     try {
-      const result = await bridge.openTerminal({ shellProfile: "system-default", clientMutationId: mutation("open") });
+      const result = await commands.openTerminal({ shellProfile: "system-default", clientMutationId: mutation("open") });
       if (!result.succeeded || !result.data) throw new Error(result.error?.safeMessage ?? "Terminal could not be opened.");
       adopt(result.data, true); setExpanded(true);
     } catch (value) { setError(value instanceof Error ? value.message : "Terminal could not be opened."); }
@@ -55,10 +68,10 @@ export function TerminalPanel({ workspaceReady, active = true }: { workspaceRead
   }
 
   async function send() {
-    if (!bridge || !terminal || !input) return;
+    if (!commands || !terminal || !input) return;
     setBusy(true); setError(null);
     try {
-      const result = await bridge.inputTerminal({ sessionId: terminal.sessionId, text: input + "\n", clientMutationId: mutation("input") });
+      const result = await commands.inputTerminal({ sessionId: terminal.sessionId, text: input + "\n", clientMutationId: mutation("input") });
       if (!result.succeeded || !result.data) throw new Error(result.error?.safeMessage ?? "Terminal input failed.");
       adopt(result.data); setInput("");
     } catch (value) { setError(value instanceof Error ? value.message : "Terminal input failed."); }
@@ -66,11 +79,11 @@ export function TerminalPanel({ workspaceReady, active = true }: { workspaceRead
   }
 
   async function stop(close: boolean) {
-    if (!bridge || !terminal) return;
+    if (!commands || !terminal) return;
     setBusy(true); setError(null);
     try {
       const command = { sessionId: terminal.sessionId, clientMutationId: mutation(close ? "close" : "cancel") };
-      const result = close ? await bridge.closeTerminal(command) : await bridge.cancelTerminal(command);
+      const result = close ? await commands.closeTerminal(command) : await commands.cancelTerminal(command);
       if (!result.succeeded || !result.data) throw new Error(result.error?.safeMessage ?? "Terminal action failed.");
       if (close) {
         if (outputText.current) outputText.current.data = "";

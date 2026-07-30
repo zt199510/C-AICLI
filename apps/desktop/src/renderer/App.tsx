@@ -145,6 +145,7 @@ export function App() {
             threadLabel={state.detail?.thread.title ?? "No active thread"}
             turnLabel={state.detail?.turns.at(-1)?.taskSummary ?? "No active turn"}
             commands={controller.reviewCommands}
+            terminalCommands={controller.terminalCommands}
             onPanel={selectWorkspacePanel}
             onReport={(id) => void controller.selectReport(id)}
             onArtifact={(id) => void controller.selectArtifact(id)}

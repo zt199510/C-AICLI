@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useReducer, useRef } from "react";
+import { useCallback, useEffect, useMemo, useReducer, useRef } from "react";
 import type { CatalogItemData, ContextDescriptorData, ThreadChangedParams, WorkspaceSnapshotData } from "../generated/desktop-contracts";
 import { createRuntimeStatus, type DesktopBridge } from "../shared/bridge-contract";
 import { desktopReducer, initialDesktopState, threadEventIdentity, type ReviewState } from "./desktop-state";
@@ -26,6 +26,13 @@ export function useDesktopController(bridge: DesktopBridge | undefined) {
   const resyncRunning = useRef(false);
   const resyncDirty = useRef(false);
   const lastThreadEvent = useRef<ThreadChangedParams | null>(null);
+  const terminalCommands = useMemo(() => bridge ? {
+    openTerminal: (command: Parameters<DesktopBridge["openTerminal"]>[0]) => bridge.openTerminal(command),
+    inputTerminal: (command: Parameters<DesktopBridge["inputTerminal"]>[0]) => bridge.inputTerminal(command),
+    cancelTerminal: (command: Parameters<DesktopBridge["cancelTerminal"]>[0]) => bridge.cancelTerminal(command),
+    closeTerminal: (command: Parameters<DesktopBridge["closeTerminal"]>[0]) => bridge.closeTerminal(command),
+    getTerminal: (command: Parameters<DesktopBridge["getTerminal"]>[0]) => bridge.getTerminal(command),
+  } : undefined, [bridge]);
 
   const refreshThreads = useCallback(async (epoch = stateRef.current.contextEpoch) => {
     if (!bridge) return;
@@ -588,6 +595,7 @@ export function useDesktopController(bridge: DesktopBridge | undefined) {
       loadGerber,
       decideGerber,
     },
+    terminalCommands,
     composer,
     composerDraft: currentDraft(composer, activeDraftKey),
     composerDisabledReason: !state.workspace ? "Open a workspace to compose." : !state.selectedThreadId ? "Select a thread to compose." : state.detail?.thread.status === "archived" ? "Archived threads cannot accept input." : state.runtime.state !== "ready" ? "AppHost is unavailable." : composer.snapshot?.pendingIntent ? "Clear the pending input before composing another." : null,
