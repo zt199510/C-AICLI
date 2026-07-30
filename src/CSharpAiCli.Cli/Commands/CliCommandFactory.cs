@@ -4661,110 +4661,6 @@ public static class CliCommandFactory
         pipelineCommand.Subcommands.Add(pipelinePlanCommand);
         pipelineCommand.Subcommands.Add(pipelineRunCommand);
 
-        Command chatCommand = new("chat", "Send one prompt to the configured model.");
-        Argument<string> promptArgument = new("prompt")
-        {
-            Description = "The user message to send to the model.",
-        };
-        Option<string> sessionOption = new("--session")
-        {
-            Description = "Create or append to a named chat transcript.",
-        };
-        Option<string> resumeOption = new("--resume")
-        {
-            Description = "Resume an existing named chat session.",
-        };
-        Option<string> chatCwdOption = new("--cwd")
-        {
-            Description = "Use a working context path for hierarchical instruction discovery.",
-        };
-        chatCommand.Arguments.Add(promptArgument);
-        chatCommand.Options.Add(sessionOption);
-        chatCommand.Options.Add(resumeOption);
-        chatCommand.Options.Add(chatCwdOption);
-        chatCommand.SetAction(parseResult =>
-        {
-            string? workspacePath = parseResult.GetValue(workspaceOption);
-            string? cwdPath = parseResult.GetValue(chatCwdOption);
-            string prompt = parseResult.GetValue(promptArgument) ?? string.Empty;
-            string? session = parseResult.GetValue(sessionOption);
-            string? resume = parseResult.GetValue(resumeOption);
-            bool sessionSupplied = IsOptionExplicit(parseResult, sessionOption);
-            bool resumeSupplied = IsOptionExplicit(parseResult, resumeOption);
-            CliEnvironmentSnapshot snapshot = snapshotProvider(workspacePath, cwdPath);
-            TryWriteCommandLog(commandLogger, "chat", snapshot);
-            WriteVerboseDiagnostics(parseResult, "chat", snapshot);
-
-            if (sessionSupplied && resumeSupplied)
-            {
-                WriteSessionOptionConflict(output);
-                return 1;
-            }
-
-            string? effectiveSession = resumeSupplied ? resume : session;
-            ConversationSessionName? sessionName = null;
-            ConversationTranscript? transcript = null;
-            ConversationTranscript? transcriptContext = null;
-            IConversationStore? conversationStore = null;
-            DateTimeOffset nowUtc = default;
-            if (sessionSupplied || resumeSupplied)
-            {
-                try
-                {
-                    sessionName = ConversationSessionName.Parse(effectiveSession);
-                }
-                catch (ArgumentException exception)
-                {
-                    WriteSafeFailure(output, "invalid-session-name", GetSafeSessionNameParseMessage(exception));
-                    return 1;
-                }
-
-                try
-                {
-                    conversationStore = conversationStoreFactory(snapshot);
-                    nowUtc = utcNowProvider();
-                    if (resumeSupplied)
-                    {
-                        if (!conversationStore.TryLoad(sessionName, out transcript) || transcript is null)
-                        {
-                            WriteSessionNotFound(output);
-                            return 1;
-                        }
-
-                        transcriptContext = transcript;
-                    }
-                    else
-                    {
-                        transcript = conversationStore.LoadOrCreate(sessionName, nowUtc);
-                    }
-                }
-                catch (Exception exception) when (IsConversationStoreException(exception))
-                {
-                    return WriteChatConversationStoreFailure(output, exception);
-                }
-            }
-
-            IChatModelClient chatModelClient = chatModelClientFactory(snapshot);
-            IChatStreamingRenderer renderer = streamingRendererFactory(output);
-            ChatRequest request = new(prompt, effectiveSession, snapshot.Instructions.Instructions, transcriptContext);
-
-            ChatModelResult result = chatModelClient.SendStreaming(request, renderer);
-            if (sessionName is not null && transcript is not null && conversationStore is not null)
-            {
-                ConversationTranscriptRecorder.RecordTurn(transcript, prompt, result, nowUtc);
-                try
-                {
-                    conversationStore.Save(sessionName, transcript);
-                }
-                catch (Exception exception) when (IsConversationStoreException(exception))
-                {
-                    return WriteChatConversationStoreFailure(output, exception);
-                }
-            }
-
-            return result.IsSuccess ? 0 : 1;
-        });
-
         rootComposer.Add(new VersionCommandModule(), commandContext);
         rootComposer.Add(new DoctorCommandModule(), commandContext);
         rootComposer.Add(new StatusCommandModule(), commandContext);
@@ -4790,7 +4686,7 @@ public static class CliCommandFactory
         rootComposer.Add(execCommand);
         rootComposer.Add(new RunCommandModule(), commandContext);
         rootComposer.Add(new SessionCommandModule(), commandContext);
-        rootComposer.Add(chatCommand);
+        rootComposer.Add(new ChatCommandModule(), commandContext);
 
         return rootComposer.Build();
     }
@@ -5401,13 +5297,6 @@ public static class CliCommandFactory
         output.WriteLine(result.Summary);
     }
 
-    private static int WriteChatConversationStoreFailure(TextWriter output, Exception exception)
-    {
-        (string errorCode, string summary) = GetConversationStoreFailure(exception);
-        WriteSafeFailure(output, errorCode, summary);
-        return 1;
-    }
-
     private static (string ErrorCode, string Summary) GetConversationStoreFailure(Exception exception)
     {
         if (IsInvalidConversationTranscriptException(exception))
@@ -5445,16 +5334,6 @@ public static class CliCommandFactory
         return message.EndsWith(parameterSuffix, StringComparison.Ordinal)
             ? message[..^parameterSuffix.Length]
             : message;
-    }
-
-    private static void WriteSessionNotFound(TextWriter output)
-    {
-        WriteSafeFailure(output, "session-not-found", "Session transcript was not found.");
-    }
-
-    private static void WriteSessionOptionConflict(TextWriter output)
-    {
-        WriteSafeFailure(output, "session-option-conflict", "Use either --session or --resume, not both.");
     }
 
     private static void WriteSafeFailure(TextWriter output, string errorCode, string summary)
