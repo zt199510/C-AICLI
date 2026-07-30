@@ -297,31 +297,19 @@ public static class CliCommandFactory
         Func<CliEnvironmentSnapshot, ToolRegistry, IToolExecutor, IAgentRunner> execAgentRunnerFactory = dependencies.ExecAgentRunnerFactory;
         Func<string, string?> environmentVariableProvider = dependencies.EnvironmentVariableProvider;
 
+        CliGlobalOptions globalOptions = new();
+        CliCommandContext commandContext = new(output, input, dependencies, globalOptions);
         Func<string?, CliEnvironmentSnapshot> workspaceSnapshotProvider =
-            workspacePath => snapshotProvider(workspacePath, null);
+            commandContext.WorkspaceSnapshotProvider;
         ProjectPackRegistry projectPackRegistry = new([new GerberTiffWorkflowPack()]);
         Func<CliEnvironmentSnapshot, ChangesApplicationService> changesServiceFactory =
             _ => new ChangesApplicationService(conversationStoreFactory);
 
-        RootCommand rootCommand = new($"{ProductInfo.CommandName} - {ProductInfo.Description}");
-        Option<string> workspaceOption = new("--workspace")
-        {
-            Description = "Use a workspace directory instead of the current directory.",
-            Recursive = true,
-        };
-        Option<bool> verboseOption = new("--verbose")
-        {
-            Description = "Show detailed human-readable diagnostics.",
-            Recursive = true,
-        };
-        Option<bool> traceOption = new("--trace")
-        {
-            Description = "Write trace-level local diagnostics.",
-            Recursive = true,
-        };
-        rootCommand.Options.Add(workspaceOption);
-        rootCommand.Options.Add(verboseOption);
-        rootCommand.Options.Add(traceOption);
+        CliRootComposer rootComposer = new(globalOptions);
+        RootCommand rootCommand = rootComposer.RootCommand;
+        Option<string> workspaceOption = globalOptions.Workspace;
+        Option<bool> verboseOption = globalOptions.Verbose;
+        Option<bool> traceOption = globalOptions.Trace;
 
         void WriteVerboseDiagnostics(
             ParseResult parseResult,
@@ -329,34 +317,21 @@ public static class CliCommandFactory
             CliEnvironmentSnapshot snapshot,
             bool humanReadableOutput = true)
         {
-            if (!humanReadableOutput || !parseResult.GetValue(verboseOption))
-            {
-                return;
-            }
-
-            DiagnosticContext context = DiagnosticContext.Create(
-                workspace: snapshot.CurrentDirectory,
-                utcNowProvider: utcNowProvider);
-            output.WriteLine(VerboseDiagnosticsReport.Create(commandName, snapshot, context).ToDisplayText());
-            output.WriteLine();
+            commandContext.WriteVerboseDiagnostics(
+                parseResult,
+                commandName,
+                snapshot,
+                humanReadableOutput);
         }
 
         bool IsTraceEnabled(ParseResult parseResult)
         {
-            return parseResult.GetValue(traceOption) ||
-                string.Equals(environmentVariableProvider("CAICLI_TRACE"), "1", StringComparison.Ordinal);
+            return commandContext.IsTraceEnabled(parseResult);
         }
 
         DiagnosticContext? CreateTraceContext(ParseResult parseResult, CliEnvironmentSnapshot snapshot)
         {
-            if (!IsTraceEnabled(parseResult))
-            {
-                return null;
-            }
-
-            return DiagnosticContext.Create(
-                workspace: snapshot.CurrentDirectory,
-                utcNowProvider: utcNowProvider);
+            return commandContext.CreateTraceContext(parseResult, snapshot);
         }
 
         void TryWriteTraceCommandEvent(
@@ -370,18 +345,16 @@ public static class CliCommandFactory
             string? errorCode = null,
             DateTimeOffset? timestampUtc = null)
         {
-            if (context is null)
-            {
-                return;
-            }
-
-            try
-            {
-                TraceLogger.AppendCommandEvent(commandName, snapshot, context, type, sequence, status, summary, errorCode, timestampUtc);
-            }
-            catch
-            {
-            }
+            commandContext.TryWriteTraceCommandEvent(
+                commandName,
+                snapshot,
+                context,
+                type,
+                sequence,
+                status,
+                summary,
+                errorCode,
+                timestampUtc);
         }
 
         void TryWriteTraceExecResult(
@@ -390,76 +363,8 @@ public static class CliCommandFactory
             DiagnosticContext? context,
             ExecResult result)
         {
-            if (context is null)
-            {
-                return;
-            }
-
-            try
-            {
-                TraceLogger.AppendExecResult(commandName, snapshot, context, result);
-            }
-            catch
-            {
-            }
+            commandContext.TryWriteTraceExecResult(commandName, snapshot, context, result);
         }
-
-        Command versionCommand = new("version", "Print product version metadata.");
-        versionCommand.SetAction(parseResult =>
-        {
-            if (parseResult.GetValue(verboseOption))
-            {
-                string? workspacePath = parseResult.GetValue(workspaceOption);
-                CliEnvironmentSnapshot snapshot = workspaceSnapshotProvider(workspacePath);
-                WriteVerboseDiagnostics(parseResult, "version", snapshot);
-            }
-
-            output.WriteLine($"{ProductInfo.CommandName} {ProductInfo.Version}");
-            output.WriteLine($"target framework: {ProductInfo.TargetFramework}");
-            output.WriteLine($"release runtime: {ProductInfo.ReleaseRuntime}");
-            return 0;
-        });
-
-        Command doctorCommand = new("doctor", "Inspect runtime, workspace, and configuration readiness.");
-        doctorCommand.SetAction(parseResult =>
-        {
-            string? workspacePath = parseResult.GetValue(workspaceOption);
-            CliEnvironmentSnapshot snapshot = workspaceSnapshotProvider(workspacePath);
-            DiagnosticContext? traceContext = CreateTraceContext(parseResult, snapshot);
-            TryWriteTraceCommandEvent("doctor", snapshot, traceContext, "command.start", 0, "started", timestampUtc: utcNowProvider());
-            TryWriteCommandLog(commandLogger, "doctor", snapshot);
-            WriteVerboseDiagnostics(parseResult, "doctor", snapshot);
-            output.WriteLine(DoctorReport.Create(snapshot).ToDisplayText());
-            TryWriteTraceCommandEvent("doctor", snapshot, traceContext, "command.complete", 1, "success", timestampUtc: utcNowProvider());
-            return 0;
-        });
-
-        Command statusCommand = new("status", "Summarize workspace, git, configuration, and approval status.");
-        statusCommand.SetAction(parseResult =>
-        {
-            string? workspacePath = parseResult.GetValue(workspaceOption);
-            CliEnvironmentSnapshot snapshot = workspaceSnapshotProvider(workspacePath);
-            TryWriteCommandLog(commandLogger, "status", snapshot);
-            WriteVerboseDiagnostics(parseResult, "status", snapshot);
-            GitStatusTool gitStatusTool = new(new WorkspaceGuard());
-            ToolExecutionResult gitStatus = gitStatusTool.Execute(new ToolExecutionContext(
-                "cli_status",
-                snapshot.Workspace,
-                "{}"));
-            output.WriteLine(StatusReport.Create(snapshot, gitStatus).ToDisplayText());
-            return 0;
-        });
-
-        Command modelsCommand = new("models", "Show current model configuration and static model examples.");
-        modelsCommand.SetAction(parseResult =>
-        {
-            string? workspacePath = parseResult.GetValue(workspaceOption);
-            CliEnvironmentSnapshot snapshot = workspaceSnapshotProvider(workspacePath);
-            TryWriteCommandLog(commandLogger, "models", snapshot);
-            WriteVerboseDiagnostics(parseResult, "models", snapshot);
-            output.WriteLine(ModelsReport.Create(snapshot).ToDisplayText());
-            return 0;
-        });
 
         Command diffCommand = new("diff", "Show current git diff for the workspace.");
         Option<bool> diffStatOption = new("--stat")
@@ -5915,34 +5820,34 @@ public static class CliCommandFactory
             return result.IsSuccess ? 0 : 1;
         });
 
-        rootCommand.Subcommands.Add(versionCommand);
-        rootCommand.Subcommands.Add(doctorCommand);
-        rootCommand.Subcommands.Add(statusCommand);
-        rootCommand.Subcommands.Add(modelsCommand);
-        rootCommand.Subcommands.Add(diffCommand);
-        rootCommand.Subcommands.Add(changesCommand);
-        rootCommand.Subcommands.Add(jobsCommand);
-        rootCommand.Subcommands.Add(ciCommand);
-        rootCommand.Subcommands.Add(daemonCommand);
-        rootCommand.Subcommands.Add(apiCommand);
-        rootCommand.Subcommands.Add(queueCommand);
-        rootCommand.Subcommands.Add(automationCommand);
-        rootCommand.Subcommands.Add(pipelineCommand);
-        rootCommand.Subcommands.Add(reviewCommand);
-        rootCommand.Subcommands.Add(configCommand);
-        rootCommand.Subcommands.Add(mcpCommand);
-        rootCommand.Subcommands.Add(workflowCommand);
-        rootCommand.Subcommands.Add(packsCommand);
-        rootCommand.Subcommands.Add(artifactsCommand);
-        rootCommand.Subcommands.Add(skillsCommand);
-        rootCommand.Subcommands.Add(toolsCommand);
-        rootCommand.Subcommands.Add(logsCommand);
-        rootCommand.Subcommands.Add(execCommand);
-        rootCommand.Subcommands.Add(runCommand);
-        rootCommand.Subcommands.Add(sessionCommand);
-        rootCommand.Subcommands.Add(chatCommand);
+        rootComposer.Add(new VersionCommandModule(), commandContext);
+        rootComposer.Add(new DoctorCommandModule(), commandContext);
+        rootComposer.Add(new StatusCommandModule(), commandContext);
+        rootComposer.Add(new ModelsCommandModule(), commandContext);
+        rootComposer.Add(diffCommand);
+        rootComposer.Add(changesCommand);
+        rootComposer.Add(jobsCommand);
+        rootComposer.Add(ciCommand);
+        rootComposer.Add(daemonCommand);
+        rootComposer.Add(apiCommand);
+        rootComposer.Add(queueCommand);
+        rootComposer.Add(automationCommand);
+        rootComposer.Add(pipelineCommand);
+        rootComposer.Add(reviewCommand);
+        rootComposer.Add(configCommand);
+        rootComposer.Add(mcpCommand);
+        rootComposer.Add(workflowCommand);
+        rootComposer.Add(packsCommand);
+        rootComposer.Add(artifactsCommand);
+        rootComposer.Add(skillsCommand);
+        rootComposer.Add(toolsCommand);
+        rootComposer.Add(logsCommand);
+        rootComposer.Add(execCommand);
+        rootComposer.Add(runCommand);
+        rootComposer.Add(sessionCommand);
+        rootComposer.Add(chatCommand);
 
-        return rootCommand;
+        return rootComposer.Build();
     }
 
     public static int Invoke(RootCommand rootCommand, string[] args, TextWriter error)

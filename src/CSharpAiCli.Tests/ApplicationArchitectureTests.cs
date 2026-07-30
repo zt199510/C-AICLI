@@ -81,8 +81,7 @@ public sealed class ApplicationArchitectureTests
                 StringComparison.Ordinal))
             .ToArray();
         string appHost = string.Join('\n', appHostFiles.Select(File.ReadAllText));
-        string cliFactory = File.ReadAllText(Path.Combine(
-            root, "src", "CSharpAiCli.Cli", "Commands", "CliCommandFactory.cs"));
+        string cliCommands = ReadCliCommandSources(root);
         string desktopBusinessSurface = string.Join('\n', Directory.EnumerateFiles(
                 Path.Combine(root, "apps", "desktop", "src"), "*.ts*", SearchOption.AllDirectories)
             .Where(path => !path.Contains($"{Path.DirectorySeparatorChar}generated{Path.DirectorySeparatorChar}",
@@ -100,8 +99,8 @@ public sealed class ApplicationArchitectureTests
         Assert.DoesNotContain(".caicli/threads", appHost, StringComparison.OrdinalIgnoreCase);
         Assert.DoesNotContain("Console.Write", appHost, StringComparison.Ordinal);
         Assert.Contains("Console.Error.WriteLine", appHost, StringComparison.Ordinal);
-        Assert.DoesNotContain("ThreadStore", cliFactory, StringComparison.Ordinal);
-        Assert.DoesNotContain("ThreadApplicationService", cliFactory, StringComparison.Ordinal);
+        Assert.DoesNotContain("ThreadStore", cliCommands, StringComparison.Ordinal);
+        Assert.DoesNotContain("ThreadApplicationService", cliCommands, StringComparison.Ordinal);
         foreach (string method in new[]
         {
             "thread.list", "thread.get", "thread.create", "thread.rename", "thread.archive", "thread.delete",
@@ -110,6 +109,20 @@ public sealed class ApplicationArchitectureTests
         {
             Assert.DoesNotContain(method, desktopBusinessSurface, StringComparison.Ordinal);
         }
+    }
+
+    [Fact]
+    public void Cli_command_modules_preserve_surface_boundaries()
+    {
+        string root = FindRepositoryRoot();
+        string source = ReadCliCommandSources(root);
+
+        Assert.DoesNotContain("CSharpAiCli.AppHost", source, StringComparison.Ordinal);
+        Assert.DoesNotContain("Electron", source, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("apps/desktop", source, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("public static class CliCommandFactory", source, StringComparison.Ordinal);
+        Assert.Contains("interface ICliCommandModule", source, StringComparison.Ordinal);
+        Assert.Contains("sealed class CliRootComposer", source, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -162,6 +175,16 @@ public sealed class ApplicationArchitectureTests
             .Select(value => Path.GetFileNameWithoutExtension(value!))
             .Order(StringComparer.Ordinal)
             .ToArray();
+    }
+
+    private static string ReadCliCommandSources(string root)
+    {
+        string commandsDirectory = Path.Combine(root, "src", "CSharpAiCli.Cli", "Commands");
+        return string.Join(
+            '\n',
+            Directory.EnumerateFiles(commandsDirectory, "*.cs", SearchOption.AllDirectories)
+                .Order(StringComparer.Ordinal)
+                .Select(File.ReadAllText));
     }
 
     private static string FindRepositoryRoot()
