@@ -97,6 +97,64 @@ describe("frozen timeline projection", () => {
     expect(messages.map((message) => message.summary)).toEqual(["Hello", "Final answer"]);
   });
 
+  it("reconciles an optimistic user message with authority without a duplicate", () => {
+    const authoritative = continuousDetail("running", "thinking", 1, [
+      { ...item(1, "user.message"), summary: "Hello authority", payload: { ...item(1, "user.message").payload, text: "Hello authority" } },
+    ]);
+    render(<TimelineView
+      detail={authoritative}
+      status="ready"
+      error={null}
+      optimisticExchanges={[{
+        localId: "local-1", threadId: "thread-1", authorityId: "intent-1",
+        text: "Hello authority", createdAtUtc: "2026-07-17T00:00:00.000Z", error: null,
+      }]}
+      onLoadMore={vi.fn()}
+    />);
+    expect(screen.getAllByText("Hello authority")).toHaveLength(1);
+  });
+
+  it("keeps connecting thinking streaming and final in one assistant block", () => {
+    const user = { ...item(1, "user.message"), summary: "Question" };
+    const partial = {
+      ...item(2, "assistant.message"),
+      summary: "new attempt complete prefix",
+      payload: { ...item(2, "assistant.message").payload, text: "new attempt complete prefix", attempt: 2, assistantMessageId: "assistant-1" },
+    };
+    const final = {
+      ...item(3, "assistant.final"),
+      summary: "Final answer",
+      payload: { ...item(3, "assistant.final").payload, text: "Final answer", attempt: 2, assistantMessageId: "assistant-1" },
+    };
+    const view = render(<TimelineView detail={continuousDetail("running", "connecting", 1, [user])} status="ready" error={null} onLoadMore={vi.fn()} />);
+    expect(document.querySelectorAll('[data-assistant-message-id="assistant-1"]')).toHaveLength(1);
+    expect(screen.getByText("正在连接")).toBeTruthy();
+    view.rerender(<TimelineView detail={continuousDetail("running", "thinking", 1, [user])} status="ready" error={null} onLoadMore={vi.fn()} />);
+    expect(screen.getByText("正在思考")).toBeTruthy();
+    view.rerender(<TimelineView detail={continuousDetail("running", "streaming", 2, [user, partial])} status="ready" error={null} onLoadMore={vi.fn()} />);
+    expect(screen.getByText("new attempt complete prefix")).toBeTruthy();
+    expect(document.querySelectorAll('[data-assistant-message-id="assistant-1"]')).toHaveLength(1);
+    view.rerender(<TimelineView detail={continuousDetail("completed", "streaming", 2, [user, partial, final])} status="ready" error={null} onLoadMore={vi.fn()} />);
+    expect(screen.getByText("Final answer")).toBeTruthy();
+    expect(screen.queryByText("new attempt complete prefix")).toBeNull();
+    expect(document.querySelectorAll('[data-assistant-message-id="assistant-1"]')).toHaveLength(1);
+  });
+
+  it("shows retry progress, authoritative duration and retry-exhausted actions", () => {
+    const retrying = render(<TimelineView detail={continuousDetail("running", "retry-wait", 5, [
+      { ...item(1, "user.message"), summary: "Question" },
+    ])} status="ready" error={null} onLoadMore={vi.fn()} />);
+    expect(screen.getByText("连接中断，正在重试 5/5...")).toBeTruthy();
+
+    retrying.rerender(<TimelineView detail={continuousDetail("failed", "failed", 6, [
+      { ...item(1, "user.message"), summary: "Question" },
+    ], true)} status="ready" error={null} onLoadMore={vi.fn()} onRestart={vi.fn(async () => null)} />);
+    expect(screen.getByText("连接失败，已重试 5 次")).toBeTruthy();
+    expect(screen.getByText("连接失败 · 处理 8.4 秒")).toBeTruthy();
+    expect(screen.getByRole("button", { name: /重新尝试/ })).toBeTruthy();
+    expect(screen.getByRole("button", { name: /复制错误信息/ })).toBeTruthy();
+  });
+
   it("shows message payload text without hiding it behind details", () => {
     const message = { ...item(1, "assistant.message"), summary: "Assistant message", payload: { ...item(1, "assistant.message").payload, text: "Visible assistant answer" } };
     render(<TimelineView detail={{ ...detail, timeline: [message] }} status="ready" error={null} onLoadMore={vi.fn()} />);
@@ -133,5 +191,43 @@ function item(sequence: number, type: string): TimelineItemData {
     source: null, status: sequence % 7 === 0 ? "failed" : "completed", summary: `Timeline item ${sequence}`,
     payload: { kind: "text", text: sequence % 5 === 0 ? "Long payload" : null, name: null, succeeded: true, errorCode: null, count: null, referenceId: null, stopReason: null },
     redacted: sequence % 101 === 0,
+  };
+}
+
+function continuousDetail(
+  status: string,
+  phase: "connecting" | "thinking" | "streaming" | "retry-wait" | "failed",
+  attempt: number,
+  timeline: readonly TimelineItemData[],
+  retryExhausted = false,
+): ThreadDetailData {
+  return {
+    thread: {
+      ...summary,
+      status,
+      activeTurnId: ["completed", "failed", "canceled"].includes(status) ? null : "turn-1",
+      timelineItemCount: timeline.length,
+    },
+    turns: [{
+      turnId: "turn-1", ordinal: 1, revision: 4, status,
+      createdAtUtc: "2026-07-17T00:00:00.000Z",
+      startedAtUtc: "2026-07-17T00:00:00.100Z",
+      completedAtUtc: ["completed", "failed", "canceled"].includes(status) ? "2026-07-17T00:00:08.400Z" : null,
+      taskSummary: "Question", stopReason: status, errorCode: status === "failed" ? "provider-transport-error" : null,
+      sourcePointers: [], timelineFirstSequence: timeline.length ? 1 : null,
+      timelineLastSequence: timeline.length ? timeline.length : null, timelineItemCount: timeline.length,
+      recoveryRequired: false, approval: null, clientMessageId: "intent-1",
+      provider: {
+        phase, attempt, maxAdditionalRetries: 5, attemptHasStreamContent: phase === "streaming",
+        assistantMessageId: "assistant-1", errorCategory: status === "failed" ? "transport" : null,
+        retryable: status === "failed" ? true : null,
+        safeErrorMessage: status === "failed" ? "The model connection could not be established." : null,
+        retryExhausted,
+      },
+    }],
+    timeline,
+    nextSequence: null,
+    timelineTruncated: false,
+    recoveryRequired: false,
   };
 }

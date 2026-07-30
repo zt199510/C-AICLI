@@ -1,4 +1,4 @@
-import { FilePlus2, FolderPlus, Send, Trash2, X } from "lucide-react";
+import { FilePlus2, FolderPlus, Send, Square, Trash2, X } from "lucide-react";
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, type KeyboardEvent } from "react";
 import type { CatalogItemData, ContextDescriptorData } from "../generated/desktop-contracts";
 import type { ComposerDraft, ComposerCatalogKind, ComposerUiState, SelectedCatalogItem } from "./composer-state";
@@ -22,6 +22,8 @@ interface ComposerProps {
   readonly onPickFile: () => void;
   readonly onPickFolder: () => void;
   readonly onSend: () => void;
+  readonly stopping?: boolean;
+  readonly onStop?: () => void;
   readonly onClear: () => void;
 }
 
@@ -33,6 +35,7 @@ export function Composer(props: ComposerProps) {
   const pending = props.composer.snapshot?.pendingIntent;
   const busy = props.draft.status === "validating" || props.draft.status === "enqueueing";
   const disabled = Boolean(props.disabledReason) || busy || Boolean(pending);
+  const stopMode = Boolean(props.onStop);
   const statusText = props.draft.error ?? props.disabledReason ?? (busy ? "Sending prompt…" : "");
   const mentionOptions = useMemo(() => [
     ...props.composer.mentions.context.map((item) => ({ id: `mention-context-${item.selectionId}`, select: () => props.onContext(item) })),
@@ -83,7 +86,7 @@ export function Composer(props: ComposerProps) {
     }
     if (event.key === "Enter" && !event.shiftKey && !composing && !event.nativeEvent.isComposing) {
       event.preventDefault();
-      if (!disabled && props.draft.text.trim()) props.onSend();
+      if (!stopMode && !disabled && props.draft.text.trim()) props.onSend();
     }
   }
 
@@ -100,7 +103,7 @@ export function Composer(props: ComposerProps) {
       </div>
       <div className="composer-footer">
         <div className="composer-tools"><button type="button" title="Attach file" onClick={props.onPickFile} disabled={disabled} aria-label="Attach workspace file"><FilePlus2 size={17} /><span className="sr-only">File</span></button><button type="button" title="Attach folder" onClick={props.onPickFolder} disabled={disabled} aria-label="Attach workspace folder"><FolderPlus size={17} /><span className="sr-only">Folder</span></button></div>
-        <div className="composer-summary"><span>{props.composer.snapshot ? `${props.composer.snapshot.effectiveModel} · ${props.composer.snapshot.approvalMode}` : props.modelLabel ? `${props.modelLabel}${props.approvalModeLabel ? ` · ${props.approvalModeLabel}` : ""}` : "Model unavailable"}</span><button className="composer-send" type="button" onClick={props.onSend} disabled={disabled || !props.draft.text.trim()} aria-label={busy ? "Sending prompt" : "Send prompt"}><Send size={17} /><span className="sr-only">{busy ? "Sending" : "Send"}</span></button></div>
+        <div className="composer-summary"><span>{props.composer.snapshot ? `${props.composer.snapshot.effectiveModel} · ${props.composer.snapshot.approvalMode}` : props.modelLabel ? `${props.modelLabel}${props.approvalModeLabel ? ` · ${props.approvalModeLabel}` : ""}` : "Model unavailable"}</span>{stopMode ? <button className="composer-send composer-stop" type="button" onClick={props.onStop} disabled={props.stopping} aria-label={props.stopping ? "Stopping response" : "Stop response"}><Square size={15} fill="currentColor" /><span className="sr-only">{props.stopping ? "Stopping" : "Stop"}</span></button> : <button className="composer-send" type="button" onClick={props.onSend} disabled={disabled || !props.draft.text.trim()} aria-label={busy ? "Sending prompt" : "Send prompt"}><Send size={17} /><span className="sr-only">{busy ? "Sending" : "Send"}</span></button>}</div>
       </div>
       <div id="composer-help" className="sr-only">Enter sends. Shift Enter inserts a new line.</div>
       <div id="composer-status" className={props.draft.error ? "composer-error" : "composer-status"} role={props.draft.error ? "alert" : "status"} hidden={!statusText && !props.disabledActionLabel}><span>{statusText}</span>{props.disabledReason && props.disabledActionLabel && props.onDisabledAction ? <button type="button" className="composer-status-action" onClick={props.onDisabledAction}>{props.disabledActionLabel}</button> : null}</div>

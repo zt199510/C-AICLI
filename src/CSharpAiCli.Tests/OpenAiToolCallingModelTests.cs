@@ -103,6 +103,42 @@ public sealed class OpenAiToolCallingModelTests
     }
 
     [Fact]
+    public void Start_emits_thinking_and_streaming_for_completed_response_text()
+    {
+        ToolRegistry registry = new();
+        FakeGateway gateway = new()
+        {
+            Responses =
+            [
+                new OpenAiResponseEnvelope(
+                    ResponseId: "resp_final",
+                    Model: "gpt-test",
+                    Text: "complete reply")
+            ]
+        };
+        RecordingProviderObserver observer = new();
+        OpenAiToolCallingModel model = new(
+            model: "gpt-test",
+            instructions: null,
+            registry,
+            gateway,
+            observer);
+
+        AgentModelTurn turn = model.Start(CreateRequest("answer"));
+
+        Assert.Equal("complete reply", turn.FinalText);
+        Assert.Collection(
+            observer.Events,
+            item => Assert.Equal(ProviderAttemptPhase.Thinking, item.Phase),
+            item =>
+            {
+                Assert.Equal(ProviderAttemptPhase.Streaming, item.Phase);
+                Assert.Equal("complete reply", item.Content);
+                Assert.True(item.HasStreamContent);
+            });
+    }
+
+    [Fact]
     public void Start_with_task_context_includes_bounded_context_and_startup_plan()
     {
         ToolRegistry registry = new();
@@ -459,6 +495,16 @@ public sealed class OpenAiToolCallingModelTests
             CancellationToken cancellationToken = default)
         {
             throw new NotSupportedException();
+        }
+    }
+
+    private sealed class RecordingProviderObserver : IProviderAttemptObserver
+    {
+        public List<ProviderAttemptEvent> Events { get; } = [];
+
+        public void OnProviderAttempt(ProviderAttemptEvent attemptEvent)
+        {
+            Events.Add(attemptEvent);
         }
     }
 

@@ -1,11 +1,20 @@
-import { useCallback, useEffect, useMemo, useReducer, useRef } from "react";
-import type { CatalogItemData, ContextDescriptorData, ThreadChangedParams, WorkspaceSnapshotData } from "../generated/desktop-contracts";
+import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from "react";
+import type { CatalogItemData, ContextDescriptorData, ThreadChangedParams, ThreadDetailData, WorkspaceSnapshotData } from "../generated/desktop-contracts";
 import { createRuntimeStatus, type DesktopBridge } from "../shared/bridge-contract";
 import { desktopReducer, initialDesktopState, threadEventIdentity, type ReviewState } from "./desktop-state";
 import { composerReducer, currentDraft, draftKey, initialComposerUiState, type ComposerCatalogKind, type SelectedCatalogItem } from "./composer-state";
 import { incrementMemoryDiagnostic } from "./memory-diagnostics";
 
 const NEW_CONVERSATION_DRAFT_ID = "__new-conversation__";
+
+export interface OptimisticExchange {
+  readonly localId: string;
+  readonly threadId: string | null;
+  readonly authorityId: string | null;
+  readonly text: string;
+  readonly createdAtUtc: string;
+  readonly error: string | null;
+}
 
 export function shouldQueueThreadResync(previous: ThreadChangedParams | null, event: ThreadChangedParams): boolean {
   if (!previous || previous.workspaceId !== event.workspaceId || previous.threadId !== event.threadId) return true;
@@ -18,6 +27,7 @@ export function shouldQueueThreadResync(previous: ThreadChangedParams | null, ev
 export function useDesktopController(bridge: DesktopBridge | undefined, options?: { readonly autoSelectConversation?: boolean }) {
   const [state, dispatch] = useReducer(desktopReducer, initialDesktopState);
   const [composer, dispatchComposer] = useReducer(composerReducer, initialComposerUiState);
+  const [optimisticExchanges, setOptimisticExchanges] = useState<readonly OptimisticExchange[]>([]);
   const stateRef = useRef(state);
   stateRef.current = state;
   const composerRef = useRef(composer);
@@ -221,6 +231,18 @@ export function useDesktopController(bridge: DesktopBridge | undefined, options?
       else dispatchComposer({ type: "snapshot-error" });
     }).catch(() => dispatchComposer({ type: "snapshot-error" }));
   }, [bridge, state.contextEpoch, state.runtime.state, state.selectedThreadId, state.selectionEpoch, state.workspace?.workspaceId]);
+
+  useEffect(() => {
+    if (!state.detail) return;
+    const authoritativeIds = new Set(state.detail.turns
+      .filter((turn) => state.detail?.timeline.some((item) =>
+        item.turnId === turn.turnId && item.type === "user.message"))
+      .map((turn) => turn.clientMessageId)
+      .filter((value): value is string => Boolean(value)));
+    if (authoritativeIds.size === 0) return;
+    setOptimisticExchanges((current) => current.filter((item) =>
+      !item.authorityId || !authoritativeIds.has(item.authorityId)));
+  }, [state.detail]);
 
   const selectThread = useCallback((threadId: string) => {
     newConversationRequested.current = false;
@@ -449,6 +471,20 @@ export function useDesktopController(bridge: DesktopBridge | undefined, options?
     let key = composerDraftKey(snapshot.workspace.workspaceId, threadId);
     const draft = currentDraft(composerRef.current, key);
     if (!draft.text.trim()) return;
+    const localId = `optimistic-${crypto.randomUUID()}`;
+    const failOptimistic = (message: string) => {
+      setOptimisticExchanges((current) => current.map((item) =>
+        item.localId === localId ? { ...item, error: message } : item));
+    };
+    setOptimisticExchanges((current) => [...current, {
+      localId,
+      threadId,
+      authorityId: null,
+      text: draft.text,
+      createdAtUtc: new Date().toISOString(),
+      error: null,
+    }]);
+    dispatchComposer({ type: "clear-draft", key });
     dispatchComposer({ type: "status", key, status: "validating" });
     const epoch = snapshot.contextEpoch;
     const selectionEpoch = snapshot.selectionEpoch;
@@ -459,10 +495,12 @@ export function useDesktopController(bridge: DesktopBridge | undefined, options?
       if (!threadId) {
         const created = await bridge.createThread({ title: conversationTitle(draft.text) });
         if (!created.succeeded || !created.data) {
-          dispatchComposer({ type: "status", key, status: "error", error: safeFailure(created.error?.safeMessage) });
+          failOptimistic(safeFailure(created.error?.safeMessage));
           return;
         }
         threadId = created.data.threadId;
+        setOptimisticExchanges((current) => current.map((item) =>
+          item.localId === localId ? { ...item, threadId } : item));
         threadRevision = created.data.revision;
         const threadKey = draftKey(snapshot.workspace.workspaceId, threadId);
         dispatchComposer({ type: "move-draft", fromKey: key, toKey: threadKey });
@@ -472,14 +510,14 @@ export function useDesktopController(bridge: DesktopBridge | undefined, options?
         expectedSelectionIntent = selectionIntent.current;
         const initialComposer = await bridge.getComposer({ threadId });
         if (!initialComposer.succeeded || !initialComposer.data) {
-          dispatchComposer({ type: "status", key, status: "error", error: safeFailure(initialComposer.error?.safeMessage) });
+          failOptimistic(safeFailure(initialComposer.error?.safeMessage));
           return;
         }
         composerSnapshot = initialComposer.data;
         threadRevision = initialComposer.data.threadRevision;
       }
       if (!composerSnapshot || threadRevision === null) {
-        dispatchComposer({ type: "status", key, status: "error", error: "Conversation state is not ready." });
+        failOptimistic("Conversation state is not ready.");
         return;
       }
       dispatchComposer({ type: "status", key, status: "enqueueing" });
@@ -493,17 +531,21 @@ export function useDesktopController(bridge: DesktopBridge | undefined, options?
         catalogSelections: draft.catalogSelections.map(item => ({ kind: item.kind, id: item.id, catalogRevision: item.catalogRevision })),
       });
       if (!result.succeeded || !result.data) {
-        dispatchComposer({ type: "status", key, status: "error", error: safeFailure(result.error?.safeMessage) });
+        failOptimistic(safeFailure(result.error?.safeMessage));
         return;
       }
       const intentId = result.data.pendingIntent?.intentId;
+      if (intentId) {
+        setOptimisticExchanges((current) => current.map((item) =>
+          item.localId === localId ? { ...item, authorityId: intentId } : item));
+      }
       const authoritative = await bridge.getComposer({ threadId });
       const current = stateRef.current;
       const stale = current.contextEpoch !== epoch || selectionIntent.current !== expectedSelectionIntent ||
         (!createdConversation && (current.selectedThreadId !== threadId || current.selectionEpoch !== selectionEpoch));
       if (stale) return;
       if (!authoritative.succeeded || !authoritative.data || !intentId || authoritative.data.pendingIntent?.intentId !== intentId) {
-        dispatchComposer({ type: "status", key, status: "error", error: "Queue confirmation could not be verified." });
+        failOptimistic("Queue confirmation could not be verified.");
         return;
       }
       dispatchComposer({ type: "snapshot", snapshot: authoritative.data });
@@ -514,17 +556,25 @@ export function useDesktopController(bridge: DesktopBridge | undefined, options?
         clientMutationId: `start-${intentId}`,
       });
       if (!started.succeeded || !started.data) {
-        dispatchComposer({ type: "status", key, status: "error", error: safeFailure(started.error?.safeMessage) });
+        failOptimistic(safeFailure(started.error?.safeMessage));
         return;
       }
-      dispatchComposer({ type: "clear-draft", key });
       const refreshed = await bridge.getComposer({ threadId });
       await refreshThreads(epoch);
       if (selectionIntent.current !== expectedSelectionIntent) return;
       await fetchThread(threadId, 0, false, epoch, targetSelectionEpoch, createdConversation);
       if (refreshed.succeeded && refreshed.data) dispatchComposer({ type: "snapshot", snapshot: refreshed.data });
-    } catch { dispatchComposer({ type: "status", key, status: "error", error: "Prompt could not be queued." }); }
+    } catch { failOptimistic("Prompt could not be queued."); }
   }, [bridge, fetchThread, refreshThreads, selectThread]);
+
+  const restoreOptimistic = useCallback((localId: string) => {
+    const exchange = optimisticExchanges.find((item) => item.localId === localId);
+    const workspace = stateRef.current.workspace;
+    if (!exchange || !workspace) return;
+    const key = composerDraftKey(workspace.workspaceId, stateRef.current.selectedThreadId);
+    dispatchComposer({ type: "text", key, text: exchange.text });
+    setOptimisticExchanges((current) => current.filter((item) => item.localId !== localId));
+  }, [optimisticExchanges]);
 
   const clearComposer = useCallback(async () => {
     if (!bridge) return;
@@ -665,7 +715,12 @@ export function useDesktopController(bridge: DesktopBridge | undefined, options?
     terminalCommands,
     composer,
     composerDraft: currentDraft(composer, activeDraftKey),
-    composerDisabledReason: !state.workspace ? "Open a workspace to compose." : state.runtime.state !== "ready" ? "AppHost is unavailable." : state.detail?.thread.status === "archived" ? "Archived conversations cannot accept input." : composer.snapshot?.pendingIntent ? "Clear the pending input before composing another." : null,
+    composerDisabledReason: !state.workspace ? "Open a workspace to compose." : state.runtime.state !== "ready" ? "AppHost is unavailable." : state.detail?.thread.status === "archived" ? "Archived conversations cannot accept input." : activeTurn(state.detail)?.approval ? "Resolve the approval request before sending another message." : composer.snapshot?.pendingIntent ? "Clear the pending input before composing another." : null,
+    activeTurn: activeTurn(state.detail),
+    optimisticExchanges: optimisticExchanges.filter((item) =>
+      item.threadId === state.selectedThreadId ||
+      (item.threadId === null && state.selectedThreadId === null)),
+    restoreOptimistic,
     setComposerText: (text: string) => { if (activeDraftKey) dispatchComposer({ type: "text", key: activeDraftKey, text }); },
     searchMentions,
     closeMentions: () => { mentionRequest.current++; dispatchComposer({ type: "mentions-close" }); },
@@ -700,4 +755,13 @@ export function conversationTitle(prompt: string): string {
 
 function safeFailure(message: string | null | undefined): string {
   return message && message.length <= 4096 ? message : "The requested operation failed.";
+}
+
+function activeTurn(detail: ThreadDetailData | null) {
+  if (!detail) return null;
+  const terminal = new Set(["completed", "failed", "canceled"]);
+  const authoritative = detail.thread.activeTurnId
+    ? detail.turns.find((turn) => turn.turnId === detail.thread.activeTurnId)
+    : null;
+  return authoritative ?? [...detail.turns].reverse().find((turn) => !terminal.has(turn.status)) ?? null;
 }

@@ -193,6 +193,12 @@ function detail(
     taskSummary: "Approval projection", stopReason: null, errorCode: null, sourcePointers: [],
     timelineFirstSequence: 1, timelineLastSequence: timelineItemCount,
     timelineItemCount, recoveryRequired: false, approval: activeApproval,
+    clientMessageId: "intent-1",
+    provider: {
+      phase: "thinking", attempt: 1, maxAdditionalRetries: 5,
+      attemptHasStreamContent: false, assistantMessageId: "assistant-1",
+      errorCategory: null, retryable: null, safeErrorMessage: null, retryExhausted: false,
+    },
   };
   return {
     thread: summary(status, revision, timelineItemCount), turns: [turn], timeline: [], nextSequence: null,

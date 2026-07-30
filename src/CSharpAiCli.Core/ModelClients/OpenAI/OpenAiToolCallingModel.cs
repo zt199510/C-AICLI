@@ -1,19 +1,23 @@
 namespace CSharpAiCli.Core;
 
-public sealed class OpenAiToolCallingModel : IToolCallingModel
+public sealed class OpenAiToolCallingModel : IToolCallingModel, IProviderAttemptContextReceiver
 {
     private readonly string model;
     private readonly string? instructions;
     private readonly IToolRegistry registry;
     private readonly IOpenAiResponsesGateway gateway;
+    private readonly IProviderAttemptObserver? attemptObserver;
     private readonly List<OpenAiToolResultInput> toolResultHistory = [];
     private string? currentPrompt;
+    private int currentAttempt = 1;
+    private int maxAdditionalRetries = ProviderRequestRetryLimits.MaxAdditionalRetries;
 
     public OpenAiToolCallingModel(
         string model,
         string? instructions,
         IToolRegistry registry,
-        IOpenAiResponsesGateway gateway)
+        IOpenAiResponsesGateway gateway,
+        IProviderAttemptObserver? attemptObserver = null)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(model);
         ArgumentNullException.ThrowIfNull(registry);
@@ -23,6 +27,7 @@ public sealed class OpenAiToolCallingModel : IToolCallingModel
         this.instructions = instructions;
         this.registry = registry;
         this.gateway = gateway;
+        this.attemptObserver = attemptObserver;
     }
 
     public AgentModelTurn Start(
@@ -60,9 +65,7 @@ public sealed class OpenAiToolCallingModel : IToolCallingModel
             Tools: OpenAiToolDefinitionMapper.FromRegistry(registry),
             ToolResults: []);
 
-        OpenAiResponseEnvelope response = gateway.CreateAgentResponse(
-            agentRequest,
-            cancellationToken);
+        OpenAiResponseEnvelope response = SendStreaming(agentRequest, cancellationToken);
         return OpenAiResponseParser.ToAgentModelTurn(response);
     }
 
@@ -80,7 +83,13 @@ public sealed class OpenAiToolCallingModel : IToolCallingModel
                 "OpenAI tool calling model must be started before continuing.");
         }
 
-        toolResultHistory.AddRange(toolResults.Select(ToToolResultInput));
+        foreach (AgentToolCallResult toolResult in toolResults)
+        {
+            if (toolResultHistory.All(existing => existing.CallId != toolResult.Request.CallId))
+            {
+                toolResultHistory.Add(ToToolResultInput(toolResult));
+            }
+        }
         OpenAiAgentRequest agentRequest = new(
             Model: model,
             Prompt: currentPrompt,
@@ -89,10 +98,83 @@ public sealed class OpenAiToolCallingModel : IToolCallingModel
             Tools: OpenAiToolDefinitionMapper.FromRegistry(registry),
             ToolResults: toolResultHistory.ToArray());
 
-        OpenAiResponseEnvelope response = gateway.CreateAgentResponse(
-            agentRequest,
-            cancellationToken);
+        OpenAiResponseEnvelope response = SendStreaming(agentRequest, cancellationToken);
         return OpenAiResponseParser.ToAgentModelTurn(response);
+    }
+
+    public void BeginProviderAttempt(int attempt, int maximumAdditionalRetries)
+    {
+        currentAttempt = attempt;
+        maxAdditionalRetries = maximumAdditionalRetries;
+    }
+
+    private OpenAiResponseEnvelope SendStreaming(
+        OpenAiAgentRequest request,
+        CancellationToken cancellationToken)
+    {
+        attemptObserver?.OnProviderAttempt(new ProviderAttemptEvent(
+            currentAttempt,
+            maxAdditionalRetries,
+            ProviderAttemptPhase.Thinking));
+        var text = new System.Text.StringBuilder();
+        int emittedLength = 0;
+        OpenAiResponseEnvelope? completed = null;
+        foreach (OpenAiStreamingResponseUpdate update in gateway.CreateAgentResponseStreaming(
+            request,
+            cancellationToken))
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            if (update.Kind == OpenAiStreamingResponseUpdateKind.OutputTextDelta)
+            {
+                string delta = update.TextDelta ?? string.Empty;
+                if (delta.Length == 0)
+                {
+                    continue;
+                }
+                text.Append(delta);
+                if (emittedLength == 0 || text.Length - emittedLength >= 512)
+                {
+                    EmitStreaming(text.ToString());
+                    emittedLength = text.Length;
+                }
+            }
+            else if (update.Kind == OpenAiStreamingResponseUpdateKind.Completed)
+            {
+                completed = update.Response ?? new OpenAiResponseEnvelope(
+                    update.ResponseId ?? "unknown",
+                    update.Model ?? request.Model,
+                    text.ToString());
+            }
+        }
+
+        if (completed is null)
+        {
+            throw new IOException("Provider stream ended before completion.");
+        }
+        if (text.Length == 0 && !string.IsNullOrEmpty(completed.Text))
+        {
+            text.Append(completed.Text);
+            EmitStreaming(text.ToString());
+        }
+        else if (text.Length > emittedLength)
+        {
+            EmitStreaming(text.ToString());
+        }
+        if (text.Length > 0 && string.IsNullOrWhiteSpace(completed.Text))
+        {
+            completed = completed with { Text = text.ToString() };
+        }
+        return completed;
+
+        void EmitStreaming(string content)
+        {
+            attemptObserver?.OnProviderAttempt(new ProviderAttemptEvent(
+                currentAttempt,
+                maxAdditionalRetries,
+                ProviderAttemptPhase.Streaming,
+                HasStreamContent: true,
+                Content: content));
+        }
     }
 
     private static OpenAiToolResultInput ToToolResultInput(AgentToolCallResult toolResult)

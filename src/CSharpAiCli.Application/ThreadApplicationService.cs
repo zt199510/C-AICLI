@@ -609,7 +609,27 @@ public sealed class ThreadApplicationService
         turn.TimelineLastSequence,
         turn.TimelineItemCount,
         turn.RecoveryRequired || recoveryRequired,
-        turn.ActiveApproval is null ? null : ProjectApproval(turn.ActiveApproval));
+        turn.ActiveApproval is null ? null : ProjectApproval(turn.ActiveApproval),
+        turn.SourceCorrelation,
+        ProjectProvider(turn));
+
+    private static ProviderProgressProjection ProjectProvider(TurnRecord turn)
+    {
+        ProviderProgressRecord value = turn.ProviderProgress;
+        string assistantMessageId = string.IsNullOrWhiteSpace(value.AssistantMessageId)
+            ? "assistant_" + turn.TurnId["turn_".Length..]
+            : value.AssistantMessageId;
+        return new ProviderProgressProjection(
+            value.Phase,
+            value.Attempt,
+            value.MaxAdditionalRetries,
+            value.AttemptHasStreamContent,
+            assistantMessageId,
+            ApplicationProjection.SafeOrNull(value.ErrorCategory, 64),
+            value.Retryable,
+            ApplicationProjection.SafeOrNull(value.SafeErrorMessage, ThreadPersistenceLimits.MaxTimelineSummaryBytes),
+            value.RetryExhausted);
+    }
 
     private static DurableApprovalProjection ProjectApproval(DurableApprovalRequestRecord value) => new(
         value.RequestId, value.WorkspaceId, value.ThreadId, value.TurnId, value.TurnRevision, value.ApprovalRevision,
@@ -634,7 +654,22 @@ public sealed class ThreadApplicationService
 
     private static TimelinePayloadProjection ProjectPayload(TimelinePayloadRecord payload)
     {
-        if (payload.Message is not null) return new("message", Text: ApplicationProjection.Safe(payload.Message.Preview));
+        if (payload.Message is not null) return new(
+            "message",
+            Text: ApplicationProjection.Safe(payload.Message.Preview),
+            Attempt: payload.Message.Attempt,
+            AssistantMessageId: ApplicationProjection.SafeOrNull(payload.Message.AssistantMessageId, 128));
+        if (payload.Provider is not null) return new(
+            "provider",
+            Phase: payload.Provider.Phase,
+            Attempt: payload.Provider.Attempt,
+            MaxAdditionalRetries: payload.Provider.MaxAdditionalRetries,
+            AttemptHasStreamContent: payload.Provider.AttemptHasStreamContent,
+            AssistantMessageId: payload.Provider.AssistantMessageId,
+            ErrorCategory: payload.Provider.ErrorCategory,
+            Retryable: payload.Provider.Retryable,
+            SafeErrorMessage: payload.Provider.SafeErrorMessage,
+            RetryExhausted: payload.Provider.RetryExhausted);
         if (payload.Plan is not null) return new("plan", Text: ApplicationProjection.Safe(payload.Plan.Summary));
         if (payload.Operation is not null) return new("operation", Name: ApplicationProjection.Safe(payload.Operation.Name), Succeeded: payload.Operation.Succeeded, ErrorCode: ApplicationProjection.SafeOrNull(payload.Operation.ErrorCode));
         if (payload.Approval is not null) return new("approval", Text: ApplicationProjection.Safe(payload.Approval.Status));

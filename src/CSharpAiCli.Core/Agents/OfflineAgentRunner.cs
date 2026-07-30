@@ -420,7 +420,9 @@ public sealed class OfflineAgentRunner : IAgentRunner
             return false;
         }
 
-        bool modelTimeoutWins = limits.ModelCallTimeout <= remainingOverallTimeout;
+        bool providerOwnsAttemptTimeout = model is IProviderRetryingToolCallingModel;
+        bool modelTimeoutWins = !providerOwnsAttemptTimeout &&
+            limits.ModelCallTimeout <= remainingOverallTimeout;
         long startedTimestamp = durationClock.GetTimestamp();
         using CancellationTokenSource overallTimeoutSource = new();
         using CancellationTokenSource modelTimeoutSource = new();
@@ -429,7 +431,10 @@ public sealed class OfflineAgentRunner : IAgentRunner
             overallTimeoutSource.Token,
             modelTimeoutSource.Token);
         overallTimeoutSource.CancelAfter(remainingOverallTimeout);
-        modelTimeoutSource.CancelAfter(limits.ModelCallTimeout);
+        if (!providerOwnsAttemptTimeout)
+        {
+            modelTimeoutSource.CancelAfter(limits.ModelCallTimeout);
+        }
         try
         {
             turn = model.Start(request, timeoutSource.Token);
@@ -497,7 +502,9 @@ public sealed class OfflineAgentRunner : IAgentRunner
             return false;
         }
 
-        bool modelTimeoutWins = limits.ModelCallTimeout <= remainingOverallTimeout;
+        bool providerOwnsAttemptTimeout = model is IProviderRetryingToolCallingModel;
+        bool modelTimeoutWins = !providerOwnsAttemptTimeout &&
+            limits.ModelCallTimeout <= remainingOverallTimeout;
         long startedTimestamp = durationClock.GetTimestamp();
         using CancellationTokenSource overallTimeoutSource = new();
         using CancellationTokenSource modelTimeoutSource = new();
@@ -506,7 +513,10 @@ public sealed class OfflineAgentRunner : IAgentRunner
             overallTimeoutSource.Token,
             modelTimeoutSource.Token);
         overallTimeoutSource.CancelAfter(remainingOverallTimeout);
-        modelTimeoutSource.CancelAfter(limits.ModelCallTimeout);
+        if (!providerOwnsAttemptTimeout)
+        {
+            modelTimeoutSource.CancelAfter(limits.ModelCallTimeout);
+        }
         try
         {
             turn = model.Continue(request, toolResults, timeoutSource.Token);

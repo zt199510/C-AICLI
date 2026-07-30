@@ -378,7 +378,20 @@ internal static class DesktopProtocolMapper
             TimelineLastSequence = turn.TimelineLastSequence,
             TimelineItemCount = turn.TimelineItemCount,
             RecoveryRequired = turn.RecoveryRequired,
-            Approval = turn.Approval is null ? null : Map(turn.Approval)
+            Approval = turn.Approval is null ? null : Map(turn.Approval),
+            ClientMessageId = turn.ClientMessageId,
+            Provider = new ProviderProgressData
+            {
+                Phase = turn.Provider.Phase,
+                Attempt = turn.Provider.Attempt,
+                MaxAdditionalRetries = turn.Provider.MaxAdditionalRetries,
+                AttemptHasStreamContent = turn.Provider.AttemptHasStreamContent,
+                AssistantMessageId = turn.Provider.AssistantMessageId,
+                ErrorCategory = turn.Provider.ErrorCategory,
+                Retryable = turn.Provider.Retryable,
+                SafeErrorMessage = turn.Provider.SafeErrorMessage,
+                RetryExhausted = turn.Provider.RetryExhausted
+            }
         }).ToArray(),
         Timeline = value.Timeline.Select(item => new TimelineItemData
         {
@@ -399,7 +412,16 @@ internal static class DesktopProtocolMapper
                 ErrorCode = item.Payload.ErrorCode,
                 Count = item.Payload.Count,
                 ReferenceId = item.Payload.ReferenceId,
-                StopReason = item.Payload.StopReason
+                StopReason = item.Payload.StopReason,
+                Phase = item.Payload.Phase,
+                Attempt = item.Payload.Attempt,
+                MaxAdditionalRetries = item.Payload.MaxAdditionalRetries,
+                AttemptHasStreamContent = item.Payload.AttemptHasStreamContent,
+                AssistantMessageId = item.Payload.AssistantMessageId,
+                ErrorCategory = item.Payload.ErrorCategory,
+                Retryable = item.Payload.Retryable,
+                SafeErrorMessage = item.Payload.SafeErrorMessage,
+                RetryExhausted = item.Payload.RetryExhausted
             },
             Redacted = item.Redacted
         }).ToArray(),

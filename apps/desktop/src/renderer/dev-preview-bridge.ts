@@ -233,6 +233,18 @@ function turn(turnId: string, ordinal: number, status: string, taskSummary: stri
     timelineItemCount: 3,
     recoveryRequired: false,
     approval: null,
+    clientMessageId: `intent-${turnId}`,
+    provider: {
+      phase: "streaming",
+      attempt: 1,
+      maxAdditionalRetries: 5,
+      attemptHasStreamContent: true,
+      assistantMessageId: `assistant-${turnId}`,
+      errorCategory: null,
+      retryable: null,
+      safeErrorMessage: null,
+      retryExhausted: false,
+    },
   } as const;
 }
 

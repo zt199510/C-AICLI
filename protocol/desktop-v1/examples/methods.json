@@ -5,7 +5,7 @@
       "params": {
         "schemaVersion": 1,
         "protocolVersion": "desktop-v1",
-        "contractSha256": "62a9856a1fef376050be345ec84f9857f91bba03c434c220d6e6d6bd90047f7b",
+        "contractSha256": "feb1f3a77e0d0f3a085212b613d0bb8805986c774a6978294649fea0dc0960d9",
         "clientName": "desktop-example",
         "clientVersion": "0.6.0",
         "clientInstanceId": "example-client-1",
@@ -14,7 +14,7 @@
       "result": {
         "schemaVersion": 1,
         "protocolVersion": "desktop-v1",
-        "contractSha256": "62a9856a1fef376050be345ec84f9857f91bba03c434c220d6e6d6bd90047f7b",
+        "contractSha256": "feb1f3a77e0d0f3a085212b613d0bb8805986c774a6978294649fea0dc0960d9",
         "serverVersion": "0.6.0",
         "serverInstanceId": "server_0123456789abcdef01234567",
         "negotiatedCapabilities": ["framed-json-rpc", "workspace-session", "application-outcome", "composer.controlled-context", "turn.write-path", "terminal.user-session", "artifact.review", "gerber.review"],

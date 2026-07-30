@@ -1,4 +1,4 @@
-import { AlertTriangle, LoaderCircle, RefreshCw, RotateCcw, ShieldCheck, ShieldX, Square } from "lucide-react";
+import { AlertTriangle, LoaderCircle, RefreshCw, RotateCcw, ShieldCheck, ShieldX } from "lucide-react";
 import { useMemo, useRef, useState } from "react";
 import type { ThreadDetailData, TurnSummaryData } from "../generated/desktop-contracts";
 
@@ -20,10 +20,9 @@ export function TaskControls(props: TaskControlsProps) {
   const turn = useMemo(() => activeTurn(props.detail), [props.detail]);
   const recoverable = useMemo(() => recoveryTurn(props.detail), [props.detail]);
   const recovery = turn?.recoveryRequired ? turn : turn ? null : recoverable;
-  const current = turn ?? recovery;
-  const approval = current?.approval ?? null;
-  const canCancel = Boolean(turn && !recovery && !approval && !terminal.has(turn.status) && turn.status !== "canceling");
-  const mode = recovery ? "recovery" : approval ? "approval" : turn ? "running" : "idle";
+  const approval = turn?.approval ?? recovery?.approval ?? null;
+  const current = approval ? (turn ?? recovery) : recovery;
+  const mode = recovery ? "recovery" : approval ? "approval" : "idle";
 
   async function run(key: string, action: () => Promise<string | null>) {
     setBusy(key);
@@ -41,17 +40,14 @@ export function TaskControls(props: TaskControlsProps) {
     <section className="task-controls inline-task-controls" aria-label="Task controls" aria-live="polite" data-turn-id={current?.turnId} data-mode={mode} hidden={!current}>
       <div className="turn-status-main">
         <span className="turn-status-indicator" aria-hidden="true">
-          {recovery ? <AlertTriangle size={15} /> : <LoaderCircle className={mode === "running" ? "spin" : undefined} size={15} />}
+          {recovery ? <AlertTriangle size={15} /> : <LoaderCircle size={15} />}
         </span>
         <div className="turn-status-copy">
-          <strong>{recovery ? "Turn interrupted" : approval ? "Approval needed" : busy === "cancel" ? "Stopping…" : "C-AICLI is working"}</strong>
+          <strong>{recovery ? "Turn interrupted" : "Approval needed"}</strong>
           <span>{current?.taskSummary}</span>
         </div>
       </div>
       <div className="turn-status-actions">
-        <button className="command-button turn-stop-button" type="button" hidden={!canCancel} disabled={busy !== null || !turn} onClick={() => { if (turn) void run("cancel", () => props.onCancel(turn.turnId, turn.revision)); }}>
-          <Square size={12} aria-hidden="true" />{busy === "cancel" ? "Stopping" : "Stop"}
-        </button>
         <button className="command-button" type="button" hidden={!recovery} disabled={busy !== null || !recovery} onClick={() => { if (recovery) void run("resume", () => props.onResume(recovery.turnId, recovery.revision)); }}>
           <RefreshCw size={14} aria-hidden="true" />{busy === "resume" ? "Resuming" : "Resume"}
         </button>

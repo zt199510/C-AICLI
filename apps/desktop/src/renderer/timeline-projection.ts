@@ -4,6 +4,7 @@ export const FROZEN_TIMELINE_TYPES = [
   "user.message",
   "assistant.message",
   "assistant.final",
+  "provider.attempt",
   "plan.updated",
   "tool.started",
   "tool.completed",
@@ -44,6 +45,7 @@ const executionTypes = new Set([
 const approvalTypes = new Set(["approval.requested", "approval.resolved"]);
 const resultTypes = new Set(["warning.raised", "turn.completed"]);
 const eventTypes = new Set([
+  "provider.attempt",
   "plan.updated",
   "changes.updated",
   "report.available",

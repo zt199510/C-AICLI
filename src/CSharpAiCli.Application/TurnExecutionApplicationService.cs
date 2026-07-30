@@ -291,6 +291,16 @@ public sealed class TurnExecutionApplicationService
             restartAggregate.Record.ActiveTurnId is not null || source is null || !TurnStatus.IsTerminal(source.Status))
             return Failure("restart-source-invalid", ApplicationErrorCategory.Conflict, "Source turn cannot be restarted safely.");
         TurnRecord restartSource = source;
+        if (restartSource.ProviderProgress.RetryExhausted)
+        {
+            bool? hasCompletedSideEffects = HasCompletedSideEffects(store, request.ThreadId, restartSource.TurnId);
+            if (hasCompletedSideEffects is null)
+                return Failure("restart-safety-check-failed", ApplicationErrorCategory.CorruptState,
+                    "Completed operations could not be checked, so the turn was not restarted.");
+            if (hasCompletedSideEffects.Value)
+                return Failure("restart-side-effects-present", ApplicationErrorCategory.Conflict,
+                    "This turn already completed operations. It was not restarted because doing so could repeat side effects.");
+        }
         DateTimeOffset now = NowAtLeast(restartAggregate.Record.UpdatedAtUtc);
         string intentId = "intent_" + Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(request.ClientMutationId + "\0" + restartSource.TurnId))).ToLowerInvariant()[..32];
         PendingComposerIntentRecord input = restartSource.ExecutionInput! with { IntentId = intentId, ThreadRevision = restartAggregate.Record.Revision, CreatedAtUtc = now };
@@ -332,6 +342,27 @@ public sealed class TurnExecutionApplicationService
     {
         string hash = Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(clientMutationId))).ToLowerInvariant();
         return "restart-recovery-" + hash[..32];
+    }
+
+    private static bool? HasCompletedSideEffects(ThreadStore store, string threadId, string turnId)
+    {
+        long afterSequence = 0;
+        while (true)
+        {
+            ThreadTimelinePageResult page = store.ReadTimelinePage(threadId, afterSequence, 100);
+            if (!page.Succeeded)
+                return null;
+            if (page.Items.Any(item =>
+                    item.TurnId == turnId &&
+                    item.Type is TimelineItemType.ToolCompleted
+                        or TimelineItemType.CommandCompleted
+                        or TimelineItemType.ApprovalResolved
+                        or TimelineItemType.ChangesUpdated))
+                return true;
+            if (!page.Truncated || page.NextSequence is null)
+                return false;
+            afterSequence = page.NextSequence.Value;
+        }
     }
 
     private sealed class PersistedEventSink(
@@ -444,9 +475,30 @@ public sealed class TurnExecutionApplicationService
         TurnRuntimeEventKind.CommandCompleted => (TimelineItemType.CommandCompleted, Operation(value)),
         TurnRuntimeEventKind.Verification => (TimelineItemType.VerificationCompleted, Operation(value)),
         TurnRuntimeEventKind.Changes => (TimelineItemType.ChangesUpdated, new TimelinePayloadRecord { Changes = new TimelineChangesPayloadRecord(value.ChangedFileCount ?? 0) }),
-        TurnRuntimeEventKind.Final => (TimelineItemType.AssistantFinal, new TimelinePayloadRecord { Message = new TimelineMessagePayloadRecord(value.Summary) }),
+        TurnRuntimeEventKind.ProviderProgress => (TimelineItemType.ProviderAttempt, Provider(value)),
+        TurnRuntimeEventKind.Final => (TimelineItemType.AssistantFinal, new TimelinePayloadRecord
+        {
+            Message = new TimelineMessagePayloadRecord(value.Summary, value.AssistantMessageId, value.ProviderAttempt)
+        }),
         TurnRuntimeEventKind.Warning => (TimelineItemType.WarningRaised, new TimelinePayloadRecord { Warning = new TimelineWarningPayloadRecord(value.ErrorCode ?? "runtime-warning") }),
-        _ => (TimelineItemType.AssistantMessage, new TimelinePayloadRecord { Message = new TimelineMessagePayloadRecord(value.Summary) })
+        _ => (TimelineItemType.AssistantMessage, new TimelinePayloadRecord
+        {
+            Message = new TimelineMessagePayloadRecord(value.Summary, value.AssistantMessageId, value.ProviderAttempt)
+        })
+    };
+
+    private static TimelinePayloadRecord Provider(TurnRuntimeEvent value) => new()
+    {
+        Provider = new TimelineProviderPayloadRecord(
+            value.ProviderPhase ?? ProviderAttemptPhase.Connecting,
+            value.ProviderAttempt ?? 1,
+            value.MaxAdditionalRetries ?? ProviderRequestRetryLimits.MaxAdditionalRetries,
+            value.AttemptHasStreamContent ?? false,
+            value.AssistantMessageId ?? "assistant_" + value.CorrelationId,
+            value.ErrorCategory,
+            value.Retryable,
+            value.SafeErrorMessage,
+            value.RetryExhausted)
     };
 
     private static TimelinePayloadRecord Operation(TurnRuntimeEvent value) => new()

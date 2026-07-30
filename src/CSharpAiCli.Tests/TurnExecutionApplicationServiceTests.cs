@@ -24,6 +24,32 @@ public sealed class TurnExecutionApplicationServiceTests
     }
 
     [Fact]
+    public async Task Provider_attempt_progress_and_active_attempt_content_are_durable()
+    {
+        using Harness test = new("Stream a retrying response");
+        TurnExecutionStateProjection started = test.Start("start-provider-progress").Data!;
+
+        ApplicationResult<TurnExecutionStateProjection> completed = await test.Service.ExecuteAsync(
+            test.Snapshot,
+            test.ThreadId,
+            started.TurnId,
+            new ProviderProgressRuntime(),
+            new RejectingWaiter());
+
+        Assert.True(completed.Succeeded, completed.Error?.SafeMessage);
+        TurnRecord turn = Assert.Single(test.Threads.Read(test.ThreadId).Aggregate!.Turns);
+        Assert.Equal(2, turn.ProviderProgress.Attempt);
+        Assert.Equal(ProviderAttemptPhase.Streaming, turn.ProviderProgress.Phase);
+        Assert.True(turn.ProviderProgress.AttemptHasStreamContent);
+        Assert.Equal("assistant-test", turn.ProviderProgress.AssistantMessageId);
+        TimelineItemRecord[] timeline = test.Threads.ReadTimelinePage(test.ThreadId, 0, 100).Items.ToArray();
+        Assert.Equal(2, timeline.Count(item => item.Type == TimelineItemType.ProviderAttempt));
+        TimelineItemRecord message = Assert.Single(timeline, item => item.Type == TimelineItemType.AssistantMessage);
+        Assert.Equal(2, message.Payload.Message?.Attempt);
+        Assert.Equal("successful attempt", message.Payload.Message?.Preview);
+    }
+
+    [Fact]
     public async Task Sequential_turns_do_not_reuse_timeline_item_identity()
     {
         using Harness test = new("Run the first deterministic fixture");
@@ -300,6 +326,42 @@ public sealed class TurnExecutionApplicationServiceTests
             item => item.Payload.Warning?.Code == "interrupted");
     }
 
+    [Fact]
+    public async Task Restart_AfterProviderExhaustionDoesNotReplayCompletedSideEffects()
+    {
+        using Harness test = new("Perform one operation before the provider fails");
+        TurnExecutionStateProjection started = test.Start("start-provider-exhaustion").Data!;
+        ApplicationResult<TurnExecutionStateProjection> failed = await test.Service.ExecuteAsync(
+            test.Snapshot,
+            test.ThreadId,
+            started.TurnId,
+            new SideEffectThenProviderExhaustionRuntime(),
+            new RejectingWaiter());
+
+        Assert.True(failed.Succeeded, failed.Error?.SafeMessage);
+        Assert.Equal(TurnStatus.Failed, failed.Data!.Status);
+        ThreadAggregate beforeRestart = test.Threads.Read(test.ThreadId).Aggregate!;
+        TurnRecord source = Assert.Single(beforeRestart.Turns);
+        Assert.True(source.ProviderProgress.RetryExhausted);
+
+        ApplicationResult<TurnExecutionStateProjection> restarted = test.Service.Restart(
+            new TurnRestartRequest(
+                test.Snapshot,
+                test.ThreadId,
+                source.TurnId,
+                beforeRestart.Record.Revision,
+                source.Revision,
+                Confirmed: true,
+                ClientMutationId: "restart-provider-exhaustion"));
+
+        Assert.False(restarted.Succeeded);
+        Assert.Equal("restart-side-effects-present", restarted.Error!.Code);
+        Assert.Single(test.Threads.Read(test.ThreadId).Aggregate!.Turns);
+        Assert.Single(
+            test.Threads.ReadTimelinePage(test.ThreadId, 0, 100).Items,
+            item => item.Type == TimelineItemType.ToolCompleted);
+    }
+
     private sealed class Harness : IDisposable
     {
         public Harness(string prompt)
@@ -458,6 +520,86 @@ public sealed class TurnExecutionApplicationServiceTests
             Entered.TrySetResult();
             await Task.Delay(Timeout.InfiniteTimeSpan, cancellationToken);
             return new TurnRuntimeResult("completed", "completed", null, "unreachable");
+        }
+    }
+
+    private sealed class ProviderProgressRuntime : ITurnExecutionRuntime
+    {
+        public async Task<TurnRuntimeResult> ExecuteAsync(
+            TurnExecutionInput input,
+            ITurnExecutionEventSink eventSink,
+            IInteractiveApprovalGateway approvalGateway,
+            CancellationToken cancellationToken)
+        {
+            await eventSink.EmitAsync(new TurnRuntimeEvent(
+                1, "provider-retry", TurnRuntimeEventKind.ProviderProgress, ProviderAttemptPhase.RetryWait,
+                "temporary failure", DateTimeOffset.UtcNow,
+                ProviderAttempt: 1,
+                MaxAdditionalRetries: 5,
+                ProviderPhase: ProviderAttemptPhase.RetryWait,
+                AttemptHasStreamContent: false,
+                AssistantMessageId: "assistant-test",
+                ErrorCategory: "transport",
+                Retryable: true,
+                SafeErrorMessage: "The model connection could not be established."), cancellationToken);
+            await eventSink.EmitAsync(new TurnRuntimeEvent(
+                2, "provider-streaming", TurnRuntimeEventKind.ProviderProgress, ProviderAttemptPhase.Streaming,
+                "streaming", DateTimeOffset.UtcNow,
+                ProviderAttempt: 2,
+                MaxAdditionalRetries: 5,
+                ProviderPhase: ProviderAttemptPhase.Streaming,
+                AttemptHasStreamContent: true,
+                AssistantMessageId: "assistant-test"), cancellationToken);
+            await eventSink.EmitAsync(new TurnRuntimeEvent(
+                3, "assistant-stream", TurnRuntimeEventKind.Assistant, ProviderAttemptPhase.Streaming,
+                "successful attempt", DateTimeOffset.UtcNow,
+                ProviderAttempt: 2,
+                MaxAdditionalRetries: 5,
+                ProviderPhase: ProviderAttemptPhase.Streaming,
+                AttemptHasStreamContent: true,
+                AssistantMessageId: "assistant-test"), cancellationToken);
+            return new TurnRuntimeResult("completed", "completed", null, "successful attempt");
+        }
+    }
+
+    private sealed class SideEffectThenProviderExhaustionRuntime : ITurnExecutionRuntime
+    {
+        public async Task<TurnRuntimeResult> ExecuteAsync(
+            TurnExecutionInput input,
+            ITurnExecutionEventSink eventSink,
+            IInteractiveApprovalGateway approvalGateway,
+            CancellationToken cancellationToken)
+        {
+            await eventSink.EmitAsync(new TurnRuntimeEvent(
+                1,
+                "completed-operation",
+                TurnRuntimeEventKind.ToolCompleted,
+                "completed",
+                "A controlled operation completed.",
+                DateTimeOffset.UtcNow,
+                Name: "fixture.write",
+                Succeeded: true), cancellationToken);
+            await eventSink.EmitAsync(new TurnRuntimeEvent(
+                2,
+                "provider-exhausted",
+                TurnRuntimeEventKind.ProviderProgress,
+                ProviderAttemptPhase.Failed,
+                "The model connection failed after all retries.",
+                DateTimeOffset.UtcNow,
+                ProviderAttempt: ProviderRequestRetryLimits.MaxAttempts,
+                MaxAdditionalRetries: ProviderRequestRetryLimits.MaxAdditionalRetries,
+                ProviderPhase: ProviderAttemptPhase.Failed,
+                AttemptHasStreamContent: false,
+                AssistantMessageId: "assistant-exhausted",
+                ErrorCategory: "transport",
+                Retryable: true,
+                SafeErrorMessage: "The model connection could not be established.",
+                RetryExhausted: true), cancellationToken);
+            return new TurnRuntimeResult(
+                "failed",
+                "provider-failure",
+                "provider-retries-exhausted",
+                "The model connection could not be established.");
         }
     }
 

@@ -727,6 +727,20 @@
       ]
     },
     {
+      "name": "ProviderProgressData",
+      "properties": [
+        { "jsonName": "phase", "type": "string", "maxUtf8Bytes": 32, "enum": ["connecting", "thinking", "streaming", "retry-wait", "failed"] },
+        { "jsonName": "attempt", "type": "int32", "min": 0, "max": 6 },
+        { "jsonName": "maxAdditionalRetries", "type": "int32", "min": 0, "max": 5 },
+        { "jsonName": "attemptHasStreamContent", "type": "boolean" },
+        { "jsonName": "assistantMessageId", "type": "string", "maxUtf8Bytes": 128 },
+        { "jsonName": "errorCategory", "type": "string", "maxUtf8Bytes": 64, "nullable": true },
+        { "jsonName": "retryable", "type": "boolean", "nullable": true },
+        { "jsonName": "safeErrorMessage", "type": "string", "maxUtf8Bytes": 16384, "nullable": true },
+        { "jsonName": "retryExhausted", "type": "boolean" }
+      ]
+    },
+    {
       "name": "TurnSummaryData",
       "properties": [
         { "jsonName": "turnId", "type": "string", "maxUtf8Bytes": 64 },
@@ -744,20 +758,31 @@
         { "jsonName": "timelineLastSequence", "type": "int64", "min": 1, "max": 9007199254740991, "nullable": true },
         { "jsonName": "timelineItemCount", "type": "int32", "min": 0, "max": 10000 },
         { "jsonName": "recoveryRequired", "type": "boolean" },
-        { "jsonName": "approval", "type": "ApprovalRequestData", "nullable": true }
+        { "jsonName": "approval", "type": "ApprovalRequestData", "nullable": true },
+        { "jsonName": "clientMessageId", "type": "string", "maxUtf8Bytes": 256, "nullable": true },
+        { "jsonName": "provider", "type": "ProviderProgressData" }
       ]
     },
     {
       "name": "TimelinePayloadData",
       "properties": [
         { "jsonName": "kind", "type": "string", "maxUtf8Bytes": 128 },
-        { "jsonName": "text", "type": "string", "maxUtf8Bytes": 4096, "nullable": true },
+        { "jsonName": "text", "type": "string", "maxUtf8Bytes": 16384, "nullable": true },
         { "jsonName": "name", "type": "string", "maxUtf8Bytes": 256, "nullable": true },
         { "jsonName": "succeeded", "type": "boolean", "nullable": true },
         { "jsonName": "errorCode", "type": "string", "maxUtf8Bytes": 256, "nullable": true },
         { "jsonName": "count", "type": "int32", "min": 0, "max": 10000, "nullable": true },
         { "jsonName": "referenceId", "type": "string", "maxUtf8Bytes": 256, "nullable": true },
-        { "jsonName": "stopReason", "type": "string", "maxUtf8Bytes": 1024, "nullable": true }
+        { "jsonName": "stopReason", "type": "string", "maxUtf8Bytes": 1024, "nullable": true },
+        { "jsonName": "phase", "type": "string", "maxUtf8Bytes": 32, "enum": ["connecting", "thinking", "streaming", "retry-wait", "failed"], "nullable": true, "optional": true },
+        { "jsonName": "attempt", "type": "int32", "min": 0, "max": 6, "nullable": true, "optional": true },
+        { "jsonName": "maxAdditionalRetries", "type": "int32", "min": 0, "max": 5, "nullable": true, "optional": true },
+        { "jsonName": "attemptHasStreamContent", "type": "boolean", "nullable": true, "optional": true },
+        { "jsonName": "assistantMessageId", "type": "string", "maxUtf8Bytes": 128, "nullable": true, "optional": true },
+        { "jsonName": "errorCategory", "type": "string", "maxUtf8Bytes": 64, "nullable": true, "optional": true },
+        { "jsonName": "retryable", "type": "boolean", "nullable": true, "optional": true },
+        { "jsonName": "safeErrorMessage", "type": "string", "maxUtf8Bytes": 16384, "nullable": true, "optional": true },
+        { "jsonName": "retryExhausted", "type": "boolean", "nullable": true, "optional": true }
       ]
     },
     {
@@ -767,10 +792,10 @@
         { "jsonName": "turnId", "type": "string", "maxUtf8Bytes": 64 },
         { "jsonName": "sequence", "type": "int64", "min": 1, "max": 9007199254740991 },
         { "jsonName": "timestampUtc", "type": "datetime" },
-        { "jsonName": "type", "type": "string", "maxUtf8Bytes": 64, "enum": ["user.message", "assistant.message", "assistant.final", "plan.updated", "tool.started", "tool.completed", "command.started", "command.completed", "approval.requested", "approval.resolved", "verification.completed", "changes.updated", "report.available", "artifact.available", "warning.raised", "turn.completed"] },
+        { "jsonName": "type", "type": "string", "maxUtf8Bytes": 64, "enum": ["user.message", "assistant.message", "assistant.final", "provider.attempt", "plan.updated", "tool.started", "tool.completed", "command.started", "command.completed", "approval.requested", "approval.resolved", "verification.completed", "changes.updated", "report.available", "artifact.available", "warning.raised", "turn.completed"] },
         { "jsonName": "source", "type": "ThreadSourcePointerData", "nullable": true },
         { "jsonName": "status", "type": "string", "maxUtf8Bytes": 64 },
-        { "jsonName": "summary", "type": "string", "maxUtf8Bytes": 4096 },
+        { "jsonName": "summary", "type": "string", "maxUtf8Bytes": 16384 },
         { "jsonName": "payload", "type": "TimelinePayloadData" },
         { "jsonName": "redacted", "type": "boolean" }
       ]

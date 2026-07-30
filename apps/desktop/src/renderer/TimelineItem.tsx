@@ -18,6 +18,7 @@ const presentations: Record<string, { label: string; icon: ComponentType<{ size?
   "user.message": { label: "User message", icon: UserRound },
   "assistant.message": { label: "Assistant message", icon: Bot },
   "assistant.final": { label: "Assistant result", icon: Bot },
+  "provider.attempt": { label: "Model connection", icon: CircleDot },
   "plan.updated": { label: "Plan updated", icon: FileClock },
   "tool.started": { label: "Tool started", icon: Hammer },
   "tool.completed": { label: "Tool completed", icon: Hammer },

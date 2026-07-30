@@ -64,6 +64,12 @@ const currentTurns = () => Array.from({ length: projectedTurnCount }, (_, index)
     taskSummary: `Fixture turn ${index + 1}`, stopReason: "completed", errorCode: null, sourcePointers: [],
     timelineFirstSequence: count > 0 ? first : null, timelineLastSequence: count > 0 ? last : null,
     timelineItemCount: count, recoveryRequired: false, approval: null,
+    clientMessageId: `fixture-intent-${index + 1}`,
+    provider: {
+      phase: "streaming", attempt: 1, maxAdditionalRetries: 5,
+      attemptHasStreamContent: true, assistantMessageId: `fixture-assistant-${index + 1}`,
+      errorCategory: null, retryable: null, safeErrorMessage: null, retryExhausted: false,
+    },
   };
 });
 const currentTimeline = () => Array.from({ length: projectedTimelineCount }, (_, index) => ({

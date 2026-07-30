@@ -6,6 +6,14 @@ public interface IOpenAiResponsesGateway
         OpenAiAgentRequest request,
         CancellationToken cancellationToken = default);
 
+    IEnumerable<OpenAiStreamingResponseUpdate> CreateAgentResponseStreaming(
+        OpenAiAgentRequest request,
+        CancellationToken cancellationToken = default)
+    {
+        yield return OpenAiStreamingResponseUpdate.Completed(
+            CreateAgentResponse(request, cancellationToken));
+    }
+
     OpenAiResponseEnvelope CreateResponse(
         string model,
         string prompt,

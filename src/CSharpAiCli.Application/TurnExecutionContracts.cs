@@ -17,6 +17,7 @@ public static class TurnRuntimeEventKind
 {
     public const string Plan = "plan";
     public const string Model = "model";
+    public const string ProviderProgress = "provider-progress";
     public const string ToolStarted = "tool-started";
     public const string ToolCompleted = "tool-completed";
     public const string CommandStarted = "command-started";
@@ -39,7 +40,16 @@ public sealed record TurnRuntimeEvent(
     bool? Succeeded = null,
     string? ErrorCode = null,
     int? ChangedFileCount = null,
-    string? OutputPointer = null);
+    string? OutputPointer = null,
+    int? ProviderAttempt = null,
+    int? MaxAdditionalRetries = null,
+    string? ProviderPhase = null,
+    bool? AttemptHasStreamContent = null,
+    string? AssistantMessageId = null,
+    string? ErrorCategory = null,
+    bool? Retryable = null,
+    string? SafeErrorMessage = null,
+    bool RetryExhausted = false);
 
 public sealed record InteractiveApprovalAction(
     string PolicyIdentity,

@@ -19,7 +19,9 @@ public sealed class OpenAiAgentRunnerFactory
         CliEnvironmentSnapshot snapshot,
         IToolRegistry registry,
         IToolExecutor executor,
-        IAgentRunEventObserver? eventObserver = null)
+        IAgentRunEventObserver? eventObserver = null,
+        IProviderAttemptObserver? providerAttemptObserver = null,
+        IProviderRetryDelay? retryDelay = null)
     {
         ArgumentNullException.ThrowIfNull(snapshot);
         ArgumentNullException.ThrowIfNull(registry);
@@ -63,7 +65,9 @@ public sealed class OpenAiAgentRunnerFactory
                 registry,
                 gateway,
                 executor,
-                eventObserver);
+                eventObserver,
+                providerAttemptObserver,
+                retryDelay);
         }
         catch
         {

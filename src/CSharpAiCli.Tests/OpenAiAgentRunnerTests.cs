@@ -131,7 +131,7 @@ public sealed class OpenAiAgentRunnerTests
 
         Assert.False(result.IsSuccess);
         Assert.Equal("openai-client-error", result.Error?.LocalErrorCode);
-        Assert.True(result.Error?.Retryable);
+        Assert.False(result.Error?.Retryable);
         Assert.Equal("OpenAI agent model call failed before a response was completed.", result.Error?.SafeMessage);
         Assert.DoesNotContain("raw sdk detail", result.Events[0].Message, StringComparison.Ordinal);
         Assert.DoesNotContain("sk-secret", result.Events[0].Message, StringComparison.Ordinal);

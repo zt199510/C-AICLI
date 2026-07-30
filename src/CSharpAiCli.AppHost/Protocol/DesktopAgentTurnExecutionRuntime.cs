@@ -9,7 +9,9 @@ namespace CSharpAiCli.AppHost.Protocol;
 internal sealed class DesktopAgentTurnExecutionRuntime : ITurnExecutionRuntime
 {
     private const int MaxRuntimeEvents =
-        TurnExecutionLimits.MaxEventBatchItems * AgentRunLimits.DefaultMaxTurns;
+        TurnExecutionLimits.MaxEventBatchItems *
+        AgentRunLimits.DefaultMaxTurns *
+        ProviderRequestRetryLimits.MaxAttempts;
     private static readonly Regex RootedPathPattern = new(
         @"(?<![A-Za-z0-9])(?:[A-Za-z]:[\\/][^\r\n""']+|\\\\[^\\\s]+\\[^\r\n""']+)",
         RegexOptions.CultureInvariant);
@@ -64,7 +66,13 @@ internal sealed class DesktopAgentTurnExecutionRuntime : ITurnExecutionRuntime
                 AllowSynchronousContinuations = false
             });
         ChannelEventObserver observer = new(channel.Writer, executionCancellation.Token);
-        IAgentRunner runner = agentFactory.Create(input.Snapshot, registry, executor, observer);
+        ProviderAgentEventObserver providerObserver = new(observer, input.TurnId);
+        IAgentRunner runner = agentFactory.Create(
+            input.Snapshot,
+            registry,
+            executor,
+            observer,
+            providerObserver);
         Task<AgentRunResult> producer = Task.Run(() =>
         {
             try
@@ -89,7 +97,10 @@ internal sealed class DesktopAgentTurnExecutionRuntime : ITurnExecutionRuntime
                     {
                         throw new InvalidOperationException("Desktop runtime event limit was exceeded.");
                     }
-                    TurnRuntimeEvent runtimeEvent = Map(pending.Event, sequence++);
+                    TurnRuntimeEvent runtimeEvent = Map(
+                        pending.Event,
+                        sequence++,
+                        providerObserver);
                     await eventSink.EmitAsync(
                         runtimeEvent,
                         executionCancellation.Token).ConfigureAwait(false);
@@ -128,7 +139,10 @@ internal sealed class DesktopAgentTurnExecutionRuntime : ITurnExecutionRuntime
         }
     }
 
-    private static TurnRuntimeEvent Map(AgentRunEvent value, long sequence)
+    private static TurnRuntimeEvent Map(
+        AgentRunEvent value,
+        long sequence,
+        ProviderAgentEventObserver providerObserver)
     {
         string? toolName = ReadPayload(value.Payload, "toolName");
         string kind = value.Type switch
@@ -142,6 +156,8 @@ internal sealed class DesktopAgentTurnExecutionRuntime : ITurnExecutionRuntime
             "verification.result" => TurnRuntimeEventKind.Verification,
             "final.response" => TurnRuntimeEventKind.Final,
             "agent.error" or "retry.exhausted" => TurnRuntimeEventKind.Warning,
+            "provider.attempt" => TurnRuntimeEventKind.ProviderProgress,
+            "provider.stream" => TurnRuntimeEventKind.Assistant,
             "model.turn" => TurnRuntimeEventKind.Model,
             _ => TurnRuntimeEventKind.Assistant
         };
@@ -157,6 +173,19 @@ internal sealed class DesktopAgentTurnExecutionRuntime : ITurnExecutionRuntime
             _ => null
         };
 
+        int? providerAttempt = TryReadNonNegativeInt(value.Payload, "attempt");
+        if (providerAttempt is null &&
+            kind is TurnRuntimeEventKind.Model or TurnRuntimeEventKind.Final)
+        {
+            providerAttempt = providerObserver.CurrentAttempt;
+        }
+        string? assistantMessageId = ReadPayload(value.Payload, "assistantMessageId");
+        if (assistantMessageId is null &&
+            kind is TurnRuntimeEventKind.Model or TurnRuntimeEventKind.Final)
+        {
+            assistantMessageId = providerObserver.AssistantMessageId;
+        }
+
         return new TurnRuntimeEvent(
             EventSequence: sequence,
             CorrelationId: $"runtime-{sequence}-agent-{value.Sequence}",
@@ -167,7 +196,16 @@ internal sealed class DesktopAgentTurnExecutionRuntime : ITurnExecutionRuntime
             Name: toolName,
             Succeeded: succeeded,
             ErrorCode: value.ErrorCode,
-            ChangedFileCount: changedFileCount);
+            ChangedFileCount: changedFileCount,
+            ProviderAttempt: providerAttempt,
+            MaxAdditionalRetries: TryReadNonNegativeInt(value.Payload, "maxAdditionalRetries"),
+            ProviderPhase: ReadPayload(value.Payload, "phase"),
+            AttemptHasStreamContent: TryReadBoolean(value.Payload, "hasStreamContent"),
+            AssistantMessageId: assistantMessageId,
+            ErrorCategory: ReadPayload(value.Payload, "errorCategory"),
+            Retryable: TryReadBoolean(value.Payload, "retryable"),
+            SafeErrorMessage: ReadPayload(value.Payload, "safeErrorMessage"),
+            RetryExhausted: TryReadBoolean(value.Payload, "retryExhausted") == true);
     }
 
     private static string SafeFallback(string kind) => kind switch
@@ -204,6 +242,14 @@ internal sealed class DesktopAgentTurnExecutionRuntime : ITurnExecutionRuntime
             out int parsed) && parsed >= 0
                 ? parsed
                 : null;
+    }
+
+    private static bool? TryReadBoolean(
+        IReadOnlyDictionary<string, string>? payload,
+        string name)
+    {
+        string? value = ReadPayload(payload, name);
+        return bool.TryParse(value, out bool parsed) ? parsed : null;
     }
 
     private static string Sanitize(string? value, int maxBytes, string fallback)
@@ -269,4 +315,48 @@ internal sealed class DesktopAgentTurnExecutionRuntime : ITurnExecutionRuntime
     private sealed record PendingAgentEvent(
         AgentRunEvent Event,
         TaskCompletionSource Committed);
+
+    private sealed class ProviderAgentEventObserver(
+        IAgentRunEventObserver eventObserver,
+        string turnId) : IProviderAttemptObserver
+    {
+        private long sequence;
+
+        public int CurrentAttempt { get; private set; }
+        public string AssistantMessageId { get; } =
+            "assistant_" + turnId["turn_".Length..];
+
+        public void OnProviderAttempt(ProviderAttemptEvent attemptEvent)
+        {
+            CurrentAttempt = attemptEvent.Attempt;
+            Dictionary<string, string> payload = new(StringComparer.Ordinal)
+            {
+                ["attempt"] = attemptEvent.Attempt.ToString(System.Globalization.CultureInfo.InvariantCulture),
+                ["maxAdditionalRetries"] = attemptEvent.MaxAdditionalRetries.ToString(System.Globalization.CultureInfo.InvariantCulture),
+                ["phase"] = attemptEvent.Phase,
+                ["hasStreamContent"] = attemptEvent.HasStreamContent ? "true" : "false",
+                ["assistantMessageId"] = AssistantMessageId,
+                ["retryExhausted"] = attemptEvent.RetryExhausted ? "true" : "false"
+            };
+            if (attemptEvent.Failure is { } failure)
+            {
+                payload["errorCategory"] = failure.Category;
+                payload["retryable"] = failure.Retryable ? "true" : "false";
+                payload["safeErrorMessage"] = failure.SafeMessage;
+            }
+
+            eventObserver.OnEvent(new AgentRunEvent(
+                Type: attemptEvent.Phase == ProviderAttemptPhase.Streaming
+                    ? "provider.stream"
+                    : "provider.attempt",
+                Sequence: sequence++,
+                Timestamp: DateTimeOffset.UtcNow,
+                Summary: attemptEvent.Content ??
+                    attemptEvent.Failure?.SafeMessage ??
+                    attemptEvent.Phase,
+                Payload: payload,
+                ErrorCode: attemptEvent.Failure?.Code,
+                Status: attemptEvent.Phase));
+        }
+    }
 }

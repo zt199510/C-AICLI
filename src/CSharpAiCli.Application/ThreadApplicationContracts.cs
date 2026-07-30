@@ -95,7 +95,20 @@ public sealed record TurnSummaryProjection(
     long? TimelineLastSequence,
     int TimelineItemCount,
     bool RecoveryRequired,
-    DurableApprovalProjection? Approval);
+    DurableApprovalProjection? Approval,
+    string? ClientMessageId,
+    ProviderProgressProjection Provider);
+
+public sealed record ProviderProgressProjection(
+    string Phase,
+    int Attempt,
+    int MaxAdditionalRetries,
+    bool AttemptHasStreamContent,
+    string AssistantMessageId,
+    string? ErrorCategory,
+    bool? Retryable,
+    string? SafeErrorMessage,
+    bool RetryExhausted);
 
 public sealed record TimelinePayloadProjection(
     string Kind,
@@ -105,7 +118,16 @@ public sealed record TimelinePayloadProjection(
     string? ErrorCode = null,
     int? Count = null,
     string? ReferenceId = null,
-    string? StopReason = null);
+    string? StopReason = null,
+    string? Phase = null,
+    int? Attempt = null,
+    int? MaxAdditionalRetries = null,
+    bool? AttemptHasStreamContent = null,
+    string? AssistantMessageId = null,
+    string? ErrorCategory = null,
+    bool? Retryable = null,
+    string? SafeErrorMessage = null,
+    bool? RetryExhausted = null);
 
 public sealed record TimelineItemProjection(
     string ItemId,

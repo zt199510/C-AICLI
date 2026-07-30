@@ -53,6 +53,17 @@ describe("Composer", () => {
     expect((screen.getByRole("textbox", { name: "Composer prompt" }) as HTMLTextAreaElement).disabled).toBe(true);
   });
 
+  it("places Stop in the primary composer button while a response is active", async () => {
+    const onStop = vi.fn();
+    const props = makeProps({ onStop });
+    render(<Composer {...props} />);
+    expect(screen.queryByRole("button", { name: "Send prompt" })).toBeNull();
+    await userEvent.click(screen.getByRole("button", { name: "Stop response" }));
+    expect(onStop).toHaveBeenCalledOnce();
+    fireEvent.keyDown(screen.getByRole("textbox", { name: "Composer prompt" }), { key: "Enter" });
+    expect(props.onSend).not.toHaveBeenCalled();
+  });
+
   it("explains disabled input and offers a direct recovery action", async () => {
     const onDisabledAction = vi.fn();
     render(<Composer {...makeProps({

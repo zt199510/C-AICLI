@@ -793,12 +793,16 @@ public sealed class ThreadStore
             }
 
             int newCount = current.TimelineItemCount + items.Count;
+            ProviderProgressRecord providerProgress = items.Aggregate(
+                current.ProviderProgress,
+                ApplyProviderProgress);
             TurnRecord updatedTurn = current with
             {
                 Revision = current.Revision + 1,
                 TimelineFirstSequence = current.TimelineFirstSequence ?? items[0].Sequence,
                 TimelineLastSequence = items[^1].Sequence,
-                TimelineItemCount = newCount
+                TimelineItemCount = newCount,
+                ProviderProgress = providerProgress
             };
             SerializedRecord<TurnRecord> serializedTurn = SerializeRecord(updatedTurn, ThreadPersistenceLimits.MaxTurnSnapshotBytes, ThreadErrorCode.TurnLimitExceeded);
             WriteImmutableJson(GetTurnPath(layout, updatedTurn.TurnId, updatedTurn.Revision), serializedTurn.Json);
@@ -826,6 +830,41 @@ public sealed class ThreadStore
             TryDeleteFile(GetTurnPath(layout, current.TurnId, current.Revision));
             return new ThreadAggregate(record, ReplaceTurn(aggregate.Turns, updatedTurn));
         }, allowIdempotentRevisionMismatch: true, mutationId: mutationId, payloadHash: payloadHash);
+    }
+
+    private static ProviderProgressRecord ApplyProviderProgress(
+        ProviderProgressRecord current,
+        TimelineItemRecord item)
+    {
+        if (item.Payload.Provider is { } provider)
+        {
+            return new ProviderProgressRecord
+            {
+                Phase = provider.Phase,
+                Attempt = provider.Attempt,
+                MaxAdditionalRetries = provider.MaxAdditionalRetries,
+                AttemptHasStreamContent = provider.AttemptHasStreamContent,
+                AssistantMessageId = provider.AssistantMessageId,
+                ErrorCategory = provider.ErrorCategory,
+                Retryable = provider.Retryable,
+                SafeErrorMessage = provider.SafeErrorMessage,
+                RetryExhausted = provider.RetryExhausted
+            };
+        }
+
+        if (item.Payload.Message is { Attempt: int attempt, AssistantMessageId: { } messageId } &&
+            attempt >= current.Attempt)
+        {
+            return current with
+            {
+                Phase = ProviderAttemptPhase.Streaming,
+                Attempt = attempt,
+                AttemptHasStreamContent = true,
+                AssistantMessageId = messageId
+            };
+        }
+
+        return current;
     }
 
     public ThreadStoreMutationResult RecoverInterrupted(

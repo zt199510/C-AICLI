@@ -13,7 +13,9 @@ public sealed class OpenAiAgentRunner : IAgentRunner
         IToolRegistry registry,
         IOpenAiResponsesGateway gateway,
         IToolExecutor toolExecutor,
-        IAgentRunEventObserver? eventObserver = null)
+        IAgentRunEventObserver? eventObserver = null,
+        IProviderAttemptObserver? providerAttemptObserver = null,
+        IProviderRetryDelay? retryDelay = null)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(model);
         ArgumentNullException.ThrowIfNull(registry);
@@ -21,7 +23,16 @@ public sealed class OpenAiAgentRunner : IAgentRunner
         ArgumentNullException.ThrowIfNull(toolExecutor);
         this.eventObserver = eventObserver;
 
-        OpenAiToolCallingModel toolCallingModel = new(model, instructions, registry, gateway);
+        OpenAiToolCallingModel providerModel = new(
+            model,
+            instructions,
+            registry,
+            gateway,
+            providerAttemptObserver);
+        RetryingToolCallingModel toolCallingModel = new(
+            providerModel,
+            providerAttemptObserver,
+            retryDelay);
         innerRunner = new OfflineAgentRunner(
             toolCallingModel,
             toolExecutor,
@@ -36,6 +47,26 @@ public sealed class OpenAiAgentRunner : IAgentRunner
         try
         {
             return innerRunner.Run(request, transcript, cancellationToken);
+        }
+        catch (ProviderRequestException exception)
+        {
+            var payload = new Dictionary<string, string>
+            {
+                ["attemptCount"] = exception.AttemptCount.ToString(System.Globalization.CultureInfo.InvariantCulture),
+                ["category"] = exception.Failure.Category,
+                ["retryable"] = exception.Failure.Retryable ? "true" : "false",
+                ["retryExhausted"] = exception.RetryExhausted ? "true" : "false"
+            };
+            if (exception.InnerException is ClientResultException client)
+            {
+                payload["statusCode"] = client.Status.ToString(System.Globalization.CultureInfo.InvariantCulture);
+            }
+            return CreateFailure(
+                new AgentError(
+                    exception.Failure.Code,
+                    exception.Failure.SafeMessage,
+                    exception.Failure.Retryable),
+                payload);
         }
         catch (ClientResultException exception)
         {
@@ -68,7 +99,7 @@ public sealed class OpenAiAgentRunner : IAgentRunner
             return CreateFailure(new AgentError(
                 "openai-client-error",
                 "OpenAI agent model call failed before a response was completed.",
-                Retryable: true));
+                Retryable: false));
         }
     }
 

@@ -4,7 +4,7 @@ import type { ThreadDetailData, TurnSummaryData } from "../generated/desktop-con
 import { TaskControls } from "./TaskControls";
 
 describe("TaskControls", () => {
-  it("reuses its DOM across active and terminal turn transitions", () => {
+  it("keeps its dormant DOM stable when normal running state moves into the assistant message", () => {
     const props = {
       onCancel: vi.fn(async () => null),
       onApproval: vi.fn(async () => null),
@@ -17,7 +17,7 @@ describe("TaskControls", () => {
     expect((stableNode as HTMLElement).hidden).toBe(true);
     view.rerender(<TaskControls {...props} detail={detail(turn("running"))} />);
     expect(document.querySelector(".task-controls")).toBe(stableNode);
-    expect((stableNode as HTMLElement).hidden).toBe(false);
+    expect((stableNode as HTMLElement).hidden).toBe(true);
     view.rerender(<TaskControls {...props} detail={detail(turn("completed"))} />);
     expect(document.querySelector(".task-controls")).toBe(stableNode);
     expect((stableNode as HTMLElement).hidden).toBe(true);
@@ -65,10 +65,10 @@ describe("TaskControls", () => {
     expect(screen.queryByRole("button", { name: "Stop" })).toBeNull();
   });
 
-  it("keeps the running state compact and exposes only the stop action", () => {
+  it("does not render a separate running turn card", () => {
     render(<TaskControls detail={detail(turn("running"))} onCancel={vi.fn(async () => null)} onApproval={vi.fn(async () => null)} onResume={vi.fn(async () => null)} onRestart={vi.fn(async () => null)} />);
-    expect(screen.getByText("C-AICLI is working")).toBeTruthy();
-    expect(screen.getByRole("button", { name: "Stop" })).toBeTruthy();
+    expect(screen.queryByText("C-AICLI is working")).toBeNull();
+    expect(screen.queryByRole("button", { name: "Stop" })).toBeNull();
     expect(screen.queryByRole("button", { name: "Resume" })).toBeNull();
     expect(screen.queryByRole("button", { name: "Restart" })).toBeNull();
   });
@@ -82,6 +82,12 @@ function turn(status: string): TurnSummaryData {
     taskSummary: "Task", stopReason: null, errorCode: null, sourcePointers: [],
     timelineFirstSequence: 1, timelineLastSequence: 6, timelineItemCount: 6,
     recoveryRequired: false, approval: null,
+    clientMessageId: "intent-1",
+    provider: {
+      phase: "connecting", attempt: 1, maxAdditionalRetries: 5,
+      attemptHasStreamContent: false, assistantMessageId: "assistant-1",
+      errorCategory: null, retryable: null, safeErrorMessage: null, retryExhausted: false,
+    },
   };
 }
 

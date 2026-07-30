@@ -46,6 +46,9 @@ describe("continuous conversations", () => {
 
     fireEvent.change(screen.getByLabelText("Prompt"), { target: { value: "Review this workspace" } });
     fireEvent.click(screen.getByRole("button", { name: "Send" }));
+    expect(screen.getByTestId("optimistic-count").textContent).toBe("1");
+    expect(screen.getByTestId("optimistic-text").textContent).toBe("Review this workspace");
+    expect((screen.getByLabelText("Prompt") as HTMLTextAreaElement).value).toBe("");
     await waitFor(() => expect(startTurn).toHaveBeenCalledTimes(1));
     await waitFor(() => expect(screen.getByTestId("detail-state").textContent).toBe("ready"));
     await waitFor(() => expect((screen.getByLabelText("Prompt") as HTMLTextAreaElement).value).toBe(""));
@@ -75,6 +78,8 @@ function ConversationHarness({ bridge }: { readonly bridge: DesktopBridge }) {
       <span data-testid="selected-thread">{controller.state.selectedThreadId ?? "new"}</span>
       <span data-testid="detail-state">{controller.state.detailStatus}</span>
       <span data-testid="threads-state">{controller.state.threadsStatus}</span>
+      <span data-testid="optimistic-count">{controller.optimisticExchanges.length}</span>
+      <span data-testid="optimistic-text">{controller.optimisticExchanges[0]?.text ?? ""}</span>
       <textarea aria-label="Prompt" value={controller.composerDraft.text} onChange={(event) => controller.setComposerText(event.target.value)} />
       <button type="button" onClick={() => void controller.enqueueComposer()}>Send</button>
     </>

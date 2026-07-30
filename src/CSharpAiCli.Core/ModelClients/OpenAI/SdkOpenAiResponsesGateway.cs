@@ -57,6 +57,35 @@ public sealed class SdkOpenAiResponsesGateway : IOpenAiResponsesGateway
         return ToEnvelope(result.Value, request.Model, canonicalToolNames);
     }
 
+    public IEnumerable<OpenAiStreamingResponseUpdate> CreateAgentResponseStreaming(
+        OpenAiAgentRequest request,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(request);
+
+        IReadOnlyDictionary<string, string> apiToolNames = CreateApiToolNameMap(request.Tools);
+        CreateResponseOptions options = CreateAgentOptions(request, apiToolNames);
+        options.StreamingEnabled = true;
+        IReadOnlyDictionary<string, string> canonicalToolNames = apiToolNames
+            .ToDictionary(pair => pair.Value, pair => pair.Key, StringComparer.Ordinal);
+
+        foreach (StreamingResponseUpdate update in client.CreateResponseStreaming(
+            options,
+            cancellationToken: cancellationToken))
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            if (update is StreamingResponseOutputTextDeltaUpdate delta)
+            {
+                yield return OpenAiStreamingResponseUpdate.OutputTextDelta(delta.Delta);
+            }
+            else if (update is StreamingResponseCompletedUpdate completed)
+            {
+                yield return OpenAiStreamingResponseUpdate.Completed(
+                    ToEnvelope(completed.Response, request.Model, canonicalToolNames));
+            }
+        }
+    }
+
     public OpenAiResponseEnvelope CreateResponse(
         string model,
         string prompt,

@@ -43,10 +43,10 @@ public static class ThreadPersistenceLimits
 {
     public const int MaxThreadManifestBytes = 1024 * 1024;
     public const int MaxTurnSnapshotBytes = 256 * 1024;
-    public const int MaxTimelineItemBytes = 16 * 1024;
+    public const int MaxTimelineItemBytes = 32 * 1024;
     public const int MaxTitleBytes = 512;
     public const int MaxTaskSummaryBytes = 4 * 1024;
-    public const int MaxTimelineSummaryBytes = 4 * 1024;
+    public const int MaxTimelineSummaryBytes = 16 * 1024;
     public const int MaxPointerValueBytes = 4 * 1024;
     public const int MaxTurnsPerThread = 1_000;
     public const int MaxTimelineItemsPerThread = 10_000;
@@ -92,6 +92,7 @@ public static class TimelineItemType
 {
     public const string UserMessage = "user.message";
     public const string AssistantMessage = "assistant.message";
+    public const string ProviderAttempt = "provider.attempt";
     public const string PlanUpdated = "plan.updated";
     public const string ToolStarted = "tool.started";
     public const string ToolCompleted = "tool.completed";
@@ -107,7 +108,7 @@ public static class TimelineItemType
     public const string WarningRaised = "warning.raised";
     public const string TurnCompleted = "turn.completed";
 
-    public static bool IsKnown(string? value) => value is UserMessage or AssistantMessage or PlanUpdated
+    public static bool IsKnown(string? value) => value is UserMessage or AssistantMessage or ProviderAttempt or PlanUpdated
         or ToolStarted or ToolCompleted or CommandStarted or CommandCompleted
         or ApprovalRequested or ApprovalResolved or VerificationCompleted or AssistantFinal or ChangesUpdated or ReportAvailable
         or ArtifactAvailable or WarningRaised or TurnCompleted;
@@ -274,10 +275,24 @@ public sealed record TurnRecord
     public TurnCheckpointRecord? Checkpoint { get; init; }
     public DurableApprovalRequestRecord? ActiveApproval { get; init; }
     public long ApprovalRevision { get; init; }
+    public ProviderProgressRecord ProviderProgress { get; init; } = new();
     public IReadOnlyList<ThreadSourcePointerRecord> SourcePointers { get; init; } = [];
     public long? TimelineFirstSequence { get; init; }
     public long? TimelineLastSequence { get; init; }
     public int TimelineItemCount { get; init; }
+}
+
+public sealed record ProviderProgressRecord
+{
+    public string Phase { get; init; } = ProviderAttemptPhase.Connecting;
+    public int Attempt { get; init; }
+    public int MaxAdditionalRetries { get; init; } = ProviderRequestRetryLimits.MaxAdditionalRetries;
+    public bool AttemptHasStreamContent { get; init; }
+    public string? AssistantMessageId { get; init; }
+    public string? ErrorCategory { get; init; }
+    public bool? Retryable { get; init; }
+    public string? SafeErrorMessage { get; init; }
+    public bool RetryExhausted { get; init; }
 }
 
 public sealed record TurnCheckpointRecord
@@ -309,7 +324,20 @@ public sealed record DurableApprovalRequestRecord
     public DateTimeOffset ExpiresAtUtc { get; init; }
 }
 
-public sealed record TimelineMessagePayloadRecord(string Preview);
+public sealed record TimelineMessagePayloadRecord(
+    string Preview,
+    string? AssistantMessageId = null,
+    int? Attempt = null);
+public sealed record TimelineProviderPayloadRecord(
+    string Phase,
+    int Attempt,
+    int MaxAdditionalRetries,
+    bool AttemptHasStreamContent,
+    string AssistantMessageId,
+    string? ErrorCategory,
+    bool? Retryable,
+    string? SafeErrorMessage,
+    bool RetryExhausted);
 public sealed record TimelinePlanPayloadRecord(string Summary);
 public sealed record TimelineOperationPayloadRecord(string Name, bool? Succeeded, string? ErrorCode);
 public sealed record TimelineApprovalPayloadRecord(string Status);
@@ -321,6 +349,7 @@ public sealed record TimelineTurnCompletedPayloadRecord(string StopReason, strin
 public sealed record TimelinePayloadRecord
 {
     public TimelineMessagePayloadRecord? Message { get; init; }
+    public TimelineProviderPayloadRecord? Provider { get; init; }
     public TimelinePlanPayloadRecord? Plan { get; init; }
     public TimelineOperationPayloadRecord? Operation { get; init; }
     public TimelineApprovalPayloadRecord? Approval { get; init; }
@@ -565,6 +594,7 @@ public static class ThreadContractValidator
                 ComposerIntentContractValidator.ComputeCanonicalInputSha256(turn.ExecutionInput) != turn.CanonicalInputSha256)
                 throw TurnCorrupt("Turn execution input hash is invalid.");
         }
+        ValidateProviderProgress(turn.ProviderProgress);
         ValidateCheckpoint(turn.Checkpoint, turn);
         ValidateApproval(turn.ActiveApproval, turn);
 
@@ -576,6 +606,21 @@ public static class ThreadContractValidator
                 turn.TimelineLastSequence - turn.TimelineFirstSequence + 1 != turn.TimelineItemCount)))
         {
             throw TurnCorrupt("Turn timeline range is invalid.");
+        }
+    }
+
+    private static void ValidateProviderProgress(ProviderProgressRecord progress)
+    {
+        if (!ProviderAttemptPhase.IsKnown(progress.Phase) ||
+            progress.Attempt < 0 ||
+            progress.Attempt > ProviderRequestRetryLimits.MaxAttempts ||
+            progress.MaxAdditionalRetries < 0 ||
+            progress.MaxAdditionalRetries > ProviderRequestRetryLimits.MaxAdditionalRetries ||
+            Utf8Bytes(progress.AssistantMessageId) > 128 ||
+            Utf8Bytes(progress.ErrorCategory) > 64 ||
+            Utf8Bytes(progress.SafeErrorMessage) > ThreadPersistenceLimits.MaxTimelineSummaryBytes)
+        {
+            throw TurnCorrupt("Turn provider progress is invalid.");
         }
     }
 
@@ -707,11 +752,18 @@ public static class ThreadContractValidator
 
     private static void ValidatePayload(string type, TimelinePayloadRecord payload)
     {
-        int count = new object?[] { payload.Message, payload.Plan, payload.Operation, payload.Approval, payload.Changes,
+        int count = new object?[] { payload.Message, payload.Provider, payload.Plan, payload.Operation, payload.Approval, payload.Changes,
             payload.Reference, payload.Warning, payload.TurnCompleted }.Count(value => value is not null);
         bool matching = type switch
         {
             TimelineItemType.UserMessage or TimelineItemType.AssistantMessage or TimelineItemType.AssistantFinal => payload.Message is not null,
+            TimelineItemType.ProviderAttempt => payload.Provider is not null &&
+                ProviderAttemptPhase.IsKnown(payload.Provider.Phase) &&
+                payload.Provider.Attempt >= 1 &&
+                payload.Provider.Attempt <= ProviderRequestRetryLimits.MaxAttempts &&
+                payload.Provider.MaxAdditionalRetries >= 0 &&
+                payload.Provider.MaxAdditionalRetries <= ProviderRequestRetryLimits.MaxAdditionalRetries &&
+                !string.IsNullOrWhiteSpace(payload.Provider.AssistantMessageId),
             TimelineItemType.PlanUpdated => payload.Plan is not null,
             TimelineItemType.ToolStarted or TimelineItemType.ToolCompleted or TimelineItemType.CommandStarted or TimelineItemType.CommandCompleted or TimelineItemType.VerificationCompleted => payload.Operation is not null,
             TimelineItemType.ApprovalRequested or TimelineItemType.ApprovalResolved => payload.Approval is not null,
@@ -724,6 +776,10 @@ public static class ThreadContractValidator
         string?[] values =
         [
             payload.Message?.Preview,
+            payload.Message?.AssistantMessageId,
+            payload.Provider?.AssistantMessageId,
+            payload.Provider?.ErrorCategory,
+            payload.Provider?.SafeErrorMessage,
             payload.Plan?.Summary,
             payload.Operation?.Name,
             payload.Operation?.ErrorCode,

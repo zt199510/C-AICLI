@@ -15,6 +15,7 @@ export function App() {
   const [opening, setOpening] = useState(false);
   const [workspaceError, setWorkspaceError] = useState<string | null>(null);
   const [workspacePanel, setWorkspacePanel] = useState<WorkspacePanel>("changes");
+  const [stopping, setStopping] = useState(false);
   const panels = useShellPanels();
   const { leftOpen, inspectorOpen, showThreadsTrigger, showInspectorTrigger } = panels;
 
@@ -40,6 +41,20 @@ export function App() {
   const workspacePath = state.workspace?.rootPath ?? null;
   const bridgeUnavailable = !bridge;
   const statusMessage = bridgeUnavailable ? "Desktop bridge unavailable" : state.runtime.message;
+  const stopTurn = controller.activeTurn && !controller.activeTurn.approval &&
+    !["completed", "failed", "canceled", "canceling"].includes(controller.activeTurn.status)
+    ? controller.activeTurn
+    : null;
+
+  async function stopResponse() {
+    if (!stopTurn) return;
+    setStopping(true);
+    try {
+      await controller.cancelTurn(stopTurn.turnId, stopTurn.revision);
+    } finally {
+      setStopping(false);
+    }
+  }
 
   return (
     <div className={`app-shell ${leftOpen ? "" : "left-collapsed"} ${inspectorOpen ? "" : "inspector-collapsed"}`} style={{ "--inspector-width": `${panels.inspectorWidth}px` } as CSSProperties}>
@@ -88,6 +103,9 @@ export function App() {
                 status={state.detailStatus}
                 error={state.detailError}
                 onLoadMore={controller.loadMore}
+                optimisticExchanges={controller.optimisticExchanges}
+                onRestoreOptimistic={controller.restoreOptimistic}
+                onRestart={controller.restartTurn}
                 controls={(
                   <TaskControls
                     detail={state.detail}
@@ -119,6 +137,8 @@ export function App() {
             onPickFile={() => void controller.pickComposerFile()}
             onPickFolder={() => void controller.pickComposerFolder()}
             onSend={() => void controller.enqueueComposer()}
+            stopping={stopping}
+            onStop={stopTurn ? () => void stopResponse() : undefined}
             onClear={() => void controller.clearComposer()}
           />
         </main>

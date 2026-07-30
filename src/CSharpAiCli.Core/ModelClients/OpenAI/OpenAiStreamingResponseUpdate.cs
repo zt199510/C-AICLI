@@ -10,7 +10,8 @@ public sealed record OpenAiStreamingResponseUpdate(
     OpenAiStreamingResponseUpdateKind Kind,
     string? TextDelta,
     string? ResponseId,
-    string? Model)
+    string? Model,
+    OpenAiResponseEnvelope? Response = null)
 {
     public static OpenAiStreamingResponseUpdate OutputTextDelta(string textDelta)
     {
@@ -18,7 +19,8 @@ public sealed record OpenAiStreamingResponseUpdate(
             Kind: OpenAiStreamingResponseUpdateKind.OutputTextDelta,
             TextDelta: textDelta,
             ResponseId: null,
-            Model: null);
+            Model: null,
+            Response: null);
     }
 
     public static OpenAiStreamingResponseUpdate Completed(string responseId, string model)
@@ -27,6 +29,18 @@ public sealed record OpenAiStreamingResponseUpdate(
             Kind: OpenAiStreamingResponseUpdateKind.Completed,
             TextDelta: null,
             ResponseId: responseId,
-            Model: model);
+            Model: model,
+            Response: null);
+    }
+
+    public static OpenAiStreamingResponseUpdate Completed(OpenAiResponseEnvelope response)
+    {
+        ArgumentNullException.ThrowIfNull(response);
+        return new OpenAiStreamingResponseUpdate(
+            Kind: OpenAiStreamingResponseUpdateKind.Completed,
+            TextDelta: null,
+            ResponseId: response.ResponseId,
+            Model: response.Model,
+            Response: response);
     }
 }
