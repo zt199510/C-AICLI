@@ -167,6 +167,22 @@ internal sealed class CliCommandContext
         Output.WriteLine(summary);
     }
 
+    public void WriteConfigEditResult(ConfigFileEditResult result)
+    {
+        Output.WriteLine($"status: {result.Status}");
+        if (result.Succeeded)
+        {
+            Output.WriteLine($"key: {result.Key}");
+            Output.WriteLine("scope: user");
+            Output.WriteLine($"path: {result.Path}");
+            return;
+        }
+
+        Output.WriteLine($"errorCode: {result.ErrorCode}");
+        Output.WriteLine("summary:");
+        Output.WriteLine(result.Summary);
+    }
+
     public bool TryParseSessionName(string name, out ConversationSessionName sessionName)
     {
         try

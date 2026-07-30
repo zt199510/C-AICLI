@@ -1311,129 +1311,6 @@ public static class CliCommandFactory
             return 1;
         });
 
-        Command configCommand = new("config", "Inspect CLI configuration.");
-        Command configGetCommand = new("get", "Print the effective configuration summary.");
-        configGetCommand.SetAction(parseResult =>
-        {
-            string? workspacePath = parseResult.GetValue(workspaceOption);
-            CliEnvironmentSnapshot snapshot = workspaceSnapshotProvider(workspacePath);
-            TryWriteCommandLog(commandLogger, "config get", snapshot);
-            WriteVerboseDiagnostics(parseResult, "config get", snapshot);
-            output.WriteLine(ConfigReport.Create(snapshot).ToDisplayText());
-            return 0;
-        });
-        Command configListCommand = new("list", "List non-secret configuration values and sources.");
-        configListCommand.SetAction(parseResult =>
-        {
-            string? workspacePath = parseResult.GetValue(workspaceOption);
-            CliEnvironmentSnapshot snapshot = workspaceSnapshotProvider(workspacePath);
-            TryWriteCommandLog(commandLogger, "config list", snapshot);
-            WriteVerboseDiagnostics(parseResult, "config list", snapshot);
-            output.WriteLine(ConfigReport.Create(snapshot).ToDisplayText());
-            return 0;
-        });
-        Command configSetCommand = new("set", "Set a scalar user configuration value.");
-        Argument<string> configSetKeyArgument = new("key")
-        {
-            Description = "The scalar config key to set.",
-        };
-        Argument<string> configSetValueArgument = new("value")
-        {
-            Description = "The scalar config value to write.",
-        };
-        configSetCommand.Arguments.Add(configSetKeyArgument);
-        configSetCommand.Arguments.Add(configSetValueArgument);
-        configSetCommand.SetAction(parseResult =>
-        {
-            string? workspacePath = parseResult.GetValue(workspaceOption);
-            string key = parseResult.GetValue(configSetKeyArgument) ?? string.Empty;
-            string value = parseResult.GetValue(configSetValueArgument) ?? string.Empty;
-            CliEnvironmentSnapshot snapshot = workspaceSnapshotProvider(workspacePath);
-            TryWriteCommandLog(commandLogger, "config set", snapshot);
-            WriteVerboseDiagnostics(parseResult, "config set", snapshot);
-
-            ConfigFileEditResult result = ConfigFileEditor.SetUserScalar(snapshot.UserConfigPath, key, value);
-            WriteConfigEditResult(output, result);
-            return result.Succeeded ? 0 : 1;
-        });
-        Command configUnsetCommand = new("unset", "Unset a scalar user configuration value.");
-        Argument<string> configUnsetKeyArgument = new("key")
-        {
-            Description = "The scalar config key to unset.",
-        };
-        configUnsetCommand.Arguments.Add(configUnsetKeyArgument);
-        configUnsetCommand.SetAction(parseResult =>
-        {
-            string? workspacePath = parseResult.GetValue(workspaceOption);
-            string key = parseResult.GetValue(configUnsetKeyArgument) ?? string.Empty;
-            CliEnvironmentSnapshot snapshot = workspaceSnapshotProvider(workspacePath);
-            TryWriteCommandLog(commandLogger, "config unset", snapshot);
-            WriteVerboseDiagnostics(parseResult, "config unset", snapshot);
-
-            ConfigFileEditResult result = ConfigFileEditor.UnsetUserScalar(snapshot.UserConfigPath, key);
-            WriteConfigEditResult(output, result);
-            return result.Succeeded ? 0 : 1;
-        });
-
-        configCommand.Subcommands.Add(configGetCommand);
-        configCommand.Subcommands.Add(configListCommand);
-        configCommand.Subcommands.Add(configSetCommand);
-        configCommand.Subcommands.Add(configUnsetCommand);
-
-        Command mcpCommand = new("mcp", "Inspect MCP server configuration.");
-        Command mcpListCommand = new("list", "List configured MCP servers.");
-        mcpListCommand.SetAction(parseResult =>
-        {
-            string? workspacePath = parseResult.GetValue(workspaceOption);
-            CliEnvironmentSnapshot snapshot = workspaceSnapshotProvider(workspacePath);
-            TryWriteCommandLog(commandLogger, "mcp list", snapshot);
-            WriteVerboseDiagnostics(parseResult, "mcp list", snapshot);
-            output.WriteLine(McpListReport.Create(snapshot).ToDisplayText());
-            return 0;
-        });
-        mcpCommand.Subcommands.Add(mcpListCommand);
-        Command mcpDoctorCommand = new("doctor", "Diagnose configured MCP servers.");
-        mcpDoctorCommand.SetAction(parseResult =>
-        {
-            string? workspacePath = parseResult.GetValue(workspaceOption);
-            CliEnvironmentSnapshot snapshot = workspaceSnapshotProvider(workspacePath);
-            TryWriteCommandLog(commandLogger, "mcp doctor", snapshot);
-            WriteVerboseDiagnostics(parseResult, "mcp doctor", snapshot);
-            output.WriteLine(McpDoctorReport.Create(snapshot).ToDisplayText());
-            return 0;
-        });
-        mcpCommand.Subcommands.Add(mcpDoctorCommand);
-
-        Command workflowCommand = new("workflow", "Inspect project workflow profiles.");
-        Command workflowListCommand = new("list", "List configured workflow profiles.");
-        workflowListCommand.SetAction(parseResult =>
-        {
-            string? workspacePath = parseResult.GetValue(workspaceOption);
-            CliEnvironmentSnapshot snapshot = workspaceSnapshotProvider(workspacePath);
-            TryWriteCommandLog(commandLogger, "workflow list", snapshot);
-            WriteVerboseDiagnostics(parseResult, "workflow list", snapshot);
-            output.WriteLine(WorkflowListReport.Create(snapshot).ToDisplayText());
-            return 0;
-        });
-        Command workflowValidateCommand = new("validate", "Suggest the validation command for a workflow profile.");
-        Argument<string> workflowProfileArgument = new("profile")
-        {
-            Description = "The configured workflow profile name.",
-        };
-        workflowValidateCommand.Arguments.Add(workflowProfileArgument);
-        workflowValidateCommand.SetAction(parseResult =>
-        {
-            string? workspacePath = parseResult.GetValue(workspaceOption);
-            string profile = parseResult.GetValue(workflowProfileArgument) ?? string.Empty;
-            CliEnvironmentSnapshot snapshot = workspaceSnapshotProvider(workspacePath);
-            TryWriteCommandLog(commandLogger, "workflow validate", snapshot);
-            WriteVerboseDiagnostics(parseResult, "workflow validate", snapshot);
-            output.WriteLine(WorkflowValidateReport.Create(snapshot, profile).ToDisplayText());
-            return 0;
-        });
-        workflowCommand.Subcommands.Add(workflowListCommand);
-        workflowCommand.Subcommands.Add(workflowValidateCommand);
-
         Command packsCommand = new("packs", "Inspect deterministic project pack contracts and tool dependencies.");
         Command packsListCommand = new("list", "List built-in project pack contracts without running tools.");
         Option<bool> packsListJsonOption = new("--json")
@@ -5713,9 +5590,9 @@ public static class CliCommandFactory
         rootComposer.Add(automationCommand);
         rootComposer.Add(pipelineCommand);
         rootComposer.Add(reviewCommand);
-        rootComposer.Add(configCommand);
-        rootComposer.Add(mcpCommand);
-        rootComposer.Add(workflowCommand);
+        rootComposer.Add(new ConfigCommandModule(), commandContext);
+        rootComposer.Add(new McpCommandModule(), commandContext);
+        rootComposer.Add(new WorkflowCommandModule(), commandContext);
         rootComposer.Add(packsCommand);
         rootComposer.Add(artifactsCommand);
         rootComposer.Add(skillsCommand);
@@ -6498,22 +6375,6 @@ public static class CliCommandFactory
             ? warning
             : warning + Environment.NewLine + Environment.NewLine + response.Text.TrimStart('\r', '\n');
         return response with { Text = text };
-    }
-
-    private static void WriteConfigEditResult(TextWriter output, ConfigFileEditResult result)
-    {
-        output.WriteLine($"status: {result.Status}");
-        if (result.Succeeded)
-        {
-            output.WriteLine($"key: {result.Key}");
-            output.WriteLine("scope: user");
-            output.WriteLine($"path: {result.Path}");
-            return;
-        }
-
-        output.WriteLine($"errorCode: {result.ErrorCode}");
-        output.WriteLine("summary:");
-        output.WriteLine(result.Summary);
     }
 
     private static void WriteRunResult(TextWriter output, ExecResult result)
