@@ -4661,37 +4661,6 @@ public static class CliCommandFactory
         pipelineCommand.Subcommands.Add(pipelinePlanCommand);
         pipelineCommand.Subcommands.Add(pipelineRunCommand);
 
-        Command runCommand = new("run", "Run a deterministic local workspace task through the direct tool layer.");
-        Argument<string> taskArgument = new("task")
-        {
-            Description = "Task text. Supported smoke tasks: create smoke note, read <path>, shell <command>.",
-        };
-        Option<bool> runApproveOption = new("--approve")
-        {
-            Description = "Approve patch or shell tools used by this run.",
-        };
-        runCommand.Arguments.Add(taskArgument);
-        runCommand.Options.Add(runApproveOption);
-        runCommand.SetAction(parseResult =>
-        {
-            string? workspacePath = parseResult.GetValue(workspaceOption);
-            string task = parseResult.GetValue(taskArgument) ?? string.Empty;
-            bool approve = parseResult.GetValue(runApproveOption);
-            CliEnvironmentSnapshot snapshot = workspaceSnapshotProvider(workspacePath);
-            TryWriteCommandLog(commandLogger, "run", snapshot);
-            WriteVerboseDiagnostics(parseResult, "run", snapshot);
-            ApprovalMode? cliApprovalMode = approve ? ApprovalMode.Always : null;
-            IApprovalPolicy approvalPolicy = ApprovalPolicyResolver.Resolve(snapshot.Configuration.ApprovalMode, cliApprovalMode);
-            ToolRegistry registry = CliToolFactory.CreateRegistry(snapshot, approvalPolicy);
-            ToolExecutor executor = new(registry, snapshot.Configuration.DisabledTools);
-            ExecRunner runner = new(approvalPolicy);
-            ExecRequest request = new(task, WorkspaceRoot: snapshot.Workspace.RootPath);
-            ExecResult result = runner.Run(request, snapshot.Workspace, executor);
-
-            WriteRunResult(output, result);
-            return result.ExitCode;
-        });
-
         Command sessionCommand = new("session", "Manage local conversation transcripts.");
         Command sessionListCommand = new("list", "List local session summaries.");
         Command sessionShowCommand = new("show", "Show one local session summary.");
@@ -4999,7 +4968,7 @@ public static class CliCommandFactory
         rootComposer.Add(toolsCommand);
         rootComposer.Add(new LogsCommandModule(), commandContext);
         rootComposer.Add(execCommand);
-        rootComposer.Add(runCommand);
+        rootComposer.Add(new RunCommandModule(), commandContext);
         rootComposer.Add(sessionCommand);
         rootComposer.Add(chatCommand);
 
@@ -5603,19 +5572,6 @@ public static class CliCommandFactory
     {
         output.WriteLine(result.Succeeded ? "status: succeeded" : "status: failed");
         output.WriteLine($"approvalStatus: {result.ApprovalStatus}");
-        if (!string.IsNullOrWhiteSpace(result.ErrorCode))
-        {
-            output.WriteLine($"errorCode: {result.ErrorCode}");
-        }
-
-        output.WriteLine("summary:");
-        output.WriteLine(result.Summary);
-    }
-
-    private static void WriteRunResult(TextWriter output, ExecResult result)
-    {
-        output.WriteLine(result.IsSuccess ? "status: succeeded" : "status: failed");
-        output.WriteLine($"approvalStatus: {result.ApprovalStatus ?? "not-required"}");
         if (!string.IsNullOrWhiteSpace(result.ErrorCode))
         {
             output.WriteLine($"errorCode: {result.ErrorCode}");
