@@ -815,3 +815,206 @@ body {
     display: none;
   }
 }
+
+/* Codex-like content-first conversation presentation. */
+.new-thread-button {
+  display: inline-flex;
+  min-height: 32px;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 5px;
+  border: 1px solid var(--color-border);
+  border-radius: 9px;
+  background: var(--color-surface);
+  padding: 5px 9px;
+  color: var(--color-text);
+  font-size: 11px;
+  font-weight: 680;
+  cursor: pointer;
+}
+
+.new-thread-button:hover {
+  border-color: var(--color-border-strong);
+  background: var(--color-accent-soft);
+  color: var(--color-accent-strong);
+}
+
+.timeline-view {
+  width: min(880px, 100%);
+  padding-inline: clamp(18px, 5vw, 64px);
+}
+
+.timeline-mode-switcher {
+  border-color: transparent;
+  background: color-mix(in srgb, var(--color-surface-muted) 78%, transparent);
+}
+
+.timeline-items {
+  gap: 22px;
+}
+
+.conversation-message {
+  display: grid;
+  width: 100%;
+  min-width: 0;
+  grid-template-columns: 30px minmax(0, 1fr);
+  align-items: start;
+  gap: 11px;
+  padding: 2px 0;
+  color: var(--color-text);
+}
+
+.conversation-message-identity {
+  display: grid;
+  width: 28px;
+  height: 28px;
+  place-items: center;
+  border-radius: 9px;
+  background: linear-gradient(145deg, #218363, var(--color-accent-strong));
+  box-shadow: 0 3px 9px rgb(15 88 66 / 18%);
+  color: white;
+  font-size: 11px;
+  font-weight: 760;
+}
+
+.conversation-message-copy {
+  min-width: 0;
+}
+
+.conversation-message-meta {
+  display: flex;
+  min-height: 24px;
+  align-items: center;
+  gap: 8px;
+  color: var(--color-text-muted);
+  font-size: 10px;
+}
+
+.conversation-message-meta strong {
+  color: var(--color-text);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.conversation-message-meta time {
+  opacity: 0;
+  transition: opacity 120ms ease;
+}
+
+.conversation-message:hover .conversation-message-meta time,
+.conversation-message:focus-within .conversation-message-meta time {
+  opacity: 1;
+}
+
+.conversation-message-content {
+  max-width: 100%;
+  color: var(--color-text);
+  font-size: 14px;
+  line-height: 1.68;
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
+}
+
+.conversation-message.message-user {
+  width: min(78%, 680px);
+  grid-template-columns: minmax(0, 1fr);
+  justify-self: end;
+  border: 1px solid color-mix(in srgb, var(--color-accent) 22%, var(--color-border));
+  border-radius: 18px 18px 5px 18px;
+  background: color-mix(in srgb, var(--color-accent-soft) 72%, var(--color-surface));
+  padding: 11px 14px 12px;
+}
+
+.message-user .conversation-message-identity {
+  display: none;
+}
+
+.message-user .conversation-message-meta {
+  min-height: 18px;
+  justify-content: flex-end;
+}
+
+.message-user .conversation-message-meta strong {
+  font-size: 11px;
+}
+
+.message-user .conversation-message-content {
+  font-size: 13.5px;
+  line-height: 1.58;
+}
+
+.conversation-message.redacted .conversation-message-copy {
+  opacity: .72;
+}
+
+.composer {
+  width: min(840px, calc(100% - 32px));
+  border-radius: 20px;
+  padding: 9px 13px 10px;
+}
+
+.composer-context-summary {
+  gap: 0;
+  padding: 0 7px 3px;
+}
+
+.composer-context-summary > span {
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  padding: 2px 8px 2px 0;
+}
+
+.composer-context-summary > span + span::before {
+  margin-right: 8px;
+  color: var(--color-border-strong);
+  content: "·";
+}
+
+.composer textarea {
+  min-height: 82px;
+  padding: 11px 8px 8px;
+  font-size: 14.5px;
+  line-height: 1.55;
+}
+
+.composer-footer {
+  padding-top: 4px;
+}
+
+.composer-tools button {
+  border-color: transparent;
+  background: var(--color-surface-muted);
+  border-radius: 9px;
+}
+
+.composer-send {
+  width: 36px;
+  height: 36px;
+  justify-content: center;
+  border-radius: 12px;
+  padding: 0;
+  overflow: hidden;
+  color: transparent;
+  gap: 0;
+}
+
+.composer-send svg {
+  color: white;
+}
+
+@media (max-width: 700px) {
+  .conversation-message.message-user {
+    width: 90%;
+  }
+
+  .conversation-message {
+    grid-template-columns: 26px minmax(0, 1fr);
+    gap: 8px;
+  }
+
+  .conversation-message-identity {
+    width: 25px;
+    height: 25px;
+  }
+}

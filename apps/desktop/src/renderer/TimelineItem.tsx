@@ -44,6 +44,27 @@ export function TimelineItem({
   const Icon = presentation.icon;
   const message = isMessage(item.type);
   const visibleText = message && item.payload.text ? item.payload.text : item.summary;
+  if (message) {
+    const user = item.type === "user.message";
+    return (
+      <article
+        className={`conversation-message ${messageRole(item.type)} ${item.redacted ? "redacted" : ""}`}
+        data-projection-kind={projectionKind}
+        data-sequence={item.sequence}
+      >
+        <div className="conversation-message-identity" aria-hidden="true">{user ? "Y" : "C"}</div>
+        <div className="conversation-message-copy">
+          <header className="conversation-message-meta">
+            <span className="sr-only">{presentation.label}</span>
+            <strong>{user ? "You" : "C-AICLI"}</strong>
+            <time dateTime={item.timestampUtc}>{formatTime(item.timestampUtc)}</time>
+          </header>
+          <div className="conversation-message-content">{item.redacted ? "Content redacted" : visibleText}</div>
+          {item.source && <div className="source-pointer">Source: {item.source.kind} · {item.source.sourceId} · {item.source.availability}</div>}
+        </div>
+      </article>
+    );
+  }
   return (
     <article
       className={`timeline-card timeline-${category(item.type)} ${messageRole(item.type)} ${item.redacted ? "redacted" : ""}`}

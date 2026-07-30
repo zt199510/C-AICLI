@@ -59,8 +59,8 @@ export function ThreadSidebar(props: ThreadSidebarProps) {
           <option value="all">All</option><option value="active">Active</option><option value="completed">Completed</option>
           <option value="failed">Failed</option><option value="archived">Archived</option>
         </select>
-        <button ref={createTrigger} className="icon-button" type="button" aria-label="Create thread" title="Create thread" onClick={() => setCreating(true)}>
-          <Plus size={16} aria-hidden="true" />
+        <button ref={createTrigger} className="new-thread-button" type="button" aria-label="Create thread" title="Create thread" onClick={() => setCreating(true)}>
+          <Plus size={15} aria-hidden="true" /> New
         </button>
       </div>
       {creating && (

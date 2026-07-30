@@ -1,5 +1,5 @@
 import { Activity, MessageSquareText, Plus } from "lucide-react";
-import { useEffect, useState, type ReactNode } from "react";
+import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from "react";
 import type { ThreadDetailData, TimelineItemData } from "../generated/desktop-contracts";
 import type { QueryStatus } from "./desktop-state";
 import { TimelineProjectionBlock } from "./TimelineProjectionBlock";
@@ -18,6 +18,18 @@ export interface TimelineViewProps {
 
 export function TimelineView({ detail, status, error, controls, onStartConversation, onLoadMore }: TimelineViewProps) {
   const items = detail?.timeline ?? [];
+  const view = useRef<HTMLDivElement>(null);
+  const activeThread = useRef<string | null>(null);
+  const followLatest = useRef(true);
+
+  useLayoutEffect(() => {
+    const element = view.current;
+    const threadId = detail?.thread.threadId ?? null;
+    if (!element || !threadId) return;
+    const threadChanged = activeThread.current !== threadId;
+    activeThread.current = threadId;
+    if (threadChanged || followLatest.current) element.scrollTop = element.scrollHeight;
+  }, [detail?.thread.threadId, items.length]);
 
   if (status === "error" && !detail) return <div className="state-card failure-card" role="alert"><h1>History unavailable</h1><p>{error}</p></div>;
   if (status === "loading" && !detail) return <div className="state-card"><h1>Loading conversation history…</h1></div>;
@@ -32,7 +44,10 @@ export function TimelineView({ detail, status, error, controls, onStartConversat
 
   const messageCount = items.filter((item) => isConversationMessage(item.type)).length;
   return (
-    <div className="timeline-view" tabIndex={0} aria-label="Thread timeline">
+    <div ref={view} className="timeline-view" tabIndex={0} aria-label="Thread timeline" onScroll={(event) => {
+      const element = event.currentTarget;
+      followLatest.current = element.scrollHeight - element.scrollTop - element.clientHeight < 96;
+    }}>
       <div className="thread-context">
         <div><strong>{detail.thread.title || "Untitled thread"}</strong><span className={`status-chip status-${detail.thread.status.toLowerCase()}`}>{detail.thread.status}</span></div>
         <div>{detail.turns.length} turns · {detail.timeline.length} loaded items</div>

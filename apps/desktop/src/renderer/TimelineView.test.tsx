@@ -57,7 +57,7 @@ describe("frozen timeline projection", () => {
     const onLoadMore = vi.fn();
     const timeline = Array.from({ length: 2000 }, (_, index) => item(index + 1, types[index % types.length] as string));
     render(<TimelineView detail={{ ...detail, timeline }} status="ready" error={null} onLoadMore={onLoadMore} />);
-    expect(document.querySelectorAll(".timeline-card").length).toBeLessThanOrEqual(80);
+    expect(document.querySelectorAll("[data-sequence]").length).toBeLessThanOrEqual(80);
     await userEvent.click(screen.getByRole("button", { name: "Load newer items" }));
     expect(onLoadMore).toHaveBeenCalledOnce();
   });
@@ -68,13 +68,13 @@ describe("frozen timeline projection", () => {
       turnId: `turn-${Math.floor(index / 6) + 1}`,
     }));
     render(<TimelineView detail={{ ...detail, timeline }} status="ready" error={null} onLoadMore={vi.fn()} />);
-    const conversationCount = document.querySelectorAll(".timeline-card").length;
+    const conversationCount = document.querySelectorAll(".conversation-message").length;
     expect(screen.getByRole("tab", { name: /Conversation/ }).getAttribute("aria-selected")).toBe("true");
     expect(conversationCount).toBeGreaterThan(3);
     expect(conversationCount).toBeLessThan(36);
     expect(screen.getByText("Timeline item 1")).toBeTruthy();
     await userEvent.click(screen.getByRole("tab", { name: /Activity/ }));
-    expect(document.querySelectorAll(".timeline-card").length).toBeGreaterThan(conversationCount);
+    expect(document.querySelectorAll("[data-sequence]").length).toBeGreaterThan(conversationCount);
   });
 
   it("shows message payload text without hiding it behind details", () => {
