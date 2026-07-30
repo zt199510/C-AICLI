@@ -1,4 +1,5 @@
 using System.CommandLine;
+using CSharpAiCli.Application;
 using CSharpAiCli.Core;
 
 namespace CSharpAiCli.Cli;
@@ -21,6 +22,7 @@ internal sealed class CliCommandContext
         Dependencies = dependencies;
         GlobalOptions = globalOptions;
         WorkspaceSnapshotProvider = workspacePath => dependencies.SnapshotProvider(workspacePath, null);
+        ChangesServiceFactory = _ => new ChangesApplicationService(dependencies.ConversationStoreFactory);
     }
 
     public TextWriter Output { get; }
@@ -32,6 +34,8 @@ internal sealed class CliCommandContext
     public CliGlobalOptions GlobalOptions { get; }
 
     public Func<string?, CliEnvironmentSnapshot> WorkspaceSnapshotProvider { get; }
+
+    public Func<CliEnvironmentSnapshot, ChangesApplicationService> ChangesServiceFactory { get; }
 
     public void WriteVerboseDiagnostics(
         ParseResult parseResult,
@@ -134,5 +138,61 @@ internal sealed class CliCommandContext
         catch
         {
         }
+    }
+
+    public static bool IsJsonOutputRequested(bool jsonRequested, string outputMode)
+    {
+        return jsonRequested ||
+            string.Equals(outputMode, "json", StringComparison.OrdinalIgnoreCase);
+    }
+
+    public void WriteToolResult(ToolExecutionResult result)
+    {
+        Output.WriteLine(result.Succeeded ? "status: succeeded" : "status: failed");
+        Output.WriteLine($"approvalStatus: {result.ApprovalStatus}");
+        if (!string.IsNullOrWhiteSpace(result.ErrorCode))
+        {
+            Output.WriteLine($"errorCode: {result.ErrorCode}");
+        }
+
+        Output.WriteLine("summary:");
+        Output.WriteLine(result.Summary);
+    }
+
+    public void WriteSafeFailure(string errorCode, string summary)
+    {
+        Output.WriteLine("status: failed");
+        Output.WriteLine($"errorCode: {errorCode}");
+        Output.WriteLine("summary:");
+        Output.WriteLine(summary);
+    }
+
+    public bool TryParseSessionName(string name, out ConversationSessionName sessionName)
+    {
+        try
+        {
+            sessionName = ConversationSessionName.Parse(name);
+            return true;
+        }
+        catch (ArgumentException exception)
+        {
+            WriteSafeFailure("invalid-session-name", GetSafeSessionNameParseMessage(exception));
+            sessionName = null!;
+            return false;
+        }
+    }
+
+    private static string GetSafeSessionNameParseMessage(ArgumentException exception)
+    {
+        string message = exception.Message;
+        if (string.IsNullOrEmpty(exception.ParamName))
+        {
+            return message;
+        }
+
+        string parameterSuffix = $" (Parameter '{exception.ParamName}')";
+        return message.EndsWith(parameterSuffix, StringComparison.Ordinal)
+            ? message[..^parameterSuffix.Length]
+            : message;
     }
 }

@@ -302,8 +302,6 @@ public static class CliCommandFactory
         Func<string?, CliEnvironmentSnapshot> workspaceSnapshotProvider =
             commandContext.WorkspaceSnapshotProvider;
         ProjectPackRegistry projectPackRegistry = new([new GerberTiffWorkflowPack()]);
-        Func<CliEnvironmentSnapshot, ChangesApplicationService> changesServiceFactory =
-            _ => new ChangesApplicationService(conversationStoreFactory);
 
         CliRootComposer rootComposer = new(globalOptions);
         RootCommand rootCommand = rootComposer.RootCommand;
@@ -365,125 +363,6 @@ public static class CliCommandFactory
         {
             commandContext.TryWriteTraceExecResult(commandName, snapshot, context, result);
         }
-
-        Command diffCommand = new("diff", "Show current git diff for the workspace.");
-        Option<bool> diffStatOption = new("--stat")
-        {
-            Description = "Show git diff stat instead of the full patch.",
-        };
-        diffCommand.Options.Add(diffStatOption);
-        diffCommand.SetAction(parseResult =>
-        {
-            string? workspacePath = parseResult.GetValue(workspaceOption);
-            bool stat = parseResult.GetValue(diffStatOption);
-            CliEnvironmentSnapshot snapshot = workspaceSnapshotProvider(workspacePath);
-            TryWriteCommandLog(commandLogger, "diff", snapshot);
-            WriteVerboseDiagnostics(parseResult, "diff", snapshot);
-            GitDiffTool gitDiffTool = new(new WorkspaceGuard());
-            string argumentsJson = stat ? """{"stat":true}""" : "{}";
-            ToolExecutionResult result = gitDiffTool.Execute(new ToolExecutionContext(
-                "cli_diff",
-                snapshot.Workspace,
-                argumentsJson));
-
-            if (result.Succeeded)
-            {
-                output.WriteLine(result.Summary);
-            }
-            else
-            {
-                WriteToolResult(output, result);
-            }
-
-            return result.Succeeded ? 0 : 1;
-        });
-
-        Command changesCommand = new("changes", "Show a read-only changes view for the workspace.");
-        Option<bool> changesJsonOption = new("--json")
-        {
-            Description = "Write a single JSON changes view object.",
-        };
-        Option<string> changesOutputOption = new("--output")
-        {
-            Description = "Select text or json output.",
-        };
-        Option<string> changesSessionOption = new("--session")
-        {
-            Description = "Include the latest task report from a named session transcript.",
-        };
-        changesOutputOption.DefaultValueFactory = _ => "text";
-        changesOutputOption.Validators.Add(result =>
-        {
-            string outputMode = result.GetValueOrDefault<string>() ?? "text";
-            if (!string.Equals(outputMode, "text", StringComparison.OrdinalIgnoreCase) &&
-                !string.Equals(outputMode, "json", StringComparison.OrdinalIgnoreCase))
-            {
-                result.AddError("Invalid value for --output. Allowed values are text and json.");
-            }
-        });
-        changesCommand.Options.Add(changesJsonOption);
-        changesCommand.Options.Add(changesOutputOption);
-        changesCommand.Options.Add(changesSessionOption);
-        changesCommand.SetAction(parseResult =>
-        {
-            string? workspacePath = parseResult.GetValue(workspaceOption);
-            bool jsonRequested = parseResult.GetValue(changesJsonOption);
-            string outputMode = parseResult.GetValue(changesOutputOption) ?? "text";
-            string? session = parseResult.GetValue(changesSessionOption);
-            CliEnvironmentSnapshot snapshot = workspaceSnapshotProvider(workspacePath);
-            DiagnosticContext? traceContext = CreateTraceContext(parseResult, snapshot);
-            WriteVerboseDiagnostics(
-                parseResult,
-                "changes",
-                snapshot,
-                humanReadableOutput: !IsJsonOutputRequested(jsonRequested, outputMode));
-
-            ConversationSessionName? sessionName = null;
-            if (!string.IsNullOrWhiteSpace(session))
-            {
-                if (!TryParseSessionName(output, session, out ConversationSessionName parsedSessionName))
-                {
-                    return 1;
-                }
-
-                sessionName = parsedSessionName;
-            }
-
-            ApplicationResult<ChangesViewReport> query = changesServiceFactory(snapshot).Query(
-                new ChangesQueryRequest(snapshot, sessionName));
-            if (!query.Succeeded || query.Data is null)
-            {
-                ApplicationError error = query.Error ?? new ApplicationError(
-                    "application-internal",
-                    ApplicationErrorCategory.Internal,
-                    "Changes query failed.",
-                    Retryable: false);
-                WriteSafeFailure(output, error.Code, error.SafeMessage);
-                return 1;
-            }
-
-            ChangesViewReport report = query.Data;
-            TryWriteTraceCommandEvent(
-                "changes",
-                snapshot,
-                traceContext,
-                "changes.view",
-                0,
-                report.Status,
-                report.Summary,
-                timestampUtc: utcNowProvider());
-
-            if (IsJsonOutputRequested(jsonRequested, outputMode))
-            {
-                new ChangesJsonRenderer(output).Write(report);
-            }
-            else
-            {
-                new ChangesTextRenderer(output).Write(report);
-            }
-
-            return report.ExitCode;
-        });
 
         Command jobsCommand = new("jobs", "Read local job history records.");
         Command jobsListCommand = new("list", "List local job records.");
@@ -5824,8 +5703,8 @@ public static class CliCommandFactory
         rootComposer.Add(new DoctorCommandModule(), commandContext);
         rootComposer.Add(new StatusCommandModule(), commandContext);
         rootComposer.Add(new ModelsCommandModule(), commandContext);
-        rootComposer.Add(diffCommand);
-        rootComposer.Add(changesCommand);
+        rootComposer.Add(new DiffCommandModule(), commandContext);
+        rootComposer.Add(new ChangesCommandModule(), commandContext);
         rootComposer.Add(jobsCommand);
         rootComposer.Add(ciCommand);
         rootComposer.Add(daemonCommand);

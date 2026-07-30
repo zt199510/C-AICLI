@@ -134,16 +134,14 @@ public sealed class ApplicationArchitectureTests
             "src",
             "CSharpAiCli.Cli",
             "Commands",
-            "CliCommandFactory.cs"));
-        int start = source.IndexOf("Command changesCommand", StringComparison.Ordinal);
-        int end = source.IndexOf("Command jobsCommand", start, StringComparison.Ordinal);
-        string handler = source[start..end];
+            "Queries",
+            "ChangesCommandModule.cs"));
 
-        Assert.Contains("changesServiceFactory", handler, StringComparison.Ordinal);
-        Assert.Contains("ChangesQueryRequest", handler, StringComparison.Ordinal);
-        Assert.DoesNotContain("new GitStatusTool", handler, StringComparison.Ordinal);
-        Assert.DoesNotContain("new GitDiffTool", handler, StringComparison.Ordinal);
-        Assert.DoesNotContain("conversationStoreFactory(", handler, StringComparison.Ordinal);
+        Assert.Contains("ChangesServiceFactory", source, StringComparison.Ordinal);
+        Assert.Contains("ChangesQueryRequest", source, StringComparison.Ordinal);
+        Assert.DoesNotContain("new GitStatusTool", source, StringComparison.Ordinal);
+        Assert.DoesNotContain("new GitDiffTool", source, StringComparison.Ordinal);
+        Assert.DoesNotContain("ConversationStoreFactory", source, StringComparison.Ordinal);
     }
 
     private static IEnumerable<Type> FlattenType(Type type)
