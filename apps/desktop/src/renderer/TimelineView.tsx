@@ -40,22 +40,11 @@ export function TimelineView({ detail, status, error, controls, onLoadMore }: Ti
     </div>
   );
 
-  const messageCount = items.filter((item) => isConversationMessage(item.type)).length;
   return (
     <div ref={view} className="timeline-view" tabIndex={0} aria-label="Thread timeline" onScroll={(event) => {
       const element = event.currentTarget;
       followLatest.current = element.scrollHeight - element.scrollTop - element.clientHeight < 96;
     }}>
-      <div className="thread-context">
-        <div><strong>{detail.thread.title || "Untitled thread"}</strong><span className={`status-chip status-${detail.thread.status.toLowerCase()}`}>{detail.thread.status}</span></div>
-        <div>{detail.turns.length} turns · {detail.timeline.length} loaded items</div>
-      </div>
-      <div className="conversation-context-summary" aria-label="Conversation context">
-        <span className="context-summary-label"><MessageSquareText size={15} aria-hidden="true" /> Conversation context</span>
-        <span>{detail.turns.length} turns</span>
-        <span>{messageCount} messages</span>
-        <span>{detail.timeline.length} events loaded</span>
-      </div>
       <div className="recovery-banner" role="alert" hidden={!detail.recoveryRequired}>Timeline consistency requires an authoritative reload.</div>
       {items.length === 0 ? <div className="empty-timeline">This conversation has no messages yet. Use the composer below to begin.</div>
         : <TimelineBrowser items={items} />}
@@ -69,15 +58,17 @@ export function TimelineView({ detail, status, error, controls, onLoadMore }: Ti
 
 function TimelineBrowser({ items }: { items: readonly TimelineItemData[] }) {
   const [mode, setMode] = useState<"conversation" | "activity">("conversation");
-  const messages = items.filter((item) => isConversationMessage(item.type));
+  const messages = projectConversationMessages(items);
   const conversationAvailable = messages.length > 0;
   const visible = mode === "conversation" && conversationAvailable ? messages : items;
 
   return (
     <div className="timeline-browser">
-      <div className="timeline-mode-switcher" role="tablist" aria-label="Timeline view">
-        <button type="button" role="tab" aria-selected={mode === "conversation"} onClick={() => setMode("conversation")} disabled={!conversationAvailable}><MessageSquareText size={15} aria-hidden="true" /> Conversation <span>{messages.length}</span></button>
-        <button type="button" role="tab" aria-selected={mode === "activity"} onClick={() => setMode("activity")}><Activity size={15} aria-hidden="true" /> Activity <span>{items.length}</span></button>
+      <div className="conversation-view-actions">
+        <button type="button" aria-pressed={mode === "activity"} onClick={() => setMode((current) => current === "activity" ? "conversation" : "activity")}>
+          {mode === "activity" ? <MessageSquareText size={14} aria-hidden="true" /> : <Activity size={14} aria-hidden="true" />}
+          {mode === "activity" ? "Back to conversation" : `Activity ${items.length}`}
+        </button>
       </div>
       {!conversationAvailable && <div className="conversation-empty-note">No message records are available yet. Showing thread activity.</div>}
       <TurnProjection key={mode} items={visible} />
@@ -111,4 +102,17 @@ function TurnProjection({ items }: { items: readonly TimelineItemData[] }) {
 
 function isConversationMessage(type: string): boolean {
   return type === "user.message" || type === "assistant.message" || type === "assistant.final";
+}
+
+export function projectConversationMessages(items: readonly TimelineItemData[]): readonly TimelineItemData[] {
+  const messages: TimelineItemData[] = [];
+  for (const item of items) {
+    if (!isConversationMessage(item.type)) continue;
+    const previous = messages.at(-1);
+    const assistantUpdate = item.type === "assistant.message" || item.type === "assistant.final";
+    const previousAssistant = previous?.type === "assistant.message" || previous?.type === "assistant.final";
+    if (assistantUpdate && previousAssistant && previous.turnId === item.turnId) messages[messages.length - 1] = item;
+    else messages.push(item);
+  }
+  return messages;
 }

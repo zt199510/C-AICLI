@@ -1,4 +1,4 @@
-import { FilePlus2, FolderPlus, History, Paperclip, Send, Trash2, X } from "lucide-react";
+import { FilePlus2, FolderPlus, Send, Trash2, X } from "lucide-react";
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, type KeyboardEvent } from "react";
 import type { CatalogItemData, ContextDescriptorData } from "../generated/desktop-contracts";
 import type { ComposerDraft, ComposerCatalogKind, ComposerUiState, SelectedCatalogItem } from "./composer-state";
@@ -8,8 +8,6 @@ interface ComposerProps {
   readonly draft: ComposerDraft;
   readonly composer: ComposerUiState;
   readonly disabledReason: string | null;
-  readonly historyTurnCount?: number;
-  readonly historyMessageCount?: number;
   readonly modelLabel?: string;
   readonly approvalModeLabel?: string;
   readonly disabledActionLabel?: string;
@@ -35,6 +33,7 @@ export function Composer(props: ComposerProps) {
   const pending = props.composer.snapshot?.pendingIntent;
   const busy = props.draft.status === "validating" || props.draft.status === "enqueueing";
   const disabled = Boolean(props.disabledReason) || busy || Boolean(pending);
+  const statusText = props.draft.error ?? props.disabledReason ?? (busy ? "Sending prompt…" : "");
   const mentionOptions = useMemo(() => [
     ...props.composer.mentions.context.map((item) => ({ id: `mention-context-${item.selectionId}`, select: () => props.onContext(item) })),
     ...props.composer.mentions.skills.map((item) => ({ id: `mention-skill-${item.id}`, select: () => props.onCatalog("skill", item, props.composer.mentions.revisions.skills) })),
@@ -90,31 +89,26 @@ export function Composer(props: ComposerProps) {
 
   return (
     <section className="composer" aria-label="Composer">
-      <div className="composer-context-summary" aria-label="Current prompt context">
-        <span><History size={14} aria-hidden="true" /> {props.historyTurnCount ?? 0} turns / {props.historyMessageCount ?? 0} messages</span>
-        <span><Paperclip size={14} aria-hidden="true" /> {props.draft.contextSelections.length} files or folders</span>
-        <span>{props.draft.catalogSelections.length} skills or agents</span>
-      </div>
       <div className="queued-intent" aria-live="polite" hidden={!pending}><div><strong>{pending ? (pending.delivery === "next-turn" ? "Queued for next turn" : "Ready to run") : "No pending input"}</strong><span>{pending ? `${pending.contextCount} context · ${pending.catalogCount} catalog` : "No queued context"}</span></div><button type="button" onClick={props.onClear} aria-label="Clear pending input" disabled={!pending}><Trash2 size={16} aria-hidden="true" /> Clear</button></div>
       {(props.draft.contextSelections.length > 0 || props.draft.catalogSelections.length > 0) && <div className="composer-chips" aria-label="Selected composer context">
         {props.draft.contextSelections.map(item => <span className="composer-chip" key={item.selectionId}>{item.relativePath}<button type="button" aria-label={`Remove ${item.relativePath}`} onClick={() => props.onRemoveContext(item.selectionId)}><X size={13} /></button></span>)}
         {props.draft.catalogSelections.map(item => <span className="composer-chip catalog-chip" key={`${item.kind}:${item.id}`}>{item.label}<button type="button" aria-label={`Remove ${item.label}`} onClick={() => props.onRemoveCatalog(item)}><X size={13} /></button></span>)}
       </div>}
       <div className="composer-input-wrap">
-        <textarea ref={textarea} defaultValue="" onChange={(event) => change(event.target.value, event.currentTarget)} onKeyDown={keyDown} onCompositionStart={() => setComposing(true)} onCompositionEnd={() => setComposing(false)} placeholder={props.disabledReason ?? "Ask about this workspace… Use @ to add context"} aria-label="Composer prompt" aria-describedby="composer-help composer-status" aria-autocomplete="list" aria-controls={mentionsOpen ? "composer-mentions" : undefined} aria-expanded={mentionsOpen} aria-activedescendant={mentionsOpen ? mentionOptions[activeMentionIndex]?.id : undefined} disabled={disabled} />
+        <textarea ref={textarea} defaultValue="" onChange={(event) => change(event.target.value, event.currentTarget)} onKeyDown={keyDown} onCompositionStart={() => setComposing(true)} onCompositionEnd={() => setComposing(false)} placeholder={props.disabledReason ?? "Message C-AICLI…"} aria-label="Composer prompt" aria-describedby="composer-help composer-status" aria-autocomplete="list" aria-controls={mentionsOpen ? "composer-mentions" : undefined} aria-expanded={mentionsOpen} aria-activedescendant={mentionsOpen ? mentionOptions[activeMentionIndex]?.id : undefined} disabled={disabled} />
         {mentionsOpen ? <MentionMenu id="composer-mentions" value={props.composer.mentions} activeId={mentionOptions[activeMentionIndex]?.id ?? null} onActive={(id) => setActiveMentionIndex(Math.max(0, mentionOptions.findIndex((option) => option.id === id)))} onContext={props.onContext} onCatalog={props.onCatalog} onClose={() => { props.onCloseMentions(); textarea.current?.focus(); }} /> : null}
       </div>
       <div className="composer-footer">
-        <div className="composer-tools"><button type="button" onClick={props.onPickFile} disabled={disabled} aria-label="Attach workspace file"><FilePlus2 size={16} /> File</button><button type="button" onClick={props.onPickFolder} disabled={disabled} aria-label="Attach workspace folder"><FolderPlus size={16} /> Folder</button></div>
-        <div className="composer-summary"><span>{props.composer.snapshot ? `${props.composer.snapshot.effectiveModel} · ${props.composer.snapshot.approvalMode}` : props.modelLabel ? `${props.modelLabel}${props.approvalModeLabel ? ` · ${props.approvalModeLabel}` : ""}` : "Model and approval policy unavailable"}</span><button className="composer-send" type="button" onClick={props.onSend} disabled={disabled || !props.draft.text.trim()} aria-label="Queue prompt"><Send size={16} />{busy ? "Queuing…" : "Send"}</button></div>
+        <div className="composer-tools"><button type="button" title="Attach file" onClick={props.onPickFile} disabled={disabled} aria-label="Attach workspace file"><FilePlus2 size={17} /><span className="sr-only">File</span></button><button type="button" title="Attach folder" onClick={props.onPickFolder} disabled={disabled} aria-label="Attach workspace folder"><FolderPlus size={17} /><span className="sr-only">Folder</span></button></div>
+        <div className="composer-summary"><span>{props.composer.snapshot ? `${props.composer.snapshot.effectiveModel} · ${props.composer.snapshot.approvalMode}` : props.modelLabel ? `${props.modelLabel}${props.approvalModeLabel ? ` · ${props.approvalModeLabel}` : ""}` : "Model unavailable"}</span><button className="composer-send" type="button" onClick={props.onSend} disabled={disabled || !props.draft.text.trim()} aria-label={busy ? "Sending prompt" : "Send prompt"}><Send size={17} /><span className="sr-only">{busy ? "Sending" : "Send"}</span></button></div>
       </div>
       <div id="composer-help" className="sr-only">Enter sends. Shift Enter inserts a new line.</div>
-      <div id="composer-status" className={props.draft.error ? "composer-error" : "composer-status"} role={props.draft.error ? "alert" : "status"}><span>{props.draft.error ?? props.disabledReason ?? (props.draft.status === "queued" ? "Prompt queued." : "Ready — Enter to send, Shift+Enter for a new line.")}</span>{props.disabledReason && props.disabledActionLabel && props.onDisabledAction ? <button type="button" className="composer-status-action" onClick={props.onDisabledAction}>{props.disabledActionLabel}</button> : null}</div>
+      <div id="composer-status" className={props.draft.error ? "composer-error" : "composer-status"} role={props.draft.error ? "alert" : "status"} hidden={!statusText && !props.disabledActionLabel}><span>{statusText}</span>{props.disabledReason && props.disabledActionLabel && props.onDisabledAction ? <button type="button" className="composer-status-action" onClick={props.onDisabledAction}>{props.disabledActionLabel}</button> : null}</div>
     </section>
   );
 }
 
 function resize(textarea: HTMLTextAreaElement) {
   textarea.style.height = "auto";
-  textarea.style.height = `${Math.min(Math.max(textarea.scrollHeight, 66), 220)}px`;
+  textarea.style.height = `${Math.min(Math.max(textarea.scrollHeight, 48), 180)}px`;
 }

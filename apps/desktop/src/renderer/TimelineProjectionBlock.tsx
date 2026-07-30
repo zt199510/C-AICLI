@@ -23,14 +23,14 @@ export function TimelineProjectionBlock({ block }: { block: ProjectionBlock }) {
         </span>
         <span className="projection-count">{block.items.length} steps</span>
       </header>
-      <p className="timeline-summary">{latest.redacted ? "Content redacted" : latest.summary}</p>
+      <p className="timeline-summary">{latest.summary || "Details withheld"}</p>
       <details className="timeline-payload projection-audit">
         <summary><ListTree size={14} aria-hidden="true" /> View audit events</summary>
         <ol>
           {block.items.map((item) => (
             <li key={item.itemId}>
               <span>{item.type}</span>
-              <span>{item.redacted ? "Content redacted" : item.summary}</span>
+              <span>{item.summary || "Details withheld"}</span>
               <span>{item.status}</span>
             </li>
           ))}

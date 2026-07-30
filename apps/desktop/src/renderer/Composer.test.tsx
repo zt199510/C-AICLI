@@ -59,11 +59,8 @@ describe("Composer", () => {
       disabledReason: "Select a thread to compose.",
       disabledActionLabel: "New conversation",
       onDisabledAction,
-      historyTurnCount: 3,
-      historyMessageCount: 6,
     })} />);
     expect((screen.getByRole("textbox", { name: "Composer prompt" }) as HTMLTextAreaElement).disabled).toBe(true);
-    expect(screen.getByText("3 turns / 6 messages")).toBeTruthy();
     await userEvent.click(screen.getByRole("button", { name: "New conversation" }));
     expect(onDisabledAction).toHaveBeenCalledOnce();
   });

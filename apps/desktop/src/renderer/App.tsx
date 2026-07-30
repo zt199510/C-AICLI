@@ -105,8 +105,6 @@ export function App() {
             draft={controller.composerDraft}
             composer={controller.composer}
             disabledReason={controller.composerDisabledReason}
-            historyTurnCount={state.detail?.turns.length ?? 0}
-            historyMessageCount={state.detail?.timeline.filter((item) => item.type === "user.message" || item.type === "assistant.message" || item.type === "assistant.final").length ?? 0}
             modelLabel={state.workspace?.configuration.effectiveModel}
             approvalModeLabel={state.workspace?.configuration.approvalMode}
             disabledActionLabel={!state.workspace ? "Open workspace" : state.detail?.thread.status === "archived" ? "New conversation" : state.runtime.state !== "ready" ? "Restart AppHost" : undefined}

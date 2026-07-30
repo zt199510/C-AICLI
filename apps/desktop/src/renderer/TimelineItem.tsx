@@ -43,7 +43,9 @@ export function TimelineItem({
   const presentation = presentations[item.type] ?? { label: "Unrecognized audit event", icon: MessageSquare };
   const Icon = presentation.icon;
   const message = isMessage(item.type);
-  const visibleText = message && item.payload.text ? item.payload.text : item.summary;
+  const visibleText = item.redacted
+    ? item.summary
+    : message && item.payload.text ? item.payload.text : item.summary;
   if (message) {
     const user = item.type === "user.message";
     return (
@@ -59,7 +61,8 @@ export function TimelineItem({
             <strong>{user ? "You" : "C-AICLI"}</strong>
             <time dateTime={item.timestampUtc}>{formatTime(item.timestampUtc)}</time>
           </header>
-          <div className="conversation-message-content">{item.redacted ? "Content redacted" : visibleText}</div>
+          <div className="conversation-message-content">{visibleText || "Details withheld"}</div>
+          {item.redacted && <span className="sr-only">Original sensitive details were redacted; this is the safe conversation preview.</span>}
           {item.source && <div className="source-pointer">Source: {item.source.kind} · {item.source.sourceId} · {item.source.availability}</div>}
         </div>
       </article>
@@ -77,7 +80,8 @@ export function TimelineItem({
         <span className={`status-chip status-${safeToken(item.status)}`}>{item.status}</span>
         <time dateTime={item.timestampUtc}>{formatTime(item.timestampUtc)}</time>
       </header>
-      <p className="timeline-summary">{item.redacted ? "Content redacted" : visibleText}</p>
+      <p className="timeline-summary">{visibleText || "Details withheld"}</p>
+      {item.redacted && <span className="sr-only">Original sensitive details were redacted; this is the safe event summary.</span>}
       {!presentations[item.type] && <p className="audit-fallback-type">Type: {item.type || "(empty)"}</p>}
       {!item.redacted && !message && hasPayload(item) && (
         <details className="timeline-payload">

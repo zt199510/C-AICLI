@@ -3,7 +3,7 @@ import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 import { isTimelineItemData, type ThreadDetailData, type TimelineItemData } from "../generated/desktop-contracts";
 import { TimelineItem } from "./TimelineItem";
-import { TimelineView } from "./TimelineView";
+import { projectConversationMessages, TimelineView } from "./TimelineView";
 import { FROZEN_TIMELINE_TYPES, projectTimeline } from "./timeline-projection";
 
 const types = FROZEN_TIMELINE_TYPES;
@@ -69,12 +69,32 @@ describe("frozen timeline projection", () => {
     }));
     render(<TimelineView detail={{ ...detail, timeline }} status="ready" error={null} onLoadMore={vi.fn()} />);
     const conversationCount = document.querySelectorAll(".conversation-message").length;
-    expect(screen.getByRole("tab", { name: /Conversation/ }).getAttribute("aria-selected")).toBe("true");
+    expect(screen.getByRole("button", { name: /Activity/ }).getAttribute("aria-pressed")).toBe("false");
     expect(conversationCount).toBeGreaterThan(3);
     expect(conversationCount).toBeLessThan(36);
     expect(screen.getByText("Timeline item 1")).toBeTruthy();
-    await userEvent.click(screen.getByRole("tab", { name: /Activity/ }));
+    await userEvent.click(screen.getByRole("button", { name: /Activity/ }));
     expect(document.querySelectorAll("[data-sequence]").length).toBeGreaterThan(conversationCount);
+  });
+
+  it("shows the safe summary for redacted messages without expanding their payload", () => {
+    const message = {
+      ...item(1, "assistant.final"),
+      redacted: true,
+      summary: "Safe assistant answer",
+      payload: { ...item(1, "assistant.final").payload, text: "Raw payload must stay hidden" },
+    };
+    render(<TimelineView detail={{ ...detail, timeline: [message] }} status="ready" error={null} onLoadMore={vi.fn()} />);
+    expect(screen.getByText("Safe assistant answer")).toBeTruthy();
+    expect(screen.queryByText("Raw payload must stay hidden")).toBeNull();
+  });
+
+  it("coalesces assistant progress and final events into one visible reply", () => {
+    const user = { ...item(1, "user.message"), redacted: true, summary: "Hello" };
+    const progress = { ...item(2, "assistant.message"), redacted: true, summary: "Working" };
+    const final = { ...item(3, "assistant.final"), redacted: true, summary: "Final answer" };
+    const messages = projectConversationMessages([user, progress, final]);
+    expect(messages.map((message) => message.summary)).toEqual(["Hello", "Final answer"]);
   });
 
   it("shows message payload text without hiding it behind details", () => {

@@ -1018,3 +1018,99 @@ body {
     height: 25px;
   }
 }
+
+/* Compact chat surface: conversation first, audit details on demand. */
+.timeline-view {
+  width: min(800px, 100%);
+  padding: 20px clamp(16px, 4vw, 40px) 28px;
+}
+
+.timeline-browser {
+  gap: 8px;
+}
+
+.conversation-view-actions {
+  display: flex;
+  min-height: 24px;
+  justify-content: flex-end;
+}
+
+.conversation-view-actions button {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  border: 0;
+  border-radius: 7px;
+  background: transparent;
+  padding: 3px 6px;
+  color: var(--color-text-muted);
+  font-size: 10px;
+  cursor: pointer;
+}
+
+.conversation-view-actions button:hover,
+.conversation-view-actions button[aria-pressed="true"] {
+  background: var(--color-surface-muted);
+  color: var(--color-text);
+}
+
+.timeline-items {
+  gap: 26px;
+}
+
+.conversation-message.message-user {
+  width: fit-content;
+  max-width: min(78%, 640px);
+  padding: 10px 14px;
+}
+
+.message-user .conversation-message-meta {
+  display: none;
+}
+
+.conversation-message.redacted .conversation-message-copy {
+  opacity: 1;
+}
+
+.composer {
+  width: min(760px, calc(100% - 28px));
+  margin-bottom: 12px;
+  border-radius: 16px;
+  padding: 7px 10px 8px;
+}
+
+.composer:focus-within {
+  box-shadow: 0 0 0 2px rgb(23 117 90 / 10%), var(--shadow-float);
+}
+
+.composer textarea {
+  min-height: 48px;
+  max-height: 180px;
+  resize: none;
+  padding: 8px 7px 6px;
+  font-size: 14px;
+  line-height: 1.5;
+}
+
+.composer-footer {
+  padding-top: 2px;
+}
+
+.composer-tools button {
+  width: 32px;
+  height: 32px;
+  justify-content: center;
+  padding: 0;
+}
+
+.composer-send {
+  width: 32px;
+  height: 32px;
+  min-height: 32px;
+  border-radius: 10px;
+}
+
+.composer-status[hidden],
+.composer-error[hidden] {
+  display: none !important;
+}
