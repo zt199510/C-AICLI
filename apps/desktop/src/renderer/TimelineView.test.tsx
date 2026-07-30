@@ -62,21 +62,26 @@ describe("frozen timeline projection", () => {
     expect(onLoadMore).toHaveBeenCalledOnce();
   });
 
-  it("shows the latest turn by default and lets the user browse another turn", async () => {
+  it("shows message history across turns by default and keeps activity available", async () => {
     const timeline = Array.from({ length: 36 }, (_, index) => ({
       ...item(index + 1, types[index % types.length] as string),
       turnId: `turn-${Math.floor(index / 6) + 1}`,
     }));
     render(<TimelineView detail={{ ...detail, timeline }} status="ready" error={null} onLoadMore={vi.fn()} />);
-    expect(document.querySelectorAll(".timeline-turn-browser-toggle")).toHaveLength(1);
-    expect(document.querySelectorAll(".timeline-turn-option")).toHaveLength(0);
-    expect(document.querySelectorAll(".timeline-card").length).toBeGreaterThan(0);
-    expect(document.querySelectorAll(".timeline-card").length).toBeLessThanOrEqual(6);
-    await userEvent.click(screen.getByRole("button", { name: /Browse 6 turns/ }));
-    expect(document.querySelectorAll(".timeline-turn-option")).toHaveLength(6);
-    await userEvent.click(screen.getByRole("button", { name: /Turn 1/ }));
-    expect(document.querySelectorAll(".timeline-card").length).toBeGreaterThan(0);
+    const conversationCount = document.querySelectorAll(".timeline-card").length;
+    expect(screen.getByRole("tab", { name: /Conversation/ }).getAttribute("aria-selected")).toBe("true");
+    expect(conversationCount).toBeGreaterThan(3);
+    expect(conversationCount).toBeLessThan(36);
     expect(screen.getByText("Timeline item 1")).toBeTruthy();
+    await userEvent.click(screen.getByRole("tab", { name: /Activity/ }));
+    expect(document.querySelectorAll(".timeline-card").length).toBeGreaterThan(conversationCount);
+  });
+
+  it("shows message payload text without hiding it behind details", () => {
+    const message = { ...item(1, "assistant.message"), summary: "Assistant message", payload: { ...item(1, "assistant.message").payload, text: "Visible assistant answer" } };
+    render(<TimelineView detail={{ ...detail, timeline: [message] }} status="ready" error={null} onLoadMore={vi.fn()} />);
+    expect(screen.getByText("Visible assistant answer")).toBeTruthy();
+    expect(screen.queryByText("Long payload")).toBeNull();
   });
 
   it("reuses the recovery banner across projection transitions", () => {

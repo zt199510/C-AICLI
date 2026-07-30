@@ -53,6 +53,21 @@ describe("Composer", () => {
     expect((screen.getByRole("textbox", { name: "Composer prompt" }) as HTMLTextAreaElement).disabled).toBe(true);
   });
 
+  it("explains disabled input and offers a direct recovery action", async () => {
+    const onDisabledAction = vi.fn();
+    render(<Composer {...makeProps({
+      disabledReason: "Select a thread to compose.",
+      disabledActionLabel: "New conversation",
+      onDisabledAction,
+      historyTurnCount: 3,
+      historyMessageCount: 6,
+    })} />);
+    expect((screen.getByRole("textbox", { name: "Composer prompt" }) as HTMLTextAreaElement).disabled).toBe(true);
+    expect(screen.getByText("3 turns / 6 messages")).toBeTruthy();
+    await userEvent.click(screen.getByRole("button", { name: "New conversation" }));
+    expect(onDisabledAction).toHaveBeenCalledOnce();
+  });
+
   it("reuses the queued-intent DOM across pending state transitions", () => {
     const initial = makeProps();
     const view = render(<Composer {...initial} />);

@@ -42,9 +42,11 @@ export function TimelineItem({
 }) {
   const presentation = presentations[item.type] ?? { label: "Unrecognized audit event", icon: MessageSquare };
   const Icon = presentation.icon;
+  const message = isMessage(item.type);
+  const visibleText = message && item.payload.text ? item.payload.text : item.summary;
   return (
     <article
-      className={`timeline-card timeline-${category(item.type)} ${item.redacted ? "redacted" : ""}`}
+      className={`timeline-card timeline-${category(item.type)} ${messageRole(item.type)} ${item.redacted ? "redacted" : ""}`}
       data-projection-kind={projectionKind}
       data-sequence={item.sequence}
     >
@@ -54,9 +56,9 @@ export function TimelineItem({
         <span className={`status-chip status-${safeToken(item.status)}`}>{item.status}</span>
         <time dateTime={item.timestampUtc}>{formatTime(item.timestampUtc)}</time>
       </header>
-      <p className="timeline-summary">{item.redacted ? "Content redacted" : item.summary}</p>
+      <p className="timeline-summary">{item.redacted ? "Content redacted" : visibleText}</p>
       {!presentations[item.type] && <p className="audit-fallback-type">Type: {item.type || "(empty)"}</p>}
-      {!item.redacted && hasPayload(item) && (
+      {!item.redacted && !message && hasPayload(item) && (
         <details className="timeline-payload">
           <summary>Details</summary>
           {item.payload.name && <div><strong>Name:</strong> {item.payload.name}</div>}
@@ -73,10 +75,20 @@ export function TimelineItem({
 }
 
 function category(type: string): string {
-  if (type.endsWith("message")) return "message";
+  if (isMessage(type)) return "message";
   if (type.startsWith("warning") || type.startsWith("approval")) return "attention";
   if (type.startsWith("command") || type.startsWith("tool")) return "execution";
   return "event";
+}
+
+function isMessage(type: string): boolean {
+  return type === "user.message" || type === "assistant.message" || type === "assistant.final";
+}
+
+function messageRole(type: string): string {
+  if (type === "user.message") return "message-user";
+  if (type === "assistant.message" || type === "assistant.final") return "message-assistant";
+  return "";
 }
 
 function safeToken(value: string): string {

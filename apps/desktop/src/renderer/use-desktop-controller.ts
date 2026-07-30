@@ -219,6 +219,13 @@ export function useDesktopController(bridge: DesktopBridge | undefined) {
     void fetchThread(threadId, 0, false, current.contextEpoch, selectionEpoch);
   }, [fetchThread]);
 
+  useEffect(() => {
+    if (!state.workspace || state.threadsStatus !== "ready" || state.selectedThreadId) return;
+    const candidate = state.threads.find((thread) =>
+      !thread.archivedAtUtc && thread.status.toLowerCase() !== "archived");
+    if (candidate) selectThread(candidate.threadId);
+  }, [selectThread, state.selectedThreadId, state.threads, state.threadsStatus, state.workspace]);
+
   const loadMore = useCallback(() => {
     const current = stateRef.current;
     const nextSequence = current.detail?.nextSequence;

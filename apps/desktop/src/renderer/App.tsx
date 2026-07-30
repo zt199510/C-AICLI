@@ -15,12 +15,17 @@ export function App() {
   const [opening, setOpening] = useState(false);
   const [workspaceError, setWorkspaceError] = useState<string | null>(null);
   const [workspacePanel, setWorkspacePanel] = useState<WorkspacePanel>("changes");
+  const [startingConversation, setStartingConversation] = useState(false);
+  const [conversationError, setConversationError] = useState<string | null>(null);
   const panels = useShellPanels();
   const { leftOpen, inspectorOpen, showThreadsTrigger, showInspectorTrigger } = panels;
 
   useEffect(() => {
     if (state.workspace) controller.setReviewTab("changes");
   }, [state.workspace?.workspaceId]);
+  useEffect(() => {
+    setConversationError(null);
+  }, [state.selectedThreadId, state.workspace?.workspaceId]);
 
   async function openWorkspace() {
     setOpening(true);
@@ -35,6 +40,15 @@ export function App() {
   function selectWorkspacePanel(panel: WorkspacePanel) {
     setWorkspacePanel(panel);
     if (panel !== "terminal") controller.setReviewTab(panel);
+  }
+
+  async function startConversation() {
+    if (!state.workspace || startingConversation) return;
+    setStartingConversation(true);
+    setConversationError(null);
+    const error = await controller.createThread("New conversation");
+    if (error) setConversationError(error);
+    setStartingConversation(false);
   }
 
   const workspacePath = state.workspace?.rootPath ?? null;
@@ -87,6 +101,7 @@ export function App() {
                 detail={state.detail}
                 status={state.detailStatus}
                 error={state.detailError}
+                onStartConversation={() => void startConversation()}
                 onLoadMore={controller.loadMore}
                 controls={(
                   <TaskControls
@@ -103,7 +118,11 @@ export function App() {
           <Composer
             draft={controller.composerDraft}
             composer={controller.composer}
-            disabledReason={controller.composerDisabledReason}
+            disabledReason={conversationError ?? controller.composerDisabledReason}
+            historyTurnCount={state.detail?.turns.length ?? 0}
+            historyMessageCount={state.detail?.timeline.filter((item) => item.type === "user.message" || item.type === "assistant.message" || item.type === "assistant.final").length ?? 0}
+            disabledActionLabel={!state.workspace ? "Open workspace" : state.detail?.thread.status === "archived" || !state.selectedThreadId ? (startingConversation ? "Starting…" : "New conversation") : state.runtime.state !== "ready" ? "Restart AppHost" : undefined}
+            onDisabledAction={!state.workspace ? () => void openWorkspace() : state.detail?.thread.status === "archived" || !state.selectedThreadId ? () => void startConversation() : state.runtime.state !== "ready" ? () => void controller.restartRuntime() : undefined}
             onText={controller.setComposerText}
             onSearch={(query) => void controller.searchMentions(query)}
             onCloseMentions={controller.closeMentions}
