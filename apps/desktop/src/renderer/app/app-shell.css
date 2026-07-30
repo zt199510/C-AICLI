@@ -274,6 +274,72 @@ body {
   gap: 14px;
 }
 
+.turn-projection {
+  display: grid;
+  gap: 10px;
+}
+
+.projection-window {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  color: var(--color-text-muted);
+  font-size: 11px;
+}
+
+.projection-window span:last-child {
+  display: flex;
+  gap: 6px;
+}
+
+.projection-window button {
+  border: 0;
+  background: transparent;
+  color: var(--color-accent);
+  font: inherit;
+  font-weight: 650;
+  cursor: pointer;
+}
+
+.projection-count {
+  justify-self: end;
+  color: var(--color-text-muted);
+  font-size: 11px;
+}
+
+.projection-audit summary {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.projection-audit ol {
+  display: grid;
+  gap: 6px;
+  margin: 10px 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.projection-audit li {
+  display: grid;
+  grid-template-columns: minmax(100px, auto) minmax(0, 1fr) auto;
+  gap: 10px;
+  border-top: 1px solid var(--color-border);
+  padding-top: 6px;
+}
+
+.projection-audit li span:nth-child(2) {
+  overflow-wrap: anywhere;
+}
+
+.audit-fallback-type {
+  margin: 6px 0 0;
+  color: var(--color-text-muted);
+  font: 11px/1.4 Consolas, monospace;
+}
+
 .timeline-card,
 .timeline-turn-toggle {
   border-color: var(--color-border);

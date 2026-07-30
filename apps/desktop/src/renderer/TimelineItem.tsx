@@ -17,11 +17,13 @@ import type { TimelineItemData } from "../generated/desktop-contracts";
 const presentations: Record<string, { label: string; icon: ComponentType<{ size?: number; "aria-hidden"?: boolean }> }> = {
   "user.message": { label: "User message", icon: UserRound },
   "assistant.message": { label: "Assistant message", icon: Bot },
+  "assistant.final": { label: "Assistant result", icon: Bot },
   "plan.updated": { label: "Plan updated", icon: FileClock },
   "tool.started": { label: "Tool started", icon: Hammer },
   "tool.completed": { label: "Tool completed", icon: Hammer },
   "command.started": { label: "Command started", icon: TerminalSquare },
   "command.completed": { label: "Command completed", icon: TerminalSquare },
+  "verification.completed": { label: "Verification completed", icon: CheckCircle2 },
   "approval.requested": { label: "Approval requested", icon: ShieldQuestion },
   "approval.resolved": { label: "Approval resolved", icon: CheckCircle2 },
   "changes.updated": { label: "Changes updated", icon: GitCompare },
@@ -31,11 +33,21 @@ const presentations: Record<string, { label: string; icon: ComponentType<{ size?
   "turn.completed": { label: "Turn completed", icon: CheckCircle2 },
 };
 
-export function TimelineItem({ item }: { item: TimelineItemData }) {
-  const presentation = presentations[item.type] ?? { label: item.type || "Unknown event", icon: MessageSquare };
+export function TimelineItem({
+  item,
+  projectionKind,
+}: {
+  item: TimelineItemData;
+  projectionKind?: string;
+}) {
+  const presentation = presentations[item.type] ?? { label: "Unrecognized audit event", icon: MessageSquare };
   const Icon = presentation.icon;
   return (
-    <article className={`timeline-card timeline-${category(item.type)} ${item.redacted ? "redacted" : ""}`} data-sequence={item.sequence}>
+    <article
+      className={`timeline-card timeline-${category(item.type)} ${item.redacted ? "redacted" : ""}`}
+      data-projection-kind={projectionKind}
+      data-sequence={item.sequence}
+    >
       <header>
         <span className="timeline-icon"><Icon size={16} aria-hidden={true} /></span>
         <span className="timeline-type">{presentation.label}</span>
@@ -43,6 +55,7 @@ export function TimelineItem({ item }: { item: TimelineItemData }) {
         <time dateTime={item.timestampUtc}>{formatTime(item.timestampUtc)}</time>
       </header>
       <p className="timeline-summary">{item.redacted ? "Content redacted" : item.summary}</p>
+      {!presentations[item.type] && <p className="audit-fallback-type">Type: {item.type || "(empty)"}</p>}
       {!item.redacted && hasPayload(item) && (
         <details className="timeline-payload">
           <summary>Details</summary>

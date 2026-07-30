@@ -4,20 +4,38 @@ import { describe, expect, it, vi } from "vitest";
 import { isTimelineItemData, type ThreadDetailData, type TimelineItemData } from "../generated/desktop-contracts";
 import { TimelineItem } from "./TimelineItem";
 import { TimelineView } from "./TimelineView";
+import { FROZEN_TIMELINE_TYPES, projectTimeline } from "./timeline-projection";
 
-const types = [
-  "user.message", "assistant.message", "plan.updated", "tool.started", "tool.completed", "command.started", "command.completed",
-  "approval.requested", "approval.resolved", "changes.updated", "report.available", "artifact.available", "warning.raised", "turn.completed",
-] as const;
+const types = FROZEN_TIMELINE_TYPES;
 
 describe("frozen timeline projection", () => {
   it("renders every frozen type from validator-checked data", () => {
     const items = types.map((type, index) => item(index + 1, type));
     expect(items.every(isTimelineItemData)).toBe(true);
     render(<>{items.map((value) => <TimelineItem key={value.itemId} item={value} />)}</>);
-    for (const label of ["User message", "Assistant message", "Plan updated", "Approval requested", "Changes updated", "Artifact available", "Turn completed"]) {
+    for (const label of ["User message", "Assistant message", "Assistant result", "Plan updated", "Approval requested", "Verification completed", "Changes updated", "Artifact available", "Turn completed"]) {
       expect(screen.getByText(label)).toBeTruthy();
     }
+  });
+
+  it("groups adjacent execution events while keeping warnings and approvals visible", () => {
+    const projected = projectTimeline([
+      { ...item(1, "tool.started"), payload: { ...item(1, "tool.started").payload, name: "workspace.read" } },
+      { ...item(2, "tool.completed"), payload: { ...item(2, "tool.completed").payload, name: "workspace.read" } },
+      item(3, "approval.requested"),
+      item(4, "warning.raised"),
+    ]);
+    expect(projected.map((block) => [block.kind, block.items.length])).toEqual([
+      ["execution", 2],
+      ["approval", 1],
+      ["result", 1],
+    ]);
+  });
+
+  it("renders an unknown type as an explicit audit fallback", () => {
+    render(<TimelineItem item={item(1, "future.event")} projectionKind="audit-fallback" />);
+    expect(screen.getByText("Unrecognized audit event")).toBeTruthy();
+    expect(screen.getByText("Type: future.event")).toBeTruthy();
   });
 
   it("keeps a 2,000 item history DOM-bounded and loads only on request", async () => {
@@ -29,7 +47,7 @@ describe("frozen timeline projection", () => {
     expect(onLoadMore).toHaveBeenCalledOnce();
   });
 
-  it("keeps the Week80 five-turn projection collapsed until a turn is opened", async () => {
+  it("shows the latest turn by default and lets the user browse another turn", async () => {
     const timeline = Array.from({ length: 36 }, (_, index) => ({
       ...item(index + 1, types[index % types.length] as string),
       turnId: `turn-${Math.floor(index / 6) + 1}`,
@@ -37,11 +55,13 @@ describe("frozen timeline projection", () => {
     render(<TimelineView detail={{ ...detail, timeline }} status="ready" error={null} onLoadMore={vi.fn()} />);
     expect(document.querySelectorAll(".timeline-turn-browser-toggle")).toHaveLength(1);
     expect(document.querySelectorAll(".timeline-turn-option")).toHaveLength(0);
-    expect(document.querySelectorAll(".timeline-card")).toHaveLength(0);
+    expect(document.querySelectorAll(".timeline-card").length).toBeGreaterThan(0);
+    expect(document.querySelectorAll(".timeline-card").length).toBeLessThanOrEqual(6);
     await userEvent.click(screen.getByRole("button", { name: /Browse 6 turns/ }));
     expect(document.querySelectorAll(".timeline-turn-option")).toHaveLength(6);
-    await userEvent.click(screen.getByRole("button", { name: /Turn 6/ }));
-    expect(document.querySelectorAll(".timeline-card")).toHaveLength(6);
+    await userEvent.click(screen.getByRole("button", { name: /Turn 1/ }));
+    expect(document.querySelectorAll(".timeline-card").length).toBeGreaterThan(0);
+    expect(screen.getByText("Timeline item 1")).toBeTruthy();
   });
 
   it("reuses the recovery banner across projection transitions", () => {

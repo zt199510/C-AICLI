@@ -1,7 +1,10 @@
 import { useState } from "react";
 import type { ThreadDetailData, TimelineItemData } from "../generated/desktop-contracts";
 import type { QueryStatus } from "./desktop-state";
-import { TimelineItem } from "./TimelineItem";
+import { TimelineProjectionBlock } from "./TimelineProjectionBlock";
+import { projectTimeline } from "./timeline-projection";
+
+const TIMELINE_WINDOW_SIZE = 80;
 
 export interface TimelineViewProps {
   detail: ThreadDetailData | null;
@@ -37,7 +40,7 @@ function TimelineTurnBrowser({ items }: { items: readonly TimelineItemData[] }) 
   const groups = groupByTurn(items);
   const [browserOpen, setBrowserOpen] = useState(false);
   const [selectedTurnId, setSelectedTurnId] = useState<string | null>(null);
-  const selected = groups.find((group) => group.turnId === selectedTurnId) ?? null;
+  const selected = groups.find((group) => group.turnId === selectedTurnId) ?? groups.at(-1)!;
   const latest = items.at(-1)!;
   return (
     <div className="timeline-turn-browser">
@@ -45,11 +48,34 @@ function TimelineTurnBrowser({ items }: { items: readonly TimelineItemData[] }) 
         Browse {groups.length} turns · {items.length} events · {latest.summary}
       </button>
       {browserOpen && <div className="timeline-turn-options">{groups.map((group, index) => (
-        <button className="timeline-turn-option" type="button" key={group.turnId} aria-pressed={selectedTurnId === group.turnId} onClick={() => setSelectedTurnId(group.turnId)}>
+        <button className="timeline-turn-option" type="button" key={group.turnId} aria-pressed={selected.turnId === group.turnId} onClick={() => setSelectedTurnId(group.turnId)}>
           Turn {index + 1} · {group.items.length} events · {group.items.at(-1)!.summary}
         </button>
       ))}</div>}
-      {selected && <div className="timeline-items">{selected.items.map((item) => <TimelineItem key={item.itemId} item={item} />)}</div>}
+      <TurnProjection key={selected.turnId} items={selected.items} />
+    </div>
+  );
+}
+
+function TurnProjection({ items }: { items: readonly TimelineItemData[] }) {
+  const [windowEnd, setWindowEnd] = useState(items.length);
+  const safeEnd = Math.min(windowEnd, items.length);
+  const start = Math.max(0, safeEnd - TIMELINE_WINDOW_SIZE);
+  const blocks = projectTimeline(items.slice(start, safeEnd));
+  return (
+    <div className="turn-projection">
+      {items.length > TIMELINE_WINDOW_SIZE && (
+        <div className="projection-window" role="status">
+          <span>Showing events {start + 1}–{safeEnd} of {items.length}</span>
+          <span>
+            {start > 0 && <button type="button" onClick={() => setWindowEnd(Math.max(TIMELINE_WINDOW_SIZE, safeEnd - TIMELINE_WINDOW_SIZE))}>Earlier events</button>}
+            {safeEnd < items.length && <button type="button" onClick={() => setWindowEnd(items.length)}>Latest events</button>}
+          </span>
+        </div>
+      )}
+      <div className="timeline-items">
+        {blocks.map((block) => <TimelineProjectionBlock key={block.key} block={block} />)}
+      </div>
     </div>
   );
 }
