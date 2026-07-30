@@ -1,6 +1,5 @@
 using System.CommandLine;
 using System.CommandLine.Parsing;
-using System.Globalization;
 using System.Text;
 using System.Text.Json;
 using CSharpAiCli.Application;
@@ -285,14 +284,12 @@ public static class CliCommandFactory
         ArgumentNullException.ThrowIfNull(dependencies);
         ArgumentNullException.ThrowIfNull(input);
 
+        output = new CliOutputRouter(output);
         Func<string?, string?, CliEnvironmentSnapshot> snapshotProvider = dependencies.SnapshotProvider;
         Action<string, CliEnvironmentSnapshot> commandLogger = dependencies.CommandLogger;
-        Func<CliEnvironmentSnapshot, IChatModelClient> chatModelClientFactory = dependencies.ChatModelClientFactory;
-        Func<TextWriter, IChatStreamingRenderer> streamingRendererFactory = dependencies.StreamingRendererFactory;
         Func<CliEnvironmentSnapshot, IConversationStore> conversationStoreFactory = dependencies.ConversationStoreFactory;
         Func<DateTimeOffset> utcNowProvider = dependencies.UtcNowProvider;
         Func<CliEnvironmentSnapshot, ToolRegistry, IToolExecutor, IAgentRunner> execAgentRunnerFactory = dependencies.ExecAgentRunnerFactory;
-        Func<string, string?> environmentVariableProvider = dependencies.EnvironmentVariableProvider;
 
         CliGlobalOptions globalOptions = new();
         CliCommandContext commandContext = new(output, input, dependencies, globalOptions);
@@ -3237,18 +3234,6 @@ public static class CliCommandFactory
                 TaskQueueStore queueStore = TaskQueueStore.Create(snapshot);
                 queueStore.Create(pending);
 
-                using StringWriter delegatedOutput = new(CultureInfo.InvariantCulture);
-                RootCommand delegatedRoot = Create(
-                    delegatedOutput,
-                    snapshotProvider,
-                    commandLogger,
-                    chatModelClientFactory,
-                    streamingRendererFactory,
-                    conversationStoreFactory,
-                    utcNowProvider,
-                    execAgentRunnerFactory,
-                    input,
-                    environmentVariableProvider);
                 List<string> arguments = [
                     "queue", "run", pending.QueueId,
                     "--workspace", snapshot.Workspace.RootPath,
@@ -3264,7 +3249,7 @@ public static class CliCommandFactory
                     arguments.Add("--trace");
                 }
 
-                int exitCode = delegatedRoot.Parse(arguments).Invoke();
+                int exitCode = commandContext.InvokeCurrentRoot(arguments).ExitCode;
                 TaskQueueItem completed = queueStore.Read(pending.QueueId).Item ??
                     throw new InvalidOperationException("Automation queue item could not be read after execution.");
                 return new AutomationRunResult(
@@ -3281,18 +3266,6 @@ public static class CliCommandFactory
 
             AutomationRunResult ExecutePipelineTarget(AutomationTarget target, AutomationRunMetadata runMetadata)
             {
-                using StringWriter delegatedOutput = new(CultureInfo.InvariantCulture);
-                RootCommand delegatedRoot = Create(
-                    delegatedOutput,
-                    snapshotProvider,
-                    commandLogger,
-                    chatModelClientFactory,
-                    streamingRendererFactory,
-                    conversationStoreFactory,
-                    utcNowProvider,
-                    execAgentRunnerFactory,
-                    input,
-                    environmentVariableProvider);
                 List<string> arguments = [
                     "pipeline", "run", target.Name!,
                     "--workspace", snapshot.Workspace.RootPath,
@@ -3326,8 +3299,9 @@ public static class CliCommandFactory
 
                 arguments.Add("--");
                 arguments.Add(target.Task!);
-                int exitCode = delegatedRoot.Parse(arguments).Invoke();
-                using JsonDocument document = JsonDocument.Parse(delegatedOutput.ToString());
+                CliCapturedInvocation delegated = commandContext.InvokeCurrentRoot(arguments);
+                int exitCode = delegated.ExitCode;
+                using JsonDocument document = JsonDocument.Parse(delegated.Output);
                 JsonElement root = document.RootElement;
                 string? pipelineRunId = null;
                 List<string> queueIds = [];
@@ -3669,18 +3643,6 @@ public static class CliCommandFactory
                     warnings: [$"pipeline={request.RunId};step={request.Step.StepId};role={request.Step.Role}"]);
                 queueStore.Create(pending);
 
-                using StringWriter delegatedOutput = new(CultureInfo.InvariantCulture);
-                RootCommand delegatedRoot = Create(
-                    delegatedOutput,
-                    snapshotProvider,
-                    commandLogger,
-                    chatModelClientFactory,
-                    streamingRendererFactory,
-                    conversationStoreFactory,
-                    utcNowProvider,
-                    execAgentRunnerFactory,
-                    input,
-                    environmentVariableProvider);
                 List<string> arguments = [
                     "queue", "run", pending.QueueId,
                     "--workspace", request.Plan.WorkspaceRoot,
@@ -3696,7 +3658,7 @@ public static class CliCommandFactory
                     arguments.Add("--trace");
                 }
 
-                delegatedRoot.Parse(arguments).Invoke();
+                commandContext.InvokeCurrentRoot(arguments);
                 TaskQueueItem completed = queueStore.Read(pending.QueueId).Item ??
                     throw new InvalidOperationException("Pipeline queue item could not be read after execution.");
                 JobRecord? job = null;

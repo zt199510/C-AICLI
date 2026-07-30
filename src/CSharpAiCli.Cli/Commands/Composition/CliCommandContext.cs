@@ -1,4 +1,5 @@
 using System.CommandLine;
+using System.Globalization;
 using CSharpAiCli.Application;
 using CSharpAiCli.Core;
 
@@ -48,6 +49,24 @@ internal sealed class CliCommandContext
         }
 
         RootCommand = rootCommand;
+    }
+
+    public CliCapturedInvocation InvokeCurrentRoot(IReadOnlyList<string> arguments)
+    {
+        ArgumentNullException.ThrowIfNull(arguments);
+        if (Output is not CliOutputRouter router)
+        {
+            throw new InvalidOperationException("The CLI output router is unavailable.");
+        }
+
+        using StringWriter captured = new(CultureInfo.InvariantCulture);
+        int exitCode;
+        using (router.Redirect(captured))
+        {
+            exitCode = RootCommand.Parse(arguments).Invoke();
+        }
+
+        return new CliCapturedInvocation(exitCode, captured.ToString());
     }
 
     public void WriteVerboseDiagnostics(
@@ -252,3 +271,5 @@ internal sealed class CliCommandContext
             : message;
     }
 }
+
+internal sealed record CliCapturedInvocation(int ExitCode, string Output);
