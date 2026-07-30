@@ -60,7 +60,7 @@ Week84–92 使用一个持续到最终验收的总 Goal，逐周 checkpoint，�
 
 采用 **9 个日历周的双 Lane 排期（Week84-92）**。
 
-Week84 是不可跳过的稳定化前置周，不属于 UI redesign：它必须关闭 Week83 移交的 listener-retention P1，形成 exact clean refactor baseline。Week85-89 由 Renderer 和 CLI 两条隔离 lane 并行；Week90-92 统一集成、hardening 和验收。
+Week83 移交的 listener-retention P1 已在 2026-07-30 由用户确认为非阻塞技术债；不再先行诊断或阻塞 UI redesign。仅当本次改动触及相关生命周期且对比结果恶化时再修复。Week85-89 直接推进 Renderer 与 CLI，Week90-92 统一集成、hardening 和验收。
 
 ```text
 Week84      baseline remediation

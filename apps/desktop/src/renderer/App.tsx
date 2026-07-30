@@ -15,6 +15,7 @@ export function App() {
   const { state } = controller;
   const [opening, setOpening] = useState(false);
   const [workspaceError, setWorkspaceError] = useState<string | null>(null);
+  const [workspaceTool, setWorkspaceTool] = useState<"review" | "terminal">("review");
   const panels = useShellPanels();
   const { leftOpen, inspectorOpen, showThreadsTrigger, showInspectorTrigger } = panels;
 
@@ -81,7 +82,6 @@ export function App() {
               <TimelineView detail={state.detail} status={state.detailStatus} error={state.detailError} onLoadMore={controller.loadMore} />
             )}
           </section>
-          <TerminalPanel workspaceReady={Boolean(state.workspace)} />
           <TaskControls
             detail={state.detail}
             onCancel={controller.cancelTurn}
@@ -107,9 +107,19 @@ export function App() {
           />
         </main>
 
-        <aside id="review-inspector-panel" className={`inspector drawer ${inspectorOpen ? "drawer-open" : ""}`} aria-label="Review inspector" aria-hidden={!inspectorOpen} onKeyDown={(event) => { if (event.key === "Escape") { event.preventDefault(); panels.closeInspector(); } }}>
-          <div className="panel-heading"><span>Review</span><button className="icon-button" type="button" title="Close review inspector" aria-label="Close review inspector" onClick={() => panels.closeInspector()}><X size={17} aria-hidden="true" /></button></div>
-          <ReviewInspector review={state.review} workspaceReady={Boolean(state.workspace)} onTab={controller.setReviewTab} onReport={(id) => void controller.selectReport(id)} onArtifact={(id) => void controller.selectArtifact(id)} />
+        <aside id="review-inspector-panel" className={`inspector drawer ${inspectorOpen ? "drawer-open" : ""}`} aria-label="Workspace inspector" aria-hidden={!inspectorOpen} onKeyDown={(event) => { if (event.key === "Escape") { event.preventDefault(); panels.closeInspector(); } }}>
+          <div className="panel-heading context-heading">
+            <div className="context-switcher" role="tablist" aria-label="Workspace tools">
+              <button type="button" role="tab" aria-selected={workspaceTool === "review"} onClick={() => setWorkspaceTool("review")}>Review</button>
+              <button type="button" role="tab" aria-selected={workspaceTool === "terminal"} onClick={() => setWorkspaceTool("terminal")}>Terminal</button>
+            </div>
+            <button className="icon-button" type="button" title="Close workspace inspector" aria-label="Close review inspector" onClick={() => panels.closeInspector()}><X size={17} aria-hidden="true" /></button>
+          </div>
+          <div className="context-panel" role="tabpanel" aria-label={workspaceTool === "review" ? "Review workspace" : "Terminal workspace"}>
+            {workspaceTool === "review"
+              ? <ReviewInspector review={state.review} workspaceReady={Boolean(state.workspace)} onTab={controller.setReviewTab} onReport={(id) => void controller.selectReport(id)} onArtifact={(id) => void controller.selectArtifact(id)} />
+              : <TerminalPanel workspaceReady={Boolean(state.workspace)} />}
+          </div>
         </aside>
       </div>
     </div>

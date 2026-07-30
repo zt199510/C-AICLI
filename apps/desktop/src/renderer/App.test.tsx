@@ -48,6 +48,15 @@ describe("desktop shell", () => {
     expect(screen.getByRole("button", { name: "Show review inspector" })).toBeTruthy();
   });
 
+  it("keeps terminal tools in the contextual inspector instead of the conversation surface", async () => {
+    render(<App />);
+    expect(screen.queryByRole("region", { name: "User terminal" })).toBeNull();
+    await userEvent.click(screen.getByRole("button", { name: "Show review inspector" }));
+    await userEvent.click(screen.getByRole("tab", { name: "Terminal" }));
+    expect(screen.getByRole("region", { name: "User terminal" })).toBeTruthy();
+    expect(screen.getByRole("tabpanel", { name: "Terminal workspace" })).toBeTruthy();
+  });
+
   it("closes drawers with Escape and restores the shell trigger", async () => {
     render(<App />);
     const collapse = screen.getByRole("button", { name: "Collapse threads" });

@@ -110,7 +110,7 @@ body {
 }
 
 .task-surface {
-  grid-template-rows: auto minmax(0, 1fr) auto auto auto;
+  grid-template-rows: auto minmax(0, 1fr) auto auto;
   background: var(--color-canvas);
 }
 
@@ -183,9 +183,51 @@ body {
 .thread-form,
 .thread-navigation,
 .review-tabs,
-.terminal-panel,
 .task-controls {
   border-color: var(--color-border);
+}
+
+.context-heading {
+  gap: 12px;
+  padding-right: 10px;
+}
+
+.context-switcher {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 3px;
+  border-radius: 10px;
+  background: var(--color-surface-muted);
+  padding: 3px;
+}
+
+.context-switcher button {
+  min-height: 28px;
+  border: 0;
+  border-radius: 7px;
+  background: transparent;
+  padding: 4px 10px;
+  color: var(--color-text-muted);
+  font-size: 11px;
+  font-weight: 650;
+  cursor: pointer;
+}
+
+.context-switcher button[aria-selected="true"] {
+  background: var(--color-surface);
+  box-shadow: 0 1px 4px rgb(35 50 41 / 10%);
+  color: var(--color-text);
+}
+
+.context-panel {
+  min-height: 0;
+  height: calc(100% - 52px);
+  overflow: hidden;
+}
+
+.context-panel > .review-inspector {
+  height: 100%;
 }
 
 .thread-actions {
@@ -285,17 +327,36 @@ body {
   max-width: 460px;
 }
 
-.terminal-panel,
 .task-controls,
 .composer {
   width: min(900px, calc(100% - 32px));
   justify-self: center;
 }
 
-.terminal-panel {
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-md) var(--radius-md) 0 0;
-  background: var(--color-surface-muted);
+.context-panel > .terminal-panel {
+  display: grid;
+  min-height: 0;
+  height: 100%;
+  grid-template-rows: auto auto minmax(0, 1fr);
+  border: 0;
+  background: var(--color-surface);
+}
+
+.context-panel .terminal-heading {
+  min-height: 48px;
+  border-bottom: 1px solid var(--color-border);
+  padding-inline: 14px;
+}
+
+.context-panel .terminal-session {
+  display: grid;
+  min-height: 0;
+  grid-template-rows: minmax(0, 1fr) auto;
+}
+
+.context-panel .terminal-output {
+  height: auto;
+  min-height: 0;
 }
 
 .task-controls {
@@ -370,7 +431,6 @@ body {
     padding-inline: 14px;
   }
 
-  .terminal-panel,
   .task-controls,
   .composer {
     width: calc(100% - 20px);
@@ -400,7 +460,8 @@ body {
   .brand-mark,
   .runtime-status,
   .state-card,
-  .composer {
+  .composer,
+  .context-switcher {
     border: 1px solid CanvasText;
     forced-color-adjust: auto;
   }

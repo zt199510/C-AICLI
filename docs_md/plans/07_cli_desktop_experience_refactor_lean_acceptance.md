@@ -43,6 +43,13 @@
 - 未触及协议或权限时的 fuzz、corrupt-state、navigation/permission 全矩阵。
 - 为了生成报告而重复执行已经通过的产品测试。
 
+## 已知非阻塞技术债
+
+- Week83 `provider-recovery-listener-retention` P1 保留为非阻塞技术债，不再作为 UI/CLI 重构的前置条件。
+- 未触及 Renderer subscription、AppHost recovery 或 Electron lifecycle 的改动不运行 listener 诊断。
+- 若改动触及上述生命周期，只执行一次不超过 5 分钟的同场景对比；只有相对已知基线继续恶化时才进入修复。
+- 未重新验证不得把该 P1 表述为已关闭。
+
 ## 时间与失败策略
 
 - 任意单条验证命令硬上限为 5 分钟。
