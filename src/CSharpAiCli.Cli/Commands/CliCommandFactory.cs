@@ -3,7 +3,6 @@ using System.CommandLine.Parsing;
 using System.Globalization;
 using System.Text;
 using System.Text.Json;
-using System.Text.Json.Nodes;
 using CSharpAiCli.Application;
 using CSharpAiCli.Core;
 using CSharpAiCli.ProjectPacks;
@@ -19,8 +18,6 @@ public static class CliCommandFactory
 
     private const string SessionStoreErrorSummary =
         "Conversation session store operation failed.";
-
-    private const string TrustedMcpRegistrySource = "user config";
 
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web);
 
@@ -3093,130 +3090,6 @@ public static class CliCommandFactory
         skillsCommand.Subcommands.Add(skillsListCommand);
         skillsCommand.Subcommands.Add(skillsRunCommand);
 
-        Command toolsCommand = new("tools", "Inspect and invoke local workspace tools.");
-        Command toolsListCommand = new("list", "List enabled local tools.");
-        Option<bool> toolsListJsonOption = new("--json")
-        {
-            Description = "Write the tool list as JSON.",
-        };
-        toolsListCommand.Options.Add(toolsListJsonOption);
-        toolsListCommand.SetAction(parseResult =>
-        {
-            string? workspacePath = parseResult.GetValue(workspaceOption);
-            CliEnvironmentSnapshot snapshot = workspaceSnapshotProvider(workspacePath);
-            TryWriteCommandLog(commandLogger, "tools list", snapshot);
-            ToolRegistry registry = CliToolFactory.CreateRegistry(snapshot, new DefaultDenyApprovalPolicy());
-            bool toolsListJsonRequested = parseResult.GetValue(toolsListJsonOption);
-            WriteVerboseDiagnostics(
-                parseResult,
-                "tools list",
-                snapshot,
-                humanReadableOutput: !toolsListJsonRequested);
-            if (toolsListJsonRequested)
-            {
-                output.WriteLine(JsonSerializer.Serialize(CreateToolsListJson(registry, snapshot.Configuration.DisabledTools), JsonOptions));
-                return 0;
-            }
-
-            foreach (ToolDefinition definition in registry.List().OrderBy(definition => definition.Name, StringComparer.Ordinal))
-            {
-                output.WriteLine($"{definition.Name}: {definition.Description}");
-            }
-
-            if (snapshot.Configuration.DisabledTools.Count > 0)
-            {
-                output.WriteLine("disabledTools: " + string.Join(", ", snapshot.Configuration.DisabledTools.Order(StringComparer.Ordinal)));
-            }
-
-            return 0;
-        });
-
-        Command toolsCallCommand = new("call", "Invoke one enabled local tool with a JSON argument object.");
-        Argument<string> toolNameArgument = new("name")
-        {
-            Description = "The tool name to invoke.",
-        };
-        Argument<string> toolArgumentsArgument = new("arguments")
-        {
-            Description = "JSON object arguments for the tool.",
-            DefaultValueFactory = _ => "{}",
-        };
-        Option<bool> toolsApproveOption = new("--approve")
-        {
-            Description = "Approve file edit or shell actions for this call.",
-        };
-        Option<string> toolsApprovalOption = new("--approval")
-        {
-            Description = "Set approval mode for this call: never, on-request, on-failure, or always.",
-        };
-        AddApprovalModeValidator(toolsApprovalOption);
-        Option<string> toolArgumentsFileOption = new("--arguments-file")
-        {
-            Description = "Read JSON object arguments from a file.",
-        };
-        Option<bool> toolStdinOption = new("--stdin")
-        {
-            Description = "Read JSON object arguments from stdin.",
-        };
-        toolsCallCommand.Arguments.Add(toolNameArgument);
-        toolsCallCommand.Arguments.Add(toolArgumentsArgument);
-        toolsCallCommand.Options.Add(toolsApproveOption);
-        toolsCallCommand.Options.Add(toolsApprovalOption);
-        toolsCallCommand.Options.Add(toolArgumentsFileOption);
-        toolsCallCommand.Options.Add(toolStdinOption);
-        toolsCallCommand.Validators.Add(result =>
-        {
-            if (!result.GetValue(toolStdinOption))
-            {
-                return;
-            }
-
-            if (result.GetResult(toolArgumentsFileOption) is OptionResult { Implicit: false })
-            {
-                result.AddError("--stdin cannot be used with --arguments-file.");
-            }
-
-            if ((result.GetResult(toolArgumentsArgument)?.Tokens.Count ?? 0) > 0)
-            {
-                result.AddError("--stdin cannot be used with positional arguments.");
-            }
-        });
-        toolsCallCommand.SetAction(parseResult =>
-        {
-            string? workspacePath = parseResult.GetValue(workspaceOption);
-            string toolName = parseResult.GetValue(toolNameArgument) ?? string.Empty;
-            string argumentsJson = parseResult.GetValue(toolArgumentsArgument) ?? "{}";
-            string? argumentsFile = parseResult.GetValue(toolArgumentsFileOption);
-            if (parseResult.GetValue(toolStdinOption))
-            {
-                argumentsJson = input.ReadToEnd();
-            }
-            else if (!string.IsNullOrWhiteSpace(argumentsFile))
-            {
-                argumentsJson = File.ReadAllText(argumentsFile);
-            }
-
-            bool approve = parseResult.GetValue(toolsApproveOption);
-            string? approvalModeValue = parseResult.GetValue(toolsApprovalOption);
-            CliEnvironmentSnapshot snapshot = workspaceSnapshotProvider(workspacePath);
-            ApprovalMode? cliApprovalMode = GetApprovalOverride(approvalModeValue, parseResult.GetResult(toolsApprovalOption), approve);
-            TryWriteCommandLog(commandLogger, "tools call", snapshot);
-            WriteVerboseDiagnostics(parseResult, "tools call", snapshot);
-            ToolRegistry registry = CliToolFactory.CreateRegistry(
-                snapshot,
-                ApprovalPolicyResolver.Resolve(snapshot.Configuration.ApprovalMode, cliApprovalMode));
-            ToolExecutor executor = new(registry, snapshot.Configuration.DisabledTools);
-            ToolExecutionResult result = executor.Execute(
-                toolName,
-                new ToolExecutionContext("cli_tool_call", snapshot.Workspace, argumentsJson));
-            result = ReplaceUnknownMcpToolWithDiscoveryFailure(result, toolName, snapshot);
-
-            WriteToolResult(output, result);
-            return result.Succeeded ? 0 : 1;
-        });
-        toolsCommand.Subcommands.Add(toolsListCommand);
-        toolsCommand.Subcommands.Add(toolsCallCommand);
-
         Command execCommand = new("exec", "Run an agentic local workspace task and emit exec events.");
         Argument<string> execTaskArgument = new("task")
         {
@@ -4681,7 +4554,7 @@ public static class CliCommandFactory
         rootComposer.Add(packsCommand);
         rootComposer.Add(artifactsCommand);
         rootComposer.Add(skillsCommand);
-        rootComposer.Add(toolsCommand);
+        rootComposer.Add(new ToolsCommandModule(), commandContext);
         rootComposer.Add(new LogsCommandModule(), commandContext);
         rootComposer.Add(execCommand);
         rootComposer.Add(new RunCommandModule(), commandContext);
@@ -4827,105 +4700,6 @@ public static class CliCommandFactory
                 result.AddError("Invalid value for --approval. Allowed values are never, on-request, on-failure, and always.");
             }
         });
-    }
-
-    private static ToolExecutionResult ReplaceUnknownMcpToolWithDiscoveryFailure(
-        ToolExecutionResult result,
-        string toolName,
-        CliEnvironmentSnapshot snapshot)
-    {
-        if (!string.Equals(result.ErrorCode, ToolErrorCode.UnknownTool, StringComparison.Ordinal) ||
-            snapshot.Configuration.DisabledTools.Contains(toolName) ||
-            !TryGetMcpToolServerSegment(toolName, out string serverSegment))
-        {
-            return result;
-        }
-
-        McpServerDefinition? server = McpConfigurationLoader
-            .Load(snapshot.Configuration)
-            .Servers
-            .FirstOrDefault(candidate =>
-                ShouldDiscoverForMcpToolCallDiagnostic(candidate) &&
-                string.Equals(
-                    NormalizeMcpNameSegment(candidate.Name, "server"),
-                    serverSegment,
-                    StringComparison.Ordinal));
-        if (server is null)
-        {
-            return result;
-        }
-
-        WorkspaceGuard workspaceGuard = new();
-        McpStdioClientSessionFactory sessionFactory = new(new McpStdioTransport(
-            workspaceGuard,
-            snapshot.Configuration.ShellPolicy));
-        McpStdioToolDiscoverer discoverer = new(sessionFactory);
-        McpToolsListResult discovery = discoverer.DiscoverTools(server, snapshot.Workspace);
-        return discovery.Succeeded
-            ? result
-            : ToolExecutionResult.Failure(
-                discovery.ErrorCode ?? McpErrorCode.ClientFailed,
-                discovery.SafeMessage);
-    }
-
-    private static bool TryGetMcpToolServerSegment(string toolName, out string serverSegment)
-    {
-        string[] parts = toolName.Split('.', StringSplitOptions.None);
-        if (parts.Length != 3 ||
-            !string.Equals(parts[0], "mcp", StringComparison.Ordinal) ||
-            string.IsNullOrWhiteSpace(parts[1]) ||
-            string.IsNullOrWhiteSpace(parts[2]))
-        {
-            serverSegment = string.Empty;
-            return false;
-        }
-
-        serverSegment = parts[1];
-        return true;
-    }
-
-    private static bool ShouldDiscoverForMcpToolCallDiagnostic(McpServerDefinition server)
-    {
-        return server.Enabled &&
-            string.Equals(server.Status, "configured", StringComparison.Ordinal) &&
-            string.Equals(server.Transport, "stdio", StringComparison.Ordinal) &&
-            string.Equals(server.Source, TrustedMcpRegistrySource, StringComparison.Ordinal);
-    }
-
-    private static string NormalizeMcpNameSegment(string value, string fallback)
-    {
-        if (string.IsNullOrWhiteSpace(value))
-        {
-            return fallback;
-        }
-
-        StringBuilder builder = new(value.Length);
-        bool lastWasSeparator = false;
-        foreach (char character in value.Trim().ToLowerInvariant())
-        {
-            if (character is >= 'a' and <= 'z' or >= '0' and <= '9')
-            {
-                builder.Append(character);
-                lastWasSeparator = false;
-                continue;
-            }
-
-            if (character is '_' or '-')
-            {
-                builder.Append(character);
-                lastWasSeparator = false;
-                continue;
-            }
-
-            if (!lastWasSeparator)
-            {
-                builder.Append('_');
-                lastWasSeparator = true;
-            }
-        }
-
-        string normalized = builder.ToString().Trim('_', '-');
-        return string.IsNullOrWhiteSpace(normalized) ? fallback : normalized;
     }
 
     private static IAgentRunner CreateDefaultExecAgentRunner(
@@ -5253,48 +5027,6 @@ public static class CliCommandFactory
         }
 
         renderer.WriteResult(result);
-    }
-
-    private static JsonObject CreateToolsListJson(ToolRegistry registry, IReadOnlySet<string> disabledTools)
-    {
-        JsonArray tools = [];
-        foreach (ToolDefinition definition in registry.List().OrderBy(definition => definition.Name, StringComparer.Ordinal))
-        {
-            RenderedToolDefinition rendered = ToolSchemaRenderer.Render(definition);
-            tools.Add(new JsonObject
-            {
-                ["name"] = rendered.Name,
-                ["description"] = rendered.Description,
-                ["riskLevel"] = rendered.RiskLevel,
-                ["parameters"] = ToolSchemaRenderer.RenderParametersSchemaObject(definition)
-            });
-        }
-
-        JsonArray disabledToolNames = [];
-        foreach (string toolName in disabledTools.OrderBy(toolName => toolName, StringComparer.Ordinal))
-        {
-            disabledToolNames.Add(toolName);
-        }
-
-        return new JsonObject
-        {
-            ["type"] = "tools.list",
-            ["tools"] = tools,
-            ["disabledTools"] = disabledToolNames
-        };
-    }
-
-    private static void WriteToolResult(TextWriter output, ToolExecutionResult result)
-    {
-        output.WriteLine(result.Succeeded ? "status: succeeded" : "status: failed");
-        output.WriteLine($"approvalStatus: {result.ApprovalStatus}");
-        if (!string.IsNullOrWhiteSpace(result.ErrorCode))
-        {
-            output.WriteLine($"errorCode: {result.ErrorCode}");
-        }
-
-        output.WriteLine("summary:");
-        output.WriteLine(result.Summary);
     }
 
     private static (string ErrorCode, string Summary) GetConversationStoreFailure(Exception exception)
