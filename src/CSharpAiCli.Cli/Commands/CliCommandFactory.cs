@@ -705,124 +705,6 @@ public static class CliCommandFactory
         ciCommand.Subcommands.Add(ciSummarizeCommand);
         ciCommand.Subcommands.Add(ciCheckCommand);
 
-        Command daemonCommand = new("daemon", "Inspect or start the localhost-only API daemon Preview.");
-        Command daemonDoctorCommand = new("doctor", "Inspect the API daemon Preview boundary without starting it.");
-        Option<string> daemonDoctorOutputOption = new("--output")
-        {
-            Description = "Select text or json output.",
-            DefaultValueFactory = _ => "text",
-        };
-        AddTextJsonOutputValidator(daemonDoctorOutputOption);
-        daemonDoctorCommand.Options.Add(daemonDoctorOutputOption);
-        daemonDoctorCommand.SetAction(parseResult =>
-        {
-            string outputMode = parseResult.GetValue(daemonDoctorOutputOption) ?? "text";
-            if (string.Equals(outputMode, "json", StringComparison.OrdinalIgnoreCase))
-            {
-                new LocalApiPreviewJsonRenderer(output).WriteDoctor();
-            }
-            else
-            {
-                new LocalApiDaemonTextRenderer(output).WriteDoctor();
-            }
-
-            return 0;
-        });
-
-        Command daemonStartCommand = new("start", "Start the localhost-only read-only API daemon Preview.");
-        Option<bool> daemonStartPreviewOption = new("--preview")
-        {
-            Description = "Acknowledge and explicitly enable the unauthenticated local Preview.",
-        };
-        Option<string> daemonStartBindOption = new("--bind")
-        {
-            Description = "Bind address. Only localhost or 127.0.0.1 is accepted.",
-            DefaultValueFactory = _ => "localhost",
-        };
-        Option<int> daemonStartPortOption = new("--port")
-        {
-            Description = $"Loopback port ({LocalApiPreviewConstants.MinimumPort}-{LocalApiPreviewConstants.MaximumPort}).",
-            DefaultValueFactory = _ => LocalApiPreviewConstants.DefaultPort,
-        };
-        daemonStartCommand.Options.Add(daemonStartPreviewOption);
-        daemonStartCommand.Options.Add(daemonStartBindOption);
-        daemonStartCommand.Options.Add(daemonStartPortOption);
-        daemonStartCommand.SetAction(parseResult =>
-        {
-            if (!parseResult.GetValue(daemonStartPreviewOption))
-            {
-                output.WriteLine("daemon start refused: --preview is required because the local API is disabled by default.");
-                return 2;
-            }
-
-            string requestedBind = parseResult.GetValue(daemonStartBindOption) ?? "localhost";
-            if (!LocalApiDaemonBindPolicy.TryNormalize(requestedBind, out _))
-            {
-                output.WriteLine("daemon start refused: only localhost or 127.0.0.1 is allowed; remote and wildcard binds are disabled.");
-                return 2;
-            }
-
-            int port = parseResult.GetValue(daemonStartPortOption);
-            if (!LocalApiDaemonBindPolicy.IsValidPort(port))
-            {
-                output.WriteLine(
-                    $"daemon start refused: --port must be between {LocalApiPreviewConstants.MinimumPort} and {LocalApiPreviewConstants.MaximumPort}.");
-                return 2;
-            }
-
-            string? workspacePath = parseResult.GetValue(workspaceOption);
-            CliEnvironmentSnapshot snapshot = workspaceSnapshotProvider(workspacePath);
-            return LocalApiDaemonHost.RunAsync(snapshot, port, output).GetAwaiter().GetResult();
-        });
-        daemonCommand.Subcommands.Add(daemonDoctorCommand);
-        daemonCommand.Subcommands.Add(daemonStartCommand);
-
-        Command apiCommand = new("api", "Inspect the local HTTP API Preview contract.");
-        Command apiRoutesCommand = new("routes", "List the local HTTP API Preview routes without starting a listener.");
-        Option<string> apiRoutesOutputOption = new("--output")
-        {
-            Description = "Select text or json output.",
-            DefaultValueFactory = _ => "text",
-        };
-        AddTextJsonOutputValidator(apiRoutesOutputOption);
-        apiRoutesCommand.Options.Add(apiRoutesOutputOption);
-        apiRoutesCommand.SetAction(parseResult =>
-        {
-            string outputMode = parseResult.GetValue(apiRoutesOutputOption) ?? "text";
-            if (string.Equals(outputMode, "json", StringComparison.OrdinalIgnoreCase))
-            {
-                new LocalApiPreviewJsonRenderer(output).WriteRoutes();
-            }
-            else
-            {
-                new LocalApiPreviewTextRenderer(output).WriteRoutes();
-            }
-
-            return 0;
-        });
-        apiCommand.Subcommands.Add(apiRoutesCommand);
-
-        Command apiSmokeCommand = new("smoke", "Check an explicitly started localhost API daemon Preview.");
-        Option<int> apiSmokePortOption = new("--port")
-        {
-            Description = $"Loopback port ({LocalApiPreviewConstants.MinimumPort}-{LocalApiPreviewConstants.MaximumPort}).",
-            DefaultValueFactory = _ => LocalApiPreviewConstants.DefaultPort,
-        };
-        apiSmokeCommand.Options.Add(apiSmokePortOption);
-        apiSmokeCommand.SetAction(parseResult =>
-        {
-            int port = parseResult.GetValue(apiSmokePortOption);
-            if (!LocalApiDaemonBindPolicy.IsValidPort(port))
-            {
-                output.WriteLine(
-                    $"api smoke refused: --port must be between {LocalApiPreviewConstants.MinimumPort} and {LocalApiPreviewConstants.MaximumPort}.");
-                return 2;
-            }
-
-            return LocalApiDaemonClient.SmokeAsync(port, output).GetAwaiter().GetResult();
-        });
-        apiCommand.Subcommands.Add(apiSmokeCommand);
-
         Command queueCommand = new("queue", "Manage the local task queue.");
         Command queueAddCommand = new("add", "Add a pending request to the local task queue.");
         Command queueAddExecCommand = new("exec", "Add a pending exec request.");
@@ -5584,8 +5466,8 @@ public static class CliCommandFactory
         rootComposer.Add(new ChangesCommandModule(), commandContext);
         rootComposer.Add(jobsCommand);
         rootComposer.Add(ciCommand);
-        rootComposer.Add(daemonCommand);
-        rootComposer.Add(apiCommand);
+        rootComposer.Add(new DaemonCommandModule(), commandContext);
+        rootComposer.Add(new ApiCommandModule(), commandContext);
         rootComposer.Add(queueCommand);
         rootComposer.Add(automationCommand);
         rootComposer.Add(pipelineCommand);

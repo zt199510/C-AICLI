@@ -146,6 +146,20 @@ internal sealed class CliCommandContext
             string.Equals(outputMode, "json", StringComparison.OrdinalIgnoreCase);
     }
 
+    public static void AddTextJsonOutputValidator(Option<string> option)
+    {
+        ArgumentNullException.ThrowIfNull(option);
+        option.Validators.Add(result =>
+        {
+            string outputMode = result.GetValueOrDefault<string>() ?? "text";
+            if (!string.Equals(outputMode, "text", StringComparison.OrdinalIgnoreCase) &&
+                !string.Equals(outputMode, "json", StringComparison.OrdinalIgnoreCase))
+            {
+                result.AddError("Invalid value for --output. Allowed values are text and json.");
+            }
+        });
+    }
+
     public void WriteToolResult(ToolExecutionResult result)
     {
         Output.WriteLine(result.Succeeded ? "status: succeeded" : "status: failed");
