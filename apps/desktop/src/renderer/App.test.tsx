@@ -26,7 +26,7 @@ describe("desktop shell", () => {
     window.caicli = configured;
     render(<App />);
     await waitFor(() => expect(configured.getChanges).toHaveBeenCalledOnce());
-    await userEvent.click(screen.getByRole("button", { name: "Show review inspector" }));
+    await userEvent.click(screen.getByRole("button", { name: "Show workspace inspector" }));
     await userEvent.click(screen.getByRole("tab", { name: "Changes" }));
     expect(configured.getChanges).toHaveBeenCalledOnce();
   });
@@ -43,15 +43,15 @@ describe("desktop shell", () => {
     render(<App />);
     await userEvent.click(screen.getByRole("button", { name: "Collapse threads" }));
     expect(screen.getByRole("button", { name: "Show threads" })).toBeTruthy();
-    await userEvent.click(screen.getByRole("button", { name: "Show review inspector" }));
-    await userEvent.click(screen.getByRole("button", { name: "Close review inspector" }));
-    expect(screen.getByRole("button", { name: "Show review inspector" })).toBeTruthy();
+    await userEvent.click(screen.getByRole("button", { name: "Show workspace inspector" }));
+    await userEvent.click(screen.getByRole("button", { name: "Close workspace inspector" }));
+    expect(screen.getByRole("button", { name: "Show workspace inspector" })).toBeTruthy();
   });
 
   it("keeps terminal tools in the contextual inspector instead of the conversation surface", async () => {
     render(<App />);
     expect(screen.queryByRole("region", { name: "User terminal" })).toBeNull();
-    await userEvent.click(screen.getByRole("button", { name: "Show review inspector" }));
+    await userEvent.click(screen.getByRole("button", { name: "Show workspace inspector" }));
     const tools = screen.getByRole("tablist", { name: "Workspace tools" });
     expect(within(tools).getAllByRole("tab").map((tab) => tab.textContent?.replace(/\d+/gu, ""))).toEqual([
       "Changes", "Terminal", "Reports", "Artifacts", "Preview",
@@ -63,7 +63,7 @@ describe("desktop shell", () => {
 
   it("supports keyboard resizing for the wide workspace inspector", async () => {
     render(<App />);
-    await userEvent.click(screen.getByRole("button", { name: "Show review inspector" }));
+    await userEvent.click(screen.getByRole("button", { name: "Show workspace inspector" }));
     const separator = screen.getByRole("separator", { name: "Resize workspace inspector" });
     expect(separator.getAttribute("aria-valuenow")).toBe("380");
     separator.focus();
@@ -85,10 +85,10 @@ describe("desktop shell", () => {
     window.innerWidth = 760;
     render(<App />);
     expect(screen.getByRole("button", { name: "Show threads" })).toBeTruthy();
-    expect(screen.getByRole("button", { name: "Show review inspector" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Show workspace inspector" })).toBeTruthy();
     await userEvent.click(screen.getByRole("button", { name: "Show threads" }));
-    expect(screen.queryByRole("button", { name: "Show review inspector" })).toBeTruthy();
-    await userEvent.click(screen.getByRole("button", { name: "Show review inspector" }));
+    expect(screen.queryByRole("button", { name: "Show workspace inspector" })).toBeTruthy();
+    await userEvent.click(screen.getByRole("button", { name: "Show workspace inspector" }));
     expect(screen.getByRole("button", { name: "Show threads" })).toBeTruthy();
   });
 });

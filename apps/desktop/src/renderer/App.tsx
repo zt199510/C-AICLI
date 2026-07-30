@@ -73,7 +73,7 @@ export function App() {
             <div className="toolbar-group">{!leftOpen && <button ref={showThreadsTrigger} className="icon-button" type="button" title="Show threads" aria-label="Show threads" aria-controls="threads-panel" aria-expanded={leftOpen} onClick={panels.showThreads}><PanelLeft size={17} aria-hidden="true" /></button>}<span className="thread-heading"><span className="thread-eyebrow">Conversation</span><span className="task-label">{state.detail?.thread.title ?? "Workspace review"}</span></span><span className="refreshing" role="status" aria-live="polite" hidden={!state.refreshing}>Refreshing…</span></div>
             <div className="toolbar-group">
               <button className="command-button" type="button" onClick={() => void openWorkspace()} disabled={opening || state.runtime.state !== "ready"}>{opening ? <RefreshCw className="spin" size={16} aria-hidden="true" /> : <FolderOpen size={16} aria-hidden="true" />}{opening ? "Opening" : "Open workspace"}</button>
-              {!inspectorOpen && <button ref={showInspectorTrigger} className="icon-button" type="button" title="Show review inspector" aria-label="Show review inspector" aria-controls="review-inspector-panel" aria-expanded={inspectorOpen} onClick={panels.showInspector}><PanelRight size={17} aria-hidden="true" /></button>}
+              {!inspectorOpen && <button ref={showInspectorTrigger} className="icon-button" type="button" title="Show workspace inspector" aria-label="Show workspace inspector" aria-controls="review-inspector-panel" aria-expanded={inspectorOpen} onClick={panels.showInspector}><PanelRight size={17} aria-hidden="true" /></button>}
             </div>
           </div>
 
