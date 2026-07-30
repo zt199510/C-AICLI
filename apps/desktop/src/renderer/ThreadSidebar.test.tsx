@@ -8,22 +8,20 @@ describe("thread metadata navigation", () => {
   it("filters loaded truth and selects an existing thread without starting a turn", async () => {
     const select = vi.fn();
     renderSidebar({ threads: [thread("active", null), thread("failed", null, "thread-2")] , onSelect: select });
-    await userEvent.selectOptions(screen.getByRole("combobox", { name: "Filter threads" }), "failed");
+    await userEvent.selectOptions(screen.getByRole("combobox", { name: "Filter conversations" }), "failed");
     expect(screen.queryByText("Review thread")).toBeNull();
     await userEvent.click(screen.getByText("failed", { selector: ".status-chip" }).closest("button") as HTMLElement);
     expect(select).toHaveBeenCalledWith("thread-2");
   });
 
-  it("uses explicit create and archive confirmation flows", async () => {
-    const create = vi.fn(async () => null);
+  it("starts a blank conversation immediately and keeps archive confirmation explicit", async () => {
+    const start = vi.fn();
     const archive = vi.fn(async () => null);
-    renderSidebar({ threads: [thread("completed", null)], onCreate: create, onArchive: archive });
-    await userEvent.click(screen.getByRole("button", { name: "Create thread" }));
-    await userEvent.type(screen.getByLabelText("Thread title"), "New review");
-    await userEvent.click(screen.getByRole("button", { name: /^Create$/ }));
-    expect(create).toHaveBeenCalledWith("New review");
+    renderSidebar({ threads: [thread("completed", null)], onNew: start, onArchive: archive });
+    await userEvent.click(screen.getByRole("button", { name: "New conversation" }));
+    expect(start).toHaveBeenCalledOnce();
     await userEvent.click(screen.getByRole("button", { name: "Archive Review thread" }));
-    expect(screen.getByRole("alertdialog", { name: "Archive this thread?" })).toBeTruthy();
+    expect(screen.getByRole("alertdialog", { name: "Archive this conversation?" })).toBeTruthy();
     await userEvent.click(screen.getByRole("button", { name: /^Archive$/ }));
     expect(archive).toHaveBeenCalledWith("thread-1", 1);
   });
@@ -32,7 +30,7 @@ describe("thread metadata navigation", () => {
     renderSidebar({ threads: [thread("completed", null)] });
     const archive = screen.getByRole("button", { name: "Archive Review thread" });
     await userEvent.click(archive);
-    expect(screen.getByRole("alertdialog", { name: "Archive this thread?" })).toBeTruthy();
+    expect(screen.getByRole("alertdialog", { name: "Archive this conversation?" })).toBeTruthy();
     await userEvent.keyboard("{Escape}");
     expect(screen.queryByRole("alertdialog")).toBeNull();
     expect(document.activeElement).toBe(archive);
@@ -47,7 +45,7 @@ function renderSidebar(overrides: Partial<React.ComponentProps<typeof ThreadSide
     truncated={false}
     selectedThreadId={null}
     onSelect={vi.fn()}
-    onCreate={vi.fn(async () => null)}
+    onNew={vi.fn()}
     onRename={vi.fn(async () => null)}
     onArchive={vi.fn(async () => null)}
     {...overrides}

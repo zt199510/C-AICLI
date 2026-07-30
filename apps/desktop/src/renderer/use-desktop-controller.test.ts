@@ -1,6 +1,18 @@
 import { describe, expect, it } from "vitest";
 import type { ThreadChangedParams } from "../generated/desktop-contracts";
-import { shouldQueueThreadResync } from "./use-desktop-controller";
+import { conversationTitle, shouldQueueThreadResync } from "./use-desktop-controller";
+
+describe("conversation title", () => {
+  it("derives a compact title from the first prompt", () => {
+    expect(conversationTitle("  Help me\nreview this workspace  ")).toBe("Help me review this workspace");
+  });
+
+  it("truncates safely by UTF-8 bytes", () => {
+    const title = conversationTitle("连续对话".repeat(30));
+    expect(new TextEncoder().encode(title).length).toBeLessThanOrEqual(96);
+    expect(title.endsWith("�")).toBe(false);
+  });
+});
 
 describe("thread projection resync policy", () => {
   it("resyncs only at the two lifecycle boundaries in an eight-notification turn", () => {

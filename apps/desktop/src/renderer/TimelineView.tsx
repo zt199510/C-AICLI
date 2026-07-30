@@ -1,4 +1,4 @@
-import { Activity, MessageSquareText, Plus } from "lucide-react";
+import { Activity, MessageSquareText } from "lucide-react";
 import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from "react";
 import type { ThreadDetailData, TimelineItemData } from "../generated/desktop-contracts";
 import type { QueryStatus } from "./desktop-state";
@@ -12,11 +12,10 @@ export interface TimelineViewProps {
   status: QueryStatus;
   error: string | null;
   controls?: ReactNode;
-  onStartConversation?(): void;
   onLoadMore(): void;
 }
 
-export function TimelineView({ detail, status, error, controls, onStartConversation, onLoadMore }: TimelineViewProps) {
+export function TimelineView({ detail, status, error, controls, onLoadMore }: TimelineViewProps) {
   const items = detail?.timeline ?? [];
   const view = useRef<HTMLDivElement>(null);
   const activeThread = useRef<string | null>(null);
@@ -36,9 +35,8 @@ export function TimelineView({ detail, status, error, controls, onStartConversat
   if (!detail) return (
     <div className="state-card">
       <div className="state-kicker">Conversation</div>
-      <h1>Start a new conversation</h1>
-      <p>Create a conversation to enable the composer and keep its history and context together.</p>
-      {onStartConversation && <button className="primary-action" type="button" onClick={onStartConversation}><Plus size={17} aria-hidden="true" /> New conversation</button>}
+      <h1>New conversation</h1>
+      <p>Type a message below. The conversation will be created when you send it.</p>
     </div>
   );
 

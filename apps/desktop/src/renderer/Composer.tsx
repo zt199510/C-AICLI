@@ -10,6 +10,8 @@ interface ComposerProps {
   readonly disabledReason: string | null;
   readonly historyTurnCount?: number;
   readonly historyMessageCount?: number;
+  readonly modelLabel?: string;
+  readonly approvalModeLabel?: string;
   readonly disabledActionLabel?: string;
   readonly onDisabledAction?: () => void;
   readonly onText: (text: string) => void;
@@ -104,7 +106,7 @@ export function Composer(props: ComposerProps) {
       </div>
       <div className="composer-footer">
         <div className="composer-tools"><button type="button" onClick={props.onPickFile} disabled={disabled} aria-label="Attach workspace file"><FilePlus2 size={16} /> File</button><button type="button" onClick={props.onPickFolder} disabled={disabled} aria-label="Attach workspace folder"><FolderPlus size={16} /> Folder</button></div>
-        <div className="composer-summary"><span>{props.composer.snapshot ? `${props.composer.snapshot.effectiveModel} · ${props.composer.snapshot.approvalMode}` : "Model and approval policy unavailable"}</span><button className="composer-send" type="button" onClick={props.onSend} disabled={disabled || !props.draft.text.trim()} aria-label="Queue prompt"><Send size={16} />{busy ? "Queuing…" : "Send"}</button></div>
+        <div className="composer-summary"><span>{props.composer.snapshot ? `${props.composer.snapshot.effectiveModel} · ${props.composer.snapshot.approvalMode}` : props.modelLabel ? `${props.modelLabel}${props.approvalModeLabel ? ` · ${props.approvalModeLabel}` : ""}` : "Model and approval policy unavailable"}</span><button className="composer-send" type="button" onClick={props.onSend} disabled={disabled || !props.draft.text.trim()} aria-label="Queue prompt"><Send size={16} />{busy ? "Queuing…" : "Send"}</button></div>
       </div>
       <div id="composer-help" className="sr-only">Enter sends. Shift Enter inserts a new line.</div>
       <div id="composer-status" className={props.draft.error ? "composer-error" : "composer-status"} role={props.draft.error ? "alert" : "status"}><span>{props.draft.error ?? props.disabledReason ?? (props.draft.status === "queued" ? "Prompt queued." : "Ready — Enter to send, Shift+Enter for a new line.")}</span>{props.disabledReason && props.disabledActionLabel && props.onDisabledAction ? <button type="button" className="composer-status-action" onClick={props.onDisabledAction}>{props.disabledActionLabel}</button> : null}</div>

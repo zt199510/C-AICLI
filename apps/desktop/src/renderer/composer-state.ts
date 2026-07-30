@@ -50,6 +50,7 @@ export type ComposerAction =
   | { type: "snapshot-loading" }
   | { type: "snapshot"; snapshot: ComposerStateData }
   | { type: "snapshot-error" }
+  | { type: "snapshot-clear" }
   | { type: "text"; key: string; text: string }
   | { type: "add-context"; key: string; item: ContextDescriptorData }
   | { type: "add-catalog"; key: string; item: SelectedCatalogItem }
@@ -57,6 +58,7 @@ export type ComposerAction =
   | { type: "remove-catalog"; key: string; kind: ComposerCatalogKind; id: string }
   | { type: "status"; key: string; status: ComposerStatus; error?: string | null }
   | { type: "clear-draft"; key: string }
+  | { type: "move-draft"; fromKey: string; toKey: string }
   | { type: "mentions-loading" }
   | { type: "mentions"; value: MentionResults }
   | { type: "mentions-close" };
@@ -67,6 +69,7 @@ export function composerReducer(state: ComposerUiState, action: ComposerAction):
     case "snapshot-loading": return { ...state, snapshotStatus: "loading" };
     case "snapshot": return { ...state, snapshotStatus: "ready", snapshot: action.snapshot };
     case "snapshot-error": return { ...state, snapshotStatus: "error", snapshot: null };
+    case "snapshot-clear": return { ...state, snapshotStatus: "idle", snapshot: null, mentions: emptyMentions };
     case "text": return updateDraft(state, action.key, draft => ({ ...draft, text: action.text, status: "editing", error: null }));
     case "add-context": return updateDraft(state, action.key, draft => draft.contextSelections.some(item => item.selectionId === action.item.selectionId)
       ? draft : { ...draft, contextSelections: [...draft.contextSelections, action.item], status: "editing", error: null });
@@ -76,6 +79,13 @@ export function composerReducer(state: ComposerUiState, action: ComposerAction):
     case "remove-catalog": return updateDraft(state, action.key, draft => ({ ...draft, catalogSelections: draft.catalogSelections.filter(item => item.kind !== action.kind || item.id !== action.id) }));
     case "status": return updateDraft(state, action.key, draft => ({ ...draft, status: action.status, error: action.error ?? null }));
     case "clear-draft": return { ...state, drafts: { ...state.drafts, [action.key]: emptyDraft("queued") } };
+    case "move-draft": {
+      const draft = state.drafts[action.fromKey];
+      if (!draft || action.fromKey === action.toKey) return state;
+      const drafts = { ...state.drafts, [action.toKey]: draft };
+      delete drafts[action.fromKey];
+      return { ...state, drafts };
+    }
     case "mentions-loading": return { ...state, mentions: { ...emptyMentions, loading: true } };
     case "mentions": return { ...state, mentions: action.value };
     case "mentions-close": return { ...state, mentions: emptyMentions };

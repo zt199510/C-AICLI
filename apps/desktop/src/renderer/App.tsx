@@ -10,22 +10,17 @@ import { WorkspaceInspector, type WorkspacePanel } from "./WorkspaceInspector";
 
 export function App() {
   const bridge = typeof window !== "undefined" ? window.caicli : undefined;
-  const controller = useDesktopController(bridge);
+  const controller = useDesktopController(bridge, { autoSelectConversation: true });
   const { state } = controller;
   const [opening, setOpening] = useState(false);
   const [workspaceError, setWorkspaceError] = useState<string | null>(null);
   const [workspacePanel, setWorkspacePanel] = useState<WorkspacePanel>("changes");
-  const [startingConversation, setStartingConversation] = useState(false);
-  const [conversationError, setConversationError] = useState<string | null>(null);
   const panels = useShellPanels();
   const { leftOpen, inspectorOpen, showThreadsTrigger, showInspectorTrigger } = panels;
 
   useEffect(() => {
     if (state.workspace) controller.setReviewTab("changes");
   }, [state.workspace?.workspaceId]);
-  useEffect(() => {
-    setConversationError(null);
-  }, [state.selectedThreadId, state.workspace?.workspaceId]);
 
   async function openWorkspace() {
     setOpening(true);
@@ -40,15 +35,6 @@ export function App() {
   function selectWorkspacePanel(panel: WorkspacePanel) {
     setWorkspacePanel(panel);
     if (panel !== "terminal") controller.setReviewTab(panel);
-  }
-
-  async function startConversation() {
-    if (!state.workspace || startingConversation) return;
-    setStartingConversation(true);
-    setConversationError(null);
-    const error = await controller.createThread("New conversation");
-    if (error) setConversationError(error);
-    setStartingConversation(false);
   }
 
   const workspacePath = state.workspace?.rootPath ?? null;
@@ -67,8 +53,8 @@ export function App() {
       </header>
 
       <div className="workspace-layout">
-        <aside id="threads-panel" className={`thread-sidebar drawer ${leftOpen ? "drawer-open" : ""}`} aria-label="Threads panel" aria-hidden={!leftOpen} onKeyDown={(event) => { if (event.key === "Escape") { event.preventDefault(); panels.closeThreads(); } }}>
-          <div className="panel-heading"><span>Threads</span><button className="icon-button" type="button" title="Collapse threads" aria-label="Collapse threads" onClick={() => panels.closeThreads()}><PanelLeftClose size={17} aria-hidden="true" /></button></div>
+        <aside id="threads-panel" className={`thread-sidebar drawer ${leftOpen ? "drawer-open" : ""}`} aria-label="Conversations panel" aria-hidden={!leftOpen} onKeyDown={(event) => { if (event.key === "Escape") { event.preventDefault(); panels.closeThreads(); } }}>
+          <div className="panel-heading"><span>Conversations</span><button className="icon-button" type="button" title="Collapse conversations" aria-label="Collapse conversations" onClick={() => panels.closeThreads()}><PanelLeftClose size={17} aria-hidden="true" /></button></div>
           <ThreadSidebar
             threads={state.threads}
             status={state.threadsStatus}
@@ -76,7 +62,7 @@ export function App() {
             truncated={state.threadsTruncated}
             selectedThreadId={state.selectedThreadId}
             onSelect={controller.selectThread}
-            onCreate={controller.createThread}
+            onNew={controller.beginConversation}
             onRename={controller.renameThread}
             onArchive={controller.archiveThread}
           />
@@ -84,7 +70,7 @@ export function App() {
 
         <main className="task-surface">
           <div className="task-toolbar">
-            <div className="toolbar-group">{!leftOpen && <button ref={showThreadsTrigger} className="icon-button" type="button" title="Show threads" aria-label="Show threads" aria-controls="threads-panel" aria-expanded={leftOpen} onClick={panels.showThreads}><PanelLeft size={17} aria-hidden="true" /></button>}<span className="thread-heading"><span className="thread-eyebrow">Conversation</span><span className="task-label">{state.detail?.thread.title ?? "Workspace review"}</span></span><span className="refreshing" role="status" aria-live="polite" hidden={!state.refreshing}>Refreshing…</span></div>
+            <div className="toolbar-group">{!leftOpen && <button ref={showThreadsTrigger} className="icon-button" type="button" title="Show conversations" aria-label="Show conversations" aria-controls="threads-panel" aria-expanded={leftOpen} onClick={panels.showThreads}><PanelLeft size={17} aria-hidden="true" /></button>}<span className="thread-heading"><span className="thread-eyebrow">Conversation</span><span className="task-label">{state.detail?.thread.title ?? (state.workspace ? "New conversation" : "Workspace review")}</span></span><span className="refreshing" role="status" aria-live="polite" hidden={!state.refreshing}>Refreshing…</span></div>
             <div className="toolbar-group">
               <button className="command-button" type="button" onClick={() => void openWorkspace()} disabled={opening || state.runtime.state !== "ready"}>{opening ? <RefreshCw className="spin" size={16} aria-hidden="true" /> : <FolderOpen size={16} aria-hidden="true" />}{opening ? "Opening" : "Open workspace"}</button>
               {!inspectorOpen && <button ref={showInspectorTrigger} className="icon-button" type="button" title="Show workspace inspector" aria-label="Show workspace inspector" aria-controls="review-inspector-panel" aria-expanded={inspectorOpen} onClick={panels.showInspector}><PanelRight size={17} aria-hidden="true" /></button>}
@@ -101,7 +87,6 @@ export function App() {
                 detail={state.detail}
                 status={state.detailStatus}
                 error={state.detailError}
-                onStartConversation={() => void startConversation()}
                 onLoadMore={controller.loadMore}
                 controls={(
                   <TaskControls
@@ -116,13 +101,16 @@ export function App() {
             )}
           </section>
           <Composer
+            key={state.selectedThreadId ?? "new-conversation"}
             draft={controller.composerDraft}
             composer={controller.composer}
-            disabledReason={conversationError ?? controller.composerDisabledReason}
+            disabledReason={controller.composerDisabledReason}
             historyTurnCount={state.detail?.turns.length ?? 0}
             historyMessageCount={state.detail?.timeline.filter((item) => item.type === "user.message" || item.type === "assistant.message" || item.type === "assistant.final").length ?? 0}
-            disabledActionLabel={!state.workspace ? "Open workspace" : state.detail?.thread.status === "archived" || !state.selectedThreadId ? (startingConversation ? "Starting…" : "New conversation") : state.runtime.state !== "ready" ? "Restart AppHost" : undefined}
-            onDisabledAction={!state.workspace ? () => void openWorkspace() : state.detail?.thread.status === "archived" || !state.selectedThreadId ? () => void startConversation() : state.runtime.state !== "ready" ? () => void controller.restartRuntime() : undefined}
+            modelLabel={state.workspace?.configuration.effectiveModel}
+            approvalModeLabel={state.workspace?.configuration.approvalMode}
+            disabledActionLabel={!state.workspace ? "Open workspace" : state.detail?.thread.status === "archived" ? "New conversation" : state.runtime.state !== "ready" ? "Restart AppHost" : undefined}
+            onDisabledAction={!state.workspace ? () => void openWorkspace() : state.detail?.thread.status === "archived" ? controller.beginConversation : state.runtime.state !== "ready" ? () => void controller.restartRuntime() : undefined}
             onText={controller.setComposerText}
             onSearch={(query) => void controller.searchMentions(query)}
             onCloseMentions={controller.closeMentions}
