@@ -1114,3 +1114,109 @@ body {
 .composer-error[hidden] {
   display: none !important;
 }
+
+/* Keep transient turn state in the conversation flow instead of presenting it as a second composer. */
+.inline-task-controls {
+  display: flex;
+  width: 100%;
+  min-height: 44px;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px 12px;
+  margin-top: 8px;
+  border: 0;
+  border-radius: 10px;
+  background: transparent;
+  box-shadow: none;
+  padding: 7px 2px;
+}
+
+.turn-status-main {
+  display: flex;
+  min-width: 0;
+  flex: 1 1 260px;
+  align-items: center;
+  gap: 9px;
+}
+
+.turn-status-indicator {
+  display: grid;
+  width: 26px;
+  height: 26px;
+  flex: 0 0 auto;
+  place-items: center;
+  border-radius: 9px;
+  background: var(--color-accent-soft);
+  color: var(--color-accent-strong);
+}
+
+.turn-status-copy {
+  display: grid;
+  min-width: 0;
+  gap: 1px;
+}
+
+.turn-status-copy strong {
+  font-size: 12px;
+  line-height: 1.3;
+}
+
+.turn-status-copy span {
+  overflow: hidden;
+  color: var(--color-text-muted);
+  font-size: 11px;
+  line-height: 1.35;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.turn-status-actions {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 5px;
+}
+
+.turn-status-actions .command-button {
+  min-height: 30px;
+  border-color: transparent;
+  background: var(--color-surface-muted);
+  padding: 4px 9px;
+  font-size: 11px;
+}
+
+.turn-stop-button {
+  color: var(--color-text-muted);
+}
+
+.task-controls[data-mode="recovery"],
+.task-controls[data-mode="approval"] {
+  border: 1px solid #e3c991;
+  background: #fffaf0;
+  padding: 8px 10px;
+}
+
+.task-controls[data-mode="recovery"] .turn-status-indicator,
+.task-controls[data-mode="approval"] .turn-status-indicator {
+  background: #fff0c8;
+  color: #8a6519;
+}
+
+.task-controls .approval-panel,
+.task-controls .restart-confirm,
+.task-controls .inline-error {
+  flex: 1 0 100%;
+  margin: 0;
+}
+
+@media (max-width: 520px) {
+  .inline-task-controls {
+    align-items: flex-start;
+  }
+
+  .turn-status-actions {
+    width: 100%;
+    justify-content: flex-end;
+  }
+}

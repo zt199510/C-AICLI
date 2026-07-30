@@ -45,7 +45,7 @@ export function TimelineView({ detail, status, error, controls, onLoadMore }: Ti
       const element = event.currentTarget;
       followLatest.current = element.scrollHeight - element.scrollTop - element.clientHeight < 96;
     }}>
-      <div className="recovery-banner" role="alert" hidden={!detail.recoveryRequired}>Timeline consistency requires an authoritative reload.</div>
+      <div className="recovery-banner" role="alert" hidden={!detail.recoveryRequired || detail.turns.some((turn) => turn.recoveryRequired)}>Timeline consistency requires an authoritative reload.</div>
       {items.length === 0 ? <div className="empty-timeline">This conversation has no messages yet. Use the composer below to begin.</div>
         : <TimelineBrowser items={items} />}
       {controls}

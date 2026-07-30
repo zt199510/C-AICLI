@@ -55,6 +55,23 @@ describe("TaskControls", () => {
     expect((approve as HTMLButtonElement).disabled).toBe(true);
     await act(async () => { finish?.(null); });
   });
+
+  it("shows recovery actions instead of conflicting running and stop controls", () => {
+    const interrupted = { ...turn("running"), recoveryRequired: true };
+    render(<TaskControls detail={detail(interrupted)} onCancel={vi.fn(async () => null)} onApproval={vi.fn(async () => null)} onResume={vi.fn(async () => null)} onRestart={vi.fn(async () => null)} />);
+    expect(screen.getByText("Turn interrupted")).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Resume" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Restart" })).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "Stop" })).toBeNull();
+  });
+
+  it("keeps the running state compact and exposes only the stop action", () => {
+    render(<TaskControls detail={detail(turn("running"))} onCancel={vi.fn(async () => null)} onApproval={vi.fn(async () => null)} onResume={vi.fn(async () => null)} onRestart={vi.fn(async () => null)} />);
+    expect(screen.getByText("C-AICLI is working")).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Stop" })).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "Resume" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Restart" })).toBeNull();
+  });
 });
 
 function turn(status: string): TurnSummaryData {
