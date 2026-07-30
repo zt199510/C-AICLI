@@ -160,6 +160,19 @@ internal sealed class CliCommandContext
         });
     }
 
+    public static void AddPositiveIntegerValidator(Option<int?> option, string optionName)
+    {
+        ArgumentNullException.ThrowIfNull(option);
+        option.Validators.Add(result =>
+        {
+            int? value = result.GetValueOrDefault<int?>();
+            if (value is <= 0)
+            {
+                result.AddError($"Invalid value for {optionName}. Value must be greater than zero.");
+            }
+        });
+    }
+
     public void WriteToolResult(ToolExecutionResult result)
     {
         Output.WriteLine(result.Succeeded ? "status: succeeded" : "status: failed");
