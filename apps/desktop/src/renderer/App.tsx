@@ -1,13 +1,12 @@
-import { FolderOpen, PanelLeft, PanelLeftClose, PanelRight, RefreshCw, X } from "lucide-react";
-import { useEffect, useState } from "react";
+import { FolderOpen, PanelLeft, PanelLeftClose, PanelRight, RefreshCw } from "lucide-react";
+import { useEffect, useState, type CSSProperties } from "react";
 import { useShellPanels } from "./app/use-shell-panels";
-import { ReviewInspector } from "./ReviewInspector";
 import { Composer } from "./Composer";
 import { TaskControls } from "./TaskControls";
 import { ThreadSidebar } from "./ThreadSidebar";
 import { TimelineView } from "./TimelineView";
-import { TerminalPanel } from "./TerminalPanel";
 import { useDesktopController } from "./use-desktop-controller";
+import { WorkspaceInspector, type WorkspacePanel } from "./WorkspaceInspector";
 
 export function App() {
   const bridge = typeof window !== "undefined" ? window.caicli : undefined;
@@ -15,7 +14,7 @@ export function App() {
   const { state } = controller;
   const [opening, setOpening] = useState(false);
   const [workspaceError, setWorkspaceError] = useState<string | null>(null);
-  const [workspaceTool, setWorkspaceTool] = useState<"review" | "terminal">("review");
+  const [workspacePanel, setWorkspacePanel] = useState<WorkspacePanel>("changes");
   const panels = useShellPanels();
   const { leftOpen, inspectorOpen, showThreadsTrigger, showInspectorTrigger } = panels;
 
@@ -33,12 +32,17 @@ export function App() {
     finally { setOpening(false); }
   }
 
+  function selectWorkspacePanel(panel: WorkspacePanel) {
+    setWorkspacePanel(panel);
+    if (panel !== "terminal") controller.setReviewTab(panel);
+  }
+
   const workspacePath = state.workspace?.rootPath ?? null;
   const bridgeUnavailable = !bridge;
   const statusMessage = bridgeUnavailable ? "Desktop bridge unavailable" : state.runtime.message;
 
   return (
-    <div className={`app-shell ${leftOpen ? "" : "left-collapsed"} ${inspectorOpen ? "" : "inspector-collapsed"}`}>
+    <div className={`app-shell ${leftOpen ? "" : "left-collapsed"} ${inspectorOpen ? "" : "inspector-collapsed"}`} style={{ "--inspector-width": `${panels.inspectorWidth}px` } as CSSProperties}>
       <header className="titlebar">
         <div className="brand" aria-label="C-AICLI Desktop">
           <span className="brand-mark" aria-hidden="true">C</span>
@@ -115,18 +119,37 @@ export function App() {
         </main>
 
         <aside id="review-inspector-panel" className={`inspector drawer ${inspectorOpen ? "drawer-open" : ""}`} aria-label="Workspace inspector" aria-hidden={!inspectorOpen} onKeyDown={(event) => { if (event.key === "Escape") { event.preventDefault(); panels.closeInspector(); } }}>
-          <div className="panel-heading context-heading">
-            <div className="context-switcher" role="tablist" aria-label="Workspace tools">
-              <button type="button" role="tab" aria-selected={workspaceTool === "review"} onClick={() => setWorkspaceTool("review")}>Review</button>
-              <button type="button" role="tab" aria-selected={workspaceTool === "terminal"} onClick={() => setWorkspaceTool("terminal")}>Terminal</button>
-            </div>
-            <button className="icon-button" type="button" title="Close workspace inspector" aria-label="Close review inspector" onClick={() => panels.closeInspector()}><X size={17} aria-hidden="true" /></button>
-          </div>
-          <div className="context-panel" role="tabpanel" aria-label={workspaceTool === "review" ? "Review workspace" : "Terminal workspace"}>
-            {workspaceTool === "review"
-              ? <ReviewInspector review={state.review} workspaceReady={Boolean(state.workspace)} onTab={controller.setReviewTab} onReport={(id) => void controller.selectReport(id)} onArtifact={(id) => void controller.selectArtifact(id)} />
-              : <TerminalPanel workspaceReady={Boolean(state.workspace)} />}
-          </div>
+          <div
+            className="inspector-resize-handle"
+            role="separator"
+            aria-label="Resize workspace inspector"
+            aria-orientation="vertical"
+            aria-valuemin={320}
+            aria-valuemax={520}
+            aria-valuenow={panels.inspectorWidth}
+            tabIndex={0}
+            onPointerDown={(event) => event.currentTarget.setPointerCapture(event.pointerId)}
+            onPointerMove={(event) => { if (event.currentTarget.hasPointerCapture(event.pointerId)) panels.resizeInspectorAt(event.clientX); }}
+            onPointerUp={(event) => event.currentTarget.releasePointerCapture(event.pointerId)}
+            onKeyDown={(event) => {
+              if (event.key === "ArrowLeft") { event.preventDefault(); panels.nudgeInspectorWidth(16); }
+              else if (event.key === "ArrowRight") { event.preventDefault(); panels.nudgeInspectorWidth(-16); }
+            }}
+          />
+          <WorkspaceInspector
+            activePanel={workspacePanel}
+            visible={inspectorOpen}
+            review={state.review}
+            workspaceReady={Boolean(state.workspace)}
+            workspaceLabel={workspacePath ?? "No workspace"}
+            threadLabel={state.detail?.thread.title ?? "No active thread"}
+            turnLabel={state.detail?.turns.at(-1)?.taskSummary ?? "No active turn"}
+            commands={controller.reviewCommands}
+            onPanel={selectWorkspacePanel}
+            onReport={(id) => void controller.selectReport(id)}
+            onArtifact={(id) => void controller.selectArtifact(id)}
+            onClose={() => panels.closeInspector()}
+          />
         </aside>
       </div>
     </div>

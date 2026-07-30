@@ -19,6 +19,9 @@ describe("user terminal panel", () => {
     await userEvent.click(screen.getByRole("button", { name: "Send" }));
     expect(inputTerminal).toHaveBeenCalledWith(expect.objectContaining({ text: "echo terminal-user-sentinel\n" }));
     expect(await screen.findByText(/terminal-user-sentinel/)).toBeTruthy();
+    await userEvent.click(screen.getByRole("button", { name: "Collapse" }));
+    await userEvent.click(screen.getByRole("button", { name: "Expand" }));
+    expect(screen.getByText(/terminal-user-sentinel/)).toBeTruthy();
     await userEvent.click(screen.getByRole("button", { name: "Cancel process" }));
     expect(cancelTerminal).toHaveBeenCalledOnce();
     await userEvent.click(screen.getByRole("button", { name: "Close terminal" }));

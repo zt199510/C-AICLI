@@ -4,15 +4,24 @@ import type { ReviewState } from "./desktop-state";
 
 const tabs = ["changes", "reports", "artifacts", "preview"] as const;
 
+export interface ReviewCommands {
+  previewArtifact(artifactId: string): Promise<string>;
+  verifyArtifact(artifactId: string): Promise<string>;
+  exportArtifact(artifactId: string): Promise<string>;
+  loadGerber(runId: string, preview: boolean): Promise<GerberReviewData>;
+  decideGerber(runId: string, expectedRevision: number, reason: string, accept: boolean): Promise<GerberReviewData>;
+}
+
 export interface ReviewInspectorProps {
   review: ReviewState;
   workspaceReady: boolean;
   onTab(tab: ReviewState["activeTab"]): void;
   onReport(reportId: string): void;
   onArtifact(artifactId: string): void;
+  commands?: ReviewCommands;
 }
 
-export function ReviewInspector({ review, workspaceReady, onTab, onReport, onArtifact }: ReviewInspectorProps) {
+export function ReviewInspector({ review, workspaceReady, onTab, onReport, onArtifact, commands }: ReviewInspectorProps) {
   const tabRefs = useRef<Array<HTMLButtonElement | null>>([]);
   function navigateTabs(event: KeyboardEvent<HTMLButtonElement>, index: number) {
     let next: number;
@@ -31,17 +40,29 @@ export function ReviewInspector({ review, workspaceReady, onTab, onReport, onArt
         {tabs.map((tab, index) => <button id={`review-tab-${tab}`} aria-controls={`review-panel-${tab}`} ref={(value) => { tabRefs.current[index] = value; }} tabIndex={review.activeTab === tab ? 0 : -1} key={tab} type="button" role="tab" aria-selected={review.activeTab === tab} onKeyDown={(event) => navigateTabs(event, index)} onClick={() => onTab(tab)}>{title(tab)}</button>)}
       </div>
       <div id={`review-panel-${review.activeTab}`} aria-labelledby={`review-tab-${review.activeTab}`} className="review-content" role="tabpanel" tabIndex={0}>
-        {!workspaceReady ? <div className="empty-list">Open a workspace to review results.</div> : null}
-        {workspaceReady && review.status === "loading" ? <div className="empty-list">Loading review data…</div> : null}
-        {workspaceReady && review.status === "error" ? <div className="inline-error" role="alert">{review.error}</div> : null}
-        {workspaceReady && review.truncated ? <div className="capped-banner">Showing a bounded result set.</div> : null}
-        {workspaceReady && review.activeTab === "changes" ? <ChangesPanel review={review} /> : null}
-        {workspaceReady && review.activeTab === "reports" ? <ReportsPanel review={review} onReport={onReport} /> : null}
-        {workspaceReady && review.activeTab === "artifacts" ? <ArtifactsPanel review={review} onArtifact={onArtifact} /> : null}
-        {workspaceReady && review.activeTab === "preview" ? <GerberPanel artifacts={review.artifacts} selected={review.selectedArtifact} onArtifact={onArtifact} /> : null}
+        <ReviewPanel review={review} workspaceReady={workspaceReady} onReport={onReport} onArtifact={onArtifact} commands={commands} />
       </div>
     </div>
   );
+}
+
+export function ReviewPanel({
+  review,
+  workspaceReady,
+  onReport,
+  onArtifact,
+  commands,
+}: Omit<ReviewInspectorProps, "onTab">) {
+  return <>
+    {!workspaceReady ? <div className="empty-list">Open a workspace to review results.</div> : null}
+    {workspaceReady && review.status === "loading" ? <div className="empty-list">Loading review data…</div> : null}
+    {workspaceReady && review.status === "error" ? <div className="inline-error" role="alert">{review.error}</div> : null}
+    {workspaceReady && review.truncated ? <div className="capped-banner">Showing a bounded result set.</div> : null}
+    {workspaceReady && review.activeTab === "changes" ? <ChangesPanel review={review} /> : null}
+    {workspaceReady && review.activeTab === "reports" ? <ReportsPanel review={review} onReport={onReport} /> : null}
+    {workspaceReady && review.activeTab === "artifacts" ? <ArtifactsPanel review={review} onArtifact={onArtifact} commands={commands} /> : null}
+    {workspaceReady && review.activeTab === "preview" ? <GerberPanel artifacts={review.artifacts} selected={review.selectedArtifact} onArtifact={onArtifact} commands={commands} /> : null}
+  </>;
 }
 
 function ChangesPanel({ review }: { review: ReviewState }) {
@@ -67,14 +88,14 @@ function ReportsPanel({ review, onReport }: { review: ReviewState; onReport(id: 
   </div>;
 }
 
-function ArtifactsPanel({ review, onArtifact }: { review: ReviewState; onArtifact(id: string): void }) {
+function ArtifactsPanel({ review, onArtifact, commands }: { review: ReviewState; onArtifact(id: string): void; commands?: ReviewCommands }) {
   return <div className="review-section"><h2>Artifacts</h2>
     {review.artifacts.length ? <div className="review-list">{review.artifacts.map((artifact) => <button type="button" key={artifact.artifactId} onClick={() => onArtifact(artifact.artifactId)}><span>{artifact.kind}</span><span>{artifact.availability}</span></button>)}</div> : review.status === "ready" ? <p>No artifacts.</p> : null}
-    {review.selectedArtifact ? <><ArtifactDetail artifact={review.selectedArtifact} /><ArtifactActions artifact={review.selectedArtifact} /></> : null}
+    {review.selectedArtifact ? <><ArtifactDetail artifact={review.selectedArtifact} /><ArtifactActions artifact={review.selectedArtifact} commands={commands} /></> : null}
   </div>;
 }
 
-function GerberPanel({ artifacts, selected, onArtifact }: { artifacts: readonly ArtifactMetadataData[]; selected: ArtifactMetadataData | null; onArtifact(id: string): void }) {
+function GerberPanel({ artifacts, selected, onArtifact, commands }: { artifacts: readonly ArtifactMetadataData[]; selected: ArtifactMetadataData | null; onArtifact(id: string): void; commands?: ReviewCommands }) {
   const managed = artifacts.filter(isManagedPreview);
   const [review, setReview] = useState<GerberReviewData | null>(null);
   const [reason, setReason] = useState("");
@@ -82,21 +103,20 @@ function GerberPanel({ artifacts, selected, onArtifact }: { artifacts: readonly 
   const runId = selected?.owner.runId ?? managed[0]?.owner.runId;
 
   async function load(preview: boolean) {
-    if (!runId) return;
+    if (!runId || !commands) return;
     try {
-      const result = preview ? await window.caicli.getGerberPreview({ runId }) : await window.caicli.getGerberReview({ runId });
-      if (!result.succeeded || !result.data) throw new Error(result.error?.safeMessage ?? "Review unavailable.");
-      setReview(result.data); setMessage(preview ? "Managed preview metadata refreshed; correctness remains unproven." : null);
+      const result = await commands.loadGerber(runId, preview);
+      setReview(result);
+      setMessage(preview ? "Managed preview metadata refreshed; correctness remains unproven." : null);
     } catch (value) { setMessage(value instanceof Error ? value.message : "Review unavailable."); }
   }
 
   async function decide(accept: boolean) {
-    if (!runId || !review) return;
+    if (!runId || !review || !commands) return;
     try {
-      const command = { runId, expectedRevision: review.revision, reason: reason || (accept ? "Reviewed in Desktop" : ""), clientMutationId: `gerber-${Date.now()}` };
-      const result = accept ? await window.caicli.acceptGerber(command) : await window.caicli.rejectGerber(command);
-      if (!result.succeeded || !result.data) throw new Error(result.error?.safeMessage ?? "Decision failed closed.");
-      setReview(result.data); setMessage(`Decision recorded: ${result.data.decision ?? result.data.state}.`);
+      const result = await commands.decideGerber(runId, review.revision, reason || (accept ? "Reviewed in Desktop" : ""), accept);
+      setReview(result);
+      setMessage(`Decision recorded: ${result.decision ?? result.state}.`);
     } catch (value) { setMessage(value instanceof Error ? value.message : "Decision failed closed."); }
   }
 
@@ -104,7 +124,7 @@ function GerberPanel({ artifacts, selected, onArtifact }: { artifacts: readonly 
     <p className="disclaimer">Metadata and verification status do not prove manufacturing or image correctness. No file bytes are opened or rendered here.</p>
     {managed.length ? <div className="review-list">{managed.map((artifact) => <button type="button" key={artifact.artifactId} onClick={() => onArtifact(artifact.artifactId)}><span>{artifact.kind}</span><span>{artifact.verification}</span></button>)}</div> : <p>No managed Gerber/TIFF preview artifacts.</p>}
     {selected && isManagedPreview(selected) ? <ArtifactDetail artifact={selected} /> : null}
-    {runId ? <div className="review-actions"><button type="button" onClick={() => void load(false)}>Load verification</button><button type="button" onClick={() => void load(true)}>Refresh preview</button></div> : null}
+    {runId ? <div className="review-actions"><button type="button" disabled={!commands} onClick={() => void load(false)}>Load verification</button><button type="button" disabled={!commands} onClick={() => void load(true)}>Refresh preview</button></div> : null}
     {review ? <>
       <dl><dt>Run state</dt><dd>{review.state}</dd><dt>Hard verification</dt><dd>{review.hardVerificationPassed ? "Passed" : "Not passed"}</dd><dt>Preview</dt><dd>{review.previewAvailable ? "Available" : "Missing"}</dd><dt>Correctness proof</dt><dd>No</dd></dl>
       <input className="decision-reason" aria-label="Human decision reason" maxLength={1024} value={reason} onChange={(event) => setReason(event.target.value)} placeholder="Reject reason (required)" />
@@ -115,22 +135,20 @@ function GerberPanel({ artifacts, selected, onArtifact }: { artifacts: readonly 
   </div>;
 }
 
-function ArtifactActions({ artifact }: { artifact: ArtifactMetadataData }) {
+function ArtifactActions({ artifact, commands }: { artifact: ArtifactMetadataData; commands?: ReviewCommands }) {
   const [message, setMessage] = useState<string | null>(null);
   async function act(kind: "preview" | "verify" | "export") {
+    if (!commands) return;
     try {
-      if (kind === "export") {
-        const result = await window.caicli.exportArtifact({ artifactId: artifact.artifactId });
-        setMessage(result === null ? "Export canceled." : result.succeeded ? `Exported ${result.data?.fileName ?? "artifact"}.` : result.error?.safeMessage ?? "Export failed.");
-        return;
-      }
       const result = kind === "preview"
-        ? await window.caicli.previewArtifact({ artifactId: artifact.artifactId })
-        : await window.caicli.verifyArtifact({ artifactId: artifact.artifactId });
-      setMessage(result.succeeded ? result.data?.safeMessage ?? "Artifact checked." : result.error?.safeMessage ?? "Artifact check failed.");
+        ? await commands.previewArtifact(artifact.artifactId)
+        : kind === "verify"
+          ? await commands.verifyArtifact(artifact.artifactId)
+          : await commands.exportArtifact(artifact.artifactId);
+      setMessage(result);
     } catch { setMessage("Artifact action failed safely."); }
   }
-  return <><div className="review-actions"><button type="button" onClick={() => void act("verify")}>Verify identity</button><button type="button" onClick={() => void act("preview")}>Preview metadata</button><button type="button" onClick={() => void act("export")}>Export…</button></div>{message ? <p className="review-status" role="status" aria-live="polite">{message}</p> : null}</>;
+  return <><div className="review-actions"><button type="button" disabled={!commands} onClick={() => void act("verify")}>Verify identity</button><button type="button" disabled={!commands} onClick={() => void act("preview")}>Preview metadata</button><button type="button" disabled={!commands} onClick={() => void act("export")}>Export…</button></div>{message ? <p className="review-status" role="status" aria-live="polite">{message}</p> : null}</>;
 }
 
 function ArtifactDetail({ artifact }: { artifact: ArtifactMetadataData }) {

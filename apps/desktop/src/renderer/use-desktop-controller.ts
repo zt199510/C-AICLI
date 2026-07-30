@@ -290,6 +290,45 @@ export function useDesktopController(bridge: DesktopBridge | undefined) {
     } catch { dispatch({ type: "review-error", epoch, message: "Artifact could not be loaded." }); }
   }, [bridge]);
 
+  const previewArtifact = useCallback(async (artifactId: string) => {
+    if (!bridge) throw new Error("Desktop bridge unavailable.");
+    const result = await bridge.previewArtifact({ artifactId });
+    if (!result.succeeded || !result.data) throw new Error(safeFailure(result.error?.safeMessage));
+    return result.data.safeMessage;
+  }, [bridge]);
+
+  const verifyArtifact = useCallback(async (artifactId: string) => {
+    if (!bridge) throw new Error("Desktop bridge unavailable.");
+    const result = await bridge.verifyArtifact({ artifactId });
+    if (!result.succeeded || !result.data) throw new Error(safeFailure(result.error?.safeMessage));
+    return result.data.safeMessage;
+  }, [bridge]);
+
+  const exportArtifact = useCallback(async (artifactId: string) => {
+    if (!bridge) throw new Error("Desktop bridge unavailable.");
+    const result = await bridge.exportArtifact({ artifactId });
+    if (result === null) return "Export canceled.";
+    if (!result.succeeded || !result.data) throw new Error(safeFailure(result.error?.safeMessage));
+    return `Exported ${result.data.fileName}.`;
+  }, [bridge]);
+
+  const loadGerber = useCallback(async (runId: string, preview: boolean) => {
+    if (!bridge) throw new Error("Desktop bridge unavailable.");
+    const result = preview
+      ? await bridge.getGerberPreview({ runId })
+      : await bridge.getGerberReview({ runId });
+    if (!result.succeeded || !result.data) throw new Error(safeFailure(result.error?.safeMessage));
+    return result.data;
+  }, [bridge]);
+
+  const decideGerber = useCallback(async (runId: string, expectedRevision: number, reason: string, accept: boolean) => {
+    if (!bridge) throw new Error("Desktop bridge unavailable.");
+    const command = { runId, expectedRevision, reason, clientMutationId: `gerber-${Date.now()}` };
+    const result = accept ? await bridge.acceptGerber(command) : await bridge.rejectGerber(command);
+    if (!result.succeeded || !result.data) throw new Error(safeFailure(result.error?.safeMessage));
+    return result.data;
+  }, [bridge]);
+
   const activeDraftKey = state.workspace && state.selectedThreadId
     ? draftKey(state.workspace.workspaceId, state.selectedThreadId)
     : null;
@@ -542,6 +581,13 @@ export function useDesktopController(bridge: DesktopBridge | undefined) {
     setReviewTab,
     selectReport,
     selectArtifact,
+    reviewCommands: {
+      previewArtifact,
+      verifyArtifact,
+      exportArtifact,
+      loadGerber,
+      decideGerber,
+    },
     composer,
     composerDraft: currentDraft(composer, activeDraftKey),
     composerDisabledReason: !state.workspace ? "Open a workspace to compose." : !state.selectedThreadId ? "Select a thread to compose." : state.detail?.thread.status === "archived" ? "Archived threads cannot accept input." : state.runtime.state !== "ready" ? "AppHost is unavailable." : composer.snapshot?.pendingIntent ? "Clear the pending input before composing another." : null,

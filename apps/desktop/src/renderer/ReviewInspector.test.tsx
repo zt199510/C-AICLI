@@ -3,7 +3,7 @@ import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 import type { ArtifactMetadataData } from "../generated/desktop-contracts";
 import type { ReviewState } from "./desktop-state";
-import { ReviewInspector } from "./ReviewInspector";
+import { ReviewInspector, type ReviewCommands } from "./ReviewInspector";
 
 describe("read-only review inspector", () => {
   it("never turns projected artifact paths into links", async () => {
@@ -19,6 +19,25 @@ describe("read-only review inspector", () => {
     render(<ReviewInspector review={{ ...review, activeTab: "preview", artifacts: [artifact], selectedArtifact: artifact }} workspaceReady onTab={vi.fn()} onReport={vi.fn()} onArtifact={vi.fn()} />);
     expect(screen.getByText(/do not prove manufacturing or image correctness/i)).toBeTruthy();
     expect(screen.getByText("verified", { selector: "dd" })).toBeTruthy();
+  });
+
+  it("routes artifact and human-decision commands through the supplied boundary", async () => {
+    const commands: ReviewCommands = {
+      previewArtifact: vi.fn(async () => "Preview ready."),
+      verifyArtifact: vi.fn(async () => "Identity verified."),
+      exportArtifact: vi.fn(async () => "Export canceled."),
+      loadGerber: vi.fn(async () => gerberReview),
+      decideGerber: vi.fn(async () => ({ ...gerberReview, revision: 8, state: "accepted", decision: "accepted", humanDecisionEligible: false })),
+    };
+    const view = render(<ReviewInspector review={{ ...review, activeTab: "artifacts", artifacts: [artifact], selectedArtifact: artifact }} workspaceReady onTab={vi.fn()} onReport={vi.fn()} onArtifact={vi.fn()} commands={commands} />);
+    await userEvent.click(screen.getByRole("button", { name: "Verify identity" }));
+    expect(commands.verifyArtifact).toHaveBeenCalledWith("artifact-1");
+    expect(await screen.findByText("Identity verified.")).toBeTruthy();
+
+    view.rerender(<ReviewInspector review={{ ...review, activeTab: "preview", artifacts: [artifact], selectedArtifact: artifact }} workspaceReady onTab={vi.fn()} onReport={vi.fn()} onArtifact={vi.fn()} commands={commands} />);
+    await userEvent.click(screen.getByRole("button", { name: "Load verification" }));
+    await userEvent.click(await screen.findByRole("button", { name: "Accept verified run" }));
+    expect(commands.decideGerber).toHaveBeenCalledWith("run-1", 7, "Reviewed in Desktop", true);
   });
 
   it("connects tabs to their panel and supports arrow-key navigation", async () => {
@@ -43,3 +62,9 @@ const artifact: ArtifactMetadataData = {
 };
 
 const review: ReviewState = { activeTab: "changes", status: "ready", error: null, changes: null, reports: [], selectedReport: null, artifacts: [], selectedArtifact: null, truncated: false };
+
+const gerberReview = {
+  runId: "run-1", revision: 7, state: "awaiting-human", hardVerificationPassed: true,
+  humanDecisionEligible: true, previewAvailable: true, correctnessProof: false, decision: null,
+  disabledReason: null, verificationArtifactId: "artifact-1", previewArtifactIds: ["artifact-1"],
+} as const;

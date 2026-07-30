@@ -3,7 +3,7 @@ import type { TerminalStateData } from "../generated/desktop-contracts";
 
 const maxRenderedScrollbackCharacters = 8 * 1024;
 
-export function TerminalPanel({ workspaceReady }: { workspaceReady: boolean }) {
+export function TerminalPanel({ workspaceReady, active = true }: { workspaceReady: boolean; active?: boolean }) {
   const bridge = typeof window === "undefined" ? undefined : window.caicli;
   const [expanded, setExpanded] = useState(false);
   const [terminal, setTerminal] = useState<TerminalStateData | null>(null);
@@ -31,7 +31,7 @@ export function TerminalPanel({ workspaceReady }: { workspaceReady: boolean }) {
   }
 
   useEffect(() => {
-    if (!expanded || !terminal || terminal.status !== "running" || !bridge) return;
+    if (!active || !expanded || !terminal || terminal.status !== "running" || !bridge) return;
     const timer = window.setInterval(() => {
       void bridge.getTerminal({ sessionId: terminal.sessionId, afterCursor: terminal.cursor }).then((result) => {
         if (!result.succeeded || !result.data) return;
@@ -41,7 +41,7 @@ export function TerminalPanel({ workspaceReady }: { workspaceReady: boolean }) {
       }).catch(() => setError("Terminal status could not be refreshed."));
     }, 500);
     return () => window.clearInterval(timer);
-  }, [bridge, expanded, terminal?.sessionId, terminal?.status]);
+  }, [active, bridge, expanded, terminal?.sessionId, terminal?.status]);
 
   async function open() {
     if (!bridge) return;
@@ -91,12 +91,13 @@ export function TerminalPanel({ workspaceReady }: { workspaceReady: boolean }) {
     }
   }
 
-  return <section className={`terminal-panel ${expanded ? "expanded" : ""}`} aria-label="User terminal">
+  return <section className={`terminal-panel ${expanded ? "expanded" : ""}`} aria-label="User terminal" data-active={active}>
     <div className="terminal-heading">
       <strong>User terminal</strong>
       <span role="status" aria-live="polite">{terminal ? `${terminal.status}${terminal.exitCode === null ? "" : ` · exit ${terminal.exitCode}`}${terminal.truncated ? " · output truncated" : ""}` : "Closed"}</span>
       <div>
         <button type="button" hidden={!expanded} onClick={() => setExpanded(false)}>Collapse</button>
+        <button type="button" hidden={expanded || !terminal || terminal.status === "closed"} onClick={() => setExpanded(true)}>Expand</button>
         <button type="button" hidden={Boolean(terminal && terminal.status !== "closed")} disabled={!workspaceReady || busy} onClick={() => void open()}>Open terminal</button>
         <button type="button" hidden={terminal?.status !== "running"} disabled={busy} onClick={() => void stop(false)}>Cancel process</button>
         <button type="button" hidden={!terminal || terminal.status === "closed"} disabled={busy} onClick={() => void stop(true)}>Close terminal</button>

@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from "@testing-library/react";
+import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { ChangesData, WorkspaceSnapshotData } from "../generated/desktop-contracts";
@@ -52,9 +52,23 @@ describe("desktop shell", () => {
     render(<App />);
     expect(screen.queryByRole("region", { name: "User terminal" })).toBeNull();
     await userEvent.click(screen.getByRole("button", { name: "Show review inspector" }));
+    const tools = screen.getByRole("tablist", { name: "Workspace tools" });
+    expect(within(tools).getAllByRole("tab").map((tab) => tab.textContent?.replace(/\d+/gu, ""))).toEqual([
+      "Changes", "Terminal", "Reports", "Artifacts", "Preview",
+    ]);
     await userEvent.click(screen.getByRole("tab", { name: "Terminal" }));
     expect(screen.getByRole("region", { name: "User terminal" })).toBeTruthy();
-    expect(screen.getByRole("tabpanel", { name: "Terminal workspace" })).toBeTruthy();
+    expect(screen.getByRole("tabpanel", { name: "Terminal" })).toBeTruthy();
+  });
+
+  it("supports keyboard resizing for the wide workspace inspector", async () => {
+    render(<App />);
+    await userEvent.click(screen.getByRole("button", { name: "Show review inspector" }));
+    const separator = screen.getByRole("separator", { name: "Resize workspace inspector" });
+    expect(separator.getAttribute("aria-valuenow")).toBe("380");
+    separator.focus();
+    await userEvent.keyboard("{ArrowLeft}");
+    expect(separator.getAttribute("aria-valuenow")).toBe("396");
   });
 
   it("closes drawers with Escape and restores the shell trigger", async () => {

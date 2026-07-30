@@ -17,10 +17,11 @@ function renderApp() {
   );
 }
 
-const preview = import.meta.env.DEV && new URLSearchParams(window.location.search).get("preview") === "week86";
+const previewFixture = new URLSearchParams(window.location.search).get("preview");
+const preview = import.meta.env.DEV && (previewFixture === "week86" || previewFixture === "week89");
 if (preview) {
-  void import("./dev-preview-bridge").then(({ installWeek86PreviewBridge }) => {
-    installWeek86PreviewBridge();
+  void import("./dev-preview-bridge").then(({ installDesktopPreviewBridge }) => {
+    installDesktopPreviewBridge();
     renderApp();
   });
 } else {

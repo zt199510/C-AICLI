@@ -1,6 +1,10 @@
 import type {
+  ArtifactMetadataData,
   ChangesData,
   ComposerStateData,
+  GerberReviewData,
+  ReportDetailData,
+  ReportMetadataData,
   ThreadDetailData,
   ThreadSummaryData,
   TimelineItemData,
@@ -69,7 +73,7 @@ const changes: ChangesData = {
   gitStatusSucceeded: true,
   gitStatusErrorCode: null,
   dirty: true,
-  diffStatSummary: "Chat-first shell · contextual workspace tools · C-AICLI brand retained",
+  diffStatSummary: "Chat-first shell · unified context workspace · C-AICLI brand retained",
   diffSucceeded: true,
   diffErrorCode: null,
   diffTruncated: false,
@@ -78,11 +82,66 @@ const changes: ChangesData = {
     { path: "apps/desktop/src/renderer/app/app-shell.css", status: "M" },
   ],
   sessionSource: "local-preview",
-  sessionName: "Week86 visual checkpoint",
+  sessionName: "Week89 visual checkpoint",
   warnings: ["Preview data only. No provider or product authority is active."],
 };
 
-export function installWeek86PreviewBridge() {
+const report: ReportMetadataData = {
+  reportId: "report-week89",
+  sourceKind: "turn",
+  sourceId: "turn-shell",
+  status: "completed",
+  createdAtUtc: timestamp,
+  updatedAtUtc: timestamp,
+  taskReportPointer: "managed:report-week89",
+  artifactPointer: "managed:artifact-week89",
+};
+
+const reportDetail: ReportDetailData = {
+  metadata: report,
+  summary: "The context workspace now uses one five-panel navigation model without changing protocol authority.",
+  stopReason: null,
+  errorCode: null,
+  changedFiles: ["apps/desktop/src/renderer/WorkspaceInspector.tsx"],
+  commands: ["npm run typecheck", "vitest targeted renderer tests"],
+  verification: ["Five panels share one accessible tab shell", "Terminal remains an explicit user surface"],
+  risks: ["Visual acceptance remains a user decision"],
+  artifactPointers: ["managed:artifact-week89"],
+  summaryTruncated: false,
+};
+
+const artifact: ArtifactMetadataData = {
+  artifactId: "artifact-week89",
+  pointerId: "pointer-week89",
+  kind: "gerber-preview",
+  ownership: "managed",
+  relativePath: "artifacts/week89/preview.gbr",
+  size: 4096,
+  sha256: "a".repeat(64),
+  availability: "available",
+  verification: "verified",
+  runState: "completed",
+  declaredAtUtc: timestamp,
+  updatedAtUtc: timestamp,
+  owner: { runId: "run-week89", jobId: null, queueId: null, rootRunId: null, parentRunId: null, attempt: 1 },
+  retention: { class: "managed", owned: true, prunable: false, defaultMinimumAgeDays: 7 },
+};
+
+const gerberReview: GerberReviewData = {
+  runId: "run-week89",
+  revision: 3,
+  state: "awaiting-human",
+  hardVerificationPassed: true,
+  humanDecisionEligible: true,
+  previewAvailable: true,
+  correctnessProof: false,
+  decision: null,
+  disabledReason: null,
+  verificationArtifactId: artifact.artifactId,
+  previewArtifactIds: [artifact.artifactId],
+};
+
+export function installDesktopPreviewBridge() {
   const unsupported = () => Promise.reject(new Error("This action is disabled in visual preview."));
   const implemented: Partial<DesktopBridge> = {
     getRuntimeStatus: async () => createRuntimeStatus("runtime-ready"),
@@ -92,8 +151,25 @@ export function installWeek86PreviewBridge() {
     listThreads: async () => result({ threads, truncated: false }),
     getThread: async ({ threadId }) => result(details.get(threadId) ?? details.get("thread-ui")!),
     getChanges: async () => result(changes),
-    listReports: async () => result({ reports: [], truncated: false }),
-    listArtifacts: async () => result({ artifacts: [], truncated: false }),
+    listReports: async () => result({ reports: [report], truncated: false }),
+    getReport: async () => result(reportDetail),
+    listArtifacts: async () => result({ artifacts: [artifact], truncated: false }),
+    getArtifact: async () => result(artifact),
+    previewArtifact: async () => result({
+      artifactId: artifact.artifactId, kind: artifact.kind, availability: artifact.availability,
+      verified: true, observedSize: artifact.size, previewAvailable: true, correctnessProof: false,
+      diagnosticCode: null, safeMessage: "Preview metadata is available; correctness remains unproven.",
+    }),
+    verifyArtifact: async () => result({
+      artifactId: artifact.artifactId, kind: artifact.kind, availability: artifact.availability,
+      verified: true, observedSize: artifact.size, previewAvailable: true, correctnessProof: false,
+      diagnosticCode: null, safeMessage: "Artifact identity verified.",
+    }),
+    exportArtifact: async () => null,
+    getGerberReview: async () => result(gerberReview),
+    getGerberPreview: async () => result(gerberReview),
+    acceptGerber: async () => result({ ...gerberReview, revision: gerberReview.revision + 1, state: "accepted", decision: "accepted", humanDecisionEligible: false }),
+    rejectGerber: async () => result({ ...gerberReview, revision: gerberReview.revision + 1, state: "rejected", decision: "rejected", humanDecisionEligible: false }),
     getComposer: async ({ threadId }) => result(composer(threadId)),
     onRuntimeStatus: () => () => undefined,
     onThreadChanged: () => () => undefined,
