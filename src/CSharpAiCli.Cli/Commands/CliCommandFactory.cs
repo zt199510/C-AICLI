@@ -792,66 +792,6 @@ public static class CliCommandFactory
         queueCommand.Subcommands.Add(queueCancelCommand);
         queueCommand.Subcommands.Add(queueCleanupCommand);
 
-        Command reviewCommand = new("review", "Review the current git diff with the configured model.");
-        Option<bool> reviewJsonOption = new("--json")
-        {
-            Description = "Write a single JSON review result object.",
-        };
-        Option<string> reviewOutputOption = new("--output")
-        {
-            Description = "Select text or json output.",
-        };
-        reviewOutputOption.DefaultValueFactory = _ => "text";
-        reviewOutputOption.Validators.Add(result =>
-        {
-            string outputMode = result.GetValueOrDefault<string>() ?? "text";
-            if (!string.Equals(outputMode, "text", StringComparison.OrdinalIgnoreCase) &&
-                !string.Equals(outputMode, "json", StringComparison.OrdinalIgnoreCase))
-            {
-                result.AddError("Invalid value for --output. Allowed values are text and json.");
-            }
-        });
-        reviewCommand.Options.Add(reviewJsonOption);
-        reviewCommand.Options.Add(reviewOutputOption);
-        reviewCommand.SetAction(parseResult =>
-        {
-            string? workspacePath = parseResult.GetValue(workspaceOption);
-            bool jsonRequested = parseResult.GetValue(reviewJsonOption);
-            string outputMode = parseResult.GetValue(reviewOutputOption) ?? "text";
-            CliEnvironmentSnapshot snapshot = workspaceSnapshotProvider(workspacePath);
-            WriteVerboseDiagnostics(
-                parseResult,
-                "review",
-                snapshot,
-                humanReadableOutput: !IsJsonOutputRequested(jsonRequested, outputMode));
-
-            GitDiffTool gitDiffTool = new(new WorkspaceGuard());
-            ToolExecutionResult gitDiff = gitDiffTool.Execute(new ToolExecutionContext(
-                "cli_review",
-                snapshot.Workspace,
-                "{}"));
-            if (!gitDiff.Succeeded)
-            {
-                WriteReviewReport(output, ReviewReport.ToolFailure(gitDiff), jsonRequested, outputMode);
-                return 1;
-            }
-
-            string prompt = ReviewPromptBuilder.Build(gitDiff.Summary);
-            ChatRequest request = new(prompt, Instructions: snapshot.Instructions.Instructions);
-            ChatModelResult result = chatModelClientFactory(snapshot).Send(request);
-            if (result.Response is not null)
-            {
-                ChatResponse response = gitDiff.Summary.Contains(GitDiffTool.TruncationWarning, StringComparison.Ordinal)
-                    ? PrependReviewWarning(result.Response, GitDiffTool.TruncationWarning)
-                    : result.Response;
-                WriteReviewReport(output, ReviewReport.Completed(response), jsonRequested, outputMode);
-                return 0;
-            }
-
-            WriteReviewReport(output, ReviewReport.ModelFailure(result), jsonRequested, outputMode);
-            return 1;
-        });
-
         Command packsCommand = new("packs", "Inspect deterministic project pack contracts and tool dependencies.");
         Command packsListCommand = new("list", "List built-in project pack contracts without running tools.");
         Option<bool> packsListJsonOption = new("--json")
@@ -5049,7 +4989,7 @@ public static class CliCommandFactory
         rootComposer.Add(queueCommand);
         rootComposer.Add(automationCommand);
         rootComposer.Add(pipelineCommand);
-        rootComposer.Add(reviewCommand);
+        rootComposer.Add(new ReviewCommandModule(), commandContext);
         rootComposer.Add(new ConfigCommandModule(), commandContext);
         rootComposer.Add(new McpCommandModule(), commandContext);
         rootComposer.Add(new WorkflowCommandModule(), commandContext);
@@ -5670,28 +5610,6 @@ public static class CliCommandFactory
 
         output.WriteLine("summary:");
         output.WriteLine(result.Summary);
-    }
-
-    private static void WriteReviewReport(
-        TextWriter output,
-        ReviewReport report,
-        bool jsonRequested,
-        string outputMode)
-    {
-        ArgumentNullException.ThrowIfNull(output);
-        ArgumentNullException.ThrowIfNull(report);
-
-        output.WriteLine(IsJsonOutputRequested(jsonRequested, outputMode)
-            ? report.ToJson()
-            : report.ToDisplayText());
-    }
-
-    private static ChatResponse PrependReviewWarning(ChatResponse response, string warning)
-    {
-        string text = string.IsNullOrWhiteSpace(response.Text)
-            ? warning
-            : warning + Environment.NewLine + Environment.NewLine + response.Text.TrimStart('\r', '\n');
-        return response with { Text = text };
     }
 
     private static void WriteRunResult(TextWriter output, ExecResult result)
