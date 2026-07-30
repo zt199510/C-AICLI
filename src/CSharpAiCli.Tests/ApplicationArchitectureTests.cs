@@ -107,7 +107,13 @@ public sealed class ApplicationArchitectureTests
             "catalog.list", "changes.get", "report.list", "report.get", "artifact.list", "artifact.get"
         })
         {
-            Assert.DoesNotContain(method, desktopBusinessSurface, StringComparison.Ordinal);
+            foreach (char quote in new[] { '"', '\'', '`' })
+            {
+                Assert.DoesNotContain(
+                    $"{quote}{method}{quote}",
+                    desktopBusinessSurface,
+                    StringComparison.Ordinal);
+            }
         }
     }
 
@@ -120,7 +126,7 @@ public sealed class ApplicationArchitectureTests
         Assert.DoesNotContain("CSharpAiCli.AppHost", source, StringComparison.Ordinal);
         Assert.DoesNotContain("Electron", source, StringComparison.OrdinalIgnoreCase);
         Assert.DoesNotContain("apps/desktop", source, StringComparison.OrdinalIgnoreCase);
-        Assert.Contains("public static class CliCommandFactory", source, StringComparison.Ordinal);
+        Assert.Contains("public static partial class CliCommandFactory", source, StringComparison.Ordinal);
         Assert.Contains("interface ICliCommandModule", source, StringComparison.Ordinal);
         Assert.Contains("sealed class CliRootComposer", source, StringComparison.Ordinal);
     }

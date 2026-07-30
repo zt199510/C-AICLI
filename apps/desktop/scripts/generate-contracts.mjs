@@ -727,7 +727,7 @@ function renderTypescript() {
 async function emit(filePath, expected) {
   if (checkOnly) {
     const actual = await readFile(filePath, "utf8").catch(() => "");
-    if (actual !== expected) {
+    if (actual.replaceAll("\r\n", "\n") !== expected.replaceAll("\r\n", "\n")) {
       throw new Error(`Generated contract is stale: ${filePath}`);
     }
     return;

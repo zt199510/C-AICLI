@@ -442,6 +442,14 @@ describe("desktop-v1 contract source", () => {
       encoding: "utf8",
     });
     expect(checked.status, checked.stderr).toBe(0);
+
+    await writeFile(csharpPath, firstCsharp.replaceAll("\n", "\r\n"), "utf8");
+    await writeFile(typescriptPath, firstTypescript.replaceAll("\n", "\r\n"), "utf8");
+    const checkedWithWindowsLineEndings = spawnSync(process.execPath, [...args, "--check"], {
+      cwd: repoRoot,
+      encoding: "utf8",
+    });
+    expect(checkedWithWindowsLineEndings.status, checkedWithWindowsLineEndings.stderr).toBe(0);
   });
 
   it("validates the checked-in Week 69 contract as a closed type graph", () => {
