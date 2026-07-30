@@ -1,18 +1,23 @@
 # 阶段 07 - CLI 可维护化与 Desktop Chat-first 体验重构计划
 
-更新时间：2026-07-28
+更新时间：2026-07-30
 
-状态：`Active / Lean validation`
+状态：`Week92 Candidate / Awaiting visual acceptance`
 
 > **2026-07-30 执行规则变更：** 原 104 Gate 重型证据流水线不再作为产品开发阻塞条件。后续按
 > `docs_md/plans/07_cli_desktop_experience_refactor_lean_acceptance.md`
 > 执行最小必要验证；W86、W89、W92 仍保留用户视觉验收。
 
+> **当前进度：** Week84–91 产品实现与精简自动验收已完成，Week92 产品候选为
+> `4cba061`。Desktop `verify` 与完整 .NET 回归通过；剩余阻塞项仅为用户对
+> W86、W89、W92 的视觉确认。详细结果见
+> `docs_md/weekly/92_week_review.md`。
+
 ## 结论
 
 完整完成本阶段建议按 **9 个日历 Week（Week 84-92）** 承诺，并在 Week85-89 使用 Renderer 与 CLI 两条隔离工作流并行推进。
 
-- Week 84 先关闭 Week83 遗留的 `provider-recovery-listener-retention` P1，并冻结可用于重构的干净基线。
+- Week 84 将 Week83 遗留的 `provider-recovery-listener-retention` P1 记为非阻塞技术债；仅当本次 UI 修改触及相关生命周期且对照显示恶化时才修复。
 - Week 85-89 的 Renderer lane 重构边界、状态、设计系统、Chat-first Shell、对话投影、Composer、审批和右侧工作区。
 - Week 85-89 的 CLI lane 分五步模块化 7,673 行的 `CliCommandFactory`，保持命令、输出、退出码和安全语义兼容。
 - Week 90 合并两条线并完成跨面集成，Week91 做完整 hardening，Week92 做最终 acceptance。
