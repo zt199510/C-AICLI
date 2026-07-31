@@ -57,6 +57,7 @@ export type ComposerAction =
   | { type: "remove-context"; key: string; selectionId: string }
   | { type: "remove-catalog"; key: string; kind: ComposerCatalogKind; id: string }
   | { type: "status"; key: string; status: ComposerStatus; error?: string | null }
+  | { type: "settle"; key: string }
   | { type: "clear-draft"; key: string }
   | { type: "move-draft"; fromKey: string; toKey: string }
   | { type: "mentions-loading" }
@@ -78,6 +79,10 @@ export function composerReducer(state: ComposerUiState, action: ComposerAction):
     case "remove-context": return updateDraft(state, action.key, draft => ({ ...draft, contextSelections: draft.contextSelections.filter(item => item.selectionId !== action.selectionId) }));
     case "remove-catalog": return updateDraft(state, action.key, draft => ({ ...draft, catalogSelections: draft.catalogSelections.filter(item => item.kind !== action.kind || item.id !== action.id) }));
     case "status": return updateDraft(state, action.key, draft => ({ ...draft, status: action.status, error: action.error ?? null }));
+    case "settle": return updateDraft(state, action.key, draft =>
+      draft.status === "validating" || draft.status === "enqueueing"
+        ? { ...draft, status: "editing", error: null }
+        : draft);
     case "clear-draft": return { ...state, drafts: { ...state.drafts, [action.key]: emptyDraft("queued") } };
     case "move-draft": {
       const draft = state.drafts[action.fromKey];

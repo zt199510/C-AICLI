@@ -52,6 +52,11 @@ describe("continuous conversations", () => {
     await waitFor(() => expect(startTurn).toHaveBeenCalledTimes(1));
     await waitFor(() => expect(screen.getByTestId("detail-state").textContent).toBe("ready"));
     await waitFor(() => expect((screen.getByLabelText("Prompt") as HTMLTextAreaElement).value).toBe(""));
+    await waitFor(() => {
+      expect(screen.getByTestId("composer-status").textContent).toBe("editing");
+      expect((screen.getByLabelText("Prompt") as HTMLTextAreaElement).disabled).toBe(false);
+      expect((screen.getByRole("button", { name: "Send" }) as HTMLButtonElement).disabled).toBe(false);
+    });
 
     expect(createThread).toHaveBeenCalledWith({ title: "Review this workspace" });
     expect(enqueueComposer).toHaveBeenLastCalledWith(expect.objectContaining({
@@ -72,16 +77,32 @@ describe("continuous conversations", () => {
 
 function ConversationHarness({ bridge }: { readonly bridge: DesktopBridge }) {
   const controller = useDesktopController(bridge);
+  const composerBusy =
+    controller.composerDraft.status === "validating" ||
+    controller.composerDraft.status === "enqueueing";
+  const composerDisabled = composerBusy || Boolean(controller.composerDisabledReason);
   return (
     <>
       <span data-testid="composer-state">{controller.composerDisabledReason ?? "enabled"}</span>
+      <span data-testid="composer-status">{controller.composerDraft.status}</span>
       <span data-testid="selected-thread">{controller.state.selectedThreadId ?? "new"}</span>
       <span data-testid="detail-state">{controller.state.detailStatus}</span>
       <span data-testid="threads-state">{controller.state.threadsStatus}</span>
       <span data-testid="optimistic-count">{controller.optimisticExchanges.length}</span>
       <span data-testid="optimistic-text">{controller.optimisticExchanges[0]?.text ?? ""}</span>
-      <textarea aria-label="Prompt" value={controller.composerDraft.text} onChange={(event) => controller.setComposerText(event.target.value)} />
-      <button type="button" onClick={() => void controller.enqueueComposer()}>Send</button>
+      <textarea
+        aria-label="Prompt"
+        disabled={composerDisabled}
+        value={controller.composerDraft.text}
+        onChange={(event) => controller.setComposerText(event.target.value)}
+      />
+      <button
+        type="button"
+        disabled={composerDisabled}
+        onClick={() => void controller.enqueueComposer()}
+      >
+        Send
+      </button>
     </>
   );
 }

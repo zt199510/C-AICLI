@@ -24,4 +24,15 @@ describe("composer state", () => {
     expect(currentDraft(state, key).text).toBe("");
     expect(currentDraft(state, key).status).toBe("queued");
   });
+
+  it("settles transient send states without hiding a terminal error", () => {
+    const key = draftKey("ws", "thread");
+    let state = composerReducer(initialComposerUiState, { type: "status", key, status: "enqueueing" });
+    state = composerReducer(state, { type: "settle", key });
+    expect(currentDraft(state, key).status).toBe("editing");
+
+    state = composerReducer(state, { type: "status", key, status: "error", error: "queue failed" });
+    state = composerReducer(state, { type: "settle", key });
+    expect(currentDraft(state, key)).toMatchObject({ status: "error", error: "queue failed" });
+  });
 });

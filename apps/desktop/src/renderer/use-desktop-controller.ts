@@ -475,6 +475,7 @@ export function useDesktopController(bridge: DesktopBridge | undefined, options?
     const failOptimistic = (message: string) => {
       setOptimisticExchanges((current) => current.map((item) =>
         item.localId === localId ? { ...item, error: message } : item));
+      dispatchComposer({ type: "status", key, status: "error", error: message });
     };
     setOptimisticExchanges((current) => [...current, {
       localId,
@@ -565,6 +566,7 @@ export function useDesktopController(bridge: DesktopBridge | undefined, options?
       await fetchThread(threadId, 0, false, epoch, targetSelectionEpoch, createdConversation);
       if (refreshed.succeeded && refreshed.data) dispatchComposer({ type: "snapshot", snapshot: refreshed.data });
     } catch { failOptimistic("Prompt could not be queued."); }
+    finally { dispatchComposer({ type: "settle", key }); }
   }, [bridge, fetchThread, refreshThreads, selectThread]);
 
   const restoreOptimistic = useCallback((localId: string) => {
