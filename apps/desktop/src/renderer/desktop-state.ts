@@ -91,8 +91,10 @@ export type DesktopAction =
 export function desktopReducer(state: DesktopState, action: DesktopAction): DesktopState {
   switch (action.type) {
     case "runtime":
-      if (action.status.state === "ready") return { ...state, runtime: action.status };
-      return resetContext({ ...state, runtime: action.status }, null);
+      // Runtime loss disables mutations in the controller, but the last AppHost-authored
+      // projection remains safe to read. A later ready snapshot performs authoritative
+      // workspace reconciliation and resets context only when the workspace identity changed.
+      return { ...state, runtime: action.status };
     case "workspace":
       if (action.workspace?.workspaceId === state.workspace?.workspaceId) {
         return { ...state, workspace: action.workspace };

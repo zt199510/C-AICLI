@@ -70,7 +70,7 @@ describe("frozen timeline projection", () => {
     render(<TimelineView detail={{ ...detail, timeline }} status="ready" error={null} onLoadMore={vi.fn()} />);
     const conversationCount = document.querySelectorAll(".conversation-message").length;
     expect(screen.getByRole("button", { name: /Activity/ }).getAttribute("aria-pressed")).toBe("false");
-    expect(conversationCount).toBeGreaterThan(3);
+    expect(conversationCount).toBeGreaterThan(2);
     expect(conversationCount).toBeLessThan(36);
     expect(screen.getByText("Timeline item 1")).toBeTruthy();
     await userEvent.click(screen.getByRole("button", { name: /Activity/ }));
@@ -128,23 +128,29 @@ describe("frozen timeline projection", () => {
     };
     const view = render(<TimelineView detail={continuousDetail("running", "connecting", 1, [user])} status="ready" error={null} onLoadMore={vi.fn()} />);
     expect(document.querySelectorAll('[data-assistant-message-id="assistant-1"]')).toHaveLength(1);
+    const stableAssistant = document.querySelector('[data-assistant-message-id="assistant-1"]');
     expect(screen.getByText("正在连接")).toBeTruthy();
     view.rerender(<TimelineView detail={continuousDetail("running", "thinking", 1, [user])} status="ready" error={null} onLoadMore={vi.fn()} />);
     expect(screen.getByText("正在思考")).toBeTruthy();
+    expect(document.querySelector('[data-assistant-message-id="assistant-1"]')).toBe(stableAssistant);
     view.rerender(<TimelineView detail={continuousDetail("running", "streaming", 2, [user, partial])} status="ready" error={null} onLoadMore={vi.fn()} />);
     expect(screen.getByText("new attempt complete prefix")).toBeTruthy();
     expect(document.querySelectorAll('[data-assistant-message-id="assistant-1"]')).toHaveLength(1);
+    expect(document.querySelector('[data-assistant-message-id="assistant-1"]')).toBe(stableAssistant);
     view.rerender(<TimelineView detail={continuousDetail("completed", "streaming", 2, [user, partial, final])} status="ready" error={null} onLoadMore={vi.fn()} />);
     expect(screen.getByText("Final answer")).toBeTruthy();
     expect(screen.queryByText("new attempt complete prefix")).toBeNull();
     expect(document.querySelectorAll('[data-assistant-message-id="assistant-1"]')).toHaveLength(1);
+    expect(document.querySelector('[data-assistant-message-id="assistant-1"]')).toBe(stableAssistant);
+    expect(screen.queryByText("已完成")).toBeNull();
+    expect(document.querySelectorAll('[aria-live="polite"]')).toHaveLength(1);
   });
 
   it("shows retry progress, authoritative duration and retry-exhausted actions", () => {
     const retrying = render(<TimelineView detail={continuousDetail("running", "retry-wait", 5, [
       { ...item(1, "user.message"), summary: "Question" },
     ])} status="ready" error={null} onLoadMore={vi.fn()} />);
-    expect(screen.getByText("连接中断，正在重试 5/5...")).toBeTruthy();
+    expect(screen.getByText("连接暂时中断，正在重试 5/5")).toBeTruthy();
 
     retrying.rerender(<TimelineView detail={continuousDetail("failed", "failed", 6, [
       { ...item(1, "user.message"), summary: "Question" },

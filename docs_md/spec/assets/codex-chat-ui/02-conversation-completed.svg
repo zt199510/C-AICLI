@@ -1,0 +1,36 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1000" height="760" viewBox="0 0 1000 760" role="img" aria-labelledby="title desc">
+  <title id="title">C-AICLI 完成态对话呈现</title>
+  <desc id="desc">展示用户消息、AI 长回复、折叠工具摘要、处理时间和底部 Composer 的视觉层级。</desc>
+  <defs><filter id="s" x="-20%" y="-20%" width="140%" height="140%"><feDropShadow dx="0" dy="5" stdDeviation="10" flood-color="#26352e" flood-opacity="0.12"/></filter></defs>
+  <rect width="1000" height="760" fill="#f3f6f4"/>
+  <rect x="0" y="0" width="1000" height="58" fill="#ffffff" stroke="#d8dfdb"/>
+  <text x="70" y="35" fill="#203029" font-family="Segoe UI, Microsoft YaHei" font-size="16" font-weight="600">会话呈现预览</text>
+  <rect x="855" y="16" width="88" height="28" rx="8" fill="#f0f4f2"/><text x="899" y="34" text-anchor="middle" fill="#5e6d65" font-family="Segoe UI, Microsoft YaHei" font-size="10">Activity 12</text>
+  <rect x="120" y="80" width="760" height="560" fill="#ffffff" opacity="0.46"/>
+
+  <rect x="528" y="104" width="320" height="68" rx="16" fill="#e2f1ea" stroke="#bad9ca"/>
+  <text x="824" y="130" text-anchor="end" fill="#22302a" font-family="Segoe UI, Microsoft YaHei" font-size="14">把错误重试体验整理得更自然一些，</text>
+  <text x="824" y="152" text-anchor="end" fill="#22302a" font-family="Segoe UI, Microsoft YaHei" font-size="14">并保留完整审计。</text>
+
+  <rect x="144" y="211" width="28" height="28" rx="9" fill="#17755a"/><text x="158" y="230" text-anchor="middle" fill="#fff" font-family="Segoe UI, Microsoft YaHei" font-size="11" font-weight="700">C</text>
+  <text x="184" y="227" fill="#22302a" font-family="Segoe UI, Microsoft YaHei" font-size="12" font-weight="600">C-AICLI</text>
+  <text x="184" y="269" fill="#22302a" font-family="Segoe UI, Microsoft YaHei" font-size="15">已经完成对话投影调整。用户发送后会立即看到自己的消息，</text>
+  <text x="184" y="296" fill="#22302a" font-family="Segoe UI, Microsoft YaHei" font-size="15">AI 的连接、思考和生成状态都在同一个消息位置更新。</text>
+  <text x="184" y="338" fill="#22302a" font-family="Segoe UI, Microsoft YaHei" font-size="15">工具与命令保留在 durable timeline 中，但默认只显示一行摘要，</text>
+  <text x="184" y="365" fill="#22302a" font-family="Segoe UI, Microsoft YaHei" font-size="15">需要检查时再展开，不打断主对话阅读。</text>
+
+  <rect x="184" y="402" width="474" height="42" rx="10" fill="#f0f4f2"/>
+  <circle cx="205" cy="423" r="8" fill="#d9ebe2"/><path d="M201 423l3 3 6-7" fill="none" stroke="#17755a" stroke-width="2"/>
+  <text x="223" y="427" fill="#53645d" font-family="Segoe UI, Microsoft YaHei" font-size="12">已完成 3 项操作</text>
+  <text x="638" y="427" text-anchor="end" fill="#17755a" font-family="Segoe UI, Microsoft YaHei" font-size="11">展开 ›</text>
+  <text x="184" y="475" fill="#7b8780" font-family="Segoe UI, Microsoft YaHei" font-size="11">已处理 8.4 秒</text>
+
+  <line x1="184" y1="505" x2="824" y2="505" stroke="#e0e5e2"/>
+  <text x="184" y="536" fill="#849088" font-family="Segoe UI, Microsoft YaHei" font-size="11">正文最大宽度 760px · AI 使用内容流，不使用重背景卡片</text>
+
+  <rect x="120" y="654" width="760" height="86" rx="16" fill="#ffffff" stroke="#ccd7d1" filter="url(#s)"/>
+  <text x="144" y="687" fill="#89938d" font-family="Segoe UI, Microsoft YaHei" font-size="13">继续提问…</text>
+  <rect x="140" y="706" width="30" height="24" rx="7" fill="#f0f4f2"/><text x="155" y="723" text-anchor="middle" fill="#53645d" font-family="Segoe UI, Microsoft YaHei" font-size="15">＋</text>
+  <text x="184" y="723" fill="#7b8780" font-family="Segoe UI, Microsoft YaHei" font-size="10">上下文与模型摘要</text>
+  <rect x="830" y="695" width="36" height="36" rx="11" fill="#17755a"/><path d="M841 713h13m0 0-5-5m5 5-5 5" stroke="#fff" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+</svg>

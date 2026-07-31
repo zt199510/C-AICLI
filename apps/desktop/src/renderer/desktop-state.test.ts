@@ -4,13 +4,26 @@ import { createRuntimeStatus } from "../shared/bridge-contract";
 import { desktopReducer, initialDesktopState, mergeDetail } from "./desktop-state";
 
 describe("desktop authoritative projection", () => {
-  it("resets workspace truth when runtime leaves ready", () => {
-    const ready = desktopReducer(initialDesktopState, { type: "workspace", workspace });
-    const failed = desktopReducer(ready, { type: "runtime", status: createRuntimeStatus("apphost-exited") });
-    expect(failed.workspace).toBeNull();
-    expect(failed.threads).toEqual([]);
-    expect(failed.selectedThreadId).toBeNull();
-    expect(failed.contextEpoch).toBe(ready.contextEpoch + 1);
+  it("keeps the last authoritative conversation readable when runtime leaves ready", () => {
+    const opened = desktopReducer(initialDesktopState, { type: "workspace", workspace });
+    const listed = desktopReducer(opened, {
+      type: "threads-ready", epoch: opened.contextEpoch, threads: [thread], truncated: false,
+    });
+    const selected = desktopReducer(listed, { type: "select", threadId: "thread-1" });
+    const loading = desktopReducer(selected, {
+      type: "detail-loading", epoch: selected.contextEpoch, selectionEpoch: selected.selectionEpoch,
+      requestId: 1, threadId: "thread-1",
+    });
+    const projected = desktopReducer(loading, {
+      type: "detail-ready", epoch: loading.contextEpoch, selectionEpoch: loading.selectionEpoch,
+      requestId: 1, detail, append: false,
+    });
+    const failed = desktopReducer(projected, { type: "runtime", status: createRuntimeStatus("apphost-exited") });
+    expect(failed.workspace).toBe(projected.workspace);
+    expect(failed.threads).toBe(projected.threads);
+    expect(failed.selectedThreadId).toBe("thread-1");
+    expect(failed.detail).toBe(projected.detail);
+    expect(failed.contextEpoch).toBe(projected.contextEpoch);
   });
 
   it("drops stale list and detail responses after context or selection changes", () => {

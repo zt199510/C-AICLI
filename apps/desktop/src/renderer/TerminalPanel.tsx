@@ -118,7 +118,7 @@ export function TerminalPanel({
     </div>
     <div className="inline-error" role="alert" hidden={!error}>{error ?? ""}</div>
     <div className="terminal-session" hidden={!expanded || !terminal}>
-      <pre ref={bindOutputElement} className="terminal-output" tabIndex={0} />
+      <pre ref={bindOutputElement} className="terminal-output" tabIndex={0} aria-label="Terminal output" />
       <div className="terminal-input-row">
         <input aria-label="Terminal input" value={input} maxLength={8192} disabled={busy || terminal?.status !== "running"} onChange={(event) => setInput(event.target.value)} onKeyDown={(event) => { if (event.key === "Enter") { event.preventDefault(); void send(); } }} />
         <button type="button" disabled={busy || terminal?.status !== "running" || !input} onClick={() => void send()}>Send</button>

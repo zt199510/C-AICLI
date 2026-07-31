@@ -2,7 +2,6 @@ import { FolderOpen, PanelLeft, PanelLeftClose, PanelRight, RefreshCw } from "lu
 import { useEffect, useState, type CSSProperties } from "react";
 import { useShellPanels } from "./app/use-shell-panels";
 import { Composer } from "./Composer";
-import { TaskControls } from "./TaskControls";
 import { ThreadSidebar } from "./ThreadSidebar";
 import { TimelineView } from "./TimelineView";
 import { useDesktopController } from "./use-desktop-controller";
@@ -41,7 +40,7 @@ export function App() {
   const workspacePath = state.workspace?.rootPath ?? null;
   const bridgeUnavailable = !bridge;
   const statusMessage = bridgeUnavailable ? "Desktop bridge unavailable" : state.runtime.message;
-  const stopTurn = controller.activeTurn && !controller.activeTurn.approval &&
+  const stopTurn = state.runtime.state === "ready" && controller.activeTurn && !controller.activeTurn.approval &&
     !["completed", "failed", "canceled", "canceling"].includes(controller.activeTurn.status)
     ? controller.activeTurn
     : null;
@@ -93,10 +92,16 @@ export function App() {
           </div>
 
           <section className="timeline" aria-label="Workspace timeline">
-            {state.runtime.state === "failed" ? (
-              <div className="state-card failure-card"><h1>{statusMessage}</h1><p>The desktop runtime is unavailable. Workspace access remains disabled.</p><button className="primary-action" type="button" disabled={!state.runtime.canRestart || bridgeUnavailable} onClick={() => void controller.restartRuntime()}><RefreshCw size={17} aria-hidden="true" /> Restart AppHost</button></div>
-            ) : !workspacePath ? (
-              <div className="state-card workspace-empty"><div className="state-kicker">Local AI workspace</div><h1>{state.runtime.state === "ready" ? "What should we build?" : state.runtime.message}</h1><p>Open a project to start a focused conversation with auditable tools, approvals, and results.</p>{workspaceError && <p role="alert">{workspaceError}</p>}<button className="primary-action" type="button" onClick={() => void openWorkspace()} disabled={opening || state.runtime.state !== "ready"}><FolderOpen size={17} aria-hidden="true" /> Open workspace</button></div>
+            {!workspacePath ? (
+              <div className="state-card workspace-empty">
+                <div className="state-kicker">Local AI workspace</div>
+                <h1>{state.runtime.state === "ready" ? "What should we build?" : state.runtime.message}</h1>
+                <p>Open a project to start a focused conversation with auditable tools, approvals, and results.</p>
+                {workspaceError && <p role="alert">{workspaceError}</p>}
+                {state.runtime.state !== "failed" ? (
+                  <button className="primary-action" type="button" onClick={() => void openWorkspace()} disabled={opening || state.runtime.state !== "ready"}><FolderOpen size={17} aria-hidden="true" /> Open workspace</button>
+                ) : null}
+              </div>
             ) : (
               <TimelineView
                 detail={state.detail}
@@ -105,15 +110,16 @@ export function App() {
                 onLoadMore={controller.loadMore}
                 optimisticExchanges={controller.optimisticExchanges}
                 onRestoreOptimistic={controller.restoreOptimistic}
+                onApproval={controller.resolveApproval}
+                onResume={controller.resumeTurn}
                 onRestart={controller.restartTurn}
-                controls={(
-                  <TaskControls
-                    detail={state.detail}
-                    onCancel={controller.cancelTurn}
-                    onApproval={controller.resolveApproval}
-                    onResume={controller.resumeTurn}
-                    onRestart={controller.restartTurn}
-                  />
+                runtimeBanner={state.runtime.state === "ready" ? null : (
+                  <section className={`runtime-banner runtime-banner-${state.runtime.state}`} role="status" aria-live="polite">
+                    <div>
+                      <strong>{state.runtime.state === "restarting" || state.runtime.state === "starting" ? "正在重启 AppHost" : "AppHost 不可用"}</strong>
+                      <span>已提交的对话历史保持可读，恢复后将通过权威 reload 对账。</span>
+                    </div>
+                  </section>
                 )}
               />
             )}
@@ -125,8 +131,22 @@ export function App() {
             disabledReason={controller.composerDisabledReason}
             modelLabel={state.workspace?.configuration.effectiveModel}
             approvalModeLabel={state.workspace?.configuration.approvalMode}
-            disabledActionLabel={!state.workspace ? "Open workspace" : state.detail?.thread.status === "archived" ? "New conversation" : state.runtime.state !== "ready" ? "Restart AppHost" : undefined}
-            onDisabledAction={!state.workspace ? () => void openWorkspace() : state.detail?.thread.status === "archived" ? controller.beginConversation : state.runtime.state !== "ready" ? () => void controller.restartRuntime() : undefined}
+            disabledActionLabel={state.runtime.state === "failed" && state.runtime.canRestart
+              ? "Restart AppHost"
+              : state.runtime.state === "restarting" || state.runtime.state === "starting"
+                ? "Restarting AppHost"
+                : !state.workspace
+                  ? "Open workspace"
+                  : state.detail?.thread.status === "archived"
+                    ? "New conversation"
+                    : undefined}
+            onDisabledAction={state.runtime.state === "failed" && state.runtime.canRestart
+              ? () => void controller.restartRuntime()
+              : !state.workspace
+                ? () => void openWorkspace()
+                : state.detail?.thread.status === "archived"
+                  ? controller.beginConversation
+                  : undefined}
             onText={controller.setComposerText}
             onSearch={(query) => void controller.searchMentions(query)}
             onCloseMentions={controller.closeMentions}
@@ -150,7 +170,7 @@ export function App() {
             aria-label="Resize workspace inspector"
             aria-orientation="vertical"
             aria-valuemin={320}
-            aria-valuemax={520}
+            aria-valuemax={480}
             aria-valuenow={panels.inspectorWidth}
             tabIndex={0}
             onPointerDown={(event) => event.currentTarget.setPointerCapture(event.pointerId)}

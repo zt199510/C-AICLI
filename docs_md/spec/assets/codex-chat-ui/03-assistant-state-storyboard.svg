@@ -1,0 +1,117 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1500" height="1080" viewBox="0 0 1500 1080" role="img" aria-labelledby="title desc">
+  <title id="title">对话状态故事板</title>
+  <desc id="desc">同一个 AI message 从连接、思考、流式生成、重试到完成、停止、失败或恢复的视觉变化，以及 AppHost 不可用的页面级状态。</desc>
+  <defs><filter id="s" x="-10%" y="-10%" width="120%" height="130%"><feDropShadow dx="0" dy="4" stdDeviation="8" flood-color="#23332b" flood-opacity="0.10"/></filter></defs>
+  <rect width="1500" height="1080" fill="#eef2ef"/>
+  <text x="54" y="52" fill="#203029" font-family="Segoe UI, Microsoft YaHei" font-size="20" font-weight="600">对话状态演进：同一 assistant message 与 runtime</text>
+  <text x="54" y="76" fill="#6e7c74" font-family="Segoe UI, Microsoft YaHei" font-size="12">消息容器 identity 不变；页面级 runtime 状态不覆盖 AppHost 权威消息</text>
+
+  <g transform="translate(54 110)">
+    <rect width="432" height="280" rx="18" fill="#ffffff" filter="url(#s)"/>
+    <text x="22" y="32" fill="#7a867f" font-family="Segoe UI, Microsoft YaHei" font-size="11">01 CONNECTING</text>
+    <rect x="24" y="60" width="28" height="28" rx="9" fill="#17755a"/><text x="38" y="79" text-anchor="middle" fill="#fff" font-family="Segoe UI, Microsoft YaHei" font-size="11">C</text>
+    <text x="65" y="78" fill="#22302a" font-family="Segoe UI, Microsoft YaHei" font-size="12" font-weight="600">C-AICLI</text>
+    <circle cx="70" cy="122" r="5" fill="#17755a"/><text x="84" y="126" fill="#5d6b64" font-family="Segoe UI, Microsoft YaHei" font-size="12">正在连接</text>
+    <text x="24" y="244" fill="#8a948e" font-family="Segoe UI, Microsoft YaHei" font-size="11">不渲染空白正文骨架</text>
+  </g>
+
+  <g transform="translate(534 110)">
+    <rect width="432" height="280" rx="18" fill="#ffffff" filter="url(#s)"/>
+    <text x="22" y="32" fill="#7a867f" font-family="Segoe UI, Microsoft YaHei" font-size="11">02 THINKING</text>
+    <rect x="24" y="60" width="28" height="28" rx="9" fill="#17755a"/><text x="38" y="79" text-anchor="middle" fill="#fff" font-family="Segoe UI, Microsoft YaHei" font-size="11">C</text>
+    <text x="65" y="78" fill="#22302a" font-family="Segoe UI, Microsoft YaHei" font-size="12" font-weight="600">C-AICLI</text>
+    <circle cx="70" cy="122" r="7" fill="none" stroke="#17755a" stroke-width="2"/><path d="M70 115a7 7 0 0 1 7 7" fill="none" stroke="#86b7a4" stroke-width="2"/>
+    <text x="84" y="126" fill="#5d6b64" font-family="Segoe UI, Microsoft YaHei" font-size="12">正在思考 · 2 秒</text>
+    <text x="24" y="244" fill="#8a948e" font-family="Segoe UI, Microsoft YaHei" font-size="11">低频动画；支持 reduced motion</text>
+  </g>
+
+  <g transform="translate(1014 110)">
+    <rect width="432" height="280" rx="18" fill="#ffffff" filter="url(#s)"/>
+    <text x="22" y="32" fill="#7a867f" font-family="Segoe UI, Microsoft YaHei" font-size="11">03 STREAMING</text>
+    <rect x="24" y="60" width="28" height="28" rx="9" fill="#17755a"/><text x="38" y="79" text-anchor="middle" fill="#fff" font-family="Segoe UI, Microsoft YaHei" font-size="11">C</text>
+    <text x="65" y="78" fill="#22302a" font-family="Segoe UI, Microsoft YaHei" font-size="12" font-weight="600">C-AICLI</text>
+    <text x="65" y="120" fill="#22302a" font-family="Segoe UI, Microsoft YaHei" font-size="14">正在检查当前实现，并整理</text>
+    <text x="65" y="145" fill="#22302a" font-family="Segoe UI, Microsoft YaHei" font-size="14">对话与状态的视觉层级…</text>
+    <circle cx="70" cy="184" r="4" fill="#17755a"/><text x="82" y="188" fill="#6f7c75" font-family="Segoe UI, Microsoft YaHei" font-size="11">正在生成回复</text>
+    <text x="24" y="244" fill="#8a948e" font-family="Segoe UI, Microsoft YaHei" font-size="11">正文成为视觉中心</text>
+  </g>
+
+  <g transform="translate(54 440)">
+    <rect width="432" height="300" rx="18" fill="#ffffff" filter="url(#s)"/>
+    <text x="22" y="32" fill="#7a867f" font-family="Segoe UI, Microsoft YaHei" font-size="11">04 RETRY WAIT</text>
+    <rect x="24" y="60" width="28" height="28" rx="9" fill="#17755a"/><text x="38" y="79" text-anchor="middle" fill="#fff" font-family="Segoe UI, Microsoft YaHei" font-size="11">C</text>
+    <text x="65" y="78" fill="#22302a" font-family="Segoe UI, Microsoft YaHei" font-size="12" font-weight="600">C-AICLI</text>
+    <rect x="65" y="102" width="334" height="42" rx="9" fill="#fff4d9" stroke="#ead49a"/>
+    <text x="82" y="128" fill="#725b1f" font-family="Segoe UI, Microsoft YaHei" font-size="11">连接暂时中断，正在重试 2/5</text>
+    <g opacity="0.65"><text x="65" y="180" fill="#22302a" font-family="Segoe UI, Microsoft YaHei" font-size="14">失败 attempt 的部分内容暂时保留，</text><text x="65" y="205" fill="#22302a" font-family="Segoe UI, Microsoft YaHei" font-size="14">新 attempt 首段到达后原位替换。</text></g>
+    <text x="24" y="268" fill="#8a948e" font-family="Segoe UI, Microsoft YaHei" font-size="11">不新增消息，不交叉拼接</text>
+  </g>
+
+  <g transform="translate(534 440)">
+    <rect width="432" height="300" rx="18" fill="#ffffff" filter="url(#s)"/>
+    <text x="22" y="32" fill="#7a867f" font-family="Segoe UI, Microsoft YaHei" font-size="11">05 COMPLETED</text>
+    <rect x="24" y="60" width="28" height="28" rx="9" fill="#17755a"/><text x="38" y="79" text-anchor="middle" fill="#fff" font-family="Segoe UI, Microsoft YaHei" font-size="11">C</text>
+    <text x="65" y="78" fill="#22302a" font-family="Segoe UI, Microsoft YaHei" font-size="12" font-weight="600">C-AICLI</text>
+    <text x="65" y="120" fill="#22302a" font-family="Segoe UI, Microsoft YaHei" font-size="14">完整回复保留在同一消息中。</text>
+    <rect x="65" y="148" width="280" height="38" rx="9" fill="#f0f4f2"/><text x="84" y="172" fill="#53645d" font-family="Segoe UI, Microsoft YaHei" font-size="11">✓ 已完成 3 项操作</text><text x="326" y="172" text-anchor="end" fill="#17755a" font-family="Segoe UI, Microsoft YaHei" font-size="10">展开 ›</text>
+    <text x="65" y="218" fill="#7a867f" font-family="Segoe UI, Microsoft YaHei" font-size="11">已处理 8.4 秒</text>
+    <text x="24" y="268" fill="#8a948e" font-family="Segoe UI, Microsoft YaHei" font-size="11">完成后移除大状态与动画</text>
+  </g>
+
+  <g transform="translate(1014 440)">
+    <rect width="432" height="300" rx="18" fill="#ffffff" filter="url(#s)"/>
+    <text x="22" y="32" fill="#7a867f" font-family="Segoe UI, Microsoft YaHei" font-size="11">06 RETRY EXHAUSTED</text>
+    <rect x="24" y="60" width="28" height="28" rx="9" fill="#17755a"/><text x="38" y="79" text-anchor="middle" fill="#fff" font-family="Segoe UI, Microsoft YaHei" font-size="11">C</text>
+    <text x="65" y="78" fill="#22302a" font-family="Segoe UI, Microsoft YaHei" font-size="12" font-weight="600">C-AICLI</text>
+    <text x="65" y="120" fill="#9c3434" font-family="Segoe UI, Microsoft YaHei" font-size="13" font-weight="600">连接失败，已重试 5 次</text>
+    <text x="65" y="150" fill="#5f6c65" font-family="Segoe UI, Microsoft YaHei" font-size="11">连接在生成回复时中断。</text>
+    <rect x="65" y="178" width="92" height="34" rx="9" fill="#17755a"/><text x="111" y="199" text-anchor="middle" fill="#fff" font-family="Segoe UI, Microsoft YaHei" font-size="11">重新尝试</text>
+    <rect x="167" y="178" width="112" height="34" rx="9" fill="#fff" stroke="#cbd5cf"/><text x="223" y="199" text-anchor="middle" fill="#34443c" font-family="Segoe UI, Microsoft YaHei" font-size="11">复制错误信息</text>
+    <text x="65" y="238" fill="#7a867f" font-family="Segoe UI, Microsoft YaHei" font-size="11">连接失败 · 处理 12.6 秒</text>
+    <text x="24" y="268" fill="#8a948e" font-family="Segoe UI, Microsoft YaHei" font-size="11">只展示安全错误和可用操作</text>
+  </g>
+
+  <g transform="translate(54 790)">
+    <rect width="324" height="220" rx="18" fill="#ffffff" filter="url(#s)"/>
+    <text x="20" y="30" fill="#7a867f" font-family="Segoe UI, Microsoft YaHei" font-size="11">07 CANCELING / CANCELED</text>
+    <rect x="20" y="50" width="26" height="26" rx="8" fill="#17755a"/><text x="33" y="68" text-anchor="middle" fill="#fff" font-family="Segoe UI, Microsoft YaHei" font-size="10">C</text>
+    <text x="58" y="68" fill="#22302a" font-family="Segoe UI, Microsoft YaHei" font-size="12" font-weight="600">C-AICLI</text>
+    <circle cx="62" cy="102" r="5" fill="#d59a2e"/><text x="75" y="106" fill="#6d5a31" font-family="Segoe UI, Microsoft YaHei" font-size="11">正在停止</text>
+    <line x1="58" y1="128" x2="294" y2="128" stroke="#e0e6e2"/>
+    <text x="58" y="154" fill="#5f6c65" font-family="Segoe UI, Microsoft YaHei" font-size="11">已停止 · 保留已有内容</text>
+    <text x="58" y="181" fill="#7a867f" font-family="Segoe UI, Microsoft YaHei" font-size="10">已处理 3.2 秒</text>
+  </g>
+
+  <g transform="translate(402 790)">
+    <rect width="324" height="220" rx="18" fill="#ffffff" filter="url(#s)"/>
+    <text x="20" y="30" fill="#7a867f" font-family="Segoe UI, Microsoft YaHei" font-size="11">08 GENERIC FAILED</text>
+    <rect x="20" y="50" width="26" height="26" rx="8" fill="#17755a"/><text x="33" y="68" text-anchor="middle" fill="#fff" font-family="Segoe UI, Microsoft YaHei" font-size="10">C</text>
+    <text x="58" y="68" fill="#22302a" font-family="Segoe UI, Microsoft YaHei" font-size="12" font-weight="600">C-AICLI</text>
+    <text x="58" y="108" fill="#9c3434" font-family="Segoe UI, Microsoft YaHei" font-size="12" font-weight="600">处理失败</text>
+    <text x="58" y="137" fill="#5f6c65" font-family="Segoe UI, Microsoft YaHei" font-size="11">请求配置无效，请检查设置。</text>
+    <text x="58" y="174" fill="#7a867f" font-family="Segoe UI, Microsoft YaHei" font-size="10">失败 · 处理 1.1 秒</text>
+    <text x="20" y="203" fill="#8a948e" font-family="Segoe UI, Microsoft YaHei" font-size="10">不可重试错误不显示“重新尝试”</text>
+  </g>
+
+  <g transform="translate(750 790)">
+    <rect width="324" height="220" rx="18" fill="#ffffff" filter="url(#s)"/>
+    <text x="20" y="30" fill="#7a867f" font-family="Segoe UI, Microsoft YaHei" font-size="11">09 INTERRUPTED / RECOVERY</text>
+    <rect x="20" y="50" width="26" height="26" rx="8" fill="#17755a"/><text x="33" y="68" text-anchor="middle" fill="#fff" font-family="Segoe UI, Microsoft YaHei" font-size="10">C</text>
+    <text x="58" y="68" fill="#22302a" font-family="Segoe UI, Microsoft YaHei" font-size="12" font-weight="600">C-AICLI</text>
+    <text x="58" y="105" fill="#805e20" font-family="Segoe UI, Microsoft YaHei" font-size="12" font-weight="600">执行已中断</text>
+    <text x="58" y="132" fill="#5f6c65" font-family="Segoe UI, Microsoft YaHei" font-size="10">权威历史已保留，可按 eligibility 恢复。</text>
+    <rect x="58" y="151" width="70" height="30" rx="8" fill="#17755a"/><text x="93" y="170" text-anchor="middle" fill="#fff" font-family="Segoe UI, Microsoft YaHei" font-size="10">继续</text>
+    <rect x="138" y="151" width="82" height="30" rx="8" fill="#fff" stroke="#cbd5cf"/><text x="179" y="170" text-anchor="middle" fill="#34443c" font-family="Segoe UI, Microsoft YaHei" font-size="10">重新开始</text>
+  </g>
+
+  <g transform="translate(1098 790)">
+    <rect width="324" height="220" rx="18" fill="#ffffff" filter="url(#s)"/>
+    <text x="20" y="30" fill="#7a867f" font-family="Segoe UI, Microsoft YaHei" font-size="11">10 RUNTIME UNAVAILABLE</text>
+    <rect x="20" y="52" width="284" height="68" rx="11" fill="#fff4d9" stroke="#ead49a"/>
+    <circle cx="42" cy="76" r="8" fill="#d59a2e"/><text x="42" y="80" text-anchor="middle" fill="#fff" font-family="Segoe UI, Microsoft YaHei" font-size="10">!</text>
+    <text x="58" y="79" fill="#725b1f" font-family="Segoe UI, Microsoft YaHei" font-size="11" font-weight="600">AppHost 不可用</text>
+    <text x="42" y="103" fill="#725b1f" font-family="Segoe UI, Microsoft YaHei" font-size="10">页面级状态，不覆盖 AI message</text>
+    <rect x="20" y="140" width="112" height="32" rx="9" fill="#17755a"/><text x="76" y="160" text-anchor="middle" fill="#fff" font-family="Segoe UI, Microsoft YaHei" font-size="10">重启 AppHost</text>
+    <text x="20" y="199" fill="#8a948e" font-family="Segoe UI, Microsoft YaHei" font-size="10">重启中禁用重复操作</text>
+  </g>
+</svg>

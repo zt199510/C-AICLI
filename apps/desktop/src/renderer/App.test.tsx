@@ -65,10 +65,10 @@ describe("desktop shell", () => {
     render(<App />);
     await userEvent.click(screen.getByRole("button", { name: "Show workspace inspector" }));
     const separator = screen.getByRole("separator", { name: "Resize workspace inspector" });
-    expect(separator.getAttribute("aria-valuenow")).toBe("380");
+    expect(separator.getAttribute("aria-valuenow")).toBe("360");
     separator.focus();
     await userEvent.keyboard("{ArrowLeft}");
-    expect(separator.getAttribute("aria-valuenow")).toBe("396");
+    expect(separator.getAttribute("aria-valuenow")).toBe("376");
   });
 
   it("closes drawers with Escape and restores the shell trigger", async () => {

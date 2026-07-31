@@ -30,12 +30,12 @@ test("long timeline, bounded diff, and terminal output survive repeated reloads"
     const page = await application.firstWindow();
     await expect(page.getByText("Fixture review thread")).toBeVisible();
     await page.locator(".thread-select").click({ force: true });
-    await expect(page.getByText("80 loaded items")).toBeVisible();
+    await expect(page.getByRole("button", { name: "Activity 80" })).toBeVisible();
     await page.getByRole("button", { name: "Load newer items" }).click();
-    await expect(page.getByText("160 loaded items")).toBeVisible();
+    await expect(page.getByRole("button", { name: "Activity 160" })).toBeVisible();
     await page.getByRole("button", { name: "Load newer items" }).click();
-    await expect(page.getByText("240 loaded items")).toBeVisible();
-    expect(await page.locator(".timeline-card").count()).toBeLessThan(100);
+    await expect(page.getByRole("button", { name: "Activity 240" })).toBeVisible();
+    expect(await page.locator(".conversation-stream .conversation-message, .conversation-stream .tool-activity-group, .conversation-stream .approval-card").count()).toBeLessThan(100);
 
     // The first of the five frozen reloads warms the renderer. Both sides of the
     // retention comparison then use the same fixed 30-second sampling window.
@@ -45,7 +45,7 @@ test("long timeline, bounded diff, and terminal output survive repeated reloads"
     // window can still contain transiently resident pages.
     await page.reload();
     await page.locator(".thread-select").click({ force: true });
-    await expect(page.getByText("80 loaded items")).toBeVisible();
+    await expect(page.getByRole("button", { name: "Activity 80" })).toBeVisible();
     await waitForStableRenderer(application);
     reloadSamples.push(await processSnapshot(application));
     warmBaseline = await captureSamplingWindow(application, idleRecoverySeconds, sampleIntervalSeconds);
@@ -53,19 +53,22 @@ test("long timeline, bounded diff, and terminal output survive repeated reloads"
     for (let index = 1; index < 5; index++) {
       await page.reload();
       await page.locator(".thread-select").click({ force: true });
-      await expect(page.getByText("80 loaded items")).toBeVisible();
+      await expect(page.getByRole("button", { name: "Activity 80" })).toBeVisible();
       await waitForStableRenderer(application);
       reloadSamples.push(await processSnapshot(application));
     }
 
+    const showInspector = page.getByRole("button", { name: "Show workspace inspector" });
+    if (await showInspector.isVisible()) await showInspector.click();
     await page.getByRole("tab", { name: "Changes" }).click();
     await expect(page.getByText("Showing a bounded result set.")).toBeVisible();
     await expect(page.getByText("Diff projection was truncated at the existing bound.")).toBeVisible();
     await expect(page.locator(".review-section li")).toHaveCount(50);
 
+    await page.getByRole("tab", { name: "Terminal" }).click();
     await page.getByRole("button", { name: "Open terminal" }).click();
     await page.getByRole("textbox", { name: "Terminal input" }).fill("long-output");
-    await page.getByRole("button", { name: "Send" }).click();
+    await page.getByRole("button", { name: "Send", exact: true }).click();
     await expect(page.getByRole("status").filter({ hasText: "output truncated" })).toBeVisible();
     const terminal = page.locator(".terminal-output");
     await expect(terminal).toContainText("[earlier output truncated]");

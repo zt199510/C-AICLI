@@ -1,0 +1,139 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>C-AICLI Chat UI 状态原型</title>
+  <style>
+    :root {
+      color-scheme: light;
+      --canvas: #eef2ef;
+      --surface: #ffffff;
+      --muted-surface: #f0f4f2;
+      --text: #203029;
+      --muted: #69766f;
+      --border: #ccd6d0;
+      --accent: #17755a;
+      --accent-soft: #e2f1ea;
+      --warning: #fff4d9;
+      --warning-border: #ead49a;
+      --danger: #9b3434;
+      --danger-soft: #fff4f4;
+      font-family: Inter, "Segoe UI Variable", "Segoe UI", "Microsoft YaHei", sans-serif;
+    }
+    * { box-sizing: border-box; }
+    body { margin: 0; background: var(--canvas); color: var(--text); }
+    button, textarea { font: inherit; }
+    .prototype { min-height: 100vh; display: grid; grid-template-rows: auto minmax(0, 1fr) auto; }
+    .toolbar { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; padding: 12px max(16px, calc((100% - 900px) / 2)); border-bottom: 1px solid var(--border); background: var(--surface); }
+    .toolbar strong { margin-right: 8px; font-size: 13px; }
+    .toolbar button { border: 1px solid var(--border); border-radius: 9px; background: var(--surface); color: var(--text); padding: 7px 10px; cursor: pointer; }
+    .toolbar button[aria-pressed="true"] { border-color: var(--accent); background: var(--accent); color: #fff; }
+    .conversation { width: min(760px, calc(100% - 32px)); margin: 0 auto; padding: 32px 0; }
+    .user { width: fit-content; max-width: min(72%, 640px); margin-left: auto; border: 1px solid #bad9ca; border-radius: 16px 16px 4px 16px; background: var(--accent-soft); padding: 11px 14px; font-size: 14px; line-height: 1.6; }
+    .assistant { display: grid; grid-template-columns: 28px minmax(0, 1fr); gap: 12px; margin-top: 28px; }
+    .avatar { display: grid; width: 28px; height: 28px; place-items: center; border-radius: 9px; background: var(--accent); color: #fff; font-size: 11px; font-weight: 700; }
+    .identity { min-height: 24px; font-size: 12px; font-weight: 600; }
+    .status { display: flex; align-items: center; gap: 8px; margin-top: 8px; color: var(--muted); font-size: 12px; }
+    .dot { width: 7px; height: 7px; border-radius: 50%; background: var(--accent); animation: pulse 1.4s ease-in-out infinite; }
+    .content { margin-top: 14px; font-size: 15px; line-height: 1.7; white-space: pre-wrap; }
+    .partial { opacity: .65; }
+    .retry-strip { margin-top: 12px; border: 1px solid var(--warning-border); border-radius: 9px; background: var(--warning); padding: 10px 12px; color: #725b1f; font-size: 12px; }
+    .tool-summary { display: flex; justify-content: space-between; gap: 16px; width: min(420px, 100%); margin-top: 18px; border: 0; border-radius: 9px; background: var(--muted-surface); padding: 11px 14px; color: var(--text); cursor: pointer; }
+    .tool-details { width: min(420px, 100%); margin: 0; padding: 10px 14px 0 34px; color: var(--muted); font-size: 12px; line-height: 1.8; }
+    .duration { margin-top: 16px; color: var(--muted); font-size: 11px; }
+    .approval { margin-top: 14px; border: 1px solid var(--warning-border); border-radius: 14px; background: #fffaf0; padding: 18px; }
+    .approval h2, .failure h2 { margin: 0 0 10px; font-size: 15px; }
+    .approval p, .failure p { margin: 6px 0; color: var(--muted); font-size: 12px; }
+    .actions { display: flex; gap: 8px; margin-top: 16px; }
+    .actions button { border: 1px solid var(--border); border-radius: 9px; background: var(--surface); padding: 8px 12px; cursor: pointer; }
+    .actions .primary { border-color: var(--accent); background: var(--accent); color: #fff; }
+    .failure { margin-top: 12px; border-radius: 12px; background: var(--danger-soft); padding: 16px; }
+    .failure h2 { color: var(--danger); }
+    .composer-wrap { padding: 12px 16px; background: linear-gradient(transparent, var(--canvas) 28%); }
+    .composer { width: min(760px, 100%); margin: 0 auto; border: 1px solid var(--border); border-radius: 16px; background: var(--surface); padding: 10px 12px; box-shadow: 0 8px 24px rgb(30 50 40 / 12%); }
+    .composer textarea { width: 100%; min-height: 48px; resize: vertical; border: 0; outline: 0; color: var(--text); }
+    .composer-footer { display: flex; justify-content: space-between; align-items: center; color: var(--muted); font-size: 11px; }
+    .main-action { width: 36px; height: 36px; border: 0; border-radius: 11px; background: var(--accent); color: #fff; cursor: pointer; }
+    .main-action.stop { background: #b43d3d; }
+    .main-action:disabled { background: #b7c0bb; cursor: not-allowed; }
+    @keyframes pulse { 0%,100% { opacity: .35; transform: scale(.8); } 50% { opacity: 1; transform: scale(1); } }
+    @media (prefers-reduced-motion: reduce) { .dot { animation: none; } }
+    @media (max-width: 700px) { .user { max-width: 88%; } .conversation { padding-top: 24px; } .assistant { grid-template-columns: 24px minmax(0, 1fr); gap: 9px; } .avatar { width: 24px; height: 24px; } }
+  </style>
+</head>
+<body>
+  <main class="prototype">
+    <nav class="toolbar" aria-label="切换 AI 状态">
+      <strong>Assistant 状态</strong>
+      <button type="button" data-state="connecting">连接</button>
+      <button type="button" data-state="thinking">思考</button>
+      <button type="button" data-state="streaming">生成</button>
+      <button type="button" data-state="retry">重试</button>
+      <button type="button" data-state="approval">审批</button>
+      <button type="button" data-state="completed">完成</button>
+      <button type="button" data-state="canceling">停止中</button>
+      <button type="button" data-state="canceled">已停止</button>
+      <button type="button" data-state="error">失败</button>
+      <button type="button" data-state="recovery">恢复</button>
+      <button type="button" data-state="failed">重试耗尽</button>
+      <button type="button" data-state="runtime">AppHost</button>
+    </nav>
+    <section class="conversation" aria-label="对话预览">
+      <div class="user">请规划一个更清晰的 Codex 式对话界面。</div>
+      <article class="assistant" data-assistant-message-id="assistant-prototype">
+        <div class="avatar" aria-hidden="true">C</div>
+        <div>
+          <header class="identity">C-AICLI</header>
+          <div id="assistant-body"></div>
+        </div>
+      </article>
+    </section>
+    <div class="composer-wrap">
+      <div class="composer">
+        <textarea aria-label="输入消息" placeholder="继续提问…"></textarea>
+        <div class="composer-footer"><span>＋ 上下文 · gpt-5</span><button id="main-action" class="main-action" type="button" aria-label="停止">■</button></div>
+      </div>
+    </div>
+  </main>
+  <script>
+    const body = document.getElementById('assistant-body');
+    const action = document.getElementById('main-action');
+    const buttons = Array.from(document.querySelectorAll('[data-state]'));
+    const content = '<div class="content">规划会把用户消息和 AI 正文放在最高视觉层级，工具与命令折叠为活动摘要，需要操作时再展开。</div>';
+    const states = {
+      connecting: '<div class="status" role="status"><span class="dot"></span>正在连接</div>',
+      thinking: '<div class="status" role="status"><span class="dot"></span>正在思考 · 2 秒</div>',
+      streaming: content + '<div class="status" role="status"><span class="dot"></span>正在生成回复</div>',
+      retry: '<div class="retry-strip" role="status">连接暂时中断，正在重试 2/5</div><div class="content partial">上一 attempt 的部分内容暂时保留；新 attempt 首段到达后会在这里原位替换。</div>',
+      approval: content + '<section class="approval"><h2>需要批准</h2><p>准备运行：npm install</p><p>此操作将访问网络并修改依赖。</p><div class="actions"><button type="button">拒绝</button><button class="primary" type="button">批准</button></div></section>',
+      completed: content + '<button class="tool-summary" type="button" aria-expanded="false"><span>✓ 已完成 3 项操作</span><span>展开 ›</span></button><div class="duration">已处理 8.4 秒</div>',
+      canceling: content + '<div class="status" role="status"><span class="dot"></span>正在停止</div>',
+      canceled: content + '<div class="duration">已停止 · 处理 3.2 秒</div>',
+      error: '<section class="failure"><h2>处理失败</h2><p>请求未完成。这里只显示 AppHost 提供的安全错误摘要。</p></section><div class="duration">处理失败 · 处理 4.8 秒</div>',
+      recovery: content + '<section class="failure"><h2>执行已中断</h2><p>可以从安全检查点继续，或显式开始一个新 Turn。</p><div class="actions"><button class="primary" type="button">继续</button><button type="button">重新开始</button></div></section>',
+      failed: '<section class="failure"><h2>连接失败，已重试 5 次</h2><p>模型连接在生成回复时多次中断，你的消息和上下文已经保留。</p><div class="actions"><button class="primary" type="button">重新尝试</button><button type="button">复制错误信息</button></div></section><div class="duration">连接失败 · 处理 12.6 秒</div>',
+      runtime: '<section class="failure"><h2>AppHost 不可用</h2><p>已提交的历史仍可阅读。重启期间不会自动重放 Turn。</p></section>'
+    };
+    function render(state) {
+      body.innerHTML = states[state];
+      buttons.forEach(button => button.setAttribute('aria-pressed', String(button.dataset.state === state)));
+      const running = ['connecting', 'thinking', 'streaming', 'retry'].includes(state);
+      action.disabled = state === 'approval' || state === 'canceling';
+      action.classList.toggle('stop', running);
+      action.textContent = state === 'runtime' ? '↻' : running ? '■' : '➜';
+      action.setAttribute('aria-label', state === 'runtime' ? '重启 AppHost' : state === 'approval' ? '等待批准' : state === 'canceling' ? '正在停止' : running ? '停止' : '发送');
+      const summary = body.querySelector('.tool-summary');
+      if (summary) summary.addEventListener('click', () => {
+        const open = summary.getAttribute('aria-expanded') === 'true';
+        summary.setAttribute('aria-expanded', String(!open));
+        summary.lastElementChild.textContent = open ? '展开 ›' : '收起 ⌃';
+        if (!open) summary.insertAdjacentHTML('afterend', '<ul class="tool-details"><li>读取现有 Renderer</li><li>生成 UI 规格</li><li>建立验收矩阵</li></ul>');
+        else body.querySelector('.tool-details')?.remove();
+      });
+    }
+    buttons.forEach(button => button.addEventListener('click', () => render(button.dataset.state)));
+    render('streaming');
+  </script>
+</body>
+</html>
