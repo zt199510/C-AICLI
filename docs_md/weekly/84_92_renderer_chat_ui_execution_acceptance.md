@@ -1,6 +1,6 @@
 # Week 84–92 Renderer Chat UI 执行与验收记录
 
-状态：`Implementation complete；P1 follow-up remediation verified；等待用户复验`
+状态：`Implementation complete；P1 execution projection remediation verified；等待用户复验`
 
 创建日期：`2026-07-31`
 
@@ -23,8 +23,8 @@
 | Executor | `Codex` |
 | Start time | `2026-07-31 13:38 +08:00` |
 | End time | `2026-07-31 15:49 +08:00` |
-| Final product revision | `feecba4c81ebfd651a3ee033ab9a32bcc6d89fe0` |
-| Overall decision | `P1 remediation verified；Pending user retest and visual acceptance` |
+| Final product revision | `6888e8de6f7f1c59f1ba45b081d1d49fff0b9d74` |
+| Overall decision | `P1 execution projection remediation verified；Pending user retest and visual acceptance` |
 
 ## 2. Preflight
 
@@ -196,8 +196,8 @@ Supplemental evidence：`artifacts/renderer-chat-ui-visual/supplemental-visual-m
 真实桌面启动：
 
 - `.env.local` 由启动 PowerShell 读取到当前进程环境；未打印变量名、值或 API key。
-- follow-up remediation 后 `npm start` helper PID `29804`；C-AICLI Desktop Electron window PID `36984`，窗口标题 `C-AICLI Desktop`，`Responding=True`。
-- AppHost dotnet PID `4020`；截至 `2026-07-31 16:14 +08:00` 仍在运行，桌面程序保留供用户复验。
+- execution ownership remediation 后 `npm start` helper PID `26160`；C-AICLI Desktop Electron window PID `26828`，窗口标题 `C-AICLI Desktop`，`Responding=True`。
+- AppHost dotnet PID `36300`；截至 `2026-07-31 17:38 +08:00` 仍在运行，桌面程序保留供用户复验。
 
 ## 13. Defects
 
@@ -208,6 +208,7 @@ Supplemental evidence：`artifacts/renderer-chat-ui-visual/supplemental-visual-m
 | UI-003 | P2 | Terminal output 是可聚焦区域但缺少 accessible name | Fixed | Codex | No |
 | UI-004 | P2 | 最终 screenshot manifest 尚未获得用户 Passed/Failed 回执 | Open | User | Final visual sign-off only |
 | UI-005 | P1 | Turn 启动/重试成功后本地 Composer draft 停留在 `enqueueing`，输入框和发送按钮永久禁用 | Fixed + regression tests (`feecba4`) | Codex | No |
+| UI-006 | P1 | AppHost 正在执行的 running Turn 被持久化读取误投影为 `recoveryRequired`，Renderer 错误显示“执行已中断” | Fixed + protocol regression (`6888e8d`) | Codex | No |
 
 Final Gate 要求 open P0/P1 为 `0/0`。
 
@@ -223,7 +224,7 @@ Final Gate 要求 open P0/P1 为 `0/0`。
 - [x] `.env.local` 真实程序启动且无密钥泄露。
 - [x] exact final product revision 与 evidence hash 已记录。
 
-最终结论：`P1 remediation verified；real desktop running；Pending user retest and visual acceptance`
+最终结论：`P1 execution projection remediation verified；real desktop running；Pending user retest and visual acceptance`
 
 签署：
 
@@ -263,3 +264,44 @@ Final Gate 要求 open P0/P1 为 `0/0`。
 修复提交：`feecba4c81ebfd651a3ee033ab9a32bcc6d89fe0`。
 
 复验状态：`Automated regression Passed；visual matrix rerun blocked by Electron GPU crash；真实桌面已重启并等待用户复验`。
+
+## 16. 2026-07-31 Active execution ownership remediation
+
+用户实机反馈：每次发送后立即出现“执行已中断”，需要多次点击继续或重新开始后才看到回答。
+
+持久化取证：
+
+- 用户最近 thread 的三个 Turn 最终均为 `completed`，provider `attempt=1`。
+- 三个 Turn 均没有 `retry-wait`、retry failure 或跨 attempt 流式内容。
+- 截图状态实际是 `recoveryRequired/执行已中断`，不是 provider retry。
+
+根因：`ThreadStore.Read()` 在发现持久化 active Turn 时会保守返回 `RecoveryRequired=true`，这是 AppHost 重启后的安全默认值；但它不知道当前 `DesktopWriteExecutionSupervisor` 正在合法持有并执行同一个 Turn。每次 thread progress 通知触发 Renderer 重新读取时，正常 running Turn 因此被错误投影为中断。
+
+修复：
+
+- supervisor 提供锁保护的 active execution ownership 查询。
+- `thread/get` 只对 supervisor 当前持有的同一 thread/Turn 抑制 stale recovery projection。
+- 未被当前 supervisor 持有的 active Turn 继续保持 `RecoveryRequired=true`，因此 AppHost 重启、断联和未知副作用边界仍要求显式恢复。
+- 未修改 desktop-v1 generated contract、provider retry、Turn revision、mutation identity 或副作用防重放规则。
+
+验证记录：
+
+| 命令/检查 | 耗时 | Exit code | 结果 |
+| --- | ---: | ---: | --- |
+| persisted user thread audit | — | 0 | 3/3 Turn completed；3/3 provider attempt=1；0 retry-wait |
+| failing protocol regression | 31.2s | 1 | 修复前稳定复现 `Expected False / Actual True`（running Turn 被标记 recovery） |
+| fixed protocol regression | 31.3s | 0 | supervised running Turn 保持 `recoveryRequired=false` |
+| full `.NET` tests (`--no-build --no-restore`) | 93.6s | 0 | 1441/1441 passed |
+| `npm run verify` | 22.4s | 0 | contracts/notices/a11y/typecheck/lint/build；31 files / 156 tests passed |
+| `npm run test:e2e` | test timeout 240s + teardown | 1 | visual fixture timeout；没有产品断言失败，未记录为 Passed，未重复运行 |
+| `git diff --check` | 1.3s | 0 | Passed；仅 line-ending conversion warnings |
+
+环境记录：
+
+- 系统 SDK 不满足仓库锁定的 9.0.308；仓库 SDK 首次 restore 在 5 分钟上限终止。
+- 第一次 `--no-restore` 构建因真实 AppHost PID `4020` 锁定 Release DLL 而失败；停止已确认的 C-AICLI 进程树后，失败回归、修复回归和完整测试均正常执行。
+- visual E2E 超时遗留 PID `7860` 无窗口且命令行为空；终止请求被系统拒绝，记录为外部 teardown 缺陷，不伪造 cleanup passed。
+
+修复提交：`6888e8de6f7f1c59f1ba45b081d1d49fff0b9d74`。
+
+复验状态：`Protocol regression and full automation Passed；真实桌面已重启并等待用户复验`。
