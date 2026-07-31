@@ -196,8 +196,8 @@ Supplemental evidence：`artifacts/renderer-chat-ui-visual/supplemental-visual-m
 真实桌面启动：
 
 - `.env.local` 由启动 PowerShell 读取到当前进程环境；未打印变量名、值或 API key。
-- `npm start` helper PID `26660`；C-AICLI Desktop Electron window PID `25028`，窗口标题 `C-AICLI Desktop`。
-- AppHost dotnet PID `39724`；截至 `2026-07-31 15:49 +08:00` 仍在运行，桌面程序保留供用户验收。
+- follow-up remediation 后 `npm start` helper PID `29804`；C-AICLI Desktop Electron window PID `36984`，窗口标题 `C-AICLI Desktop`，`Responding=True`。
+- AppHost dotnet PID `4020`；截至 `2026-07-31 16:14 +08:00` 仍在运行，桌面程序保留供用户复验。
 
 ## 13. Defects
 
@@ -223,7 +223,7 @@ Final Gate 要求 open P0/P1 为 `0/0`。
 - [x] `.env.local` 真实程序启动且无密钥泄露。
 - [x] exact final product revision 与 evidence hash 已记录。
 
-最终结论：`P1 remediation verified；real desktop restart pending；Pending user retest and visual acceptance`
+最终结论：`P1 remediation verified；real desktop running；Pending user retest and visual acceptance`
 
 签署：
 
@@ -262,4 +262,4 @@ Final Gate 要求 open P0/P1 为 `0/0`。
 
 修复提交：`feecba4c81ebfd651a3ee033ab9a32bcc6d89fe0`。
 
-复验状态：`Automated regression Passed；visual matrix rerun blocked by Electron GPU crash；等待真实桌面复验`。
+复验状态：`Automated regression Passed；visual matrix rerun blocked by Electron GPU crash；真实桌面已重启并等待用户复验`。
