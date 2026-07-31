@@ -143,13 +143,18 @@ public sealed class ThreadApplicationService
             return StoreFailure<ThreadDetailProjection>(timeline.Diagnostic);
         }
 
+        bool recoveryRequired = read.RecoveryRequired &&
+            !string.Equals(
+                read.Aggregate.Record.ActiveTurnId,
+                request.OwnedActiveTurnId,
+                StringComparison.Ordinal);
         var diagnostics = new List<ApplicationDiagnostic>();
         TurnSummaryProjection[] turns = read.Aggregate.Turns.Select(turn => ProjectTurn(
             turn,
             request.Snapshot,
             diagnostics,
             cancellationToken,
-            read.RecoveryRequired && turn.TurnId == read.Aggregate.Record.ActiveTurnId)).ToArray();
+            recoveryRequired && turn.TurnId == read.Aggregate.Record.ActiveTurnId)).ToArray();
         TimelineItemProjection[] items = timeline.Items.Select(item => ProjectItem(item, request.Snapshot, diagnostics, cancellationToken)).ToArray();
         ThreadDetailProjection detail = new(
             ProjectSummary(read.Aggregate.Record),
@@ -157,7 +162,7 @@ public sealed class ThreadApplicationService
             items,
             timeline.NextSequence,
             timeline.Truncated,
-            read.RecoveryRequired);
+            recoveryRequired);
         bool aggregateTruncated = false;
         while (items.Length > 0 && JsonSerializer.SerializeToUtf8Bytes(detail).Length > ApplicationLimits.TargetAggregateBytes)
         {

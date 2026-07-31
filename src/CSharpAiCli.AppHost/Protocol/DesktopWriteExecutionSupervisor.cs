@@ -29,6 +29,17 @@ internal sealed class DesktopWriteExecutionSupervisor : IDisposable
         get { lock (sync) return execution is { IsCompleted: false }; }
     }
 
+    public string? GetOwnedTurnId(string activeThreadId)
+    {
+        lock (sync)
+        {
+            return execution is { IsCompleted: false } &&
+                string.Equals(threadId, activeThreadId, StringComparison.Ordinal)
+                    ? turnId
+                    : null;
+        }
+    }
+
     public bool TryStart(DesktopApplicationSession session, TurnExecutionStateProjection state)
     {
         lock (sync)

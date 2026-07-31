@@ -493,11 +493,13 @@ public sealed class DesktopRpcServer : IDisposable
             return InvalidParams(id, "Thread get parameters are invalid.");
         }
 
+        string? ownedActiveTurnId = writeSupervisor.GetOwnedTurnId(request.ThreadId);
         return Success(id, DesktopProtocolMapper.Map(applicationSession!.GetThread(
             request.ThreadId,
             request.AfterSequence,
             request.TimelinePageSize,
-            cancellationToken)));
+            cancellationToken,
+            ownedActiveTurnId)));
     }
 
     private byte[] CreateThread(long? id, JsonElement parameters, CancellationToken cancellationToken)

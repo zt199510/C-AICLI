@@ -14,7 +14,8 @@ public sealed record ThreadGetRequest(
     CliEnvironmentSnapshot Snapshot,
     string ThreadId,
     long AfterSequence = 0,
-    int TimelinePageSize = ApplicationLimits.DefaultPageSize);
+    int TimelinePageSize = ApplicationLimits.DefaultPageSize,
+    string? OwnedActiveTurnId = null);
 
 public sealed record ThreadRenameRequest(
     CliEnvironmentSnapshot Snapshot,

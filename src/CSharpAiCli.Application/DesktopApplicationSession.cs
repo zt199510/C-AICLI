@@ -179,9 +179,10 @@ public sealed class DesktopApplicationSession : IDisposable
         string threadId,
         long afterSequence,
         int timelinePageSize,
-        CancellationToken cancellationToken = default) => Execute(
+        CancellationToken cancellationToken = default,
+        string? ownedActiveTurnId = null) => Execute(
             token => threadService.Get(
-                new ThreadGetRequest(snapshot, threadId, afterSequence, timelinePageSize),
+                new ThreadGetRequest(snapshot, threadId, afterSequence, timelinePageSize, ownedActiveTurnId),
                 token),
             cancellationToken);
 

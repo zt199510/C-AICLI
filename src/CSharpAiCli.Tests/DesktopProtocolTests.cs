@@ -4,6 +4,7 @@ using System.Text.Json.Serialization;
 using System.Reflection;
 using CSharpAiCli.AppHost.Protocol;
 using CSharpAiCli.AppHost.Protocol.Generated;
+using CSharpAiCli.Application;
 
 namespace CSharpAiCli.Tests;
 
@@ -560,6 +561,57 @@ public sealed class DesktopProtocolTests
         Assert.Equal(JsonValueKind.Null, clear.RootElement.GetProperty("result").GetProperty("data").GetProperty("pendingIntent").ValueKind);
     }
 
+    [Fact]
+    public async Task Supervised_running_turn_is_not_projected_as_interrupted_recovery()
+    {
+        using TempDirectory temp = TempDirectory.Create();
+        BlockingTurnExecutionRuntime runtime = new();
+        using DesktopRpcServer server = new(new DesktopApplicationSessionFactory(), runtime);
+        using JsonDocument initialized = Initialize(server, 1);
+        using JsonDocument opened = OpenWorkspace(server, 2, temp.Path);
+        using JsonDocument created = HandleRequest(server, 3, DesktopProtocolDefinition.ThreadCreateMethod,
+            new { schemaVersion = 1, title = "active execution" });
+        JsonElement thread = created.RootElement.GetProperty("result").GetProperty("data");
+        string threadId = thread.GetProperty("threadId").GetString()!;
+        long threadRevision = thread.GetProperty("revision").GetInt64();
+
+        using JsonDocument enqueued = HandleRequest(server, 4, DesktopProtocolDefinition.ComposerEnqueueMethod,
+            new
+            {
+                schemaVersion = 1,
+                threadId,
+                expectedThreadRevision = threadRevision,
+                expectedQueueRevision = 0,
+                clientMutationId = "enqueue-active-execution",
+                prompt = "Keep running",
+                contextSelectionIds = Array.Empty<string>(),
+                catalogSelections = Array.Empty<object>()
+            });
+        JsonElement composer = enqueued.RootElement.GetProperty("result").GetProperty("data");
+
+        using JsonDocument started = HandleRequest(server, 5, DesktopProtocolDefinition.TurnStartMethod,
+            new
+            {
+                schemaVersion = 1,
+                threadId,
+                expectedThreadRevision = composer.GetProperty("threadRevision").GetInt64(),
+                expectedQueueRevision = composer.GetProperty("queueRevision").GetInt64(),
+                clientMutationId = "start-active-execution"
+            });
+        Assert.True(started.RootElement.GetProperty("result").GetProperty("succeeded").GetBoolean());
+        await runtime.Started.Task.WaitAsync(TimeSpan.FromSeconds(5));
+
+        using JsonDocument detail = HandleRequest(server, 6, DesktopProtocolDefinition.ThreadGetMethod,
+            new { schemaVersion = 1, threadId, afterSequence = 0, timelinePageSize = 50 });
+        JsonElement data = detail.RootElement.GetProperty("result").GetProperty("data");
+        JsonElement turn = Assert.Single(data.GetProperty("turns").EnumerateArray());
+        Assert.Equal("running", turn.GetProperty("status").GetString());
+        Assert.False(turn.GetProperty("recoveryRequired").GetBoolean());
+        Assert.False(data.GetProperty("recoveryRequired").GetBoolean());
+
+        runtime.Release.TrySetResult();
+    }
+
     private static async Task WriteRequest(Stream output, int id, string method, object parameters)
     {
         byte[] payload = JsonSerializer.SerializeToUtf8Bytes(new
@@ -691,6 +743,25 @@ public sealed class DesktopProtocolTests
             }
 
             base.Dispose(disposing);
+        }
+    }
+
+    private sealed class BlockingTurnExecutionRuntime : ITurnExecutionRuntime
+    {
+        public TaskCompletionSource Started { get; } =
+            new(TaskCreationOptions.RunContinuationsAsynchronously);
+        public TaskCompletionSource Release { get; } =
+            new(TaskCreationOptions.RunContinuationsAsynchronously);
+
+        public async Task<TurnRuntimeResult> ExecuteAsync(
+            TurnExecutionInput input,
+            ITurnExecutionEventSink eventSink,
+            IInteractiveApprovalGateway approvalGateway,
+            CancellationToken cancellationToken)
+        {
+            Started.TrySetResult();
+            await Release.Task.WaitAsync(cancellationToken);
+            return new TurnRuntimeResult("completed", "completed", null, "Completed.");
         }
     }
 
