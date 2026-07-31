@@ -1,6 +1,6 @@
 # Week 84–92 Renderer Chat UI 执行与验收记录
 
-状态：`Implementation complete；自动化通过；等待用户视觉验收`
+状态：`Implementation complete；P1 follow-up remediation verified；等待用户复验`
 
 创建日期：`2026-07-31`
 
@@ -23,8 +23,8 @@
 | Executor | `Codex` |
 | Start time | `2026-07-31 13:38 +08:00` |
 | End time | `2026-07-31 15:49 +08:00` |
-| Final product revision | `843a542712c7a3e23869dcb8a7740b2ea72644a0` |
-| Overall decision | `Pending user visual acceptance` |
+| Final product revision | `feecba4c81ebfd651a3ee033ab9a32bcc6d89fe0` |
+| Overall decision | `P1 remediation verified；Pending user retest and visual acceptance` |
 
 ## 2. Preflight
 
@@ -207,6 +207,7 @@ Supplemental evidence：`artifacts/renderer-chat-ui-visual/supplemental-visual-m
 | UI-002 | P2 | long-session E2E 仍查找旧 `loaded items`/旧 Terminal 位置 | Fixed；performance passed | Codex | No |
 | UI-003 | P2 | Terminal output 是可聚焦区域但缺少 accessible name | Fixed | Codex | No |
 | UI-004 | P2 | 最终 screenshot manifest 尚未获得用户 Passed/Failed 回执 | Open | User | Final visual sign-off only |
+| UI-005 | P1 | Turn 启动/重试成功后本地 Composer draft 停留在 `enqueueing`，输入框和发送按钮永久禁用 | Fixed + regression tests (`feecba4`) | Codex | No |
 
 Final Gate 要求 open P0/P1 为 `0/0`。
 
@@ -222,7 +223,7 @@ Final Gate 要求 open P0/P1 为 `0/0`。
 - [x] `.env.local` 真实程序启动且无密钥泄露。
 - [x] exact final product revision 与 evidence hash 已记录。
 
-最终结论：`Automation Passed；real desktop running；Pending user visual acceptance`
+最终结论：`P1 remediation verified；real desktop restart pending；Pending user retest and visual acceptance`
 
 签署：
 
@@ -231,3 +232,34 @@ Final Gate 要求 open P0/P1 为 `0/0`。
 | 自动化 Gate | Passed | 2026-07-31 | Gate 15/15，supplemental 30/30 |
 | 开发验收 | Passed | 2026-07-31 | Required commands passed；legacy broad unpacked 未伪造 |
 | 用户视觉验收 | 待确认 | — | — |
+
+## 15. 2026-07-31 Composer follow-up remediation
+
+用户实机反馈：首次对话失败、provider retry 成功后，Turn 已完成且 AppHost ready，但 Composer 仍显示 “Sending prompt.”，输入框与发送按钮不可用。
+
+根因：`enqueueComposer` 将 thread-scoped draft 置为 `validating/enqueueing` 后，没有在 `startTurn` 成功、失败、选择切换或异常退出时统一收敛 transient 状态。AppHost authoritative pending intent 已清除，但 Renderer draft 仍保持 busy，形成永久禁用。
+
+修复：
+
+- 新增 reducer `settle` action，仅将 `validating/enqueueing` 收敛为 `editing`，不覆盖 terminal error。
+- `enqueueComposer` 使用 `finally` 覆盖所有退出路径；失败路径同时保留可见错误。
+- conversation harness 使用与产品 Composer 相同的 busy/disabled 规则，并验证第一条发送完成后可以继续输入和发送第二条。
+- 未修改 desktop-v1 contract、AppHost authority、provider retry、Turn/revision 或副作用执行语义。
+
+验证记录：
+
+| 命令 | 耗时 | Exit code | 结果 |
+| --- | ---: | ---: | --- |
+| failing regression (`use-desktop-controller.conversation.test.tsx`) | 2.69s | 1 | 修复前稳定复现 `expected editing / received enqueueing` |
+| targeted Renderer tests | 1.47s | 0 | 2 files / 4 tests passed |
+| `npm run typecheck` | 5.0s | 0 | Passed |
+| `npm run lint` | 4.7s | 0 | Passed |
+| `npm run test` | 9.2s | 0 | 31 files / 156 tests passed |
+| `npm run build` | 11.1s | 0 | contracts/notices/typecheck/main/renderer/security passed |
+| `npm run verify` | 23.1s | 0 | all checks/build；31 files / 156 tests passed |
+| `npm run test:e2e` | 192.4s | 1 | Electron GPU process exited (`-1073741515`) and closed the page；不是产品断言失败，未记录为 Passed |
+| `git diff --check` | 1.2s | 0 | Passed；仅 line-ending conversion warnings |
+
+修复提交：`feecba4c81ebfd651a3ee033ab9a32bcc6d89fe0`。
+
+复验状态：`Automated regression Passed；visual matrix rerun blocked by Electron GPU crash；等待真实桌面复验`。
