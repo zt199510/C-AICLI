@@ -139,6 +139,42 @@ public sealed class OpenAiToolCallingModelTests
     }
 
     [Fact]
+    public void Start_emits_bounded_cumulative_streaming_snapshots_before_completion()
+    {
+        ToolRegistry registry = new();
+        string[] deltas = Enumerable.Range(0, 40)
+            .Select(index => index.ToString("D2") + "abcdefgh")
+            .ToArray();
+        string finalText = string.Concat(deltas);
+        FakeGateway gateway = new()
+        {
+            StreamingDeltas = deltas,
+            Responses = [new OpenAiResponseEnvelope("resp_stream", "gpt-test", finalText)]
+        };
+        RecordingProviderObserver observer = new();
+        OpenAiToolCallingModel model = new(
+            model: "gpt-test",
+            instructions: null,
+            registry,
+            gateway,
+            observer);
+
+        AgentModelTurn turn = model.Start(CreateRequest("stream the answer"));
+
+        ProviderAttemptEvent[] streaming = observer.Events
+            .Where(item => item.Phase == ProviderAttemptPhase.Streaming)
+            .ToArray();
+        Assert.True(streaming.Length >= 4);
+        Assert.Equal(deltas[0], streaming[0].Content);
+        Assert.Equal(finalText, streaming[^1].Content);
+        Assert.All(streaming, item => Assert.True(item.HasStreamContent));
+        Assert.Equal(
+            streaming.Select(item => item.Content!.Length).Order(),
+            streaming.Select(item => item.Content!.Length));
+        Assert.Equal(finalText, turn.FinalText);
+    }
+
+    [Fact]
     public void Start_with_task_context_includes_bounded_context_and_startup_plan()
     {
         ToolRegistry registry = new();
@@ -465,6 +501,7 @@ public sealed class OpenAiToolCallingModelTests
 
         public List<OpenAiAgentRequest> AgentRequests { get; } = [];
         public IReadOnlyList<OpenAiResponseEnvelope> Responses { get; init; } = [];
+        public IReadOnlyList<string>? StreamingDeltas { get; init; }
 
         public OpenAiResponseEnvelope CreateAgentResponse(
             OpenAiAgentRequest request,
@@ -486,6 +523,30 @@ public sealed class OpenAiToolCallingModelTests
             CancellationToken cancellationToken = default)
         {
             throw new NotSupportedException();
+        }
+
+        public IEnumerable<OpenAiStreamingResponseUpdate> CreateAgentResponseStreaming(
+            OpenAiAgentRequest request,
+            CancellationToken cancellationToken = default)
+        {
+            if (StreamingDeltas is null)
+            {
+                yield return OpenAiStreamingResponseUpdate.Completed(
+                    CreateAgentResponse(request, cancellationToken));
+                yield break;
+            }
+            if (responseIndex >= Responses.Count)
+            {
+                throw new InvalidOperationException("Fake gateway has no queued agent response.");
+            }
+
+            AgentRequests.Add(request);
+            foreach (string delta in StreamingDeltas)
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+                yield return OpenAiStreamingResponseUpdate.OutputTextDelta(delta);
+            }
+            yield return OpenAiStreamingResponseUpdate.Completed(Responses[responseIndex++]);
         }
 
         public IEnumerable<OpenAiStreamingResponseUpdate> CreateResponseStreaming(

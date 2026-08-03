@@ -21,7 +21,7 @@ export function shouldQueueThreadResync(previous: ThreadChangedParams | null, ev
   if (previous.eventSequence === event.eventSequence && threadEventIdentity(previous) === threadEventIdentity(event)) return false;
   if (event.changeKind !== "updated") return true;
   if (event.revision < previous.revision && event.committedSequence <= previous.committedSequence) return false;
-  return previous.committedSequence === event.committedSequence;
+  return event.revision > previous.revision || event.committedSequence > previous.committedSequence;
 }
 
 export function useDesktopController(bridge: DesktopBridge | undefined, options?: { readonly autoSelectConversation?: boolean }) {
@@ -141,8 +141,17 @@ export function useDesktopController(bridge: DesktopBridge | undefined, options?
         resyncDirty.current = false;
         const snapshot = stateRef.current;
         await refreshThreads(snapshot.contextEpoch);
-        if (snapshot.selectedThreadId) {
-          await fetchThread(snapshot.selectedThreadId, 0, false, snapshot.contextEpoch, snapshot.selectionEpoch);
+        const current = stateRef.current;
+        if (current.selectedThreadId) {
+          const selectedDetail = current.detail?.thread.threadId === current.selectedThreadId ? current.detail : null;
+          const afterSequence = selectedDetail?.timeline.at(-1)?.sequence ?? 0;
+          await fetchThread(
+            current.selectedThreadId,
+            afterSequence,
+            afterSequence > 0,
+            current.contextEpoch,
+            current.selectionEpoch,
+          );
         }
       } while (resyncDirty.current);
       dispatch({ type: "refresh-complete" });

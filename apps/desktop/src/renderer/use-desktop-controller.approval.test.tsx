@@ -98,10 +98,45 @@ describe("approval projection resync", () => {
     expect(getThread.mock.calls.length).toBeGreaterThanOrEqual(2);
   });
 
-  it("bounds a completed provider turn to two selected-projection resyncs", async () => {
+  it("requests only new timeline items when a selected streaming turn advances", async () => {
     let notify: ((event: ThreadChangedParams) => void) | null = null;
     let authoritative = detail("running", 2, null, 1);
-    const getThread = vi.fn(async () => threadResult(authoritative));
+    const getThread = vi.fn(async (request: { readonly threadId: string; readonly afterSequence: number }) => {
+      void request;
+      return threadResult(authoritative);
+    });
+    const bridge = {
+      getRuntimeStatus: vi.fn(async () => createRuntimeStatus("runtime-ready")),
+      getWorkspaceSnapshot: vi.fn(async () => workspace),
+      listThreads: vi.fn(async () => listResult(authoritative.thread)),
+      getThread,
+      getComposer: vi.fn(async () => { throw new Error("not needed by this regression"); }),
+      onRuntimeStatus: vi.fn(() => () => undefined),
+      onThreadChanged: vi.fn((listener: (event: ThreadChangedParams) => void) => {
+        notify = listener;
+        return () => undefined;
+      }),
+    } as unknown as DesktopBridge;
+
+    render(<ApprovalProjectionHarness bridge={bridge} />);
+    await waitFor(() => expect((screen.getByRole("button", { name: "Select regression thread" }) as HTMLButtonElement).disabled).toBe(false));
+    fireEvent.click(screen.getByRole("button", { name: "Select regression thread" }));
+    await screen.findByText("running projection r2");
+
+    authoritative = detail("running", 3, null, 2);
+    act(() => notify?.(event(1, 3, 2)));
+
+    await waitFor(() => expect(getThread).toHaveBeenCalledTimes(2));
+    expect(getThread).toHaveBeenLastCalledWith({ threadId: "thread-1", afterSequence: 1 });
+  });
+
+  it("coalesces burst notifications while advancing the selected projection", async () => {
+    let notify: ((event: ThreadChangedParams) => void) | null = null;
+    let authoritative = detail("running", 2, null, 1);
+    const getThread = vi.fn(async (request: { readonly threadId: string; readonly afterSequence: number }) => {
+      void request;
+      return threadResult(authoritative);
+    });
     const bridge = {
       getRuntimeStatus: vi.fn(async () => createRuntimeStatus("runtime-ready")),
       getWorkspaceSnapshot: vi.fn(async () => workspace),
@@ -140,7 +175,9 @@ describe("approval projection resync", () => {
     });
     await screen.findByText("completed projection r8");
 
-    expect(getThread).toHaveBeenCalledTimes(3);
+    expect(getThread.mock.calls.length).toBeGreaterThan(3);
+    expect(getThread.mock.calls.length).toBeLessThan(9);
+    expect(getThread.mock.calls.slice(1).every(([request]) => request.afterSequence > 0)).toBe(true);
   });
 });
 
@@ -201,7 +238,32 @@ function detail(
     },
   };
   return {
-    thread: summary(status, revision, timelineItemCount), turns: [turn], timeline: [], nextSequence: null,
+    thread: summary(status, revision, timelineItemCount), turns: [turn], timeline: Array.from(
+      { length: timelineItemCount },
+      (_, index) => ({
+        itemId: `item-${index + 1}`,
+        turnId: "turn-1",
+        sequence: index + 1,
+        timestampUtc: `2026-07-28T00:00:${String(index + 1).padStart(2, "0")}.000Z`,
+        type: index === 0 ? "user.message" : "assistant.message",
+        source: null,
+        status: "committed",
+        summary: `projection item ${index + 1}`,
+        payload: {
+          kind: index === 0 ? "user.message" : "assistant.message",
+          text: `projection item ${index + 1}`,
+          name: null,
+          succeeded: null,
+          errorCode: null,
+          count: null,
+          referenceId: null,
+          stopReason: null,
+          attempt: index === 0 ? null : 1,
+          assistantMessageId: index === 0 ? null : "assistant-1",
+        },
+        redacted: false,
+      }),
+    ), nextSequence: null,
     timelineTruncated: false, recoveryRequired: false,
   };
 }

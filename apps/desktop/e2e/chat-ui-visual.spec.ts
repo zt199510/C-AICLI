@@ -127,7 +127,7 @@ test("Chat-first Gate and supplemental visual matrices remain structurally safe"
     }
   } finally {
     await closeElectron(application);
-    fs.rmSync(runRoot, { recursive: true, force: true });
+    fs.rmSync(runRoot, { recursive: true, force: true, maxRetries: 5, retryDelay: 200 });
     expect(fs.existsSync(runRoot), "Visual E2E temp root must be released.").toBe(false);
   }
 });

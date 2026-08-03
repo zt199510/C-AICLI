@@ -116,8 +116,10 @@ public sealed class OpenAiToolCallingModel : IToolCallingModel, IProviderAttempt
             currentAttempt,
             maxAdditionalRetries,
             ProviderAttemptPhase.Thinking));
+        const int streamingSnapshotCharacterInterval = 96;
         var text = new System.Text.StringBuilder();
         int emittedLength = 0;
+        long lastEmissionTimestamp = System.Diagnostics.Stopwatch.GetTimestamp();
         OpenAiResponseEnvelope? completed = null;
         foreach (OpenAiStreamingResponseUpdate update in gateway.CreateAgentResponseStreaming(
             request,
@@ -132,10 +134,15 @@ public sealed class OpenAiToolCallingModel : IToolCallingModel, IProviderAttempt
                     continue;
                 }
                 text.Append(delta);
-                if (emittedLength == 0 || text.Length - emittedLength >= 512)
+                bool emissionDelayElapsed = System.Diagnostics.Stopwatch.GetElapsedTime(lastEmissionTimestamp) >=
+                    TimeSpan.FromMilliseconds(120);
+                if (emittedLength == 0 ||
+                    text.Length - emittedLength >= streamingSnapshotCharacterInterval ||
+                    emissionDelayElapsed)
                 {
                     EmitStreaming(text.ToString());
                     emittedLength = text.Length;
+                    lastEmissionTimestamp = System.Diagnostics.Stopwatch.GetTimestamp();
                 }
             }
             else if (update.Kind == OpenAiStreamingResponseUpdateKind.Completed)

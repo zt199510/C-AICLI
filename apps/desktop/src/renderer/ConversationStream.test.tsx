@@ -83,6 +83,45 @@ describe("ConversationStream state matrix", () => {
     expect(screen.queryByRole("button", { name: "重新开始" })).toBeNull();
   });
 
+  it("renders assistant content as a safe Markdown preview", () => {
+    const markdown = [
+      "## Preview title",
+      "",
+      "Use **strong text** and `inlineCode`.",
+      "",
+      "- first item",
+      "- second item",
+      "",
+      "```ts",
+      "const answer = 42;",
+      "```",
+      "",
+      "[safe link](https://example.com) [unsafe link](javascript:alert(1))",
+      "<script>window.__unsafe = true</script>",
+    ].join("\n");
+    const value = turn({
+      status: "completed",
+      completedAtUtc: "2026-07-17T00:00:08.400Z",
+      provider: { phase: "streaming", attemptHasStreamContent: true },
+    });
+    render(<ConversationStream
+      detail={makeDetail(value, [
+        item(1, "user.message", { text: "Question" }),
+        item(2, "assistant.final", { text: markdown, attempt: 1, assistantMessageId: "assistant-1" }),
+      ])}
+      optimisticExchanges={[]}
+    />);
+
+    expect(screen.getByRole("heading", { name: "Preview title", level: 2 })).toBeTruthy();
+    expect(screen.getByText("strong text").tagName).toBe("STRONG");
+    expect(screen.getByText("inlineCode").tagName).toBe("CODE");
+    expect(document.querySelectorAll("li")).toHaveLength(2);
+    expect(document.querySelector("pre code")?.textContent).toContain("const answer = 42;");
+    expect(screen.getByRole("link", { name: "safe link" }).getAttribute("href")).toBe("https://example.com");
+    expect(screen.queryByRole("link", { name: "unsafe link" })).toBeNull();
+    expect(document.querySelector("script")).toBeNull();
+  });
+
   it("folds completed activity and expands failed activity without exposing raw payloads", () => {
     const detail = makeDetail(turn({ status: "completed", completedAtUtc: "2026-07-17T00:00:08.400Z" }), [
       item(1, "user.message", { text: "Question" }),

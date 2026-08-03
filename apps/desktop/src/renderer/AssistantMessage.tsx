@@ -1,6 +1,7 @@
 import { Bot } from "lucide-react";
 import type { AssistantMessageBlock } from "./conversation-block-projector";
 import { AssistantStatusLine, processingDuration } from "./AssistantStatusLine";
+import { MarkdownPreview } from "./MarkdownPreview";
 import { RetryExhaustedActions } from "./RecoveryActions";
 
 export function AssistantMessage({
@@ -26,7 +27,7 @@ export function AssistantMessage({
         <header className="conversation-message-meta"><strong>C-AICLI</strong></header>
         {block.content ? (
           <div className={`conversation-message-content ${block.stalePartial ? "assistant-partial-stale" : ""}`}>
-            {block.content}
+            <MarkdownPreview content={block.content} />
           </div>
         ) : null}
         {block.lifecycle === "failed" && safeFailure ? (

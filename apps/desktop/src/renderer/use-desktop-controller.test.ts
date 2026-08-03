@@ -15,7 +15,7 @@ describe("conversation title", () => {
 });
 
 describe("thread projection resync policy", () => {
-  it("resyncs only at the two lifecycle boundaries in an eight-notification turn", () => {
+  it("resyncs every monotonic lifecycle or committed timeline advance", () => {
     const committed = [7, 7, 8, 9, 10, 11, 12, 12];
     let previous: ThreadChangedParams | null = {
       schemaVersion: 1, eventSequence: 0, workspaceId: "workspace-1", threadId: "thread-1",
@@ -36,7 +36,7 @@ describe("thread projection resync policy", () => {
       if (shouldQueueThreadResync(previous, event)) resyncs++;
       previous = event;
     }
-    expect(resyncs).toBe(2);
+    expect(resyncs).toBe(8);
   });
 
   it("does not resync a regressive revision duplicate at the same committed sequence", () => {
