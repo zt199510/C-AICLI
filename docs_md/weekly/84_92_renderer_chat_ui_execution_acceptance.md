@@ -305,3 +305,50 @@ Final Gate 要求 open P0/P1 为 `0/0`。
 修复提交：`6888e8de6f7f1c59f1ba45b081d1d49fff0b9d74`。
 
 复验状态：`Protocol regression and full automation Passed；真实桌面已重启并等待用户复验`。
+
+## 17. 2026-08-03 Streaming and Markdown follow-up remediation
+
+用户实机反馈：助手回复看起来一次性出现，且助手消息正文没有按 Markdown 预览呈现。
+
+根因：
+
+- OpenAI streaming gateway 已使用流式 API，但累计内容只在首个 delta、每新增 `512` 字符和完成时提交；短回复通常只有首帧和终帧。
+- Renderer 的 thread notification 策略只在少数生命周期边界重新同步，并始终从 sequence `0` 全量读取；中间已提交的 streaming timeline 无法及时投影。
+- `AssistantMessage` 直接输出字符串并使用 `white-space: pre-wrap`，因此标题、列表、链接和代码块均显示为 Markdown 源文本。
+
+修复：
+
+- Provider 现在在首个 delta、累计新增 `96` 字符或经过 `120ms` 时提交累计 streaming snapshot；完成前的快照保持单调增长。
+- Renderer 对 revision 或 committed sequence 的单调推进触发同步，并从当前最后一个 timeline sequence 增量读取；并发通知仍通过既有 `resyncRunning/resyncDirty` 合并。
+- 新增无 `dangerouslySetInnerHTML` 的轻量 Markdown preview，覆盖标题、段落、列表、引用、分隔线、代码块、行内代码、强调和链接；仅允许 `http`、`https`、`mailto` 链接协议，原始 HTML 保持文本。
+- Assistant article 继续使用同一个 `assistantMessageId` 和 React key；connecting、thinking、streaming、retry、completed 不创建第二个 AI message，不改变跨 provider attempt 的投影规则。
+- 视觉 E2E 临时目录清理增加 Windows `EBUSY` 有界重试，不放宽任何 UI 断言。
+
+验证记录：
+
+| 命令/检查 | 耗时 | Exit code | 结果 |
+| --- | ---: | ---: | --- |
+| 修复前 Renderer 回归（3 files / 20 tests） | 17.2s | 1 | 3 个新增断言稳定失败：Markdown heading 缺失、仅 2 次 resync、增量请求仍为 `afterSequence=0` |
+| 修复后 targeted Renderer tests | 2.2s | 0 | 3 files / 20 tests passed |
+| 修复前 provider streaming fixture | — | 未单独记录 | `512` 字符阈值对 400 字符 fixture 只会产生首帧和终帧；首次与失败的 Renderer 命令并行执行，输出未独立保存，不伪造 exit code |
+| 修复后 provider streaming 回归 | 31.7s（含 build） | 0 | 1/1 passed；累计快照长度单调且最终内容完整 |
+| `npm run verify` | 35.7s | 0 | contracts/notices/a11y/typecheck/lint/build；31 files / 158 tests passed |
+| full `.NET` 首次运行 | 113.4s | 1 | 1441 passed / 1 external conversion child-process teardown failure；与本次路径无关，未记为 Passed |
+| isolated external conversion rerun | 3.6s | 0 | 1/1 passed |
+| full `.NET` 最终运行 | 101.9s | 0 | 1442/1442 passed |
+| `npm run test:e2e` 首次 | 72.8s | 1 | 45-case UI 断言执行完成；Windows `DIPS` 文件锁导致 teardown `EBUSY`，未记为 Passed |
+| `npm run test:e2e` 第二次 | 7.2s | 1 | Electron GPU process `-1073741515` 关闭页面，未记为 Passed；不继续重复运行 |
+| final scoped typecheck + lint | 13.9s | 0 | Passed |
+| `git diff --check` | 1.3s | 0 | Passed；仅 line-ending conversion warnings |
+
+缺陷状态：
+
+| ID | Priority | 描述 | 状态 | Blocking |
+| --- | --- | --- | --- | --- |
+| UI-007 | P1 | Provider 快照与 Renderer 投影节流叠加，回复不呈现连续流式更新 | Fixed + regression tests | No |
+| UI-008 | P1 | Assistant 内容以纯文本而非安全 Markdown preview 渲染 | Fixed + regression tests | No |
+| UI-009 | P2 | 当前 Windows 主机上的 Electron visual E2E 存在 `DIPS` 文件锁或 GPU process crash | Open；环境/teardown，未伪造 Passed | No（产品单元、Renderer、build 与真实桌面启动均通过） |
+
+修复提交：`5448b535344c5514510afbd47d68bf3c3a024f25`。
+
+真实桌面状态：使用 `.env.local` 启动且未打印变量或秘密；helper PID `39884`，Electron PID `31348`，窗口标题 `C-AICLI Desktop`、`Responding=True`，AppHost PID `36828` 正在运行并已将窗口置前，等待用户复验。
