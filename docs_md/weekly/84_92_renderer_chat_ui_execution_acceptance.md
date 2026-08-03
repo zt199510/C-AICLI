@@ -352,3 +352,34 @@ Final Gate 要求 open P0/P1 为 `0/0`。
 修复提交：`5448b535344c5514510afbd47d68bf3c3a024f25`。
 
 真实桌面状态：使用 `.env.local` 启动且未打印变量或秘密；helper PID `39884`，Electron PID `31348`，窗口标题 `C-AICLI Desktop`、`Responding=True`，AppHost PID `36828` 正在运行并已将窗口置前，等待用户复验。
+
+## 18. 2026-08-03 First-content latency and Composer queue reconciliation
+
+用户实机反馈：发送后需要等待数秒才出现首段 streaming 内容，并且 Composer 显示 `Ready to run`、阻止继续输入。
+
+真实持久化时间线取证（未输出 API key、请求头或环境变量）：
+
+- Turn A：`user.message` 到 `connecting` 约 `94ms`，到 `thinking` 约 `185ms`，到首个 `assistant.message/streaming` 约 `5.15s`。
+- Turn B：`user.message` 到 `connecting` 约 `116ms`，到 `thinking` 约 `228ms`，到首个 `assistant.message/streaming` 约 `6.62s`。
+- 两轮均为 provider attempt `1`，均有多个 streaming snapshots，证明请求与响应链路使用 streaming；5–7 秒区间是 Provider/model 的 time-to-first-content，而不是客户端等待完整响应。
+- 持久化 Composer queue 在取证时 `pendingIntent=false`，但截图中的 Renderer 仍显示 `Ready to run`，确认是旧 Composer snapshot 回写竞态，而不是 AppHost 仍有待执行输入。
+
+修复：
+
+- 同一 workspace/thread 的 Composer snapshot 按 canonical `queueRevision` 单调接收，旧 revision 不能把已消费队列重新投影为 pending。
+- `startTurn` 成功后的无 pending authoritative snapshot 在等待 thread/sidebar 刷新前立即提交，Composer 不再被慢 detail 请求阻塞。
+- selected conversation detail 与 sidebar thread list 并发刷新；connecting/thinking/streaming 投影不再串行等待列表刷新。
+- 未改变 OpenAI streaming 请求、Provider retry、Turn/revision、assistant identity、跨 attempt 内容隔离或副作用防重放规则。
+
+验证记录：
+
+| 命令/检查 | 耗时 | Exit code | 结果 |
+| --- | ---: | ---: | --- |
+| failing Renderer regressions | 2.17s / 1.69s | 1 | 稳定复现旧 queue snapshot 覆盖、selected detail 等待 sidebar、已消费 pending 在 detail 完成前仍可见 |
+| fixed targeted Renderer tests | 1.81s | 0 | 3 files / 11 tests passed |
+| `npm run verify` | 22.4s | 0 | contracts/notices/a11y/typecheck/lint/build；31 files / 161 tests passed |
+| `git diff --check` | 1.5s | 0 | Passed；仅 line-ending conversion warnings |
+
+修复提交：`4da8b495980a22d2785fcde699facb9bcdc2c181`。
+
+真实桌面状态：使用 `.env.local` 重启且未打印变量或秘密；helper PID `11368`，Electron PID `22952`，窗口标题 `C-AICLI Desktop`、`Responding=True`，AppHost PID `6140` 正在运行并已将窗口置前，等待用户复验。
