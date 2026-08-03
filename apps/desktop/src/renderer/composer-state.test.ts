@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import type { ComposerStateData } from "../generated/desktop-contracts";
 import { composerReducer, currentDraft, draftKey, initialComposerUiState } from "./composer-state";
 
 describe("composer state", () => {
@@ -35,4 +36,36 @@ describe("composer state", () => {
     state = composerReducer(state, { type: "settle", key });
     expect(currentDraft(state, key)).toMatchObject({ status: "error", error: "queue failed" });
   });
+
+  it("does not let an older pending snapshot replace a consumed composer queue", () => {
+    const consumed = snapshot(3, false);
+    const stalePending = snapshot(2, true);
+    let state = composerReducer(initialComposerUiState, { type: "snapshot", snapshot: consumed });
+
+    state = composerReducer(state, { type: "snapshot", snapshot: stalePending });
+
+    expect(state.snapshot).toBe(consumed);
+    expect(state.snapshot?.pendingIntent).toBeNull();
+  });
 });
+
+function snapshot(queueRevision: number, pending: boolean): ComposerStateData {
+  return {
+    workspaceId: "workspace-1",
+    threadId: "thread-1",
+    threadRevision: 4,
+    queueRevision,
+    pendingIntent: pending ? {
+      intentId: "intent-1",
+      delivery: "current-turn",
+      createdAtUtc: "2026-08-03T00:00:00.000Z",
+      contextCount: 0,
+      catalogCount: 0,
+    } : null,
+    effectiveModel: "gpt-test",
+    modelSource: "test",
+    approvalMode: "ask",
+    approvalModeSource: "test",
+    controlledContext: true,
+  };
+}

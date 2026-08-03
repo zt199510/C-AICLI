@@ -130,6 +130,42 @@ describe("approval projection resync", () => {
     expect(getThread).toHaveBeenLastCalledWith({ threadId: "thread-1", afterSequence: 1 });
   });
 
+  it("does not make selected conversation progress wait for the sidebar refresh", async () => {
+    let notify: ((event: ThreadChangedParams) => void) | null = null;
+    let authoritative = detail("running", 2, null, 1);
+    let blockList = false;
+    const blockedList = deferred<ReturnType<typeof listResult>>();
+    const listThreads = vi.fn(async () => blockList ? blockedList.promise : listResult(authoritative.thread));
+    const getThread = vi.fn(async () => threadResult(authoritative));
+    const bridge = {
+      getRuntimeStatus: vi.fn(async () => createRuntimeStatus("runtime-ready")),
+      getWorkspaceSnapshot: vi.fn(async () => workspace),
+      listThreads,
+      getThread,
+      getComposer: vi.fn(async () => { throw new Error("not needed by this regression"); }),
+      onRuntimeStatus: vi.fn(() => () => undefined),
+      onThreadChanged: vi.fn((listener: (event: ThreadChangedParams) => void) => {
+        notify = listener;
+        return () => undefined;
+      }),
+    } as unknown as DesktopBridge;
+
+    render(<ApprovalProjectionHarness bridge={bridge} />);
+    await waitFor(() => expect((screen.getByRole("button", { name: "Select regression thread" }) as HTMLButtonElement).disabled).toBe(false));
+    fireEvent.click(screen.getByRole("button", { name: "Select regression thread" }));
+    await screen.findByText("running projection r2");
+
+    authoritative = detail("running", 3, null, 2);
+    blockList = true;
+    act(() => notify?.(event(1, 3, 2)));
+    await waitFor(() => expect(listThreads).toHaveBeenCalledTimes(2));
+    const detailRequestsBeforeListRelease = getThread.mock.calls.length;
+    blockedList.resolve(listResult(authoritative.thread));
+
+    expect(detailRequestsBeforeListRelease).toBe(2);
+    await waitFor(() => expect(getThread).toHaveBeenCalledTimes(2));
+  });
+
   it("coalesces burst notifications while advancing the selected projection", async () => {
     let notify: ((event: ThreadChangedParams) => void) | null = null;
     let authoritative = detail("running", 2, null, 1);

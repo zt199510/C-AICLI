@@ -140,19 +140,19 @@ export function useDesktopController(bridge: DesktopBridge | undefined, options?
       do {
         resyncDirty.current = false;
         const snapshot = stateRef.current;
-        await refreshThreads(snapshot.contextEpoch);
-        const current = stateRef.current;
-        if (current.selectedThreadId) {
-          const selectedDetail = current.detail?.thread.threadId === current.selectedThreadId ? current.detail : null;
+        const threadsRefresh = refreshThreads(snapshot.contextEpoch);
+        if (snapshot.selectedThreadId) {
+          const selectedDetail = snapshot.detail?.thread.threadId === snapshot.selectedThreadId ? snapshot.detail : null;
           const afterSequence = selectedDetail?.timeline.at(-1)?.sequence ?? 0;
           await fetchThread(
-            current.selectedThreadId,
+            snapshot.selectedThreadId,
             afterSequence,
             afterSequence > 0,
-            current.contextEpoch,
-            current.selectionEpoch,
+            snapshot.contextEpoch,
+            snapshot.selectionEpoch,
           );
         }
+        await threadsRefresh;
       } while (resyncDirty.current);
       dispatch({ type: "refresh-complete" });
       resyncRunning.current = false;
@@ -570,10 +570,15 @@ export function useDesktopController(bridge: DesktopBridge | undefined, options?
         return;
       }
       const refreshed = await bridge.getComposer({ threadId });
+      const afterStart = stateRef.current;
+      const startStillCurrent = afterStart.contextEpoch === epoch && selectionIntent.current === expectedSelectionIntent &&
+        (createdConversation || (afterStart.selectedThreadId === threadId && afterStart.selectionEpoch === selectionEpoch));
+      if (startStillCurrent && refreshed.succeeded && refreshed.data) {
+        dispatchComposer({ type: "snapshot", snapshot: refreshed.data });
+      }
       await refreshThreads(epoch);
       if (selectionIntent.current !== expectedSelectionIntent) return;
       await fetchThread(threadId, 0, false, epoch, targetSelectionEpoch, createdConversation);
-      if (refreshed.succeeded && refreshed.data) dispatchComposer({ type: "snapshot", snapshot: refreshed.data });
     } catch { failOptimistic("Prompt could not be queued."); }
     finally { dispatchComposer({ type: "settle", key }); }
   }, [bridge, fetchThread, refreshThreads, selectThread]);

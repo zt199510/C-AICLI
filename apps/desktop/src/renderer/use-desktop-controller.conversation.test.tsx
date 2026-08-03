@@ -8,16 +8,19 @@ describe("continuous conversations", () => {
   it("creates on the first send and appends later turns to the same conversation", async () => {
     let created = false;
     let pending = false;
+    let queueRevision = 1;
     const createThread = vi.fn(async () => {
       created = true;
       return ok(thread);
     });
     const enqueueComposer = vi.fn(async () => {
       pending = true;
-      return ok(composer(true));
+      queueRevision++;
+      return ok(composer(true, queueRevision));
     });
     const startTurn = vi.fn(async () => {
       pending = false;
+      queueRevision++;
       return ok({
         workspaceId: workspace.workspaceId, threadId: thread.threadId, turnId: "turn-1",
         threadRevision: 1, turnRevision: 1, status: "running", committedSequence: 0,
@@ -33,7 +36,7 @@ describe("continuous conversations", () => {
         thread, turns: [], timeline: [], nextSequence: null,
         timelineTruncated: false, recoveryRequired: false,
       })),
-      getComposer: vi.fn(async () => ok(composer(pending))),
+      getComposer: vi.fn(async () => ok(composer(pending, queueRevision))),
       enqueueComposer,
       startTurn,
       onRuntimeStatus: vi.fn(() => () => undefined),
@@ -73,10 +76,56 @@ describe("continuous conversations", () => {
       threadId: "thread-1", prompt: "Continue with the same context",
     }));
   });
+
+  it("clears a consumed ready intent before waiting for thread projection refresh", async () => {
+    let pending = false;
+    let started = false;
+    let queueRevision = 1;
+    const detail = () => ok({
+      thread, turns: [], timeline: [], nextSequence: null,
+      timelineTruncated: false as const, recoveryRequired: false as const,
+    });
+    const delayedDetail = deferred<ReturnType<typeof detail>>();
+    const getThread = vi.fn(async () => started ? delayedDetail.promise : detail());
+    const bridge = {
+      getRuntimeStatus: vi.fn(async () => createRuntimeStatus("runtime-ready")),
+      getWorkspaceSnapshot: vi.fn(async () => workspace),
+      listThreads: vi.fn(async () => ok({ threads: [thread], truncated: false })),
+      getThread,
+      getComposer: vi.fn(async () => ok(composer(pending, queueRevision))),
+      enqueueComposer: vi.fn(async () => {
+        pending = true;
+        queueRevision++;
+        return ok(composer(true, queueRevision));
+      }),
+      startTurn: vi.fn(async () => {
+        pending = false;
+        queueRevision++;
+        started = true;
+        return ok({
+          workspaceId: workspace.workspaceId, threadId: thread.threadId, turnId: "turn-1",
+          threadRevision: 2, turnRevision: 1, status: "running", committedSequence: 1,
+          recoveryRequired: false, idempotent: false, approval: null,
+        });
+      }),
+      onRuntimeStatus: vi.fn(() => () => undefined),
+      onThreadChanged: vi.fn(() => () => undefined),
+    } as unknown as DesktopBridge;
+
+    render(<ConversationHarness bridge={bridge} autoSelect />);
+    await waitFor(() => expect(screen.getByTestId("selected-thread").textContent).toBe("thread-1"));
+    fireEvent.change(screen.getByLabelText("Prompt"), { target: { value: "Start now" } });
+    fireEvent.click(screen.getByRole("button", { name: "Send" }));
+    await waitFor(() => expect(getThread.mock.calls.length).toBeGreaterThanOrEqual(2));
+    const pendingBeforeDetailRelease = screen.getByTestId("composer-pending").textContent;
+    delayedDetail.resolve(detail());
+
+    expect(pendingBeforeDetailRelease).toBe("none");
+  });
 });
 
-function ConversationHarness({ bridge }: { readonly bridge: DesktopBridge }) {
-  const controller = useDesktopController(bridge);
+function ConversationHarness({ bridge, autoSelect = false }: { readonly bridge: DesktopBridge; readonly autoSelect?: boolean }) {
+  const controller = useDesktopController(bridge, { autoSelectConversation: autoSelect });
   const composerBusy =
     controller.composerDraft.status === "validating" ||
     controller.composerDraft.status === "enqueueing";
@@ -90,6 +139,7 @@ function ConversationHarness({ bridge }: { readonly bridge: DesktopBridge }) {
       <span data-testid="threads-state">{controller.state.threadsStatus}</span>
       <span data-testid="optimistic-count">{controller.optimisticExchanges.length}</span>
       <span data-testid="optimistic-text">{controller.optimisticExchanges[0]?.text ?? ""}</span>
+      <span data-testid="composer-pending">{controller.composer.snapshot?.pendingIntent ? "pending" : "none"}</span>
       <textarea
         aria-label="Prompt"
         disabled={composerDisabled}
@@ -120,9 +170,9 @@ const thread: ThreadSummaryData = {
   origin: { kind: "desktop", sourceKind: null, sourceId: null, sourceFingerprint: null },
 };
 
-function composer(hasPendingIntent: boolean): ComposerStateData {
+function composer(hasPendingIntent: boolean, queueRevision = hasPendingIntent ? 2 : 1): ComposerStateData {
   return {
-    workspaceId: workspace.workspaceId, threadId: thread.threadId, threadRevision: thread.revision, queueRevision: hasPendingIntent ? 2 : 1,
+    workspaceId: workspace.workspaceId, threadId: thread.threadId, threadRevision: thread.revision, queueRevision,
     pendingIntent: hasPendingIntent ? { intentId: "intent-1", delivery: "current-turn", createdAtUtc: "2026-07-30T00:00:00.000Z", contextCount: 0, catalogCount: 0 } : null,
     effectiveModel: "gpt-test", modelSource: "environment", approvalMode: "ask", approvalModeSource: "default", controlledContext: true,
   };
@@ -130,4 +180,10 @@ function composer(hasPendingIntent: boolean): ComposerStateData {
 
 function ok<T>(data: T) {
   return { schemaVersion: 1, succeeded: true, data, error: null, diagnostics: [], truncated: false } as const;
+}
+
+function deferred<T>() {
+  let resolve!: (value: T) => void;
+  const promise = new Promise<T>((complete) => { resolve = complete; });
+  return { promise, resolve };
 }

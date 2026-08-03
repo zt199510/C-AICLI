@@ -68,7 +68,12 @@ export function composerReducer(state: ComposerUiState, action: ComposerAction):
   switch (action.type) {
     case "reset": return initialComposerUiState;
     case "snapshot-loading": return { ...state, snapshotStatus: "loading" };
-    case "snapshot": return { ...state, snapshotStatus: "ready", snapshot: action.snapshot };
+    case "snapshot": {
+      const current = state.snapshot;
+      const sameQueue = current?.workspaceId === action.snapshot.workspaceId && current.threadId === action.snapshot.threadId;
+      if (sameQueue && action.snapshot.queueRevision < current.queueRevision) return state;
+      return { ...state, snapshotStatus: "ready", snapshot: action.snapshot };
+    }
     case "snapshot-error": return { ...state, snapshotStatus: "error", snapshot: null };
     case "snapshot-clear": return { ...state, snapshotStatus: "idle", snapshot: null, mentions: emptyMentions };
     case "text": return updateDraft(state, action.key, draft => ({ ...draft, text: action.text, status: "editing", error: null }));
