@@ -52,20 +52,36 @@ describe("useShellPanels navigation width", () => {
 });
 
 describe("useShellPanels responsive panel behavior", () => {
+  it("opens an inline inspector on wide viewports and keeps overlays closed initially", () => {
+    setViewportWidth(1440);
+    const wide = renderHook(() => useShellPanels());
+    expect(wide.result.current.toolSidebarOpen).toBe(true);
+    expect(wide.result.current.summaryOpen).toBe(false);
+    expect(wide.result.current.bottomPanelOpen).toBe(false);
+    expect(wide.result.current.overlayInspector).toBe(false);
+    wide.unmount();
+
+    setViewportWidth(1024);
+    const compact = renderHook(() => useShellPanels());
+    expect(compact.result.current.toolSidebarOpen).toBe(false);
+    expect(compact.result.current.overlayInspector).toBe(true);
+    compact.unmount();
+  });
+
   it("keeps the navigation and inspector mutually exclusive on narrow viewports", () => {
     setViewportWidth(800);
     const { result } = renderHook(() => useShellPanels());
 
     expect(result.current.leftOpen).toBe(false);
-    expect(result.current.inspectorOpen).toBe(false);
+    expect(result.current.toolSidebarOpen).toBe(false);
 
     act(() => result.current.showThreads());
     expect(result.current.leftOpen).toBe(true);
-    expect(result.current.inspectorOpen).toBe(false);
+    expect(result.current.toolSidebarOpen).toBe(false);
 
-    act(() => result.current.showInspector());
+    act(() => result.current.showToolSidebar());
     expect(result.current.leftOpen).toBe(false);
-    expect(result.current.inspectorOpen).toBe(true);
+    expect(result.current.toolSidebarOpen).toBe(true);
   });
 
   it("preserves the navigation width while viewport layout changes", () => {
@@ -80,7 +96,7 @@ describe("useShellPanels responsive panel behavior", () => {
 
     expect(result.current.navigationWidth).toBe(340);
     expect(result.current.leftOpen).toBe(false);
-    expect(result.current.inspectorOpen).toBe(false);
+    expect(result.current.toolSidebarOpen).toBe(false);
 
     act(() => {
       setViewportWidth(1000);
@@ -88,7 +104,61 @@ describe("useShellPanels responsive panel behavior", () => {
     });
     expect(result.current.navigationWidth).toBe(340);
     expect(result.current.leftOpen).toBe(true);
-    expect(result.current.inspectorOpen).toBe(false);
+    expect(result.current.toolSidebarOpen).toBe(false);
+  });
+
+  it("keeps the three workspace surfaces independently switchable", () => {
+    setViewportWidth(1440);
+    const { result } = renderHook(() => useShellPanels());
+
+    act(() => result.current.toggleSummary());
+    expect(result.current.summaryOpen).toBe(true);
+    expect(result.current.bottomPanelOpen).toBe(false);
+    expect(result.current.toolSidebarOpen).toBe(true);
+
+    act(() => result.current.showBottomPanel());
+    expect(result.current.summaryOpen).toBe(true);
+    expect(result.current.bottomPanelOpen).toBe(true);
+    expect(result.current.toolSidebarOpen).toBe(true);
+
+    act(() => result.current.toggleToolSidebar());
+    expect(result.current.summaryOpen).toBe(true);
+    expect(result.current.bottomPanelOpen).toBe(true);
+    expect(result.current.toolSidebarOpen).toBe(false);
+  });
+
+  it("closes the last opened non-modal surface first", () => {
+    const { result } = renderHook(() => useShellPanels());
+    act(() => {
+      result.current.toggleSummary();
+      result.current.showBottomPanel();
+    });
+
+    act(() => result.current.closeLastSurface());
+    expect(result.current.bottomPanelOpen).toBe(false);
+    expect(result.current.summaryOpen).toBe(true);
+
+    act(() => result.current.closeLastSurface());
+    expect(result.current.summaryOpen).toBe(false);
+  });
+
+  it("preserves the tool sidebar width across responsive mode changes", () => {
+    setViewportWidth(1440);
+    const { result } = renderHook(() => useShellPanels());
+    act(() => result.current.nudgeInspectorWidth(72));
+    expect(result.current.inspectorWidth).toBe(432);
+
+    act(() => {
+      setViewportWidth(1024);
+      window.dispatchEvent(new Event("resize"));
+    });
+    expect(result.current.inspectorWidth).toBe(432);
+
+    act(() => {
+      setViewportWidth(1440);
+      window.dispatchEvent(new Event("resize"));
+    });
+    expect(result.current.inspectorWidth).toBe(432);
   });
 });
 

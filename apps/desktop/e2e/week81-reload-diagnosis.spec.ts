@@ -128,7 +128,7 @@ async function sample(
       };
       return Object.fromEntries([
         ".titlebar", "#threads-panel", ".task-surface", ".timeline-view", ".terminal-panel",
-        ".task-controls", ".composer", "#review-inspector-panel", ".review-content",
+        ".task-controls", ".composer", "#workspace-tool-sidebar", "#workspace-bottom-panel", ".review-content",
       ].map((selector) => [selector, count(selector)]));
     }),
   ]);

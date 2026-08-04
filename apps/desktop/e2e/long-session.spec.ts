@@ -24,7 +24,7 @@ test("long timeline, bounded diff, and terminal output survive repeated reloads"
 
   try {
     application = await electron.launch({
-      args: ["--disable-gpu", path.join(desktopRoot, "e2e", "fixture-main.cjs")],
+      args: ["--disable-gpu", "--in-process-gpu", path.join(desktopRoot, "e2e", "fixture-main.cjs")],
       env: { ...process.env, CAICLI_E2E_SCENARIO: "long-session", CAICLI_E2E_ROOT: root, APPDATA: path.join(root, "appdata") },
     });
     const page = await application.firstWindow();
@@ -58,14 +58,14 @@ test("long timeline, bounded diff, and terminal output survive repeated reloads"
       reloadSamples.push(await processSnapshot(application));
     }
 
-    const showInspector = page.getByRole("button", { name: "Show workspace inspector" });
-    if (await showInspector.isVisible()) await showInspector.click();
-    await page.getByRole("tab", { name: "Changes" }).click();
+    const toolSidebar = page.getByRole("button", { name: "Toggle workspace tool sidebar" });
+    if ((await toolSidebar.getAttribute("aria-pressed")) === "false") await toolSidebar.click();
+    await page.getByRole("button", { name: "Changes", exact: true }).click();
     await expect(page.getByText("Showing a bounded result set.")).toBeVisible();
     await expect(page.getByText("Diff projection was truncated at the existing bound.")).toBeVisible();
     await expect(page.locator(".review-section li")).toHaveCount(50);
 
-    await page.getByRole("tab", { name: "Terminal" }).click();
+    await page.getByRole("button", { name: "Terminal", exact: true }).click();
     await page.getByRole("button", { name: "Open terminal" }).click();
     await page.getByRole("textbox", { name: "Terminal input" }).fill("long-output");
     await page.getByRole("button", { name: "Send", exact: true }).click();

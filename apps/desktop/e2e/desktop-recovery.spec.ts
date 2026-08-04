@@ -83,7 +83,7 @@ for (const scenario of scenarios) {
         await killAppHost(value, application);
         await expect(page.getByRole("heading", { name: "AppHost stopped unexpectedly" })).toBeVisible();
         await page.getByRole("button", { name: "Restart AppHost" }).click();
-        await expect(page.getByText("AppHost ready")).toBeVisible();
+        await expect(page.locator(".app-shell")).toHaveAttribute("data-runtime-state", "ready");
         await openWorkspace(page);
         await page.getByText(title, { exact: true }).first().click();
         await expect(page.getByText("This turn needs recovery before it can continue.")).toBeVisible();

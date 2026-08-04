@@ -27,6 +27,7 @@ const appPaths = await packager({
     /^\/node_modules($|\/)/,
     /^\/resources($|\/)/,
     /^\/dist\/.*\.map$/,
+    /(^|\/).*\.log$/,
     /^\/e2e($|\/)/,
     /^\/playwright-report($|\/)/,
     /^\/test-results($|\/)/,

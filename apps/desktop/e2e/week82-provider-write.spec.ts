@@ -126,7 +126,7 @@ test("authorized Week82 controlled write uses two durable approvals", async ({ b
       dialog.showOpenDialog = async () => ({ canceled: false, filePaths: [selectedWorkspace] });
     }, workspace);
     page = await application.firstWindow();
-    await expect(page.getByText("AppHost ready")).toBeVisible({ timeout: 60_000 });
+    await expect(page.locator(".app-shell")).toHaveAttribute("data-runtime-state", "ready", { timeout: 60_000 });
     await page.getByRole("button", { name: "Open workspace" }).first().click();
     const appHostPid = await expect.poll(() => findAppHostPid(application!.process().pid), { timeout: 15_000 }).not.toBeNull()
       .then(() => findAppHostPid(application!.process().pid));

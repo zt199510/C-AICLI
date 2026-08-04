@@ -136,7 +136,7 @@ test("authorized Week83 provider crash and explicit restart", async ({ browserNa
       dialog.showOpenDialog = async () => ({ canceled: false, filePaths: [selectedWorkspace] });
     }, workspace);
     page = await application.firstWindow();
-    await expect(page.getByText("AppHost ready")).toBeVisible({ timeout: 60_000 });
+    await expect(page.locator(".app-shell")).toHaveAttribute("data-runtime-state", "ready", { timeout: 60_000 });
     await page.getByRole("button", { name: "Open workspace" }).first().click();
     await expect.poll(async () => page!.evaluate(async () => {
       const snapshot = await window.caicli.getWorkspaceSnapshot();
@@ -211,7 +211,7 @@ test("authorized Week83 provider crash and explicit restart", async ({ browserNa
     noAutomaticRestartOrReplayObserved = true;
 
     await page.getByRole("button", { name: "Restart AppHost" }).click();
-    await expect(page.getByText("AppHost ready")).toBeVisible({ timeout: 60_000 });
+    await expect(page.locator(".app-shell")).toHaveAttribute("data-runtime-state", "ready", { timeout: 60_000 });
     newAppHostPid = await expect.poll(
       () => findAppHostPid(application!.process().pid), { timeout: 15_000 },
     ).not.toBeNull().then(() => findAppHostPid(application!.process().pid));

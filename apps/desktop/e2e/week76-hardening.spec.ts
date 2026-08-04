@@ -68,13 +68,14 @@ test("packaged trust boundary and keyboard accessibility stay fail-closed", asyn
     await page.keyboard.press("Enter");
     await expect(prompt).toBeFocused();
 
-    const showInspector = page.getByRole("button", { name: "Show workspace inspector" });
-    if (await showInspector.isVisible()) await showInspector.click();
-    const changes = page.getByRole("tab", { name: "Changes" });
+    const toolSidebar = page.getByRole("button", { name: "Toggle workspace tool sidebar" });
+    if ((await toolSidebar.getAttribute("aria-pressed")) === "false") await toolSidebar.click();
+    const changes = page.getByRole("button", { name: "Changes", exact: true });
     await changes.focus();
-    await page.keyboard.press("ArrowRight");
-    await expect(page.getByRole("tab", { name: "Terminal" })).toBeFocused();
-    expect(await page.getByRole("tabpanel").getAttribute("aria-labelledby")).toBe("context-tab-terminal");
+    await page.keyboard.press("ArrowDown");
+    await expect(page.getByRole("button", { name: "Local", exact: true })).toBeFocused();
+    await page.getByRole("button", { name: "Terminal", exact: true }).click();
+    await expect(page.getByRole("region", { name: "Terminal", exact: true })).toBeVisible();
 
     await page.setViewportSize({ width: 760, height: 560 });
     const showThreads = page.getByRole("button", { name: "显示会话侧栏" });

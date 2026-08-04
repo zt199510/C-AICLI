@@ -1,4 +1,4 @@
-import { render, screen, waitFor, within } from "@testing-library/react";
+import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { ChangesData, WorkspaceSnapshotData } from "../generated/desktop-contracts";
@@ -12,8 +12,9 @@ describe("desktop shell", () => {
   });
 
   it("reads the runtime snapshot without initializing AppHost from the renderer", async () => {
-    render(<App />);
-    expect(await screen.findByText("AppHost ready")).toBeTruthy();
+    const { container } = render(<App />);
+    await waitFor(() => expect(container.querySelector(".app-shell")?.getAttribute("data-runtime-state")).toBe("ready"));
+    expect(container.querySelector(".titlebar")).toBeNull();
     expect(window.caicli.getRuntimeStatus).toHaveBeenCalledOnce();
   });
 
@@ -26,8 +27,7 @@ describe("desktop shell", () => {
     window.caicli = configured;
     render(<App />);
     await waitFor(() => expect(configured.getChanges).toHaveBeenCalledOnce());
-    await userEvent.click(screen.getByRole("button", { name: "Show workspace inspector" }));
-    await userEvent.click(screen.getByRole("tab", { name: "Changes" }));
+    await userEvent.click(screen.getByRole("button", { name: "Changes" }));
     expect(configured.getChanges).toHaveBeenCalledOnce();
   });
 
@@ -39,13 +39,28 @@ describe("desktop shell", () => {
     expect(window.caicli.restartRuntime).toHaveBeenCalledOnce();
   });
 
-  it("opens and collapses shell panels", async () => {
+  it("keeps three workspace panel toggles visible and independently switchable", async () => {
     render(<App />);
     await userEvent.click(screen.getByRole("button", { name: "收起会话侧栏" }));
     expect(screen.getByRole("button", { name: "展开会话侧栏" })).toBeTruthy();
-    await userEvent.click(screen.getByRole("button", { name: "Show workspace inspector" }));
-    await userEvent.click(screen.getByRole("button", { name: "Close workspace inspector" }));
-    expect(screen.getByRole("button", { name: "Show workspace inspector" })).toBeTruthy();
+    const summary = screen.getByRole("button", { name: "Toggle workspace summary" });
+    const bottom = screen.getByRole("button", { name: "Toggle workspace bottom panel" });
+    const sidebar = screen.getByRole("button", { name: "Toggle workspace tool sidebar" });
+    expect(summary.getAttribute("aria-controls")).toBe("workspace-summary-overlay");
+    expect(bottom.getAttribute("aria-controls")).toBe("workspace-bottom-panel");
+    expect(sidebar.getAttribute("aria-controls")).toBe("workspace-tool-sidebar");
+    expect(summary.getAttribute("aria-pressed")).toBe("false");
+    expect(bottom.getAttribute("aria-pressed")).toBe("false");
+    expect(sidebar.getAttribute("aria-pressed")).toBe("true");
+
+    await userEvent.click(summary);
+    await userEvent.click(bottom);
+    await userEvent.click(sidebar);
+    expect(summary.getAttribute("aria-pressed")).toBe("true");
+    expect(bottom.getAttribute("aria-pressed")).toBe("true");
+    expect(sidebar.getAttribute("aria-pressed")).toBe("false");
+    expect(document.querySelector("#workspace-summary-overlay")).toBeTruthy();
+    expect(document.querySelector("#workspace-bottom-panel")).toBeTruthy();
   });
 
   it("opens the archived view from the collapsed conversation rail", async () => {
@@ -64,19 +79,47 @@ describe("desktop shell", () => {
   it("keeps terminal tools in the contextual inspector instead of the conversation surface", async () => {
     render(<App />);
     expect(screen.queryByRole("region", { name: "User terminal" })).toBeNull();
-    await userEvent.click(screen.getByRole("button", { name: "Show workspace inspector" }));
-    const tools = screen.getByRole("tablist", { name: "Workspace tools" });
-    expect(within(tools).getAllByRole("tab").map((tab) => tab.textContent?.replace(/\d+/gu, ""))).toEqual([
-      "Changes", "Terminal", "Reports", "Artifacts", "Preview",
-    ]);
-    await userEvent.click(screen.getByRole("tab", { name: "Terminal" }));
+    const tools = screen.getByRole("navigation", { name: "Workspace tool groups" });
+    expect(tools).toBeTruthy();
+    for (const name of ["Changes", "Terminal", "Reports", "Artifacts", "Preview"]) {
+      expect(screen.getByRole("button", { name })).toBeTruthy();
+    }
+    await userEvent.click(screen.getByRole("button", { name: "Terminal" }));
+    expect(screen.getByRole("button", { name: "Toggle workspace bottom panel" }).getAttribute("aria-pressed")).toBe("true");
     expect(screen.getByRole("region", { name: "User terminal" })).toBeTruthy();
-    expect(screen.getByRole("tabpanel", { name: "Terminal" })).toBeTruthy();
+    expect(screen.getByRole("region", { name: "Terminal" })).toBeTruthy();
+  });
+
+  it("retains the selected tool while the bottom panel is closed", async () => {
+    render(<App />);
+    await userEvent.click(screen.getByRole("button", { name: "Terminal" }));
+    const bottom = screen.getByRole("button", { name: "Toggle workspace bottom panel" });
+    await userEvent.click(bottom);
+    expect(screen.queryByRole("region", { name: "Terminal" })).toBeNull();
+    await userEvent.click(bottom);
+    expect(screen.getByRole("region", { name: "Terminal" })).toBeTruthy();
+  });
+
+  it("closes non-modal surfaces in last-opened order and restores their triggers", async () => {
+    render(<App />);
+    const summary = screen.getByRole("button", { name: "Toggle workspace summary" });
+    const bottom = screen.getByRole("button", { name: "Toggle workspace bottom panel" });
+    await userEvent.click(summary);
+    await userEvent.click(bottom);
+
+    document.querySelector<HTMLElement>("#workspace-bottom-panel .inspector-detail-scroll")?.focus();
+    await userEvent.keyboard("{Escape}");
+    expect(bottom.getAttribute("aria-pressed")).toBe("false");
+    expect(summary.getAttribute("aria-pressed")).toBe("true");
+    expect(document.activeElement).toBe(bottom);
+
+    await userEvent.keyboard("{Escape}");
+    expect(summary.getAttribute("aria-pressed")).toBe("false");
+    expect(document.activeElement).toBe(summary);
   });
 
   it("supports keyboard resizing for the wide workspace inspector", async () => {
     render(<App />);
-    await userEvent.click(screen.getByRole("button", { name: "Show workspace inspector" }));
     const separator = screen.getByRole("separator", { name: "Resize workspace inspector" });
     expect(separator.getAttribute("aria-valuenow")).toBe("360");
     separator.focus();
@@ -109,11 +152,14 @@ describe("desktop shell", () => {
     window.innerWidth = 760;
     render(<App />);
     expect(screen.getByRole("button", { name: "显示会话侧栏" })).toBeTruthy();
-    expect(screen.getByRole("button", { name: "Show workspace inspector" })).toBeTruthy();
+    const sidebar = screen.getByRole("button", { name: "Toggle workspace tool sidebar" });
+    expect(sidebar.getAttribute("aria-pressed")).toBe("false");
     await userEvent.click(screen.getByRole("button", { name: "显示会话侧栏" }));
-    expect(screen.queryByRole("button", { name: "Show workspace inspector" })).toBeTruthy();
-    await userEvent.click(screen.getByRole("button", { name: "Show workspace inspector" }));
+    expect(sidebar).toBeTruthy();
+    await userEvent.click(sidebar);
     expect(screen.getByRole("button", { name: "显示会话侧栏" })).toBeTruthy();
+    expect(document.querySelector("#threads-panel")?.getAttribute("aria-hidden")).toBe("true");
+    expect(document.querySelector("#workspace-tool-sidebar")?.getAttribute("aria-hidden")).toBe("false");
   });
 });
 

@@ -161,7 +161,7 @@ for (const profile of profileNames) {
           dialog.showOpenDialog = async () => ({ canceled: false, filePaths: [selectedWorkspace] });
         }, workspace);
         page = await application.firstWindow();
-        await expect(page.getByText("AppHost ready")).toBeVisible({ timeout: 60_000 });
+        await expect(page.locator(".app-shell")).toHaveAttribute("data-runtime-state", "ready", { timeout: 60_000 });
         await page.getByRole("button", { name: "Open workspace" }).first().click();
         await expect.poll(async () => observedPageEvaluate(page!, observer, async () =>
           Boolean(await window.caicli.getWorkspaceSnapshot())), { timeout: 20_000 }).toBe(true);

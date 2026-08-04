@@ -23,14 +23,22 @@ export function useShellPanels() {
   const initialViewportRange = viewportRange(viewportWidth());
   const viewportRangeRef = useRef<ViewportRange>(initialViewportRange);
   const [narrowViewport, setNarrowViewport] = useState(initialViewportRange === "narrow");
+  const [overlayInspector, setOverlayInspector] = useState(initialViewportRange !== "wide");
   const [leftOpen, setLeftOpen] = useState(initialViewportRange !== "narrow");
-  const [inspectorOpen, setInspectorOpen] = useState(false);
+  const [summaryOpen, setSummaryOpen] = useState(false);
+  const [bottomPanelOpen, setBottomPanelOpen] = useState(false);
+  const [toolSidebarOpen, setToolSidebarOpen] = useState(initialViewportRange === "wide");
   const [navigationWidth, setNavigationWidth] = useState(NAVIGATION_DEFAULT_WIDTH);
   const [inspectorWidth, setInspectorWidth] = useState(360);
   const showThreadsTrigger = useRef<HTMLButtonElement>(null);
-  const showInspectorTrigger = useRef<HTMLButtonElement>(null);
+  const summaryTrigger = useRef<HTMLButtonElement>(null);
+  const bottomPanelTrigger = useRef<HTMLButtonElement>(null);
+  const toolSidebarTrigger = useRef<HTMLButtonElement>(null);
   const restoreThreadsFocus = useRef(false);
-  const restoreInspectorFocus = useRef(false);
+  const restoreSummaryFocus = useRef(false);
+  const restoreBottomPanelFocus = useRef(false);
+  const restoreToolSidebarFocus = useRef(false);
+  const openedSurfaceOrder = useRef<Array<"summary" | "bottom">>([]);
 
   useEffect(() => {
     const updateLayout = () => {
@@ -39,14 +47,15 @@ export function useShellPanels() {
       if (previous === next) return;
       viewportRangeRef.current = next;
       setNarrowViewport(next === "narrow");
+      setOverlayInspector(next !== "wide");
       if (next === "narrow") {
         setLeftOpen(false);
-        setInspectorOpen(false);
+        setToolSidebarOpen(false);
       } else if (previous === "narrow") {
         setLeftOpen(true);
-        setInspectorOpen(next === "wide");
-      } else if (next === "compact") setInspectorOpen(false);
-      else setInspectorOpen(true);
+        setToolSidebarOpen(next === "wide");
+      } else if (next === "compact") setToolSidebarOpen(false);
+      else setToolSidebarOpen(true);
     };
 
     window.addEventListener("resize", updateLayout);
@@ -61,19 +70,33 @@ export function useShellPanels() {
   }, [leftOpen]);
 
   useEffect(() => {
-    if (!inspectorOpen && restoreInspectorFocus.current) {
-      restoreInspectorFocus.current = false;
-      showInspectorTrigger.current?.focus();
+    if (!summaryOpen && restoreSummaryFocus.current) {
+      restoreSummaryFocus.current = false;
+      summaryTrigger.current?.focus();
     }
-  }, [inspectorOpen]);
+  }, [summaryOpen]);
+
+  useEffect(() => {
+    if (!bottomPanelOpen && restoreBottomPanelFocus.current) {
+      restoreBottomPanelFocus.current = false;
+      bottomPanelTrigger.current?.focus();
+    }
+  }, [bottomPanelOpen]);
+
+  useEffect(() => {
+    if (!toolSidebarOpen && restoreToolSidebarFocus.current) {
+      restoreToolSidebarFocus.current = false;
+      toolSidebarTrigger.current?.focus();
+    }
+  }, [toolSidebarOpen]);
 
   function showThreads() {
     setLeftOpen(true);
-    if (viewportWidth() <= NARROW_VIEWPORT_MAX) setInspectorOpen(false);
+    if (viewportWidth() <= NARROW_VIEWPORT_MAX) setToolSidebarOpen(false);
   }
 
-  function showInspector() {
-    setInspectorOpen(true);
+  function showToolSidebar() {
+    setToolSidebarOpen(true);
     if (viewportWidth() <= NARROW_VIEWPORT_MAX) setLeftOpen(false);
   }
 
@@ -82,9 +105,54 @@ export function useShellPanels() {
     setLeftOpen(false);
   }
 
-  function closeInspector(restoreFocus = true) {
-    restoreInspectorFocus.current = restoreFocus;
-    setInspectorOpen(false);
+  function closeToolSidebar(restoreFocus = true) {
+    restoreToolSidebarFocus.current = restoreFocus;
+    setToolSidebarOpen(false);
+  }
+
+  function toggleSummary() {
+    if (summaryOpen) closeSummary();
+    else {
+      openedSurfaceOrder.current = [...openedSurfaceOrder.current.filter((surface) => surface !== "summary"), "summary"];
+      setSummaryOpen(true);
+    }
+  }
+
+  function closeSummary(restoreFocus = true) {
+    restoreSummaryFocus.current = restoreFocus;
+    openedSurfaceOrder.current = openedSurfaceOrder.current.filter((surface) => surface !== "summary");
+    setSummaryOpen(false);
+  }
+
+  function showBottomPanel() {
+    if (!bottomPanelOpen) {
+      openedSurfaceOrder.current = [...openedSurfaceOrder.current.filter((surface) => surface !== "bottom"), "bottom"];
+      setBottomPanelOpen(true);
+    }
+  }
+
+  function toggleBottomPanel() {
+    if (bottomPanelOpen) closeBottomPanel();
+    else showBottomPanel();
+  }
+
+  function closeBottomPanel(restoreFocus = true) {
+    restoreBottomPanelFocus.current = restoreFocus;
+    openedSurfaceOrder.current = openedSurfaceOrder.current.filter((surface) => surface !== "bottom");
+    setBottomPanelOpen(false);
+  }
+
+  function toggleToolSidebar() {
+    if (toolSidebarOpen) closeToolSidebar();
+    else showToolSidebar();
+  }
+
+  function closeLastSurface() {
+    const surface = openedSurfaceOrder.current.at(-1);
+    if (surface === "bottom" && bottomPanelOpen) closeBottomPanel();
+    else if (surface === "summary" && summaryOpen) closeSummary();
+    else if (bottomPanelOpen) closeBottomPanel();
+    else if (summaryOpen) closeSummary();
   }
 
   function resizeNavigationAt(clientX: number) {
@@ -109,16 +177,28 @@ export function useShellPanels() {
 
   return {
     leftOpen,
-    inspectorOpen,
+    summaryOpen,
+    bottomPanelOpen,
+    toolSidebarOpen,
     narrowViewport,
+    overlayInspector,
     navigationWidth,
     inspectorWidth,
     showThreadsTrigger,
-    showInspectorTrigger,
+    summaryTrigger,
+    bottomPanelTrigger,
+    toolSidebarTrigger,
     showThreads,
-    showInspector,
+    showToolSidebar,
     closeThreads,
-    closeInspector,
+    closeToolSidebar,
+    toggleSummary,
+    closeSummary,
+    showBottomPanel,
+    toggleBottomPanel,
+    closeBottomPanel,
+    toggleToolSidebar,
+    closeLastSurface,
     resizeNavigationAt,
     nudgeNavigationWidth,
     resetNavigationWidth,

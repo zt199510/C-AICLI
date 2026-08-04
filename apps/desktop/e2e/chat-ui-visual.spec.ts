@@ -1,4 +1,4 @@
-import { _electron as electron, expect, test, type ElectronApplication, type Page } from "@playwright/test";
+import { _electron as electron, expect, test, type ElectronApplication, type Locator, type Page } from "@playwright/test";
 import crypto from "node:crypto";
 import { execFileSync } from "node:child_process";
 import fs from "node:fs";
@@ -55,6 +55,15 @@ interface VisualCase {
   composerPosition: string;
   openDrawerCount: number;
   drawerMutualExclusionPassed: boolean;
+  timelineStageWidthBefore: number;
+  timelineStageWidthAfter: number;
+  timelineStageWidthDelta: number;
+  floatingSurfaceOverlapCount: number;
+  composerFloatingSurfaceOverlapCount: number;
+  floatingSurfacePositioningPassed: boolean;
+  nonModalFloatingSurfacesPassed: boolean;
+  panelToggleOrder: string;
+  toolSidebarPosition: string;
 }
 
 test("Chat-first Gate and supplemental visual matrices remain structurally safe", async ({ browserName }) => {
@@ -69,12 +78,12 @@ test("Chat-first Gate and supplemental visual matrices remain structurally safe"
     CAICLI_CHAT_UI_FIXTURE: "new",
   };
   const application = await electron.launch({
-    args: ["--disable-gpu", path.join(desktopRoot, "e2e", "fixture-main.cjs")],
+    args: ["--disable-gpu", "--in-process-gpu", path.join(desktopRoot, "e2e", "fixture-main.cjs")],
     env: environment,
   });
   try {
     const page = await application.firstWindow();
-    await expect(page.getByText("AppHost ready")).toBeVisible();
+    await expect(page.locator(".app-shell")).toHaveAttribute("data-runtime-state", "ready");
     prepareDirectory(gateRoot);
     prepareDirectory(supplementalRoot);
 
@@ -124,6 +133,13 @@ test("Chat-first Gate and supplemental visual matrices remain structurally safe"
       expect(entry.largeRunningTurnCardCount, `${entry.caseId}: large running Turn card`).toBe(0);
       expect(entry.composerPosition, `${entry.caseId}: viewport-fixed composer`).not.toBe("fixed");
       expect(entry.drawerMutualExclusionPassed, `${entry.caseId}: narrow drawers must be mutually exclusive`).toBe(true);
+      expect(entry.timelineStageWidthDelta, `${entry.caseId}: floating panels changed the middle grid width`).toBe(0);
+      expect(entry.floatingSurfaceOverlapCount, `${entry.caseId}: summary and bottom panel overlap`).toBe(0);
+      expect(entry.composerFloatingSurfaceOverlapCount, `${entry.caseId}: floating panel overlaps composer`).toBe(0);
+      expect(entry.floatingSurfacePositioningPassed, `${entry.caseId}: floating panels must be absolute`).toBe(true);
+      expect(entry.nonModalFloatingSurfacesPassed, `${entry.caseId}: floating panels must remain non-modal`).toBe(true);
+      expect(entry.panelToggleOrder, `${entry.caseId}: panel toggle order`).toBe("workspace-summary-overlay,workspace-bottom-panel,workspace-tool-sidebar");
+      expect(entry.toolSidebarPosition, `${entry.caseId}: sidebar positioning mode`).toBe(entry.viewport.width > 1120 ? "relative" : "absolute");
     }
   } finally {
     await closeElectron(application);
@@ -148,7 +164,7 @@ async function captureCase(
     fixtures.setFixture(nextFixture);
   }, fixture);
   await waitForFixture(page, fixture);
-  await configurePanels(page, fixture, viewport.width);
+  const timelineStageWidthBefore = await configurePanels(page, fixture, viewport.width);
 
   const caseId = `${name}-${viewport.name}-${viewport.width}x${viewport.height}`;
   const screenshotPath = path.join(root, "screenshots", `${caseId}.png`);
@@ -159,7 +175,7 @@ async function captureCase(
   const accessibility = await page.locator("body").ariaSnapshot();
   fs.writeFileSync(accessibilityPath, accessibility);
 
-  const metrics = await page.evaluate(() => {
+  const metrics = await page.evaluate((stageWidthBefore) => {
     const visible = (element: Element) => {
       const html = element as HTMLElement;
       const style = getComputedStyle(html);
@@ -204,10 +220,20 @@ async function captureCase(
       return Boolean(element && visible(element));
     });
     const composerRect = rectangle(".composer");
+    const summaryRect = rectangle(".workspace-summary-overlay");
+    const bottomPanelRect = rectangle(".workspace-bottom-panel");
     const criticalOverlapCount = [
       rectangle(".thread-sidebar.drawer-open"),
       rectangle(".inspector.drawer-open"),
     ].filter((drawer) => intersects(composerRect, drawer)).length;
+    const timelineStage = document.querySelector<HTMLElement>(".timeline-stage");
+    const summary = document.querySelector<HTMLElement>(".workspace-summary-overlay");
+    const bottomPanel = document.querySelector<HTMLElement>(".workspace-bottom-panel");
+    const toolSidebar = document.querySelector<HTMLElement>("#workspace-tool-sidebar");
+    const panelToggleOrder = [...document.querySelectorAll<HTMLElement>(".panel-toggle-group [aria-controls]")]
+      .map((element) => element.getAttribute("aria-controls"))
+      .join(",");
+    const timelineStageWidthAfter = timelineStage?.getBoundingClientRect().width ?? 0;
     return {
       bodyHorizontalOverflow: Math.max(0, document.documentElement.scrollWidth - innerWidth),
       criticalOverlapCount,
@@ -221,8 +247,17 @@ async function captureCase(
       composerPosition: composer ? getComputedStyle(composer).position : "missing",
       openDrawerCount: openDrawers.length,
       drawerMutualExclusionPassed: innerWidth > 899 || openDrawers.length <= 1,
+      timelineStageWidthBefore: stageWidthBefore,
+      timelineStageWidthAfter,
+      timelineStageWidthDelta: Math.abs(timelineStageWidthAfter - stageWidthBefore),
+      floatingSurfaceOverlapCount: intersects(summaryRect, bottomPanelRect) ? 1 : 0,
+      composerFloatingSurfaceOverlapCount: [summaryRect, bottomPanelRect].filter((surface) => intersects(composerRect, surface)).length,
+      floatingSurfacePositioningPassed: [summary, bottomPanel].every((surface) => surface && getComputedStyle(surface).position === "absolute"),
+      nonModalFloatingSurfacesPassed: [summary, bottomPanel].every((surface) => surface && surface.getAttribute("role") !== "dialog" && !surface.hasAttribute("aria-modal")),
+      panelToggleOrder,
+      toolSidebarPosition: toolSidebar ? getComputedStyle(toolSidebar).position : "missing",
     };
-  });
+  }, timelineStageWidthBefore);
 
   return {
     caseId,
@@ -264,32 +299,51 @@ async function waitForFixture(page: Page, fixture: string) {
 }
 
 async function configurePanels(page: Page, fixture: string, width: number) {
-  if (fixture === "review-terminal") {
-    const showInspector = page.getByRole("button", { name: "Show workspace inspector" });
-    if (await showInspector.isVisible()) await showInspector.click();
-    await page.getByRole("tab", { name: "Terminal" }).click();
-  } else {
-    const changes = page.getByRole("tab", { name: "Changes" });
-    if (await changes.isVisible()) await changes.click();
+  const summaryToggle = page.getByRole("button", { name: "Toggle workspace summary" });
+  const bottomToggle = page.getByRole("button", { name: "Toggle workspace bottom panel" });
+  const sidebarToggle = page.getByRole("button", { name: "Toggle workspace tool sidebar" });
+  if (width <= 1120 && (await sidebarToggle.getAttribute("aria-pressed")) === "true") {
+    await closeSidebarDrawer(page, sidebarToggle);
   }
+  await setPressed(summaryToggle, false);
+  await setPressed(bottomToggle, false);
+  if (width > 1120) await setPressed(sidebarToggle, true);
+
   if (width <= 899) {
     const showConversations = page.getByRole("button", { name: "显示会话侧栏" });
     if (await showConversations.isVisible()) {
       await showConversations.click();
       await expect(page.locator("#threads-panel")).toHaveAttribute("aria-hidden", "false");
-      const showInspector = page.getByRole("button", { name: "Show workspace inspector" });
-      await showInspector.click();
+      await sidebarToggle.click();
       await expect(page.locator("#threads-panel")).toHaveAttribute("aria-hidden", "true");
-      await page.getByRole("tab", { name: "Changes" }).focus();
+      await page.getByRole("button", { name: "Changes", exact: true }).focus();
       await page.keyboard.press("Escape");
-      const restoredInspectorTrigger = page.getByRole("button", { name: "Show workspace inspector" });
-      await expect(restoredInspectorTrigger).toBeFocused();
-      if (fixture === "review-terminal") {
-        await restoredInspectorTrigger.click();
-        await page.getByRole("tab", { name: "Terminal" }).click();
-      }
+      await expect(sidebarToggle).toBeFocused();
     }
   }
+
+  if (width <= 1120) await setPressed(sidebarToggle, true);
+
+  const timelineStageWidthBefore = await page.locator(".timeline-stage").evaluate((element) =>
+    element.getBoundingClientRect().width,
+  );
+  await page.getByRole("button", { name: fixture === "review-terminal" ? "Terminal" : "Changes", exact: true }).click();
+  if (width <= 1120) await closeSidebarDrawer(page, sidebarToggle);
+  await setPressed(summaryToggle, true);
+
+  if (width <= 1120 && fixture === "review-terminal") await setPressed(sidebarToggle, true);
+  return timelineStageWidthBefore;
+}
+
+async function setPressed(locator: Locator, pressed: boolean) {
+  if ((await locator.getAttribute("aria-pressed")) !== String(pressed)) await locator.click();
+}
+
+async function closeSidebarDrawer(page: Page, sidebarToggle: Locator) {
+  await page.locator("#workspace-tool-sidebar button:not([disabled])").first().focus();
+  await page.keyboard.press("Escape");
+  await expect(sidebarToggle).toHaveAttribute("aria-pressed", "false");
+  await expect(sidebarToggle).toBeFocused();
 }
 
 function prepareDirectory(directory: string) {

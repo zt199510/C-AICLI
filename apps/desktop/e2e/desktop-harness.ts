@@ -49,8 +49,8 @@ export async function launchDesktop(value: DesktopCase): Promise<{ application: 
     CAICLI_E2E_CASE: value.id,
   };
   const application = value.packaged
-    ? await electron.launch({ executablePath: packagedExecutable, args: ["--disable-gpu"], env: environment })
-    : await electron.launch({ args: ["--disable-gpu", desktopRoot], env: environment });
+    ? await electron.launch({ executablePath: packagedExecutable, args: ["--disable-gpu", "--in-process-gpu"], env: environment })
+    : await electron.launch({ args: ["--disable-gpu", "--in-process-gpu", desktopRoot], env: environment });
   value.applications.push(application);
   const mainPid = application.process().pid;
   value.applicationPids.set(application, mainPid);
@@ -59,7 +59,7 @@ export async function launchDesktop(value: DesktopCase): Promise<{ application: 
     dialog.showOpenDialog = async () => ({ canceled: false, filePaths: [workspace] });
   }, value.workspace);
   const page = await application.firstWindow();
-  await expect(page.getByText("AppHost ready")).toBeVisible({ timeout: value.packaged ? 60_000 : 20_000 });
+  await expect(page.locator(".app-shell")).toHaveAttribute("data-runtime-state", "ready", { timeout: value.packaged ? 60_000 : 20_000 });
   return { application, page };
 }
 

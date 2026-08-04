@@ -1,4 +1,4 @@
-import { Archive, FolderOpen, PanelLeft, PanelRight, RefreshCw, SquarePen } from "lucide-react";
+import { Archive, FolderOpen, PanelBottom, PanelLeft, PanelRight, PanelTop, RefreshCw, SquarePen } from "lucide-react";
 import { useEffect, useState, type CSSProperties } from "react";
 import { useShellPanels } from "./app/use-shell-panels";
 import { Composer } from "./Composer";
@@ -6,7 +6,12 @@ import { ThreadSidebar } from "./ThreadSidebar";
 import type { ThreadFilter } from "./thread-sidebar-model";
 import { TimelineView } from "./TimelineView";
 import { useDesktopController } from "./use-desktop-controller";
-import { WorkspaceInspector, type WorkspacePanel } from "./WorkspaceInspector";
+import {
+  WorkspaceBottomPanel,
+  type WorkspacePanel,
+  WorkspaceSummaryOverlay,
+  WorkspaceToolSidebar,
+} from "./WorkspaceInspector";
 
 export function App() {
   const bridge = typeof window !== "undefined" ? window.caicli : undefined;
@@ -18,9 +23,10 @@ export function App() {
   const [stopping, setStopping] = useState(false);
   const [threadFilter, setThreadFilter] = useState<ThreadFilter>("all");
   const panels = useShellPanels();
-  const { leftOpen, inspectorOpen, showThreadsTrigger, showInspectorTrigger } = panels;
+  const { leftOpen, toolSidebarOpen, showThreadsTrigger } = panels;
 
   useEffect(() => {
+    setWorkspacePanel("changes");
     if (state.workspace) controller.setReviewTab("changes");
   }, [state.workspace?.workspaceId]);
 
@@ -36,12 +42,15 @@ export function App() {
 
   function selectWorkspacePanel(panel: WorkspacePanel) {
     setWorkspacePanel(panel);
-    if (panel !== "terminal") controller.setReviewTab(panel);
+    if (isReviewWorkspacePanel(panel)) controller.setReviewTab(panel);
+    panels.showBottomPanel();
   }
 
   const workspacePath = state.workspace?.rootPath ?? null;
   const bridgeUnavailable = !bridge;
   const statusMessage = bridgeUnavailable ? "Desktop bridge unavailable" : state.runtime.message;
+  const threadLabel = state.detail?.thread.title ?? "No active thread";
+  const turnLabel = state.detail?.turns.at(-1)?.taskSummary ?? "No active turn";
   const stopTurn = state.runtime.state === "ready" && controller.activeTurn && !controller.activeTurn.approval &&
     !["completed", "failed", "canceled", "canceling"].includes(controller.activeTurn.status)
     ? controller.activeTurn
@@ -68,16 +77,17 @@ export function App() {
   }
 
   return (
-    <div className={`app-shell ${leftOpen ? "" : "left-collapsed"} ${inspectorOpen ? "" : "inspector-collapsed"}`} style={{ "--navigation-width": `${panels.navigationWidth}px`, "--inspector-width": `${panels.inspectorWidth}px` } as CSSProperties}>
-      <header className="titlebar">
-        <div className="brand" aria-label="C-AICLI Desktop">
-          <span className="brand-mark" aria-hidden="true">C</span>
-          <span className="brand-copy"><span className="brand-name">C-AICLI</span><span className="brand-edition">Desktop workspace</span></span>
-        </div>
-        <div className="workspace-title" title={workspacePath ?? "No workspace"}>{workspacePath ?? "No workspace"}</div>
-        <div className={`runtime-status runtime-${state.runtime.state}`} role="status" aria-live="polite" aria-atomic="true"><span className="status-dot" aria-hidden="true" /><span>{statusMessage}</span></div>
-      </header>
-
+    <div
+      className={`app-shell ${leftOpen ? "" : "left-collapsed"} ${toolSidebarOpen ? "" : "inspector-collapsed"}`}
+      data-runtime-state={state.runtime.state}
+      style={{ "--navigation-width": `${panels.navigationWidth}px`, "--inspector-width": `${panels.inspectorWidth}px` } as CSSProperties}
+      onKeyDown={(event) => {
+        if (event.key === "Escape" && !event.defaultPrevented && (panels.summaryOpen || panels.bottomPanelOpen)) {
+          event.preventDefault();
+          panels.closeLastSurface();
+        }
+      }}
+    >
       <div className="workspace-layout">
         {!leftOpen && !panels.narrowViewport ? (
           <nav className="thread-rail" aria-label="会话快捷栏">
@@ -139,43 +149,72 @@ export function App() {
             <div className="toolbar-group">{!leftOpen && panels.narrowViewport ? <button ref={showThreadsTrigger} className="icon-button" type="button" title="显示会话侧栏" aria-label="显示会话侧栏" aria-controls="threads-panel" aria-expanded={leftOpen} onClick={panels.showThreads}><PanelLeft size={17} aria-hidden="true" /></button> : null}<span className="thread-heading"><span className="thread-eyebrow">对话</span><span className="task-label">{state.detail?.thread.title ?? (state.workspace ? "新建对话" : "工作区概览")}</span></span><span className="refreshing" role="status" aria-live="polite" hidden={!state.refreshing}>正在刷新…</span></div>
             <div className="toolbar-group">
               <button className="command-button" type="button" onClick={() => void openWorkspace()} disabled={opening || state.runtime.state !== "ready"}>{opening ? <RefreshCw className="spin" size={16} aria-hidden="true" /> : <FolderOpen size={16} aria-hidden="true" />}{opening ? "Opening" : "Open workspace"}</button>
-              {!inspectorOpen && <button ref={showInspectorTrigger} className="icon-button" type="button" title="Show workspace inspector" aria-label="Show workspace inspector" aria-controls="review-inspector-panel" aria-expanded={inspectorOpen} onClick={panels.showInspector}><PanelRight size={17} aria-hidden="true" /></button>}
+              <div className="panel-toggle-group" aria-label="Workspace panels">
+                <button ref={panels.summaryTrigger} className="icon-button panel-toggle" type="button" title="Show or hide workspace summary" aria-label="Toggle workspace summary" aria-controls="workspace-summary-overlay" aria-pressed={panels.summaryOpen} onClick={panels.toggleSummary}><PanelTop size={17} aria-hidden="true" /></button>
+                <button ref={panels.bottomPanelTrigger} className="icon-button panel-toggle" type="button" title="Show or hide bottom panel" aria-label="Toggle workspace bottom panel" aria-controls="workspace-bottom-panel" aria-pressed={panels.bottomPanelOpen} onClick={panels.toggleBottomPanel}><PanelBottom size={17} aria-hidden="true" /></button>
+                <button ref={panels.toolSidebarTrigger} className="icon-button panel-toggle" type="button" title="Show or hide workspace tool sidebar" aria-label="Toggle workspace tool sidebar" aria-controls="workspace-tool-sidebar" aria-pressed={panels.toolSidebarOpen} onClick={panels.toggleToolSidebar}><PanelRight size={17} aria-hidden="true" /></button>
+              </div>
             </div>
           </div>
 
-          <section className="timeline" aria-label="Workspace timeline">
-            {!workspacePath ? (
-              <div className="state-card workspace-empty">
-                <div className="state-kicker">Local AI workspace</div>
-                <h1>{state.runtime.state === "ready" ? "What should we build?" : state.runtime.message}</h1>
-                <p>Open a project to start a focused conversation with auditable tools, approvals, and results.</p>
-                {workspaceError && <p role="alert">{workspaceError}</p>}
-                {state.runtime.state !== "failed" ? (
-                  <button className="primary-action" type="button" onClick={() => void openWorkspace()} disabled={opening || state.runtime.state !== "ready"}><FolderOpen size={17} aria-hidden="true" /> Open workspace</button>
-                ) : null}
-              </div>
-            ) : (
-              <TimelineView
-                detail={state.detail}
-                status={state.detailStatus}
-                error={state.detailError}
-                onLoadMore={controller.loadMore}
-                optimisticExchanges={controller.optimisticExchanges}
-                onRestoreOptimistic={controller.restoreOptimistic}
-                onApproval={controller.resolveApproval}
-                onResume={controller.resumeTurn}
-                onRestart={controller.restartTurn}
-                runtimeBanner={state.runtime.state === "ready" ? null : (
-                  <section className={`runtime-banner runtime-banner-${state.runtime.state}`} role="status" aria-live="polite">
-                    <div>
-                      <strong>{state.runtime.state === "restarting" || state.runtime.state === "starting" ? "正在重启 AppHost" : "AppHost 不可用"}</strong>
-                      <span>已提交的对话历史保持可读，恢复后将通过权威 reload 对账。</span>
-                    </div>
-                  </section>
-                )}
-              />
-            )}
-          </section>
+          <div className="timeline-stage">
+            <section className="timeline" aria-label="Workspace timeline">
+              {!workspacePath ? (
+                <div className="state-card workspace-empty">
+                  <div className="state-kicker">Local AI workspace</div>
+                  <h1>{state.runtime.state === "ready" ? "What should we build?" : state.runtime.message}</h1>
+                  <p>Open a project to start a focused conversation with auditable tools, approvals, and results.</p>
+                  {workspaceError && <p role="alert">{workspaceError}</p>}
+                  {state.runtime.state !== "failed" ? (
+                    <button className="primary-action" type="button" onClick={() => void openWorkspace()} disabled={opening || state.runtime.state !== "ready"}><FolderOpen size={17} aria-hidden="true" /> Open workspace</button>
+                  ) : null}
+                </div>
+              ) : (
+                <TimelineView
+                  detail={state.detail}
+                  status={state.detailStatus}
+                  error={state.detailError}
+                  onLoadMore={controller.loadMore}
+                  optimisticExchanges={controller.optimisticExchanges}
+                  onRestoreOptimistic={controller.restoreOptimistic}
+                  onApproval={controller.resolveApproval}
+                  onResume={controller.resumeTurn}
+                  onRestart={controller.restartTurn}
+                  runtimeBanner={state.runtime.state === "ready" ? null : (
+                    <section className={`runtime-banner runtime-banner-${state.runtime.state}`} role="status" aria-live="polite">
+                      <div>
+                        <strong>{state.runtime.state === "restarting" || state.runtime.state === "starting" ? "正在重启 AppHost" : "AppHost 不可用"}</strong>
+                        <span>已提交的对话历史保持可读，恢复后将通过权威 reload 对账。</span>
+                      </div>
+                    </section>
+                  )}
+                />
+              )}
+            </section>
+            {panels.summaryOpen || panels.bottomPanelOpen ? <div className="timeline-overlay-layer">
+              {panels.summaryOpen ? <WorkspaceSummaryOverlay
+                review={state.review}
+                workspaceReady={Boolean(state.workspace)}
+                workspaceLabel={workspacePath ?? "No workspace"}
+                threadLabel={threadLabel}
+                turnLabel={turnLabel}
+                runtimeLabel={statusMessage}
+              /> : null}
+              {panels.bottomPanelOpen ? <WorkspaceBottomPanel
+                activePanel={workspacePanel}
+                visible={panels.bottomPanelOpen}
+                review={state.review}
+                workspaceReady={Boolean(state.workspace)}
+                workspaceLabel={workspacePath ?? "No workspace"}
+                threadLabel={threadLabel}
+                turnLabel={turnLabel}
+                commands={controller.reviewCommands}
+                terminalCommands={controller.terminalCommands}
+                onReport={(id) => void controller.selectReport(id)}
+                onArtifact={(id) => void controller.selectArtifact(id)}
+              /> : null}
+            </div> : null}
+          </div>
           <Composer
             key={state.selectedThreadId ?? "new-conversation"}
             draft={controller.composerDraft}
@@ -215,7 +254,16 @@ export function App() {
           />
         </main>
 
-        <aside id="review-inspector-panel" className={`inspector drawer ${inspectorOpen ? "drawer-open" : ""}`} aria-label="Workspace inspector" aria-hidden={!inspectorOpen} onKeyDown={(event) => { if (event.key === "Escape") { event.preventDefault(); panels.closeInspector(); } }}>
+        {toolSidebarOpen && panels.overlayInspector ? <div className="drawer-backdrop inspector-backdrop" aria-hidden="true" onClick={() => panels.closeToolSidebar()} /> : null}
+        <aside
+          id="workspace-tool-sidebar"
+          className={`inspector drawer ${toolSidebarOpen ? "drawer-open" : ""}`}
+          aria-label="Workspace tool sidebar"
+          aria-hidden={!toolSidebarOpen}
+          aria-modal={panels.overlayInspector && toolSidebarOpen ? true : undefined}
+          role={panels.overlayInspector ? "dialog" : undefined}
+          onKeyDown={(event) => { if (event.key === "Escape" && !event.defaultPrevented) { event.preventDefault(); panels.closeToolSidebar(); } }}
+        >
           <div
             className="inspector-resize-handle"
             role="separator"
@@ -233,23 +281,23 @@ export function App() {
               else if (event.key === "ArrowRight") { event.preventDefault(); panels.nudgeInspectorWidth(-16); }
             }}
           />
-          <WorkspaceInspector
+          <WorkspaceToolSidebar
             activePanel={workspacePanel}
-            visible={inspectorOpen}
+            visible={toolSidebarOpen}
             review={state.review}
             workspaceReady={Boolean(state.workspace)}
             workspaceLabel={workspacePath ?? "No workspace"}
-            threadLabel={state.detail?.thread.title ?? "No active thread"}
-            turnLabel={state.detail?.turns.at(-1)?.taskSummary ?? "No active turn"}
-            commands={controller.reviewCommands}
+            threadLabel={threadLabel}
+            turnLabel={turnLabel}
             terminalCommands={controller.terminalCommands}
             onPanel={selectWorkspacePanel}
-            onReport={(id) => void controller.selectReport(id)}
-            onArtifact={(id) => void controller.selectArtifact(id)}
-            onClose={() => panels.closeInspector()}
           />
         </aside>
       </div>
     </div>
   );
+}
+
+function isReviewWorkspacePanel(panel: WorkspacePanel): panel is "changes" | "reports" | "artifacts" | "preview" {
+  return panel === "changes" || panel === "reports" || panel === "artifacts" || panel === "preview";
 }

@@ -18,15 +18,15 @@ test("read-only thread timeline review survives renderer reload", async ({ brows
   const executablePath = path.join(packageRoot, "caicli-desktop.exe");
   const environment = { ...process.env, APPDATA: path.join(root, "appdata"), CAICLI_USER_PROFILE: path.join(root, "profile"), CAICLI_E2E_ROOT: root };
   const application = packaged
-    ? await electron.launch({ executablePath, args: ["--disable-gpu"], env: environment })
-    : await electron.launch({ args: ["--disable-gpu", path.join(desktopRoot, "e2e", "fixture-main.cjs")], env: environment });
+    ? await electron.launch({ executablePath, args: ["--disable-gpu", "--in-process-gpu"], env: environment })
+    : await electron.launch({ args: ["--disable-gpu", "--in-process-gpu", path.join(desktopRoot, "e2e", "fixture-main.cjs")], env: environment });
   try {
     const page = await application.firstWindow();
-    await expect(page.getByText("AppHost ready")).toBeVisible();
+    await expect(page.locator(".app-shell")).toHaveAttribute("data-runtime-state", "ready");
     if (packaged) {
       await expect(page.getByRole("heading", { name: "Open a workspace" })).toBeVisible();
       await page.reload();
-      await expect(page.getByText("AppHost ready")).toBeVisible();
+      await expect(page.locator(".app-shell")).toHaveAttribute("data-runtime-state", "ready");
       return;
     }
     const projection = await page.evaluate(async () => ({

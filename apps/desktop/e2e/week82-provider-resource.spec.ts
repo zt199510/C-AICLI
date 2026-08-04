@@ -246,7 +246,7 @@ test("authorized Week83 provider resource profile", async ({ browserName }, test
       dialog.showOpenDialog = async () => ({ canceled: false, filePaths: [selectedWorkspace] });
     }, workspace);
     page = await application.firstWindow();
-    await expect(page.getByText("AppHost ready")).toBeVisible({ timeout: 60_000 });
+    await expect(page.locator(".app-shell")).toHaveAttribute("data-runtime-state", "ready", { timeout: 60_000 });
     await page.getByRole("button", { name: "Open workspace" }).first().click();
     const readConfiguration = () => observedPageEvaluate(page!, observer, async () => {
       const snapshot = await window.caicli.getWorkspaceSnapshot();
