@@ -152,9 +152,10 @@ test("authorized Week83 provider crash and explicit restart", async ({ browserNa
     await cdp.send("Profiler.startPreciseCoverage", { callCount: true, detailed: true });
 
     const title = "Week 82 provider recovery";
-    await page.getByRole("button", { name: "Create thread" }).click();
-    await page.getByLabel("Thread title").fill(title);
-    await page.getByRole("button", { name: /^Create$/ }).click();
+    await page.evaluate(async (targetTitle) => {
+      const result = await window.caicli.createThread({ title: targetTitle });
+      if (!result.succeeded || !result.data) throw new Error("Recovery conversation could not be created.");
+    }, title);
     const threadId = await expect.poll(async () => page!.evaluate(async (targetTitle) => {
       const result = await window.caicli.listThreads();
       return result.data?.threads.find((thread) => thread.title === targetTitle)?.threadId ?? null;
@@ -164,6 +165,9 @@ test("authorized Week83 provider crash and explicit restart", async ({ browserNa
       if (!id) throw new Error("Recovery thread was not returned by the authoritative list.");
       return id;
     }, title));
+    const recoveryThreadRow = page.locator("#threads-panel").getByText(title, { exact: true }).first();
+    await expect(recoveryThreadRow).toBeVisible();
+    await recoveryThreadRow.click();
     await page.evaluate(() => {
       const target = window as typeof window & {
         caicliWeek83ThreadTrace?: ThreadChangeTrace[];
@@ -182,7 +186,7 @@ test("authorized Week83 provider crash and explicit restart", async ({ browserNa
     await page.getByRole("textbox", { name: "Composer prompt" }).fill(
       "Your only valid next action is exactly one workspace.apply_patch tool call replacing the single line 'before' with 'after' in recovery.txt. Do not answer directly, do not read files, and do not use shell, Git, MCP, or any other tool. Stop and wait when the Desktop approval is requested.",
     );
-    await page.getByRole("button", { name: "Queue prompt" }).click();
+    await page.getByRole("button", { name: "Send prompt" }).click();
     oldState = await waitForApprovalOrTerminal(page, threadId, 300_000);
     expect(oldState.turns).toHaveLength(1);
     expect(oldState.turns[0]?.status).toBe("waiting-for-approval");

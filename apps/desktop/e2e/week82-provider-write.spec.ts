@@ -138,9 +138,10 @@ test("authorized Week82 controlled write uses two durable approvals", async ({ b
     const coverageTargets = createCoverageTargets();
 
     const title = "Week 82 controlled write";
-    await page.getByRole("button", { name: "Create thread" }).click();
-    await page.getByLabel("Thread title").fill(title);
-    await page.getByRole("button", { name: /^Create$/ }).click();
+    await page.evaluate(async (targetTitle) => {
+      const result = await window.caicli.createThread({ title: targetTitle });
+      if (!result.succeeded || !result.data) throw new Error("Controlled-write conversation could not be created.");
+    }, title);
     const threadId = await expect.poll(async () => page!.evaluate(async (targetTitle) => {
       const result = await window.caicli.listThreads();
       return result.data?.threads.find((thread) => thread.title === targetTitle)?.threadId ?? null;
@@ -150,13 +151,16 @@ test("authorized Week82 controlled write uses two durable approvals", async ({ b
       if (!id) throw new Error("Controlled-write thread was not returned by the authoritative list.");
       return id;
     }, title));
+    const controlledWriteThreadRow = page.locator("#threads-panel").getByText(title, { exact: true }).first();
+    await expect(controlledWriteThreadRow).toBeVisible();
+    await controlledWriteThreadRow.click();
     await takeCoverage(cdp, coverageTargets);
     const domBefore = await cdp.send("Memory.getDOMCounters");
 
     await page.getByRole("textbox", { name: "Composer prompt" }).fill(
       `Project B has a deterministic failing baseline. Use exactly one workspace.apply_patch call to replace the only line 'fail' with 'pass' in result.txt. Then use exactly one workspace.run_shell call with the exact command: ${exactTestCommand}. Do not modify Week82Gate.proj. Do not use any other file, tool, command, or network behavior.`,
     );
-    await page.getByRole("button", { name: "Queue prompt" }).click();
+    await page.getByRole("button", { name: "Send prompt" }).click();
     await expect(page.getByRole("group", { name: "Approval request" })).toBeVisible({ timeout: 300_000 });
     let state = await readWriteState(page, threadId);
     firstApproval = state.turns[0]?.approval ?? null;

@@ -273,7 +273,7 @@ async function configurePanels(page: Page, fixture: string, width: number) {
     if (await changes.isVisible()) await changes.click();
   }
   if (width <= 899) {
-    const showConversations = page.getByRole("button", { name: "Show conversations" });
+    const showConversations = page.getByRole("button", { name: "显示会话侧栏" });
     if (await showConversations.isVisible()) {
       await showConversations.click();
       await expect(page.locator("#threads-panel")).toHaveAttribute("aria-hidden", "false");

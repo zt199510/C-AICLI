@@ -74,24 +74,26 @@ export async function openWorkspace(page: Page): Promise<void> {
 }
 
 export async function createThread(page: Page, title: string): Promise<string> {
-  await page.getByRole("button", { name: "Create thread" }).click();
-  await page.getByLabel("Thread title").fill(title);
-  await page.getByRole("button", { name: /^Create$/ }).click();
-  await expect(page.getByText(title, { exact: true }).first()).toBeVisible();
+  const createdThreadId = await page.evaluate(async (targetTitle) => {
+    const result = await window.caicli.createThread({ title: targetTitle });
+    if (!result.succeeded || !result.data) throw new Error("Conversation could not be created.");
+    return result.data.threadId;
+  }, title);
   return await expect.poll(async () => page.evaluate(async (targetTitle) => {
     const result = await window.caicli.listThreads();
     return result.data?.threads.find((thread) => thread.title === targetTitle)?.threadId ?? null;
-  }, title)).not.toBeNull().then(async () => page.evaluate(async (targetTitle) => {
-    const result = await window.caicli.listThreads();
-    const threadId = result.data?.threads.find((thread) => thread.title === targetTitle)?.threadId;
-    if (!threadId) throw new Error("Created thread was not returned by the authoritative list.");
-    return threadId;
-  }, title));
+  }, title)).toBe(createdThreadId).then(async () => {
+    const threadTitle = page.locator("#threads-panel").getByText(title, { exact: true }).first();
+    await expect(threadTitle).toBeVisible();
+    await threadTitle.click();
+    await expect(threadTitle.locator("..")).toHaveAttribute("aria-current", "page");
+    return createdThreadId;
+  });
 }
 
 export async function queuePrompt(page: Page, prompt: string): Promise<void> {
   await page.getByRole("textbox", { name: "Composer prompt" }).fill(prompt);
-  await page.getByRole("button", { name: "Queue prompt" }).click();
+  await page.getByRole("button", { name: "Send prompt" }).click();
 }
 
 export async function waitForThreadStatus(page: Page, threadId: string, status: string): Promise<void> {

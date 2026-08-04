@@ -38,7 +38,10 @@
   --duration-normal: 160ms;
   --duration-pulse: 1400ms;
   --conversation-width: 760px;
-  --navigation-width: 264px;
+  --navigation-width: 288px;
+  --navigation-min-width: 240px;
+  --navigation-max-width: 360px;
+  --navigation-rail-width: 64px;
   --inspector-min-width: 320px;
   --inspector-max-width: 480px;
   --shadow-panel: 0 14px 38px rgb(37 55 45 / 12%);

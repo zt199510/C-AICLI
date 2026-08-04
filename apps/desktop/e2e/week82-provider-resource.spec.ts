@@ -266,14 +266,18 @@ test("authorized Week83 provider resource profile", async ({ browserName }, test
     firstModelObserved = true;
     firstModelSource = "environment";
 
-    await page.getByRole("button", { name: "Create thread" }).click();
-    await page.getByLabel("Thread title").fill(`Week 82 ${profile} provider resource`);
-    await page.getByRole("button", { name: /^Create$/ }).click();
-    await expect(page.getByText(`Week 82 ${profile} provider resource`, { exact: true }).first()).toBeVisible();
+    const providerThreadTitle = `Week 82 ${profile} provider resource`;
+    await page.evaluate(async (title) => {
+      const result = await window.caicli.createThread({ title });
+      if (!result.succeeded || !result.data) throw new Error("Provider resource conversation could not be created.");
+    }, providerThreadTitle);
+    const providerThreadRow = page.locator("#threads-panel").getByText(providerThreadTitle, { exact: true }).first();
+    await expect(providerThreadRow).toBeVisible();
+    await providerThreadRow.click();
     const observedThreadId = await observedPageEvaluate(page, observer, async (title) => {
       const listed = await window.caicli.listThreads();
       return listed.data?.threads.find((thread) => thread.title === title)?.threadId ?? null;
-    }, `Week 82 ${profile} provider resource`);
+    }, providerThreadTitle);
     expect(observedThreadId).not.toBeNull();
     if (!observedThreadId) throw new Error("Created provider diagnostic thread was not observed.");
     threadId = observedThreadId;
@@ -551,7 +555,7 @@ async function executeProviderTurn(
   await page.getByRole("textbox", { name: "Composer prompt" }).fill(
     "Use exactly one workspace.read_text tool call to read global.json. Then reply with one short sentence. Do not call any other tool, do not modify files, and do not use shell, Git, MCP, or any other network behavior.",
   );
-  await page.getByRole("button", { name: "Queue prompt" }).click();
+  await page.getByRole("button", { name: "Send prompt" }).click();
   const state = await waitForCompletedTurn(page, threadId, expectedTotalTurns, observer);
   const durationMilliseconds = Date.now() - started;
   expect(state.latestTurn?.status).toBe("completed");

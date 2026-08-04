@@ -390,14 +390,18 @@ test("authorized provider-backed renderer memory profile", async ({ browserName 
     firstModelObserved = true;
     firstModelSource = "environment";
 
-    await page.getByRole("button", { name: "Create thread" }).click();
-    await page.getByLabel("Thread title").fill(`Week 80 ${profile} provider diagnosis`);
-    await page.getByRole("button", { name: /^Create$/ }).click();
-    await expect(page.getByText(`Week 80 ${profile} provider diagnosis`, { exact: true }).first()).toBeVisible();
+    const providerThreadTitle = `Week 80 ${profile} provider diagnosis`;
+    await page.evaluate(async (title) => {
+      const result = await window.caicli.createThread({ title });
+      if (!result.succeeded || !result.data) throw new Error("Provider diagnostic conversation could not be created.");
+    }, providerThreadTitle);
+    const providerThreadRow = page.locator("#threads-panel").getByText(providerThreadTitle, { exact: true }).first();
+    await expect(providerThreadRow).toBeVisible();
+    await providerThreadRow.click();
     const observedThreadId = await observedPageEvaluate(page, observer, async (title) => {
       const listed = await window.caicli.listThreads();
       return listed.data?.threads.find((thread) => thread.title === title)?.threadId ?? null;
-    }, `Week 80 ${profile} provider diagnosis`);
+    }, providerThreadTitle);
     expect(observedThreadId).not.toBeNull();
     if (!observedThreadId) throw new Error("Created provider diagnostic thread was not observed.");
     threadId = observedThreadId;
@@ -886,7 +890,7 @@ async function executeProviderTurn(
   if (coverageTargets) await takeCoverage(cdp, observer, coverageTargets);
   const started = Date.now();
   await page.getByRole("textbox", { name: "Composer prompt" }).fill(providerPrompt);
-  await page.getByRole("button", { name: "Queue prompt" }).click();
+  await page.getByRole("button", { name: "Send prompt" }).click();
   if (mainObservedTerminal) {
     await waitForMeasuredNotificationCount(application, ordinal * 8);
   }

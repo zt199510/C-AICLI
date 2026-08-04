@@ -49,13 +49,13 @@ export function useDesktopController(bridge: DesktopBridge | undefined, options?
   } : undefined, [bridge]);
 
   const refreshThreads = useCallback(async (epoch = stateRef.current.contextEpoch) => {
-    if (!bridge) return;
+    if (!bridge) return null;
     dispatch({ type: "threads-loading", epoch });
     try {
       const result = await bridge.listThreads();
       if (!result.succeeded || !result.data) {
         dispatch({ type: "threads-error", epoch, message: safeFailure(result.error?.safeMessage) });
-        return;
+        return null;
       }
       const corrupt = result.diagnostics.find((diagnostic) => diagnostic.category === "corrupt-state");
       dispatch({
@@ -65,8 +65,10 @@ export function useDesktopController(bridge: DesktopBridge | undefined, options?
         truncated: result.data.truncated || result.truncated,
         warning: corrupt ? `Corrupt state was isolated: ${safeFailure(corrupt.safeMessage)}` : null,
       });
+      return result.data.threads;
     } catch {
       dispatch({ type: "threads-error", epoch, message: "Threads could not be loaded." });
+      return null;
     }
   }, [bridge]);
 
@@ -315,6 +317,27 @@ export function useDesktopController(bridge: DesktopBridge | undefined, options?
       return null;
     } catch { return "Thread metadata could not be updated."; }
   }, [queueResync, refreshThreads, selectThread]);
+
+  const archiveThread = useCallback(async (threadId: string, expectedRevision: number) => {
+    if (!bridge) return "Desktop bridge unavailable.";
+    const wasSelected = stateRef.current.selectedThreadId === threadId;
+    try {
+      const result = await bridge.archiveThread({ threadId, expectedRevision });
+      if (!result.succeeded) {
+        queueResync();
+        return safeFailure(result.error?.safeMessage);
+      }
+      const threads = await refreshThreads();
+      if (!wasSelected || stateRef.current.selectedThreadId !== threadId) return null;
+      const candidate = threads?.find((thread) =>
+        thread.threadId !== threadId && !thread.archivedAtUtc && thread.status.toLowerCase() !== "archived");
+      if (candidate) selectThread(candidate.threadId);
+      else beginConversation();
+      return null;
+    } catch {
+      return "Thread metadata could not be updated.";
+    }
+  }, [beginConversation, bridge, queueResync, refreshThreads, selectThread]);
 
   const setReviewTab = useCallback((tab: ReviewState["activeTab"]) => {
     const current = stateRef.current;
@@ -717,7 +740,7 @@ export function useDesktopController(bridge: DesktopBridge | undefined, options?
     loadMore,
     createThread: (title: string) => bridge ? mutate(() => bridge.createThread({ title })) : Promise.resolve("Desktop bridge unavailable."),
     renameThread: (threadId: string, expectedRevision: number, title: string) => bridge ? mutate(() => bridge.renameThread({ threadId, expectedRevision, title })) : Promise.resolve("Desktop bridge unavailable."),
-    archiveThread: (threadId: string, expectedRevision: number) => bridge ? mutate(() => bridge.archiveThread({ threadId, expectedRevision })) : Promise.resolve("Desktop bridge unavailable."),
+    archiveThread,
     setReviewTab,
     selectReport,
     selectArtifact,

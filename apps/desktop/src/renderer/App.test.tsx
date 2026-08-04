@@ -41,11 +41,24 @@ describe("desktop shell", () => {
 
   it("opens and collapses shell panels", async () => {
     render(<App />);
-    await userEvent.click(screen.getByRole("button", { name: "Collapse conversations" }));
-    expect(screen.getByRole("button", { name: "Show conversations" })).toBeTruthy();
+    await userEvent.click(screen.getByRole("button", { name: "收起会话侧栏" }));
+    expect(screen.getByRole("button", { name: "展开会话侧栏" })).toBeTruthy();
     await userEvent.click(screen.getByRole("button", { name: "Show workspace inspector" }));
     await userEvent.click(screen.getByRole("button", { name: "Close workspace inspector" }));
     expect(screen.getByRole("button", { name: "Show workspace inspector" })).toBeTruthy();
+  });
+
+  it("opens the archived view from the collapsed conversation rail", async () => {
+    render(<App />);
+    await userEvent.click(screen.getByRole("button", { name: "收起会话侧栏" }));
+    await userEvent.click(screen.getByRole("button", { name: "查看已归档对话" }));
+    expect(screen.getByRole("button", { name: "筛选对话，当前：已归档" })).toBeTruthy();
+    expect(document.activeElement).toBe(screen.getByRole("searchbox", { name: "搜索对话" }));
+
+    await userEvent.click(screen.getByRole("button", { name: "收起会话侧栏" }));
+    await userEvent.click(screen.getByRole("button", { name: "新建对话" }));
+    await userEvent.click(screen.getByRole("button", { name: "展开会话侧栏" }));
+    expect(screen.getByRole("button", { name: "筛选对话，当前：全部（不含已归档）" })).toBeTruthy();
   });
 
   it("keeps terminal tools in the contextual inspector instead of the conversation surface", async () => {
@@ -71,12 +84,23 @@ describe("desktop shell", () => {
     expect(separator.getAttribute("aria-valuenow")).toBe("376");
   });
 
+  it("supports keyboard resizing for the conversation sidebar", async () => {
+    render(<App />);
+    const separator = screen.getByRole("separator", { name: "调整会话侧栏宽度" });
+    expect(separator.getAttribute("aria-valuenow")).toBe("288");
+    separator.focus();
+    await userEvent.keyboard("{ArrowRight}");
+    expect(separator.getAttribute("aria-valuenow")).toBe("304");
+    await userEvent.keyboard("{Home}");
+    expect(separator.getAttribute("aria-valuenow")).toBe("288");
+  });
+
   it("closes drawers with Escape and restores the shell trigger", async () => {
     render(<App />);
-    const collapse = screen.getByRole("button", { name: "Collapse conversations" });
+    const collapse = screen.getByRole("button", { name: "收起会话侧栏" });
     collapse.focus();
     await userEvent.keyboard("{Escape}");
-    const show = screen.getByRole("button", { name: "Show conversations" });
+    const show = screen.getByRole("button", { name: "展开会话侧栏" });
     expect(document.activeElement).toBe(show);
     expect(show.getAttribute("aria-controls")).toBe("threads-panel");
   });
@@ -84,12 +108,12 @@ describe("desktop shell", () => {
   it("keeps narrow drawers closed and mutually exclusive", async () => {
     window.innerWidth = 760;
     render(<App />);
-    expect(screen.getByRole("button", { name: "Show conversations" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "显示会话侧栏" })).toBeTruthy();
     expect(screen.getByRole("button", { name: "Show workspace inspector" })).toBeTruthy();
-    await userEvent.click(screen.getByRole("button", { name: "Show conversations" }));
+    await userEvent.click(screen.getByRole("button", { name: "显示会话侧栏" }));
     expect(screen.queryByRole("button", { name: "Show workspace inspector" })).toBeTruthy();
     await userEvent.click(screen.getByRole("button", { name: "Show workspace inspector" }));
-    expect(screen.getByRole("button", { name: "Show conversations" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "显示会话侧栏" })).toBeTruthy();
   });
 });
 

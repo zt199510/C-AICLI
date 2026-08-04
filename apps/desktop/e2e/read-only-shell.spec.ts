@@ -34,8 +34,9 @@ test("read-only thread timeline review survives renderer reload", async ({ brows
       detail: await window.caicli.getThread({ threadId: "fixture-thread", afterSequence: 0 }),
     }));
     assertFixtureProjection(projection);
-    await expect(page.getByText("Fixture review thread")).toBeVisible();
-    await page.locator(".thread-select").click({ force: true });
+    const fixtureThread = page.locator("#threads-panel").getByText("Fixture review thread", { exact: true });
+    await expect(fixtureThread).toBeVisible();
+    await fixtureThread.click();
     await page.getByRole("button", { name: /Browse 1 turns/ }).click();
     await page.getByRole("button", { name: /Turn 1/ }).click();
     await expect(page.getByText("User message")).toBeVisible();
@@ -45,7 +46,7 @@ test("read-only thread timeline review survives renderer reload", async ({ brows
     await page.getByRole("textbox", { name: "Composer prompt" }).fill("Explain fixture @fixture");
     await expect(page.getByRole("listbox", { name: "Composer mentions" })).toBeVisible();
     await page.getByRole("option", { name: /Fixture skills/i }).click();
-    await page.getByRole("button", { name: "Queue prompt" }).click();
+    await page.getByRole("button", { name: "Send prompt" }).click();
     await expect(page.getByText("Ready to run")).toBeVisible();
     await page.reload();
     await page.locator(".thread-select").click({ force: true });

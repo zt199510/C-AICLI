@@ -122,7 +122,103 @@ describe("continuous conversations", () => {
 
     expect(pendingBeforeDetailRelease).toBe("none");
   });
+
+  it("selects the next available conversation after archiving the current one", async () => {
+    let archived = false;
+    const nextThread: ThreadSummaryData = {
+      ...thread,
+      threadId: "thread-2",
+      title: "Next conversation",
+      updatedAtUtc: "2026-07-29T00:00:00.000Z",
+    };
+    const archivedThread: ThreadSummaryData = {
+      ...thread,
+      status: "archived",
+      archivedAtUtc: "2026-07-30T01:00:00.000Z",
+    };
+    const archiveThread = vi.fn(async () => {
+      archived = true;
+      return ok(archivedThread);
+    });
+    const bridge = {
+      getRuntimeStatus: vi.fn(async () => createRuntimeStatus("runtime-ready")),
+      getWorkspaceSnapshot: vi.fn(async () => workspace),
+      listThreads: vi.fn(async () => ok({ threads: archived ? [archivedThread, nextThread] : [thread, nextThread], truncated: false })),
+      getThread: vi.fn(async ({ threadId }: { readonly threadId: string }) => ok({
+        thread: threadId === nextThread.threadId ? nextThread : thread,
+        turns: [], timeline: [], nextSequence: null,
+        timelineTruncated: false, recoveryRequired: false,
+      })),
+      getComposer: vi.fn(async () => ok(composer(false))),
+      archiveThread,
+      onRuntimeStatus: vi.fn(() => () => undefined),
+      onThreadChanged: vi.fn(() => () => undefined),
+    } as unknown as DesktopBridge;
+
+    render(<ArchiveHarness bridge={bridge} />);
+    await waitFor(() => expect(screen.getByTestId("selected-thread").textContent).toBe("thread-1"));
+    fireEvent.click(screen.getByRole("button", { name: "Archive current" }));
+
+    await waitFor(() => expect(screen.getByTestId("selected-thread").textContent).toBe("thread-2"));
+    expect(archiveThread).toHaveBeenCalledWith({ threadId: "thread-1", expectedRevision: 1 });
+  });
+
+  it("keeps the current selection when a background conversation is archived", async () => {
+    let archived = false;
+    const background: ThreadSummaryData = { ...thread, threadId: "thread-2", title: "Background conversation" };
+    const bridge = {
+      getRuntimeStatus: vi.fn(async () => createRuntimeStatus("runtime-ready")),
+      getWorkspaceSnapshot: vi.fn(async () => workspace),
+      listThreads: vi.fn(async () => ok({
+        threads: archived ? [thread, { ...background, status: "archived", archivedAtUtc: "2026-07-30T01:00:00.000Z" }] : [thread, background],
+        truncated: false,
+      })),
+      getThread: vi.fn(async ({ threadId }: { readonly threadId: string }) => ok({
+        thread: threadId === background.threadId ? background : thread,
+        turns: [], timeline: [], nextSequence: null,
+        timelineTruncated: false, recoveryRequired: false,
+      })),
+      getComposer: vi.fn(async () => ok(composer(false))),
+      archiveThread: vi.fn(async () => {
+        archived = true;
+        return ok({ ...background, status: "archived", archivedAtUtc: "2026-07-30T01:00:00.000Z" });
+      }),
+      onRuntimeStatus: vi.fn(() => () => undefined),
+      onThreadChanged: vi.fn(() => () => undefined),
+    } as unknown as DesktopBridge;
+
+    render(<ArchiveHarness bridge={bridge} />);
+    await waitFor(() => expect(screen.getByTestId("selected-thread").textContent).toBe("thread-1"));
+    fireEvent.click(screen.getByRole("button", { name: "Archive background" }));
+    await waitFor(() => expect(bridge.listThreads).toHaveBeenCalledTimes(2));
+    expect(screen.getByTestId("selected-thread").textContent).toBe("thread-1");
+  });
 });
+
+function ArchiveHarness({ bridge }: { readonly bridge: DesktopBridge }) {
+  const controller = useDesktopController(bridge, { autoSelectConversation: true });
+  const selected = controller.state.threads.find((entry) => entry.threadId === controller.state.selectedThreadId);
+  const background = controller.state.threads.find((entry) => entry.threadId !== controller.state.selectedThreadId && !entry.archivedAtUtc);
+  return (
+    <>
+      <span data-testid="selected-thread">{controller.state.selectedThreadId ?? "new"}</span>
+      <button
+        type="button"
+        disabled={!selected}
+        onClick={() => selected && void controller.archiveThread(selected.threadId, selected.revision)}
+      >
+        Archive current
+      </button>
+      <button
+        type="button"
+        disabled={!background}
+        onClick={() => background && void controller.archiveThread(background.threadId, background.revision)}
+      >
+        Archive background
+      </button>
+    </>
+  );
+}
 
 function ConversationHarness({ bridge, autoSelect = false }: { readonly bridge: DesktopBridge; readonly autoSelect?: boolean }) {
   const controller = useDesktopController(bridge, { autoSelectConversation: autoSelect });
@@ -164,7 +260,7 @@ const workspace: WorkspaceSnapshotData = {
 };
 
 const thread: ThreadSummaryData = {
-  threadId: "thread-1", revision: 1, workspaceId: workspace.workspaceId, title: "Review this workspace", status: "active",
+  threadId: "thread-1", revision: 1, workspaceId: workspace.workspaceId, title: "Review this workspace", status: "idle",
   createdAtUtc: "2026-07-30T00:00:00.000Z", updatedAtUtc: "2026-07-30T00:00:00.000Z", archivedAtUtc: null,
   turnCount: 0, timelineItemCount: 0, activeTurnId: null,
   origin: { kind: "desktop", sourceKind: null, sourceId: null, sourceFingerprint: null },

@@ -10,6 +10,10 @@ export default defineConfig(({ command }) => ({
         const development = command === "serve";
         return html
           .replace(
+            "__CAICLI_SCRIPT_SRC__",
+            development ? "'self' 'unsafe-inline'" : "'self'",
+          )
+          .replace(
             "__CAICLI_STYLE_SRC__",
             development ? "'self' 'unsafe-inline'" : "'self'",
           )
