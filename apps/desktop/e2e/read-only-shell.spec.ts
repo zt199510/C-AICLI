@@ -41,7 +41,8 @@ test("read-only thread timeline review survives renderer reload", async ({ brows
     await page.getByRole("button", { name: /Turn 1/ }).click();
     await expect(page.getByText("User message")).toBeVisible();
     await expect(page.locator(".timeline-card")).toHaveCount(14);
-    await page.getByRole("button", { name: "Attach workspace file" }).click();
+    await page.getByRole("button", { name: "Add context" }).click();
+    await page.getByRole("menuitem", { name: /添加工作区文件/ }).click();
     await expect(page.getByLabel("Selected composer context").getByText("src/review.ts")).toBeVisible();
     await page.getByRole("textbox", { name: "Composer prompt" }).fill("Explain fixture @fixture");
     await expect(page.getByRole("listbox", { name: "Composer mentions" })).toBeVisible();

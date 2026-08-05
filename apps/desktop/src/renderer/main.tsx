@@ -4,6 +4,7 @@ import { App } from "./App";
 import "./styles.css";
 import "./shared/theme/tokens.css";
 import "./app/app-shell.css";
+import "./composer.css";
 import "./thread-sidebar.css";
 
 const root = document.getElementById("root");

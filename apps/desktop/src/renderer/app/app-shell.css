@@ -169,14 +169,12 @@ body {
   padding-inline: 13px;
 }
 
-.primary-action,
-.composer-send {
+.primary-action {
   border-color: var(--color-accent);
   background: var(--color-accent);
 }
 
-.primary-action:hover,
-.composer-send:hover {
+.primary-action:hover {
   background: var(--color-accent-strong);
 }
 
@@ -521,8 +519,7 @@ body {
   max-width: 460px;
 }
 
-.task-controls,
-.composer {
+.task-controls {
   width: min(900px, calc(100% - 32px));
   justify-self: center;
 }
@@ -563,40 +560,6 @@ body {
   margin-top: 14px;
   border-radius: var(--radius-md);
   box-shadow: 0 4px 16px rgb(39 54 45 / 5%);
-}
-
-.composer {
-  margin: 0 0 18px;
-  border: 1px solid var(--color-border-strong);
-  border-radius: var(--radius-lg);
-  background: var(--color-surface);
-  box-shadow: var(--shadow-float);
-  padding: 10px 12px 9px;
-}
-
-.composer textarea {
-  min-height: 66px;
-  border: 0;
-  border-radius: var(--radius-md);
-  background: transparent;
-  padding: 10px 8px;
-  font-size: 14px;
-}
-
-.composer textarea:focus {
-  outline: 0;
-  box-shadow: none;
-}
-
-.composer:focus-within {
-  border-color: var(--color-focus);
-  box-shadow: 0 0 0 3px rgb(23 117 90 / 12%), var(--shadow-float);
-}
-
-.composer-send {
-  min-height: 34px;
-  border-radius: 10px;
-  padding-inline: 13px;
 }
 
 @media (max-width: 1120px) {
@@ -640,13 +603,8 @@ body {
     padding-inline: 14px;
   }
 
-  .task-controls,
-  .composer {
+  .task-controls {
     width: calc(100% - 20px);
-  }
-
-  .composer {
-    margin-bottom: 10px;
   }
 }
 
@@ -669,7 +627,6 @@ body {
   .brand-mark,
   .runtime-status,
   .state-card,
-  .composer,
   .context-switcher {
     border: 1px solid CanvasText;
     forced-color-adjust: auto;
@@ -1308,8 +1265,7 @@ body {
 }
 
 /* Conversation-first usability additions. */
-.conversation-context-summary,
-.composer-context-summary {
+.conversation-context-summary {
   display: flex;
   min-width: 0;
   align-items: center;
@@ -1323,8 +1279,7 @@ body {
   margin: -5px 0 16px;
 }
 
-.conversation-context-summary > span,
-.composer-context-summary > span {
+.conversation-context-summary > span {
   display: inline-flex;
   align-items: center;
   gap: 5px;
@@ -1408,42 +1363,9 @@ body {
   justify-self: start;
 }
 
-.composer-context-summary {
-  padding: 1px 2px 7px;
-}
-
-.composer-context-summary > span {
-  background: var(--color-surface-muted);
-  padding-block: 3px;
-}
-
-.composer-status {
-  display: flex;
-  min-height: 25px;
-  align-items: center;
-  justify-content: space-between;
-  gap: 10px;
-}
-
-.composer-status-action {
-  flex: 0 0 auto;
-  border: 0;
-  border-radius: 8px;
-  background: var(--color-accent-soft);
-  padding: 4px 8px;
-  color: var(--color-accent-strong);
-  font-size: 11px;
-  font-weight: 680;
-  cursor: pointer;
-}
-
 @media (max-width: 520px) {
   .timeline-items .timeline-message {
     width: 94%;
-  }
-
-  .composer-context-summary > span:last-child {
-    display: none;
   }
 }
 
@@ -1698,62 +1620,6 @@ body {
   opacity: .72;
 }
 
-.composer {
-  width: min(840px, calc(100% - 32px));
-  border-radius: 20px;
-  padding: 9px 13px 10px;
-}
-
-.composer-context-summary {
-  gap: 0;
-  padding: 0 7px 3px;
-}
-
-.composer-context-summary > span {
-  border: 0;
-  border-radius: 0;
-  background: transparent;
-  padding: 2px 8px 2px 0;
-}
-
-.composer-context-summary > span + span::before {
-  margin-right: 8px;
-  color: var(--color-border-strong);
-  content: "·";
-}
-
-.composer textarea {
-  min-height: 82px;
-  padding: 11px 8px 8px;
-  font-size: 14.5px;
-  line-height: 1.55;
-}
-
-.composer-footer {
-  padding-top: 4px;
-}
-
-.composer-tools button {
-  border-color: transparent;
-  background: var(--color-surface-muted);
-  border-radius: 9px;
-}
-
-.composer-send {
-  width: 36px;
-  height: 36px;
-  justify-content: center;
-  border-radius: 12px;
-  padding: 0;
-  overflow: hidden;
-  color: transparent;
-  gap: 0;
-}
-
-.composer-send svg {
-  color: white;
-}
-
 @media (max-width: 700px) {
   .conversation-message.message-user {
     width: 90%;
@@ -1821,54 +1687,6 @@ body {
 
 .conversation-message.redacted .conversation-message-copy {
   opacity: 1;
-}
-
-.composer {
-  width: min(760px, calc(100% - 28px));
-  margin-bottom: 12px;
-  border-radius: 16px;
-  padding: 7px 10px 8px;
-}
-
-.composer:focus-within {
-  box-shadow: 0 0 0 2px rgb(23 117 90 / 10%), var(--shadow-float);
-}
-
-.composer textarea {
-  min-height: 48px;
-  max-height: 180px;
-  resize: none;
-  padding: 8px 7px 6px;
-  font-size: 14px;
-  line-height: 1.5;
-}
-
-.composer-footer {
-  padding-top: 2px;
-}
-
-.composer-tools button {
-  width: 32px;
-  height: 32px;
-  justify-content: center;
-  padding: 0;
-}
-
-.composer-send {
-  width: 32px;
-  height: 32px;
-  min-height: 32px;
-  border-radius: 10px;
-}
-
-.composer-stop {
-  background: color-mix(in srgb, #d94d4d 12%, var(--color-surface));
-  color: #b83232;
-}
-
-.composer-status[hidden],
-.composer-error[hidden] {
-  display: none !important;
 }
 
 /* Keep transient turn state in the conversation flow instead of presenting it as a second composer. */
@@ -2291,30 +2109,6 @@ body {
   cursor: pointer;
 }
 
-.composer {
-  z-index: 6;
-  width: min(var(--conversation-width), calc(100% - 32px));
-  margin: 0 auto 12px;
-}
-
-.composer textarea {
-  overflow-y: auto;
-}
-
-.composer-stop {
-  border-color: var(--color-danger);
-  background: var(--color-danger);
-  color: var(--color-accent-contrast);
-}
-
-.composer-stop:hover {
-  background: var(--color-danger-strong);
-}
-
-.composer-alternate-action:disabled {
-  color: var(--color-text-disabled);
-}
-
 @media (max-width: 1120px) {
   .titlebar {
     grid-template-columns: 240px minmax(0, 1fr) auto;
@@ -2392,11 +2186,6 @@ body {
 
   .approval-card .approval-actions > button {
     flex: 1 1 0;
-  }
-
-  .composer-footer {
-    align-items: center;
-    flex-direction: row;
   }
 }
 

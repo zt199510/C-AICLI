@@ -1,70 +1,233 @@
-import { fireEvent, render, screen } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
+import type { CatalogItemData, ContextDescriptorData } from "../generated/desktop-contracts";
 import { Composer } from "./Composer";
-import { initialComposerUiState, type ComposerDraft } from "./composer-state";
+import { initialComposerUiState, type ComposerDraft, type MentionResults } from "./composer-state";
 
+const contextFile: ContextDescriptorData = {
+  selectionId: "context-file",
+  relativePath: "src/first.ts",
+  kind: "file",
+  byteCount: 10,
+  fileCount: 1,
+  availability: "available",
+};
+const contextFolder: ContextDescriptorData = {
+  selectionId: "context-folder",
+  relativePath: "src/components",
+  kind: "folder",
+  byteCount: 200,
+  fileCount: 4,
+  availability: "available",
+};
+const skill = catalog("skill-1", "Fixture skill", "Runs fixture checks");
+const expert = catalog("expert-1", "UI expert", "Reviews interface behavior");
+const automation = catalog("automation-1", "Nightly automation", "Runs each night");
+const mentions: MentionResults = {
+  loading: false,
+  error: null,
+  truncated: false,
+  context: [contextFile, contextFolder],
+  skills: [skill],
+  experts: [expert],
+  automations: [automation],
+  revisions: { skills: "skills-r1", experts: "experts-r1", automations: "automations-r1" },
+};
 const draft: ComposerDraft = { text: "hello", contextSelections: [], catalogSelections: [], status: "editing", error: null };
 
 describe("Composer", () => {
-  it("sends on Enter and inserts a newline on Shift Enter", () => {
+  it("sends on Enter, keeps Shift+Enter for newlines, and ignores IME Enter", () => {
     const props = makeProps();
     render(<Composer {...props} />);
     const prompt = screen.getByRole("textbox", { name: "Composer prompt" });
+
     fireEvent.keyDown(prompt, { key: "Enter", shiftKey: false });
     expect(props.onSend).toHaveBeenCalledOnce();
     fireEvent.keyDown(prompt, { key: "Enter", shiftKey: true });
     expect(props.onSend).toHaveBeenCalledOnce();
-  });
 
-  it("does not send while IME composition is active", () => {
-    const props = makeProps();
-    render(<Composer {...props} />);
-    const prompt = screen.getByRole("textbox", { name: "Composer prompt" });
     fireEvent.compositionStart(prompt);
     fireEvent.keyDown(prompt, { key: "Enter" });
-    expect(props.onSend).not.toHaveBeenCalled();
     fireEvent.compositionEnd(prompt);
-    fireEvent.keyDown(prompt, { key: "Enter" });
+    fireEvent.keyDown(prompt, { key: "Enter", isComposing: true });
     expect(props.onSend).toHaveBeenCalledOnce();
+    fireEvent.keyDown(prompt, { key: "Enter" });
+    expect(props.onSend).toHaveBeenCalledTimes(2);
   });
 
-  it("opens mention search and exposes accessible picker controls", async () => {
+  it("auto-grows between 48px and 180px, then enables internal scrolling", () => {
+    const props = makeProps({ draft: { ...draft, text: "" } });
+    render(<Composer {...props} />);
+    const prompt = screen.getByRole("textbox", { name: "Composer prompt" }) as HTMLTextAreaElement;
+
+    Object.defineProperty(prompt, "scrollHeight", { configurable: true, value: 20 });
+    fireEvent.change(prompt, { target: { value: "short" } });
+    expect(prompt.style.height).toBe("48px");
+    expect(prompt.style.overflowY).toBe("hidden");
+
+    Object.defineProperty(prompt, "scrollHeight", { configurable: true, value: 124 });
+    fireEvent.change(prompt, { target: { value: "several\nlines" } });
+    expect(prompt.style.height).toBe("124px");
+    expect(prompt.style.overflowY).toBe("hidden");
+
+    Object.defineProperty(prompt, "scrollHeight", { configurable: true, value: 260 });
+    fireEvent.change(prompt, { target: { value: "many\nlines\ninside\nthe\ncomposer" } });
+    expect(prompt.style.height).toBe("180px");
+    expect(prompt.style.overflowY).toBe("auto");
+  });
+
+  it("opens and closes the add menu and keeps Composer menus mutually exclusive", async () => {
+    const user = userEvent.setup();
+    const props = makeProps({ composer: { ...initialComposerUiState, mentions } });
+    render(<Composer {...props} />);
+    const add = screen.getByRole("button", { name: "Add context" });
+
+    await user.click(add);
+    expect(add.getAttribute("aria-expanded")).toBe("true");
+    expect(screen.getByRole("menu", { name: "添加上下文" })).toBeTruthy();
+
+    await user.click(screen.getByRole("button", { name: "工具" }));
+    expect(screen.queryByRole("menu", { name: "添加上下文" })).toBeNull();
+    expect(screen.getByRole("menu", { name: "工具目录" })).toBeTruthy();
+
+    await user.click(screen.getByRole("button", { name: "工具" }));
+    expect(screen.queryByRole("menu", { name: "工具目录" })).toBeNull();
+  });
+
+  it("runs file and directory picker actions from the add menu", async () => {
+    const user = userEvent.setup();
     const props = makeProps();
     render(<Composer {...props} />);
-    fireEvent.change(screen.getByRole("textbox", { name: "Composer prompt" }), { target: { value: "hello @src" } });
-    expect(props.onSearch).toHaveBeenLastCalledWith("src");
-    expect(screen.getByRole("button", { name: "Attach workspace file" })).toBeTruthy();
-    expect(screen.getByRole("button", { name: "Attach workspace folder" })).toBeTruthy();
+
+    await user.click(screen.getByRole("button", { name: "Add context" }));
+    await user.click(screen.getByRole("menuitem", { name: /添加工作区文件/ }));
+    expect(props.onPickFile).toHaveBeenCalledOnce();
+    expect(screen.queryByRole("menu", { name: "添加上下文" })).toBeNull();
+
+    await user.click(screen.getByRole("button", { name: "Add context" }));
+    await user.click(screen.getByRole("menuitem", { name: /添加工作区目录/ }));
+    expect(props.onPickFolder).toHaveBeenCalledOnce();
   });
 
-  it("renders next-turn pending state and clear action", async () => {
+  it("shows only Catalog items in the tools menu and preserves catalog revisions", async () => {
+    const user = userEvent.setup();
+    const props = makeProps({ composer: { ...initialComposerUiState, mentions } });
+    render(<Composer {...props} />);
+
+    await user.click(screen.getByRole("button", { name: "工具" }));
+    const menu = screen.getByRole("menu", { name: "工具目录" });
+    expect(props.onSearch).toHaveBeenLastCalledWith("");
+    expect(withinText(menu, "Skills")).toBe(true);
+    expect(withinText(menu, "Experts")).toBe(true);
+    expect(withinText(menu, "Automations")).toBe(true);
+    expect(withinText(menu, "src/first.ts")).toBe(false);
+
+    await user.click(screen.getByRole("menuitem", { name: /UI expert/ }));
+    expect(props.onCatalog).toHaveBeenCalledWith("expert", expert, "experts-r1");
+  });
+
+  it("supports menu arrow keys, Escape, and trigger focus restoration", async () => {
+    const user = userEvent.setup();
+    render(<Composer {...makeProps()} />);
+    const trigger = screen.getByRole("button", { name: "Add context" });
+    await user.click(trigger);
+    const file = screen.getByRole("menuitem", { name: /添加工作区文件/ });
+    const folder = screen.getByRole("menuitem", { name: /添加工作区目录/ });
+    await waitFor(() => expect(document.activeElement).toBe(file));
+
+    fireEvent.keyDown(file, { key: "End" });
+    expect(document.activeElement).toBe(folder);
+    fireEvent.keyDown(folder, { key: "Home" });
+    expect(document.activeElement).toBe(file);
+    fireEvent.keyDown(file, { key: "Escape" });
+    await waitFor(() => expect(document.activeElement).toBe(trigger));
+    expect(screen.queryByRole("menu", { name: "添加上下文" })).toBeNull();
+  });
+
+  it("searches mentions, navigates results, closes on Escape, and restores prompt focus", async () => {
+    const props = makeProps({ composer: { ...initialComposerUiState, mentions } });
+    render(<Composer {...props} />);
+    const prompt = screen.getByRole("textbox", { name: "Composer prompt" });
+    fireEvent.change(prompt, { target: { value: "hello @src" } });
+    expect(props.onSearch).toHaveBeenLastCalledWith("src");
+    expect(prompt.getAttribute("aria-activedescendant")).toBe("mention-context-context-file");
+
+    fireEvent.keyDown(prompt, { key: "End" });
+    expect(prompt.getAttribute("aria-activedescendant")).toBe("mention-automation-automation-1");
+    fireEvent.keyDown(prompt, { key: "Enter" });
+    expect(props.onCatalog).toHaveBeenCalledWith("automation", automation, "automations-r1");
+    await waitFor(() => expect(document.activeElement).toBe(prompt));
+
+    fireEvent.change(prompt, { target: { value: "hello @" } });
+    fireEvent.keyDown(prompt, { key: "Escape" });
+    expect(props.onCloseMentions).toHaveBeenCalled();
+    await waitFor(() => expect(document.activeElement).toBe(prompt));
+  });
+
+  it("removes Context and Catalog chips independently", async () => {
+    const user = userEvent.setup();
+    const selectedCatalog = { kind: "skill" as const, id: skill.id, label: skill.displayName, catalogRevision: "skills-r1" };
+    const props = makeProps({ draft: { ...draft, contextSelections: [contextFile], catalogSelections: [selectedCatalog] } });
+    render(<Composer {...props} />);
+
+    await user.click(screen.getByRole("button", { name: "Remove src/first.ts" }));
+    expect(props.onRemoveContext).toHaveBeenCalledWith("context-file");
+    await user.click(screen.getByRole("button", { name: "Remove Fixture skill" }));
+    expect(props.onRemoveCatalog).toHaveBeenCalledWith(selectedCatalog);
+  });
+
+  it("uses the authoritative snapshot for Effective Model and Approval Mode", () => {
+    render(<Composer {...makeProps({
+      modelLabel: "workspace-fallback",
+      approvalModeLabel: "FallbackMode",
+      composer: { ...initialComposerUiState, snapshotStatus: "ready", snapshot: snapshot({ effectiveModel: "gpt-authoritative", approvalMode: "OnRequest" }) },
+    })} />);
+    expect(screen.getByLabelText("Effective model: gpt-authoritative")).toBeTruthy();
+    expect(screen.getByLabelText("Approval mode: OnRequest")).toBeTruthy();
+    expect(screen.queryByText("workspace-fallback")).toBeNull();
+    expect(screen.queryByText("FallbackMode")).toBeNull();
+  });
+
+  it("renders pending intent, disables composition, and clears it", async () => {
+    const user = userEvent.setup();
     const props = makeProps({
-      composer: { ...initialComposerUiState, snapshotStatus: "ready", snapshot: {
-        workspaceId: "ws", threadId: "thread", threadRevision: 1, queueRevision: 2,
+      composer: { ...initialComposerUiState, snapshotStatus: "ready", snapshot: snapshot({
         pendingIntent: { intentId: "intent", delivery: "next-turn", createdAtUtc: "2026-07-17T00:00:00Z", contextCount: 1, catalogCount: 2 },
-        effectiveModel: "gpt-test", modelSource: "test", approvalMode: "OnRequest", approvalModeSource: "test", controlledContext: true,
-      } },
+      }) },
     });
     render(<Composer {...props} />);
     expect(screen.getByText("Queued for next turn")).toBeTruthy();
-    await userEvent.click(screen.getByRole("button", { name: "Clear pending input" }));
-    expect(props.onClear).toHaveBeenCalledOnce();
     expect((screen.getByRole("textbox", { name: "Composer prompt" }) as HTMLTextAreaElement).disabled).toBe(true);
+    expect((screen.getByRole("button", { name: "Add context" }) as HTMLButtonElement).disabled).toBe(true);
+    await user.click(screen.getByRole("button", { name: "Clear pending input" }));
+    expect(props.onClear).toHaveBeenCalledOnce();
   });
 
-  it("places Stop in the primary composer button while a response is active", async () => {
+  it("switches between Send, Stop, and Stopping primary states", async () => {
+    const user = userEvent.setup();
+    const sendProps = makeProps();
+    const view = render(<Composer {...sendProps} />);
+    await user.click(screen.getByRole("button", { name: "Send prompt" }));
+    expect(sendProps.onSend).toHaveBeenCalledOnce();
+
     const onStop = vi.fn();
-    const props = makeProps({ onStop });
-    render(<Composer {...props} />);
+    view.rerender(<Composer {...makeProps({ onStop })} />);
     expect(screen.queryByRole("button", { name: "Send prompt" })).toBeNull();
-    await userEvent.click(screen.getByRole("button", { name: "Stop response" }));
+    await user.click(screen.getByRole("button", { name: "Stop response" }));
     expect(onStop).toHaveBeenCalledOnce();
-    fireEvent.keyDown(screen.getByRole("textbox", { name: "Composer prompt" }), { key: "Enter" });
-    expect(props.onSend).not.toHaveBeenCalled();
+
+    view.rerender(<Composer {...makeProps({ onStop, stopping: true })} />);
+    expect((screen.getByRole("button", { name: "Stopping response" }) as HTMLButtonElement).disabled).toBe(true);
   });
 
-  it("explains disabled input and offers a direct recovery action", async () => {
+  it("disables empty sends", () => {
+    render(<Composer {...makeProps({ draft: { ...draft, text: "   " } })} />);
+    expect((screen.getByRole("button", { name: "Send prompt" }) as HTMLButtonElement).disabled).toBe(true);
+  });
+
+  it("explains disabled input and offers the existing direct recovery action", async () => {
+    const user = userEvent.setup();
     const onDisabledAction = vi.fn();
     render(<Composer {...makeProps({
       disabledReason: "Select a thread to compose.",
@@ -72,60 +235,38 @@ describe("Composer", () => {
       onDisabledAction,
     })} />);
     expect((screen.getByRole("textbox", { name: "Composer prompt" }) as HTMLTextAreaElement).disabled).toBe(true);
-    await userEvent.click(screen.getByRole("button", { name: "New conversation" }));
+    expect(screen.getByRole("status").textContent).toContain("Select a thread to compose.");
+    await user.click(screen.getByRole("button", { name: "New conversation" }));
     expect(onDisabledAction).toHaveBeenCalledOnce();
   });
 
-  it("reuses the queued-intent DOM across pending state transitions", () => {
-    const initial = makeProps();
-    const view = render(<Composer {...initial} />);
-    const stableNode = document.querySelector(".queued-intent");
-    expect(stableNode).not.toBeNull();
-    expect((stableNode as HTMLElement).hidden).toBe(true);
-    const composer = { ...initialComposerUiState, snapshotStatus: "ready" as const, snapshot: {
-      workspaceId: "ws", threadId: "thread", threadRevision: 1, queueRevision: 2,
-      pendingIntent: { intentId: "intent", delivery: "next-turn" as const, createdAtUtc: "2026-07-17T00:00:00Z", contextCount: 1, catalogCount: 2 },
-      effectiveModel: "gpt-test", modelSource: "test", approvalMode: "OnRequest", approvalModeSource: "test", controlledContext: true,
-    } };
-    view.rerender(<Composer {...makeProps({ composer })} />);
-    expect(document.querySelector(".queued-intent")).toBe(stableNode);
-    expect((stableNode as HTMLElement).hidden).toBe(false);
-    view.rerender(<Composer {...makeProps()} />);
-    expect(document.querySelector(".queued-intent")).toBe(stableNode);
-    expect((stableNode as HTMLElement).hidden).toBe(true);
+  it("uses alert semantics for errors", () => {
+    render(<Composer {...makeProps({ draft: { ...draft, status: "error", error: "Catalog revision expired." } })} />);
+    expect(screen.getByRole("alert").textContent).toContain("Catalog revision expired.");
   });
 
-  it("updates draft and status text without replacing DOM child nodes", async () => {
+  it("reuses pending, prompt, and Composer DOM across ordinary state updates", () => {
     const initial = makeProps({ draft: { ...draft, text: "", status: "editing" } });
     const view = render(<Composer {...initial} />);
-    const records: MutationRecord[] = [];
-    const observer = new MutationObserver((batch) => records.push(...batch));
-    observer.observe(document.querySelector(".composer")!, { childList: true, subtree: true });
-    view.rerender(<Composer {...makeProps({ draft: { ...draft, text: "provider prompt", status: "queued" } })} />);
-    view.rerender(<Composer {...initial} />);
-    await Promise.resolve();
-    observer.disconnect();
-    expect(records.flatMap((record) => [...record.addedNodes])).toHaveLength(0);
-    expect(records.flatMap((record) => [...record.removedNodes])).toHaveLength(0);
-  });
+    const composerNode = document.querySelector(".composer");
+    const pendingNode = document.querySelector(".queued-intent");
+    const promptNode = screen.getByRole("textbox", { name: "Composer prompt" });
 
-  it("navigates mention options with a roving active descendant and restores the prompt", async () => {
-    const props = makeProps({ composer: { ...initialComposerUiState, mentions: {
-      loading: false, error: null, truncated: false,
-      context: [
-        { selectionId: "first", relativePath: "src/first.ts", kind: "file", byteCount: 10, fileCount: 1, availability: "available" },
-        { selectionId: "second", relativePath: "src/second.ts", kind: "file", byteCount: 20, fileCount: 1, availability: "available" },
-      ], skills: [], experts: [], automations: [], revisions: { skills: "", experts: "", automations: "" },
-    } } });
-    render(<Composer {...props} />);
-    const prompt = screen.getByRole("textbox", { name: "Composer prompt" });
-    expect(prompt.getAttribute("aria-activedescendant")).toBe("mention-context-first");
-    fireEvent.keyDown(prompt, { key: "End" });
-    expect(prompt.getAttribute("aria-activedescendant")).toBe("mention-context-second");
-    fireEvent.keyDown(prompt, { key: "Enter" });
-    expect(props.onContext).toHaveBeenCalledWith(expect.objectContaining({ selectionId: "second" }));
-    expect(props.onCloseMentions).toHaveBeenCalledOnce();
-    expect(document.activeElement).toBe(prompt);
+    view.rerender(<Composer {...makeProps({
+      draft: { ...draft, text: "provider prompt", status: "queued" },
+      composer: { ...initialComposerUiState, snapshotStatus: "ready", snapshot: snapshot({
+        pendingIntent: { intentId: "intent", delivery: "next-turn", createdAtUtc: "2026-07-17T00:00:00Z", contextCount: 1, catalogCount: 2 },
+      }) },
+    })} />);
+    expect(document.querySelector(".composer")).toBe(composerNode);
+    expect(document.querySelector(".queued-intent")).toBe(pendingNode);
+    expect(screen.getByRole("textbox", { name: "Composer prompt" })).toBe(promptNode);
+    expect((pendingNode as HTMLElement).hidden).toBe(false);
+
+    view.rerender(<Composer {...initial} />);
+    expect(document.querySelector(".composer")).toBe(composerNode);
+    expect(document.querySelector(".queued-intent")).toBe(pendingNode);
+    expect((pendingNode as HTMLElement).hidden).toBe(true);
   });
 });
 
@@ -134,8 +275,41 @@ function makeProps(overrides: Record<string, unknown> = {}) {
     draft,
     composer: initialComposerUiState,
     disabledReason: null,
-    onText: vi.fn(), onSearch: vi.fn(), onCloseMentions: vi.fn(), onContext: vi.fn(), onCatalog: vi.fn(),
-    onRemoveContext: vi.fn(), onRemoveCatalog: vi.fn(), onPickFile: vi.fn(), onPickFolder: vi.fn(), onSend: vi.fn(), onClear: vi.fn(),
+    onText: vi.fn(),
+    onSearch: vi.fn(),
+    onCloseMentions: vi.fn(),
+    onContext: vi.fn(),
+    onCatalog: vi.fn(),
+    onRemoveContext: vi.fn(),
+    onRemoveCatalog: vi.fn(),
+    onPickFile: vi.fn(),
+    onPickFolder: vi.fn(),
+    onSend: vi.fn(),
+    onClear: vi.fn(),
     ...overrides,
   };
+}
+
+function snapshot(overrides: Record<string, unknown> = {}) {
+  return {
+    workspaceId: "ws",
+    threadId: "thread",
+    threadRevision: 1,
+    queueRevision: 2,
+    pendingIntent: null,
+    effectiveModel: "gpt-test",
+    modelSource: "test",
+    approvalMode: "OnRequest",
+    approvalModeSource: "test",
+    controlledContext: true,
+    ...overrides,
+  };
+}
+
+function withinText(element: HTMLElement, text: string) {
+  return element.textContent?.includes(text) ?? false;
+}
+
+function catalog(id: string, displayName: string, description: string): CatalogItemData {
+  return { id, displayName, description, version: null, sourceKind: "fixture", readOnly: true, toolBoundary: "fixture", capabilities: [] };
 }

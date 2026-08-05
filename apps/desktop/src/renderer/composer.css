@@ -1,0 +1,512 @@
+.composer {
+  position: relative;
+  z-index: 8;
+  display: grid;
+  width: min(var(--conversation-width), calc(100% - 32px));
+  min-width: 0;
+  justify-self: center;
+  margin: 0 auto var(--space-3);
+  border: 1px solid var(--color-border-strong);
+  border-radius: var(--radius-lg);
+  background: var(--color-surface);
+  box-shadow: var(--shadow-float);
+  padding: var(--space-2) 10px 7px;
+  transition: border-color var(--duration-fast), box-shadow var(--duration-fast);
+}
+
+.composer:focus-within {
+  border-color: var(--color-focus);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--color-focus) 12%, transparent), var(--shadow-float);
+}
+
+.queued-intent {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+  margin: 1px 2px var(--space-2);
+  border: 1px solid color-mix(in srgb, var(--color-success) 35%, var(--color-border));
+  border-radius: var(--radius-sm);
+  background: var(--color-success-soft);
+  padding: 7px 9px;
+  color: var(--color-success);
+  font-size: 11px;
+}
+
+.queued-intent[hidden],
+.composer-chips[hidden],
+.composer-status[hidden],
+.composer-error[hidden] {
+  display: none !important;
+}
+
+.queued-intent > div {
+  display: grid;
+  min-width: 0;
+  gap: 1px;
+}
+
+.queued-intent > div span {
+  overflow: hidden;
+  color: var(--color-text-muted);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.queued-intent button,
+.composer-tool-button {
+  display: inline-flex;
+  min-height: 30px;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  border: 1px solid var(--color-border);
+  border-radius: 9px;
+  background: var(--color-surface-muted);
+  color: var(--color-text);
+  padding: 5px 8px;
+  font: inherit;
+  cursor: pointer;
+}
+
+.queued-intent button:hover,
+.composer-tool-button:hover,
+.composer-tool-button[aria-expanded="true"] {
+  border-color: var(--color-border-strong);
+  background: var(--color-accent-soft);
+  color: var(--color-accent-strong);
+}
+
+.composer-chips {
+  display: flex;
+  min-width: 0;
+  gap: 6px;
+  overflow-x: auto;
+  overflow-y: hidden;
+  padding: 1px 2px 6px;
+  scrollbar-width: thin;
+}
+
+.composer-chip {
+  display: inline-flex;
+  max-width: 260px;
+  min-width: 0;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 4px;
+  border: 1px solid var(--color-border);
+  border-radius: 999px;
+  background: var(--color-surface-muted);
+  padding: 3px 3px 3px 8px;
+  color: var(--color-text);
+  font-size: 11px;
+}
+
+.composer-chip-expert,
+.composer-chip-skill,
+.composer-chip-automation {
+  border-color: color-mix(in srgb, var(--color-accent) 24%, var(--color-border));
+  background: var(--color-accent-soft);
+  color: var(--color-accent-strong);
+}
+
+.composer-chip > span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.composer-chip button {
+  display: inline-grid;
+  width: 22px;
+  height: 22px;
+  flex: 0 0 auto;
+  place-items: center;
+  border: 0;
+  border-radius: 50%;
+  background: transparent;
+  padding: 0;
+  color: inherit;
+  cursor: pointer;
+}
+
+.composer-chip button:hover {
+  background: color-mix(in srgb, currentColor 10%, transparent);
+}
+
+.composer-input-wrap {
+  position: relative;
+  min-width: 0;
+}
+
+.composer textarea {
+  display: block;
+  width: 100%;
+  min-height: 48px;
+  max-height: 180px;
+  resize: none;
+  border: 0;
+  border-radius: 0;
+  outline: 0;
+  background: transparent;
+  padding: 8px 7px 6px;
+  color: var(--color-text);
+  font: 14px/1.5 "Segoe UI", Arial, sans-serif;
+  overflow-wrap: anywhere;
+}
+
+.composer textarea::placeholder {
+  color: var(--color-text-muted);
+  opacity: 1;
+}
+
+.composer textarea:focus {
+  outline: 0;
+  box-shadow: none;
+}
+
+.composer textarea:disabled {
+  color: var(--color-text-disabled);
+  cursor: not-allowed;
+}
+
+.composer-footer {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+  padding-top: 2px;
+}
+
+.composer-toolbar-group {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 6px;
+}
+
+.composer-toolbar-left {
+  flex: 1 1 auto;
+}
+
+.composer-toolbar-right {
+  flex: 0 1 auto;
+  justify-content: flex-end;
+}
+
+.composer-icon-button {
+  width: 32px;
+  height: 32px;
+  padding: 0;
+}
+
+.composer-tools-trigger {
+  height: 32px;
+}
+
+.composer-tool-button:disabled,
+.queued-intent button:disabled {
+  border-color: var(--color-border);
+  background: var(--color-surface-muted);
+  color: var(--color-text-disabled);
+  cursor: default;
+  opacity: 1;
+}
+
+.composer-readonly-state {
+  display: inline-flex;
+  min-width: 0;
+  max-width: 190px;
+  align-items: center;
+  gap: 4px;
+  border-radius: 8px;
+  padding: 4px 5px;
+  color: var(--color-text-muted);
+  font-size: 10px;
+  white-space: nowrap;
+}
+
+.composer-readonly-state strong {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--color-text);
+  font-weight: 650;
+  text-overflow: ellipsis;
+}
+
+.composer-model-state {
+  max-width: 220px;
+}
+
+.composer-send {
+  display: inline-flex;
+  width: 32px;
+  height: 32px;
+  min-height: 32px;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: center;
+  gap: 0;
+  overflow: hidden;
+  border: 1px solid var(--color-accent);
+  border-radius: 10px;
+  background: var(--color-accent);
+  padding: 0;
+  color: var(--color-accent-contrast);
+  cursor: pointer;
+}
+
+.composer-send:hover {
+  background: var(--color-accent-strong);
+}
+
+.composer-send:disabled {
+  border-color: var(--color-border-strong);
+  background: var(--color-surface-muted);
+  color: var(--color-text-disabled);
+  cursor: default;
+}
+
+.composer-stop {
+  border-color: var(--color-danger);
+  background: var(--color-danger);
+}
+
+.composer-stop:hover {
+  background: var(--color-danger-strong);
+}
+
+.composer-alternate-action:disabled {
+  color: var(--color-text-disabled);
+}
+
+.composer-status,
+.composer-error {
+  min-height: 16px;
+  padding: 3px 6px 0;
+  color: var(--color-text-muted);
+  font-size: 10px;
+  overflow-wrap: anywhere;
+}
+
+.composer-error {
+  color: var(--color-danger);
+}
+
+.composer-menu-anchor {
+  position: relative;
+  flex: 0 0 auto;
+}
+
+.composer-menu,
+.mention-menu {
+  position: absolute;
+  z-index: 12;
+  bottom: calc(100% + 8px);
+  max-height: min(380px, 52vh);
+  overflow-x: hidden;
+  overflow-y: auto;
+  border: 1px solid var(--color-border-strong);
+  border-radius: var(--radius-md);
+  background: var(--color-surface-raised);
+  box-shadow: var(--shadow-panel);
+  padding: 5px;
+}
+
+.composer-menu {
+  left: 0;
+  width: min(320px, calc(100vw - 32px));
+}
+
+.mention-menu {
+  right: 0;
+  left: 0;
+}
+
+.composer-menu-heading,
+.mention-heading {
+  position: sticky;
+  z-index: 1;
+  top: -5px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+  border-bottom: 1px solid var(--color-border);
+  background: var(--color-surface-raised);
+  padding: 6px 7px;
+  color: var(--color-text-muted);
+  font-size: 11px;
+  font-weight: 650;
+}
+
+.composer-menu-heading button,
+.mention-heading button {
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  padding: 3px 5px;
+  color: var(--color-text-muted);
+  cursor: pointer;
+}
+
+.composer-menu-entry {
+  display: contents;
+}
+
+.composer-menu-group-label,
+.mention-group > div {
+  padding: 8px 8px 3px;
+  color: var(--color-text-muted);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: .04em;
+  text-transform: uppercase;
+}
+
+.composer-menu-entry > button,
+.mention-group button {
+  display: grid;
+  width: 100%;
+  min-width: 0;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: center;
+  gap: 8px;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  padding: 7px 8px;
+  color: var(--color-text);
+  text-align: left;
+  cursor: pointer;
+}
+
+.mention-group button {
+  grid-template-columns: minmax(0, 1fr);
+  gap: 2px;
+}
+
+.composer-menu-entry > button:hover,
+.composer-menu-entry > button:focus-visible,
+.mention-group button:hover,
+.mention-group button:focus-visible,
+.mention-group button[aria-selected="true"] {
+  outline: 0;
+  background: var(--color-accent-soft);
+  box-shadow: inset 3px 0 var(--color-focus);
+}
+
+.composer-menu-entry > button > span,
+.mention-group button span,
+.mention-group button small {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.composer-menu-entry > button > span {
+  display: grid;
+  gap: 2px;
+}
+
+.composer-menu-entry strong {
+  font-size: 12px;
+}
+
+.composer-menu-entry small,
+.mention-group button small {
+  color: var(--color-text-muted);
+  font-size: 10px;
+}
+
+.composer-menu-state,
+.mention-state {
+  padding: 12px 8px;
+  color: var(--color-text-muted);
+  font-size: 12px;
+}
+
+.composer-menu-error {
+  color: var(--color-danger);
+}
+
+@media (max-width: 700px) {
+  .composer {
+    width: calc(100% - 20px);
+    margin-bottom: 10px;
+  }
+
+  .composer-state-label {
+    display: none;
+  }
+
+  .composer-readonly-state {
+    max-width: 112px;
+    padding-inline: 2px;
+  }
+
+  .composer-model-state {
+    max-width: 128px;
+  }
+}
+
+@media (max-width: 520px) {
+  .composer {
+    width: calc(100% - 14px);
+    padding-inline: 7px;
+  }
+
+  .composer-footer {
+    gap: 4px;
+  }
+
+  .composer-toolbar-group {
+    gap: 3px;
+  }
+
+  .composer-tools-trigger {
+    padding-inline: 7px;
+  }
+
+  .composer-readonly-state svg {
+    display: none;
+  }
+
+  .composer-readonly-state {
+    max-width: 82px;
+  }
+
+  .composer-model-state {
+    max-width: 96px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .composer {
+    transition: none;
+  }
+}
+
+@media (forced-colors: active) {
+  .composer,
+  .composer-chip,
+  .composer-menu,
+  .mention-menu,
+  .queued-intent {
+    border: 1px solid CanvasText;
+    forced-color-adjust: auto;
+  }
+
+  .composer:focus-within,
+  .composer-menu-entry > button:focus-visible,
+  .mention-group button[aria-selected="true"] {
+    outline: 2px solid Highlight;
+    outline-offset: 2px;
+    box-shadow: none;
+  }
+}

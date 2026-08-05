@@ -64,6 +64,8 @@ interface VisualCase {
   nonModalFloatingSurfacesPassed: boolean;
   panelToggleOrder: string;
   toolSidebarPosition: string;
+  composerMenuOpenCount: number;
+  composerMenuObscuredActionCount: number;
 }
 
 test("Chat-first Gate and supplemental visual matrices remain structurally safe", async ({ browserName }) => {
@@ -90,6 +92,7 @@ test("Chat-first Gate and supplemental visual matrices remain structurally safe"
     const supplementalCases: VisualCase[] = [];
     for (const viewport of viewports) {
       supplementalCases.push(await captureCase(page, supplementalRoot, "new", "new", viewport));
+      supplementalCases.push(await captureCase(page, supplementalRoot, "composer-add-menu", "new", viewport, "add"));
     }
 
     const gateCases: VisualCase[] = [];
@@ -114,7 +117,7 @@ test("Chat-first Gate and supplemental visual matrices remain structurally safe"
         supplementalCases.push(await captureCase(page, supplementalRoot, fixture, fixture, viewport));
       }
     }
-    expect(supplementalCases).toHaveLength(30);
+    expect(supplementalCases).toHaveLength(33);
     writeManifest(
       path.join(supplementalRoot, "supplemental-visual-manifest.json"),
       "chat-first-supplemental-visual-matrix",
@@ -140,6 +143,8 @@ test("Chat-first Gate and supplemental visual matrices remain structurally safe"
       expect(entry.nonModalFloatingSurfacesPassed, `${entry.caseId}: floating panels must remain non-modal`).toBe(true);
       expect(entry.panelToggleOrder, `${entry.caseId}: panel toggle order`).toBe("workspace-summary-overlay,workspace-bottom-panel,workspace-tool-sidebar");
       expect(entry.toolSidebarPosition, `${entry.caseId}: sidebar positioning mode`).toBe(entry.viewport.width > 1120 ? "relative" : "absolute");
+      expect(entry.composerMenuOpenCount, `${entry.caseId}: Composer menu state`).toBe(entry.caseId.startsWith("composer-add-menu-") ? 1 : 0);
+      expect(entry.composerMenuObscuredActionCount, `${entry.caseId}: obscured Composer menu action`).toBe(0);
     }
   } finally {
     await closeElectron(application);
@@ -154,6 +159,7 @@ async function captureCase(
   name: string,
   fixture: string,
   viewport: (typeof viewports)[number],
+  composerMenu: "add" | null = null,
 ): Promise<VisualCase> {
   await page.setViewportSize({ width: viewport.width, height: viewport.height });
   await page.evaluate((nextFixture) => {
@@ -164,7 +170,16 @@ async function captureCase(
     fixtures.setFixture(nextFixture);
   }, fixture);
   await waitForFixture(page, fixture);
+  const existingComposerMenu = page.locator(".composer-menu");
+  if (await existingComposerMenu.count()) {
+    await page.keyboard.press("Escape");
+    await expect(existingComposerMenu).toHaveCount(0);
+  }
   const timelineStageWidthBefore = await configurePanels(page, fixture, viewport.width);
+  if (composerMenu === "add") {
+    await page.getByRole("button", { name: "Add context" }).click();
+    await expect(page.getByRole("menu", { name: "添加上下文" })).toBeVisible();
+  }
 
   const caseId = `${name}-${viewport.name}-${viewport.width}x${viewport.height}`;
   const screenshotPath = path.join(root, "screenshots", `${caseId}.png`);
@@ -201,6 +216,13 @@ async function captureCase(
         element.getAttribute("aria-labelledby") ?? element.textContent;
       return !label?.trim();
     });
+    const composerMenuObscuredActionCount = [...document.querySelectorAll<HTMLElement>(".composer-menu button")]
+      .filter(visible)
+      .filter((element) => {
+        const rect = element.getBoundingClientRect();
+        const topmost = document.elementFromPoint(rect.left + rect.width / 2, rect.top + rect.height / 2);
+        return Boolean(topmost && !element.contains(topmost));
+      }).length;
     const assistantIds = [...document.querySelectorAll<HTMLElement>("[data-assistant-message-id]")]
       .filter(visible)
       .map((element) => element.dataset.assistantMessageId ?? "");
@@ -256,6 +278,8 @@ async function captureCase(
       nonModalFloatingSurfacesPassed: [summary, bottomPanel].every((surface) => surface && surface.getAttribute("role") !== "dialog" && !surface.hasAttribute("aria-modal")),
       panelToggleOrder,
       toolSidebarPosition: toolSidebar ? getComputedStyle(toolSidebar).position : "missing",
+      composerMenuOpenCount: [...document.querySelectorAll<HTMLElement>(".composer-menu")].filter(visible).length,
+      composerMenuObscuredActionCount,
     };
   }, timelineStageWidthBefore);
 
