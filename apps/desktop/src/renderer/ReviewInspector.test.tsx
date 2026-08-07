@@ -23,6 +23,7 @@ describe("read-only review inspector", () => {
 
   it("routes artifact and human-decision commands through the supplied boundary", async () => {
     const commands: ReviewCommands = {
+      mutateChanges: vi.fn(async () => "Git action completed."),
       previewArtifact: vi.fn(async () => "Preview ready."),
       verifyArtifact: vi.fn(async () => "Identity verified."),
       exportArtifact: vi.fn(async () => "Export canceled."),

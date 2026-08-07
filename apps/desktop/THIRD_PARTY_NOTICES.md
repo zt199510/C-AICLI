@@ -2,9 +2,9 @@
 
 Generated from `package-lock.json`. Do not edit manually.
 
-- Packages: 353
+- Packages: 355
 - Registry sources outside npmjs.org: 0
-- License summary: (MIT OR CC0-1.0) (1), 0BSD (1), Apache-2.0 (22), BlueOak-1.0.0 (5), BSD-2-Clause (14), BSD-3-Clause (6), ISC (16), MIT (275), MIT-0 (1), MPL-2.0 (12)
+- License summary: (MIT OR CC0-1.0) (1), 0BSD (1), Apache-2.0 (22), BlueOak-1.0.0 (5), BSD-2-Clause (14), BSD-3-Clause (6), ISC (16), MIT (277), MIT-0 (1), MPL-2.0 (12)
 
 The packaged Electron runtime also carries Electron's `LICENSE` and Chromium's `LICENSES.chromium.html` files next to the executable.
 
@@ -134,6 +134,8 @@ The packaged Electron runtime also carries Electron's `LICENSE` and Chromium's `
 | @vitest/spy | 4.1.10 | MIT |
 | @vitest/utils | 4.1.10 | MIT |
 | @xmldom/xmldom | 0.9.10 | MIT |
+| @xterm/addon-fit | 0.11.0 | MIT |
+| @xterm/xterm | 6.0.0 | MIT |
 | acorn | 8.17.0 | MIT |
 | acorn-jsx | 5.3.2 | MIT |
 | agent-base | 7.1.4 | MIT |

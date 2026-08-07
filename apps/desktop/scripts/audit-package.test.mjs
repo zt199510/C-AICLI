@@ -11,7 +11,7 @@ afterEach(async () => { await Promise.all(roots.splice(0).map((root) => rm(root,
 describe("packaged Desktop audit", () => {
   it("accepts the reviewed payload and rejects source/test leakage", async () => {
     const root = await fixture();
-    await expect(auditDesktopPackage(root)).resolves.toMatchObject({ forbiddenPayloadCount: 0, reviewedInvokeChannels: 39, reviewedEventChannels: 2 });
+    await expect(auditDesktopPackage(root)).resolves.toMatchObject({ forbiddenPayloadCount: 0, reviewedInvokeChannels: 48, reviewedEventChannels: 2 });
     await mkdir(path.join(root, "src"));
     await writeFile(path.join(root, "src", "leak.ts"), "secret test hook");
     await expect(auditDesktopPackage(root)).rejects.toThrow(/Forbidden packaged payload/);

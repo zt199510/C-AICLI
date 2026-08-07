@@ -60,25 +60,27 @@ test("long timeline, bounded diff, and terminal output survive repeated reloads"
 
     const toolSidebar = page.getByRole("button", { name: "Toggle workspace tool sidebar" });
     if ((await toolSidebar.getAttribute("aria-pressed")) === "false") await toolSidebar.click();
-    await page.getByRole("button", { name: "Changes", exact: true }).click();
+    await page.getByRole("tab", { name: "审阅", exact: true }).click();
     await expect(page.getByText("Showing a bounded result set.")).toBeVisible();
     await expect(page.getByText("Diff projection was truncated at the existing bound.")).toBeVisible();
-    await expect(page.locator(".review-section li")).toHaveCount(50);
+    const changedFileCount = await page.evaluate(async () => (await window.caicli.getChanges({})).data?.changedFiles.length ?? 0);
+    expect(changedFileCount).toBe(50);
 
-    await page.getByRole("button", { name: "Terminal", exact: true }).click();
-    await page.getByRole("button", { name: "Open terminal" }).click();
-    await page.getByRole("textbox", { name: "Terminal input" }).fill("long-output");
-    await page.getByRole("button", { name: "Send", exact: true }).click();
-    await expect(page.getByRole("status").filter({ hasText: "output truncated" })).toBeVisible();
-    const terminal = page.locator(".terminal-output");
-    await expect(terminal).toContainText("[earlier output truncated]");
-    await expect(terminal).toContainText("long-output-tail-sentinel");
+    const bottomPanel = page.getByRole("button", { name: "Toggle workspace bottom panel" });
+    if ((await bottomPanel.getAttribute("aria-pressed")) === "false") await bottomPanel.click();
+    await expect(bottomPanel).toHaveAttribute("aria-pressed", "true");
+    await page.getByRole("button", { name: "新建终端", exact: true }).click();
+    const terminalInput = page.getByLabel("Terminal input");
+    await terminalInput.pressSequentially("long-output");
+    await terminalInput.press("Enter");
+    await expect(page.locator(".terminal-session-status")).toContainText("较早输出已截断");
+    await expect(page.locator(".xterm-rows")).toContainText("long-output-tail-sentinel");
     const projection = await page.evaluate(async () => window.caicli.getTerminal({ sessionId: "terminal_fixture", afterCursor: 0 }));
     expect(projection.data?.cursor).toBe(70 * 1024);
     expect(projection.data?.output.length).toBeLessThanOrEqual(64 * 1024);
-    await page.getByRole("button", { name: "Cancel process" }).click();
-    await expect(page.getByText(/exited/)).toBeVisible();
-    await page.getByRole("button", { name: "Close terminal" }).click();
+    await page.getByRole("button", { name: /Ctrl\+C/ }).click();
+    await expect(page.locator(".terminal-session-status")).toContainText("exited");
+    await page.getByRole("button", { name: "关闭", exact: true }).click();
 
     postWorkloadIdle = await captureSamplingWindow(application, idleRecoverySeconds, sampleIntervalSeconds);
     retention = calculateRetention(warmBaseline, postWorkloadIdle, reloadSamples);

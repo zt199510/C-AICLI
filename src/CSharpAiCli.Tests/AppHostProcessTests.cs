@@ -215,7 +215,8 @@ public sealed class AppHostProcessTests
         await WriteRequest(input, 4, DesktopProtocolDefinition.ChangesGetMethod,
             new { schemaVersion = 1 });
         using JsonDocument changes = await ReadFrame(output);
-        Assert.True(changes.RootElement.GetProperty("result").GetProperty("succeeded").GetBoolean());
+        Assert.False(changes.RootElement.GetProperty("result").GetProperty("succeeded").GetBoolean());
+        Assert.Equal("git-command-failed", changes.RootElement.GetProperty("result").GetProperty("error").GetProperty("code").GetString());
 
         await WriteRequest(input, 5, DesktopProtocolDefinition.ReportListMethod,
             new { schemaVersion = 1, pageSize = 50 });

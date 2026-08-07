@@ -32,6 +32,7 @@ export function TimelineView({
   onApproval,
   onResume,
   onRestart,
+  onMessageAction,
   onLoadMore,
 }: TimelineViewProps) {
   const items = detail?.timeline ?? [];
@@ -105,6 +106,7 @@ export function TimelineView({
           onApproval={onApproval}
           onResume={onResume}
           onRestart={onRestart}
+          onMessageAction={onMessageAction}
         />
       )}
       {controls}
@@ -137,6 +139,7 @@ function TimelineBrowser({
   onApproval,
   onResume,
   onRestart,
+  onMessageAction,
 }: {
   readonly detail: ThreadDetailData;
   readonly optimisticExchanges: readonly OptimisticExchange[];
@@ -168,6 +171,7 @@ function TimelineBrowser({
           onApproval={onApproval}
           onResume={onResume}
           onRestart={onRestart}
+          onMessageAction={onMessageAction}
         />
       ) : (
         <TurnProjection key={mode} items={detail.timeline} />

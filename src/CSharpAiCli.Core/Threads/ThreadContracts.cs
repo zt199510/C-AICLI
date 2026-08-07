@@ -123,8 +123,9 @@ public static class ThreadSourceKind
     public const string Trace = "trace";
     public const string Run = "run";
     public const string Artifact = "artifact";
+    public const string ThreadMessage = "thread-message";
 
-    public static bool IsKnown(string? value) => value is Session or Job or Queue or Report or Trace or Run or Artifact;
+    public static bool IsKnown(string? value) => value is Session or Job or Queue or Report or Trace or Run or Artifact or ThreadMessage;
 }
 
 public static class ThreadSourceAvailability

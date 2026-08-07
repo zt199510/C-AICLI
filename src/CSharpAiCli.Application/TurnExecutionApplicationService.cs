@@ -63,7 +63,7 @@ public sealed class TurnExecutionApplicationService
         if (intent.WorkspaceId != workspace.Data.WorkspaceId || intent.WorkspaceRootIdentity != workspace.Data.RootPath ||
             intent.EffectiveModel != request.Snapshot.Configuration.Model || intent.ApprovalMode != request.Snapshot.Configuration.ApprovalMode.ToString())
             return Failure("turn-input-stale", ApplicationErrorCategory.Conflict, "Composer input authority changed before start.");
-        ApplicationError? contextError = RevalidateContext(intent, workspace.Data.RootPath);
+        ApplicationError? contextError = RevalidateContext(intent, workspace.Data);
         if (contextError is not null) return ApplicationResult<TurnExecutionStateProjection>.Failure(contextError);
 
         ComposerIntentStoreResult claimed = composer.Claim(workspace.Data.WorkspaceId, workspace.Data.RootPath, request.ThreadId,
@@ -82,7 +82,8 @@ public sealed class TurnExecutionApplicationService
             Mode = "desktop-write",
             SourceCorrelation = intent.IntentId,
             ExecutionInput = intent,
-            CanonicalInputSha256 = claim.CanonicalInputSha256
+            CanonicalInputSha256 = claim.CanonicalInputSha256,
+            SourcePointers = intent.SourcePointer is null ? [] : [intent.SourcePointer]
         };
         string prompt = ApplicationProjection.Safe(intent.Prompt, ThreadPersistenceLimits.MaxTimelineSummaryBytes);
         TimelineItemRecord message = Item(read.Aggregate.Record, turn.TurnId, "turn-start-user", TimelineItemType.UserMessage,
@@ -537,11 +538,26 @@ public sealed class TurnExecutionApplicationService
         return now < boundary ? boundary : now;
     }
 
-    private static ApplicationError? RevalidateContext(PendingComposerIntentRecord intent, string root)
+    private static ApplicationError? RevalidateContext(PendingComposerIntentRecord intent, WorkspaceSnapshotProjection workspace)
     {
-        string fullRoot = Path.GetFullPath(root);
+        string fullRoot = Path.GetFullPath(workspace.RootPath);
         foreach (ComposerContextReferenceRecord context in intent.Context)
         {
+            if (DesktopContextSnapshotStore.IsExternal(context.RelativePath))
+            {
+                try
+                {
+                    string snapshot = DesktopContextSnapshotStore.Resolve(workspace, context.RelativePath);
+                    if (!File.Exists(snapshot)) return new ApplicationError("context-reference-stale", ApplicationErrorCategory.Conflict, "External context snapshot is unavailable.", false);
+                    using FileStream stream = new(snapshot, FileMode.Open, FileAccess.Read, FileShare.Read);
+                    string hash = Convert.ToHexStringLower(System.Security.Cryptography.SHA256.HashData(stream));
+                    if (!string.Equals(hash, context.ObservedIdentity, StringComparison.Ordinal))
+                        return new ApplicationError("context-reference-stale", ApplicationErrorCategory.Conflict, "External context snapshot changed before execution.", false);
+                    continue;
+                }
+                catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or ArgumentException or NotSupportedException)
+                { return new ApplicationError("context-reference-stale", ApplicationErrorCategory.Conflict, "External context snapshot is unavailable.", false); }
+            }
             string path = Path.GetFullPath(Path.Combine(fullRoot, context.RelativePath));
             if (!path.StartsWith(Path.TrimEndingDirectorySeparator(fullRoot) + Path.DirectorySeparatorChar,
                     OperatingSystem.IsWindows() ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal) ||

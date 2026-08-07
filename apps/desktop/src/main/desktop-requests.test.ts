@@ -4,6 +4,7 @@ import {
   ARTIFACT_GET_REQUEST,
   ARTIFACT_LIST_REQUEST,
   CHANGES_GET_REQUEST,
+  CHANGES_MUTATE_REQUEST,
   REPORT_GET_REQUEST,
   REPORT_LIST_REQUEST,
   REVIEW_LIST_PAGE_SIZE,
@@ -22,11 +23,13 @@ describe("reviewed desktop request descriptors", () => {
     expect([
       THREAD_LIST_REQUEST.method, THREAD_GET_REQUEST.method, THREAD_CREATE_REQUEST.method,
       THREAD_RENAME_REQUEST.method, THREAD_ARCHIVE_REQUEST.method, CHANGES_GET_REQUEST.method,
+      CHANGES_MUTATE_REQUEST.method,
       REPORT_LIST_REQUEST.method, REPORT_GET_REQUEST.method, ARTIFACT_LIST_REQUEST.method,
       ARTIFACT_GET_REQUEST.method,
     ]).toEqual([
       DESKTOP_METHODS.ThreadListMethod, DESKTOP_METHODS.ThreadGetMethod, DESKTOP_METHODS.ThreadCreateMethod,
       DESKTOP_METHODS.ThreadRenameMethod, DESKTOP_METHODS.ThreadArchiveMethod, DESKTOP_METHODS.ChangesGetMethod,
+      DESKTOP_METHODS.ChangesMutateMethod,
       DESKTOP_METHODS.ReportListMethod, DESKTOP_METHODS.ReportGetMethod, DESKTOP_METHODS.ArtifactListMethod,
       DESKTOP_METHODS.ArtifactGetMethod,
     ]);

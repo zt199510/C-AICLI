@@ -70,7 +70,7 @@ for (const scenario of scenarios) {
         await queuePrompt(page, "[pause] crash before a controlled write");
         await waitForThreadStatus(page, threadId, "running");
         await killAppHost(value, application);
-        await expect(page.getByRole("heading", { name: "AppHost stopped unexpectedly" })).toBeVisible();
+        await expect(page.getByText("AppHost stopped unexpectedly", { exact: true }).first()).toBeVisible();
         await expect(page.getByRole("button", { name: "Restart AppHost" })).toBeEnabled();
         await expect(page.getByText("Task completed successfully.")).toHaveCount(0);
         await expect.poll(async () => page.evaluate(async () => (await window.caicli.getRuntimeStatus()).code)).toBe("apphost-exited");

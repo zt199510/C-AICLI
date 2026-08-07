@@ -430,6 +430,8 @@ internal static class DesktopProtocolMapper
         RecoveryRequired = value.RecoveryRequired
     };
 
+    internal static ApprovalRequestData MapApproval(DurableApprovalProjection value) => Map(value);
+
     private static ApprovalRequestData Map(DurableApprovalProjection value) => new()
     {
         RequestId = value.RequestId,

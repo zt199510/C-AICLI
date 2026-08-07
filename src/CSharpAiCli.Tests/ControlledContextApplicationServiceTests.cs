@@ -49,6 +49,34 @@ public sealed class ControlledContextApplicationServiceTests
         finally { File.Delete(outside); }
     }
 
+    [Fact]
+    public void External_file_is_a_task_scoped_read_only_content_hash_snapshot()
+    {
+        using TempWorkspace temp = new();
+        string managed = System.IO.Path.Combine(temp.Path, "managed-attachments");
+        ControlledContextApplicationService service = new(managed);
+        WorkspaceSnapshotProjection workspace = temp.Snapshot();
+        string source = System.IO.Path.Combine(System.IO.Path.GetTempPath(), "external-" + Guid.NewGuid().ToString("N") + ".txt");
+        File.WriteAllText(source, "snapshot-v1");
+        try
+        {
+            string threadId = ThreadIdentity.CreateThreadId();
+            ApplicationResult<ControlledContextDescriptor> resolved = service.ResolveNativePath(workspace, source, "file", threadId);
+            Assert.True(resolved.Succeeded, resolved.Error?.SafeMessage);
+            ControlledContextDescriptor descriptor = Assert.IsType<ControlledContextDescriptor>(resolved.Data);
+            Assert.StartsWith(DesktopContextSnapshotStore.RelativePrefix + threadId, descriptor.RelativePath);
+            string snapshot = DesktopContextSnapshotStore.Resolve(workspace, descriptor.RelativePath, managed);
+            Assert.True(File.GetAttributes(snapshot).HasFlag(FileAttributes.ReadOnly));
+            Assert.Equal("snapshot-v1", File.ReadAllText(snapshot));
+            File.WriteAllText(source, "source-changed");
+            Assert.True(service.Revalidate(workspace, descriptor.SelectionId).Succeeded);
+            File.SetAttributes(snapshot, FileAttributes.Normal);
+            File.WriteAllText(snapshot, "tampered");
+            Assert.Equal(ApplicationErrorCategory.Conflict, service.Revalidate(workspace, descriptor.SelectionId).Error!.Category);
+        }
+        finally { File.Delete(source); }
+    }
+
     private sealed class TempWorkspace : IDisposable
     {
         public TempWorkspace()

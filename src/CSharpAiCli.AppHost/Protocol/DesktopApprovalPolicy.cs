@@ -27,6 +27,10 @@ internal sealed class DesktopApprovalPolicy(
                 Approved: false,
                 Status: "dangerous-shell-denied",
                 SafeMessage: "Dangerous shell commands are denied by Desktop policy."),
+            ToolRiskLevel.Write or ToolRiskLevel.Shell when input.Snapshot.Configuration.ApprovalMode == ApprovalMode.Never =>
+                ApprovalDecision.Deny("Desktop is in read-only approval mode."),
+            ToolRiskLevel.Write or ToolRiskLevel.Shell when input.Snapshot.Configuration.ApprovalMode == ApprovalMode.OnFailure =>
+                ApprovalDecision.Approve("Approved by trusted-local Desktop mode inside the guarded workspace."),
             ToolRiskLevel.Write or ToolRiskLevel.Shell => RequestDurableDecision(request),
             _ => throw new ArgumentOutOfRangeException(
                 nameof(request),

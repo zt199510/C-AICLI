@@ -3,13 +3,16 @@ import type { AssistantMessageBlock } from "./conversation-block-projector";
 import { AssistantStatusLine, processingDuration } from "./AssistantStatusLine";
 import { MarkdownPreview } from "./MarkdownPreview";
 import { RetryExhaustedActions } from "./RecoveryActions";
+import type { TimelineItemData } from "../generated/desktop-contracts";
 
 export function AssistantMessage({
   block,
   onRestart,
+  onMessageAction,
 }: {
   readonly block: AssistantMessageBlock;
   readonly onRestart?: (turnId: string, turnRevision: number) => Promise<string | null>;
+  readonly onMessageAction?: (item: TimelineItemData, action: "edit" | "branch") => void;
 }) {
   const duration = processingDuration(block);
   const safeFailure = block.turn.provider.safeErrorMessage ?? block.turn.errorCode;
@@ -35,6 +38,7 @@ export function AssistantMessage({
         ) : null}
         <AssistantStatusLine block={block} />
         {duration ? <div className="assistant-duration">{duration}</div> : null}
+        {block.content && onMessageAction && block.auditItems.at(-1) ? <div className="message-actions"><button type="button" onClick={() => onMessageAction(block.auditItems.at(-1)!, "branch")}>从此分支</button></div> : null}
         {block.lifecycle === "retry-exhausted" ? (
           <RetryExhaustedActions block={block} onRestart={onRestart} />
         ) : null}

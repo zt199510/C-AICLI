@@ -14,6 +14,7 @@ import {
   isTurnResumeParams,
   isTurnRestartParams,
   isTurnExecutionStateResult,
+  isSubagentListParams, isSubagentStartParams, isSubagentMutationParams, isSubagentApprovalResolveParams, isSubagentResult,
   isContextResolveParams,
   isContextResolveResult,
   isContextSearchParams,
@@ -23,10 +24,11 @@ import {
   isArtifactListParams,
   isArtifactListResult,
   isTerminalOpenParams, isTerminalInputParams, isTerminalResizeParams, isTerminalMutationParams, isTerminalGetParams, isTerminalStateResult,
+  isTerminalProfilesGetParams, isTerminalProfileListResult,
   isArtifactReviewParams, isArtifactReviewResult, isArtifactExportParams, isArtifactExportResult,
   isGerberReviewParams, isGerberDecisionParams, isGerberReviewResult,
-  isChangesGetParams,
-  isChangesGetResult,
+  isChangesGetParams, isChangesMutateParams,
+  isChangesGetResult, isChangesMutateResult,
   isInitializeResult,
   isReportGetParams,
   isReportGetResult,
@@ -48,10 +50,11 @@ import {
   type ArtifactListParams,
   type ArtifactListResult,
   type TerminalOpenParams, type TerminalInputParams, type TerminalResizeParams, type TerminalMutationParams, type TerminalGetParams, type TerminalStateResult,
+  type TerminalProfilesGetParams, type TerminalProfileListResult,
   type ArtifactReviewParams, type ArtifactReviewResult, type ArtifactExportParams, type ArtifactExportResult,
   type GerberReviewParams, type GerberDecisionParams, type GerberReviewResult,
-  type ChangesGetParams,
-  type ChangesGetResult,
+  type ChangesGetParams, type ChangesMutateParams,
+  type ChangesGetResult, type ChangesMutateResult,
   type CatalogListParams,
   type CatalogListResult,
   type ComposerClearParams,
@@ -84,6 +87,7 @@ import {
   type ThreadRenameParams,
   type ThreadSummaryResult,
   type WorkspaceOpenResult,
+  type SubagentListParams, type SubagentStartParams, type SubagentMutationParams, type SubagentApprovalResolveParams, type SubagentResult,
 } from "../generated/desktop-contracts";
 
 export type TimeoutClass = "initialize" | "query" | "mutation" | "shutdown";
@@ -215,6 +219,28 @@ export const CHANGES_GET_REQUEST = descriptor<ChangesGetParams, ChangesGetResult
   isChangesGetParams,
   isChangesGetResult,
 );
+
+export const SUBAGENT_LIST_REQUEST = descriptor<SubagentListParams, SubagentResult>(
+  DESKTOP_METHODS.SubagentListMethod, DESKTOP_METHOD_METADATA.SubagentListMethod.timeout, isSubagentListParams, isSubagentResult,
+);
+export const SUBAGENT_START_REQUEST = descriptor<SubagentStartParams, SubagentResult>(
+  DESKTOP_METHODS.SubagentStartMethod, DESKTOP_METHOD_METADATA.SubagentStartMethod.timeout, isSubagentStartParams, isSubagentResult,
+);
+export const SUBAGENT_CANCEL_REQUEST = descriptor<SubagentMutationParams, SubagentResult>(
+  DESKTOP_METHODS.SubagentCancelMethod, DESKTOP_METHOD_METADATA.SubagentCancelMethod.timeout, isSubagentMutationParams, isSubagentResult,
+);
+export const SUBAGENT_TAKEOVER_REQUEST = descriptor<SubagentMutationParams, SubagentResult>(
+  DESKTOP_METHODS.SubagentTakeoverMethod, DESKTOP_METHOD_METADATA.SubagentTakeoverMethod.timeout, isSubagentMutationParams, isSubagentResult,
+);
+export const SUBAGENT_APPROVAL_RESOLVE_REQUEST = descriptor<SubagentApprovalResolveParams, SubagentResult>(
+  DESKTOP_METHODS.SubagentApprovalResolveMethod, DESKTOP_METHOD_METADATA.SubagentApprovalResolveMethod.timeout, isSubagentApprovalResolveParams, isSubagentResult,
+);
+export const CHANGES_MUTATE_REQUEST = descriptor<ChangesMutateParams, ChangesMutateResult>(
+  DESKTOP_METHODS.ChangesMutateMethod,
+  DESKTOP_METHOD_METADATA.ChangesMutateMethod.timeout,
+  isChangesMutateParams,
+  isChangesMutateResult,
+);
 export const REPORT_LIST_REQUEST = descriptor<ReportListParams, ReportListResult>(
   DESKTOP_METHODS.ReportListMethod,
   DESKTOP_METHOD_METADATA.ReportListMethod.timeout,
@@ -245,6 +271,7 @@ export const TERMINAL_RESIZE_REQUEST = descriptor<TerminalResizeParams, Terminal
 export const TERMINAL_CANCEL_REQUEST = descriptor<TerminalMutationParams, TerminalStateResult>(DESKTOP_METHODS.TerminalCancelMethod, "mutation", isTerminalMutationParams, isTerminalStateResult);
 export const TERMINAL_CLOSE_REQUEST = descriptor<TerminalMutationParams, TerminalStateResult>(DESKTOP_METHODS.TerminalCloseMethod, "mutation", isTerminalMutationParams, isTerminalStateResult);
 export const TERMINAL_GET_REQUEST = descriptor<TerminalGetParams, TerminalStateResult>(DESKTOP_METHODS.TerminalGetMethod, "query", isTerminalGetParams, isTerminalStateResult);
+export const TERMINAL_PROFILES_GET_REQUEST = descriptor<TerminalProfilesGetParams, TerminalProfileListResult>(DESKTOP_METHODS.TerminalProfilesGetMethod, "query", isTerminalProfilesGetParams, isTerminalProfileListResult);
 export const ARTIFACT_PREVIEW_REQUEST = descriptor<ArtifactReviewParams, ArtifactReviewResult>(DESKTOP_METHODS.ArtifactPreviewMethod, "query", isArtifactReviewParams, isArtifactReviewResult);
 export const ARTIFACT_EXPORT_REQUEST = descriptor<ArtifactExportParams, ArtifactExportResult>(DESKTOP_METHODS.ArtifactExportMethod, "mutation", isArtifactExportParams, isArtifactExportResult);
 export const ARTIFACT_VERIFY_REQUEST = descriptor<ArtifactReviewParams, ArtifactReviewResult>(DESKTOP_METHODS.ArtifactVerifyMethod, "query", isArtifactReviewParams, isArtifactReviewResult);

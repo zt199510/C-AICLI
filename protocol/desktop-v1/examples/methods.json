@@ -5,7 +5,7 @@
       "params": {
         "schemaVersion": 1,
         "protocolVersion": "desktop-v1",
-        "contractSha256": "feb1f3a77e0d0f3a085212b613d0bb8805986c774a6978294649fea0dc0960d9",
+        "contractSha256": "12b21308ab7c9ea9a33c739eafc7b9ab4fc46bcff6777030f46f9ca6df2543b9",
         "clientName": "desktop-example",
         "clientVersion": "0.6.0",
         "clientInstanceId": "example-client-1",
@@ -14,11 +14,11 @@
       "result": {
         "schemaVersion": 1,
         "protocolVersion": "desktop-v1",
-        "contractSha256": "feb1f3a77e0d0f3a085212b613d0bb8805986c774a6978294649fea0dc0960d9",
+        "contractSha256": "12b21308ab7c9ea9a33c739eafc7b9ab4fc46bcff6777030f46f9ca6df2543b9",
         "serverVersion": "0.6.0",
         "serverInstanceId": "server_0123456789abcdef01234567",
         "negotiatedCapabilities": ["framed-json-rpc", "workspace-session", "application-outcome", "composer.controlled-context", "turn.write-path", "terminal.user-session", "artifact.review", "gerber.review"],
-        "methods": ["app.initialize", "app.cancel", "app.shutdown", "workspace.open", "thread.list", "thread.get", "thread.create", "thread.rename", "thread.archive", "thread.delete", "catalog.list", "context.search", "context.resolve", "composer.get", "composer.enqueue", "composer.clear", "turn.start", "turn.cancel", "approval.resolve", "turn.resume", "turn.restart", "changes.get", "report.list", "report.get", "artifact.list", "artifact.get", "terminal.open", "terminal.input", "terminal.resize", "terminal.cancel", "terminal.close", "terminal.get", "artifact.preview", "artifact.export", "artifact.verify", "gerber.review.get", "gerber.preview", "gerber.accept", "gerber.reject"],
+        "methods": ["app.initialize", "app.cancel", "app.shutdown", "workspace.open", "thread.list", "thread.get", "thread.create", "thread.rename", "thread.archive", "thread.delete", "catalog.list", "context.search", "context.resolve", "composer.get", "composer.enqueue", "composer.clear", "turn.start", "turn.cancel", "approval.resolve", "subagent.list", "subagent.start", "subagent.cancel", "subagent.takeover", "subagent.approval.resolve", "turn.resume", "turn.restart", "changes.get", "report.list", "report.get", "artifact.list", "artifact.get", "terminal.open", "terminal.input", "terminal.resize", "terminal.cancel", "terminal.close", "terminal.get", "terminal.profiles.get", "artifact.preview", "artifact.export", "artifact.verify", "gerber.review.get", "gerber.preview", "gerber.accept", "gerber.reject"],
         "notifications": [],
         "limits": {
           "maxHeaderBytes": 8192,
@@ -178,6 +178,36 @@
       "result": { "schemaVersion": 1, "succeeded": false, "data": null, "error": { "code": "changes-unavailable", "category": "unavailable", "safeMessage": "Changes are unavailable.", "retryable": true }, "diagnostics": [], "truncated": false }
     },
     {
+      "method": "changes.mutate",
+      "params": { "schemaVersion": 1, "workspaceId": "workspace_0123456789abcdef", "repositoryId": "repo_0123456789abcdef", "expectedRevision": "revision_0123456789abcdef", "action": "stage", "path": "src/example.ts", "area": "unstaged", "hunkId": null, "message": null, "setUpstream": false, "confirmed": true, "clientMutationId": "changes-stage-example-1" },
+      "result": { "schemaVersion": 1, "succeeded": false, "data": null, "error": { "code": "changes-stale", "category": "conflict", "safeMessage": "Changes changed before the mutation could be applied.", "retryable": false }, "diagnostics": [], "truncated": false }
+    },
+    {
+      "method": "subagent.list",
+      "params": { "schemaVersion": 1, "parentThreadId": "thread_0123456789abcdef01234567" },
+      "result": { "schemaVersion": 1, "succeeded": true, "data": { "parentThreadId": "thread_0123456789abcdef01234567", "maxAgents": 3, "agents": [] }, "error": null, "diagnostics": [], "truncated": false }
+    },
+    {
+      "method": "subagent.start",
+      "params": { "schemaVersion": 1, "parentThreadId": "thread_0123456789abcdef01234567", "prompt": "Inspect the tests", "mode": "read-only", "confirmed": true, "clientMutationId": "subagent-start-1" },
+      "result": { "schemaVersion": 1, "succeeded": false, "data": null, "error": { "code": "subagent-parent-missing", "category": "not-found", "safeMessage": "Parent task was not found.", "retryable": false }, "diagnostics": [], "truncated": false }
+    },
+    {
+      "method": "subagent.cancel",
+      "params": { "schemaVersion": 1, "agentId": "agent_0123456789abcdef01234567", "confirmed": true, "clientMutationId": "subagent-cancel-1" },
+      "result": { "schemaVersion": 1, "succeeded": false, "data": null, "error": { "code": "subagent-not-found", "category": "not-found", "safeMessage": "Sub-agent was not found.", "retryable": false }, "diagnostics": [], "truncated": false }
+    },
+    {
+      "method": "subagent.takeover",
+      "params": { "schemaVersion": 1, "agentId": "agent_0123456789abcdef01234567", "confirmed": true, "clientMutationId": "subagent-takeover-1" },
+      "result": { "schemaVersion": 1, "succeeded": false, "data": null, "error": { "code": "subagent-not-found", "category": "not-found", "safeMessage": "Sub-agent was not found.", "retryable": false }, "diagnostics": [], "truncated": false }
+    },
+    {
+      "method": "subagent.approval.resolve",
+      "params": { "schemaVersion": 1, "agentId": "agent_0123456789abcdef01234567", "decision": "deny", "clientMutationId": "subagent-approval-1" },
+      "result": { "schemaVersion": 1, "succeeded": false, "data": null, "error": { "code": "subagent-approval-stale", "category": "conflict", "safeMessage": "Sub-agent approval is stale.", "retryable": false }, "diagnostics": [], "truncated": false }
+    },
+    {
       "method": "report.list",
       "params": { "schemaVersion": 1, "pageSize": 50 },
       "result": { "schemaVersion": 1, "succeeded": false, "data": null, "error": { "code": "report-unavailable", "category": "unavailable", "safeMessage": "Reports are unavailable.", "retryable": true }, "diagnostics": [], "truncated": false }
@@ -226,6 +256,11 @@
       "method": "terminal.get",
       "params": { "schemaVersion": 1, "sessionId": "terminal_0123456789abcdef", "afterCursor": 0 },
       "result": { "schemaVersion": 1, "succeeded": false, "data": null, "error": { "code": "terminal-not-found", "category": "not-found", "safeMessage": "Terminal session was not found.", "retryable": false }, "diagnostics": [], "truncated": false }
+    },
+    {
+      "method": "terminal.profiles.get",
+      "params": { "schemaVersion": 1 },
+      "result": { "schemaVersion": 1, "succeeded": true, "data": { "profiles": [{ "profileId": "system-default", "displayName": "PowerShell (default)", "isDefault": true }, { "profileId": "cmd", "displayName": "Command Prompt", "isDefault": false }] }, "error": null, "diagnostics": [], "truncated": false }
     },
     {
       "method": "artifact.preview",

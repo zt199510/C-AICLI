@@ -46,4 +46,69 @@
   --inspector-max-width: 480px;
   --shadow-panel: 0 14px 38px rgb(37 55 45 / 12%);
   --shadow-float: 0 12px 32px rgb(35 50 41 / 10%);
+  --font-sans: Inter, "Segoe UI Variable", "Segoe UI", "Microsoft YaHei UI", sans-serif;
+  --font-mono: "Cascadia Mono", "Cascadia Code", Consolas, monospace;
+  --control-height: 34px;
+}
+
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --color-canvas: #151a17;
+  --color-canvas-strong: #1b221e;
+  --color-surface: #1d2420;
+  --color-surface-muted: #222b26;
+  --color-surface-raised: #27312b;
+  --color-sidebar: #19201c;
+  --color-border: #344039;
+  --color-border-strong: #46564c;
+  --color-text: #edf3ee;
+  --color-text-muted: #a7b4ab;
+  --color-text-disabled: #7f8b83;
+  --color-accent: #5bc49a;
+  --color-accent-strong: #80dbb5;
+  --color-accent-soft: #234839;
+  --color-accent-contrast: #102219;
+  --color-success: #72d39b;
+  --color-success-soft: #1f4430;
+  --color-warning: #e0c872;
+  --color-warning-soft: #443b20;
+  --color-warning-border: #766938;
+  --color-danger: #f19a9a;
+  --color-danger-strong: #ffb2b2;
+  --color-danger-soft: #4b2929;
+  --color-danger-border: #754545;
+  --color-focus: #78d7b1;
+  --shadow-panel: 0 14px 38px rgb(0 0 0 / 30%);
+  --shadow-float: 0 12px 32px rgb(0 0 0 / 26%);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root[data-theme="system"] {
+    color-scheme: dark;
+    --color-canvas: #151a17;
+    --color-canvas-strong: #1b221e;
+    --color-surface: #1d2420;
+    --color-surface-muted: #222b26;
+    --color-surface-raised: #27312b;
+    --color-sidebar: #19201c;
+    --color-border: #344039;
+    --color-border-strong: #46564c;
+    --color-text: #edf3ee;
+    --color-text-muted: #a7b4ab;
+    --color-text-disabled: #7f8b83;
+    --color-accent: #5bc49a;
+    --color-accent-strong: #80dbb5;
+    --color-accent-soft: #234839;
+    --color-accent-contrast: #102219;
+    --color-success: #72d39b;
+    --color-success-soft: #1f4430;
+    --color-warning: #e0c872;
+    --color-warning-soft: #443b20;
+    --color-warning-border: #766938;
+    --color-danger: #f19a9a;
+    --color-danger-strong: #ffb2b2;
+    --color-danger-soft: #4b2929;
+    --color-danger-border: #754545;
+    --color-focus: #78d7b1;
+  }
 }

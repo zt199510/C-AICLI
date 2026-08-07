@@ -89,6 +89,23 @@ describe("frozen timeline projection", () => {
     expect(screen.queryByText("Raw payload must stay hidden")).toBeNull();
   });
 
+  it("routes edit and branch message actions with the authoritative item", async () => {
+    const message = { ...item(1, "user.message"), summary: "Refine this request" };
+    const onMessageAction = vi.fn();
+    render(<TimelineView
+      detail={{ ...detail, timeline: [message] }}
+      status="ready"
+      error={null}
+      onLoadMore={vi.fn()}
+      onMessageAction={onMessageAction}
+    />);
+
+    await userEvent.click(screen.getByRole("button", { name: "编辑到新对话" }));
+    await userEvent.click(screen.getByRole("button", { name: "从此分支" }));
+    expect(onMessageAction).toHaveBeenNthCalledWith(1, message, "edit");
+    expect(onMessageAction).toHaveBeenNthCalledWith(2, message, "branch");
+  });
+
   it("coalesces assistant progress and final events into one visible reply", () => {
     const user = { ...item(1, "user.message"), redacted: true, summary: "Hello" };
     const progress = { ...item(2, "assistant.message"), redacted: true, summary: "Working" };

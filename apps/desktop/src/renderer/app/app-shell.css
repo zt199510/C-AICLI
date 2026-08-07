@@ -1,7 +1,7 @@
 :root {
   color: var(--color-text);
   background: var(--color-canvas);
-  font-family: Inter, "Segoe UI Variable", "Segoe UI", sans-serif;
+  font-family: var(--font-sans);
 }
 
 body {
@@ -633,6 +633,150 @@ body {
   }
 }
 
+/* Full PTY surface. Session ownership lives above PanelBottom so hiding this
+   surface never implies process termination. */
+.terminal-workspace-panel {
+  display: grid;
+  min-width: 0;
+  min-height: 0;
+  height: 100%;
+  grid-template-rows: auto auto minmax(0, 1fr) auto;
+  background: #111713;
+  color: #e7efe9;
+}
+
+.terminal-toolbar {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 5px;
+  overflow-x: auto;
+  border-bottom: 1px solid #334139;
+  background: #1b241f;
+  padding: 6px 8px;
+}
+
+.terminal-toolbar select,
+.terminal-toolbar button {
+  min-height: 28px;
+  flex: 0 0 auto;
+  border: 1px solid #45574d;
+  border-radius: 6px;
+  background: #222e28;
+  padding: 4px 7px;
+  color: #e7efe9;
+  font-size: 11px;
+}
+
+.terminal-toolbar button {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  cursor: pointer;
+}
+
+.terminal-toolbar button:disabled {
+  color: #7f8c84;
+  cursor: default;
+}
+
+.terminal-toolbar-spacer {
+  flex: 1 1 auto;
+}
+
+.terminal-session-tabs {
+  display: flex;
+  min-width: 0;
+  gap: 2px;
+  overflow-x: auto;
+  border-bottom: 1px solid #334139;
+  background: #17201b;
+  padding: 3px 6px 0;
+}
+
+.terminal-session-tabs button {
+  display: inline-flex;
+  min-width: 104px;
+  min-height: 29px;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  border: 0;
+  border-bottom: 2px solid transparent;
+  background: transparent;
+  padding: 5px 8px;
+  color: #9eafa5;
+}
+
+.terminal-session-tabs button[aria-selected="true"] {
+  border-bottom-color: #5bc49a;
+  background: #222e28;
+  color: #f2f7f3;
+}
+
+.terminal-tab-status {
+  width: 7px;
+  height: 7px;
+  flex: 0 0 auto;
+  border-radius: 50%;
+  background: #839087;
+}
+
+.terminal-tab-status.status-running { background: #5bc49a; }
+.terminal-tab-status.status-failed { background: #f19a9a; }
+
+.terminal-session-host {
+  display: grid;
+  min-width: 0;
+  min-height: 0;
+  grid-template-rows: minmax(0, 1fr) auto;
+}
+
+.pty-terminal-viewport {
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+  padding: 7px 8px;
+  background: #111713;
+}
+
+.pty-terminal-viewport .xterm,
+.pty-terminal-viewport .xterm-viewport {
+  height: 100%;
+}
+
+.terminal-session-status {
+  display: flex;
+  min-height: 24px;
+  align-items: center;
+  gap: 10px;
+  border-top: 1px solid #334139;
+  background: #17201b;
+  padding: 3px 8px;
+  color: #9eafa5;
+  font: 10px/1.4 var(--font-mono);
+}
+
+.terminal-empty-state {
+  display: grid;
+  min-height: 160px;
+  place-content: center;
+  gap: 7px;
+  padding: 20px;
+  color: #9eafa5;
+  text-align: center;
+}
+
+.terminal-empty-state strong { color: #e7efe9; }
+
+.terminal-error {
+  border-top: 1px solid #754545;
+  background: #4b2929;
+  padding: 6px 9px;
+  color: #ffb2b2;
+  font-size: 11px;
+}
+
 /* Codex-style three-surface shell. Summary and detail stay inside the timeline
    stage, while only the tool sidebar participates in the workspace grid. */
 .panel-toggle-group {
@@ -677,6 +821,12 @@ body {
   min-height: 0;
 }
 
+/* PanelTop is visually floating, but visible conversation actions must never sit
+   underneath it. Reserve only its compact header footprint in the scroll area. */
+.timeline-stage:has(.workspace-summary-overlay) .conversation-view-actions {
+  margin-top: 148px;
+}
+
 .timeline-overlay-layer {
   position: absolute;
   z-index: 7;
@@ -685,8 +835,7 @@ body {
   pointer-events: none;
 }
 
-.workspace-summary-overlay,
-.workspace-bottom-panel {
+.workspace-summary-overlay {
   position: absolute;
   min-width: 0;
   overflow: hidden;
@@ -704,6 +853,7 @@ body {
   max-height: 30%;
   overflow-y: auto;
   padding: 12px;
+  pointer-events: none;
 }
 
 .workspace-summary-heading {
@@ -795,18 +945,6 @@ body {
   color: var(--color-text);
 }
 
-.workspace-bottom-panel {
-  right: 12px;
-  bottom: 12px;
-  left: 12px;
-  height: clamp(180px, 34vh, 360px);
-  max-height: 45%;
-}
-
-.workspace-bottom-panel .inspector-detail-scroll {
-  overscroll-behavior: contain;
-}
-
 .workspace-tool-sidebar {
   min-width: 0;
   min-height: 0;
@@ -827,12 +965,6 @@ body {
     width: min(520px, calc(100% - 20px));
   }
 
-  .workspace-bottom-panel {
-    right: 10px;
-    bottom: 10px;
-    left: 10px;
-  }
-
   .workspace-tool-sidebar {
     padding: 8px;
   }
@@ -850,6 +982,10 @@ body {
   .workspace-summary-overlay {
     left: 10px;
     width: auto;
+  }
+
+  .timeline-stage:has(.workspace-summary-overlay) .conversation-view-actions {
+    margin-top: 156px;
   }
 }
 
@@ -883,9 +1019,6 @@ body {
     flex: 0 0 auto;
   }
 
-  .workspace-bottom-panel .inspector-detail-heading {
-    grid-template-columns: minmax(0, 1fr) auto;
-  }
 }
 
 @media (forced-colors: active) {
@@ -2209,6 +2342,230 @@ body {
   .recovery-block,
   .runtime-banner,
   .back-to-latest {
+    border: 1px solid CanvasText;
+    forced-color-adjust: auto;
+  }
+}
+
+/* Codex-aligned workspace docks. PanelTop remains the only floating surface;
+   PanelBottom is a real row below the Composer and PanelRight is a roomy tool
+   launcher instead of a full-height card pinned over the task header. */
+.task-surface.bottom-panel-open {
+  grid-template-rows: minmax(150px, 1fr) auto clamp(190px, 34vh, 360px);
+}
+
+.workspace-bottom-panel {
+  position: relative;
+  inset: auto;
+  display: grid;
+  width: 100%;
+  min-width: 0;
+  min-height: 0;
+  height: auto;
+  max-height: none;
+  grid-template-rows: auto minmax(0, 1fr);
+  overflow: hidden;
+  border: 0;
+  border-top: 1px solid var(--color-border-strong);
+  border-radius: 0;
+  background: var(--color-surface);
+  box-shadow: none;
+  pointer-events: auto;
+}
+
+.workspace-bottom-panel[data-panel="terminal"] {
+  grid-template-rows: minmax(0, 1fr);
+}
+
+.workspace-bottom-panel-heading {
+  display: flex;
+  min-width: 0;
+  min-height: 42px;
+  align-items: center;
+  gap: 8px;
+  border-bottom: 1px solid var(--color-border);
+  background: var(--color-surface);
+  padding: 5px 10px 5px 14px;
+}
+
+.workspace-bottom-panel-title {
+  display: flex;
+  min-width: 0;
+  flex: 1 1 auto;
+  align-items: center;
+  gap: 8px;
+  color: var(--color-text);
+}
+
+.workspace-bottom-panel-title strong {
+  overflow: hidden;
+  font-size: 12px;
+  font-weight: 600;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.workspace-bottom-panel-close,
+.terminal-panel-close {
+  width: 28px;
+  height: 28px;
+  color: var(--color-text-muted);
+}
+
+.workspace-bottom-panel-body {
+  min-width: 0;
+  min-height: 0;
+  overflow: auto;
+}
+
+.workspace-bottom-panel[data-panel="terminal"] .workspace-bottom-panel-body {
+  overflow: hidden;
+}
+
+.workspace-bottom-panel .review-content {
+  min-height: 100%;
+}
+
+.workspace-tool-sidebar {
+  display: grid;
+  min-width: 0;
+  min-height: 0;
+  height: 100%;
+  place-items: center;
+  overflow: hidden;
+  padding: clamp(24px, 7vh, 72px) clamp(24px, 5vw, 72px);
+}
+
+.workspace-main-layout > .inspector {
+  background: var(--color-surface);
+  box-shadow: none;
+}
+
+.workspace-tool-sidebar .workspace-tool-launcher {
+  width: min(536px, 100%);
+  height: auto;
+  max-height: 100%;
+  overflow: auto;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+}
+
+.workspace-tool-launcher .inspector-tool-nav {
+  padding: 0;
+}
+
+.workspace-tool-launcher .inspector-tool-group + .inspector-tool-group {
+  margin-top: 8px;
+  padding-top: 8px;
+}
+
+.workspace-tool-launcher .inspector-tool-group h2 {
+  padding: 4px 10px;
+  font-size: 9px;
+  opacity: .72;
+}
+
+.workspace-tool-launcher .inspector-tool-row {
+  min-height: 42px;
+  padding: 8px 10px;
+}
+
+.workspace-tool-launcher .inspector-tool-row[aria-pressed="true"] {
+  background: var(--color-surface-muted);
+  box-shadow: none;
+  color: var(--color-text);
+}
+
+.workspace-tool-launcher .inspector-tool-status-dot {
+  width: 6px;
+  height: 6px;
+  opacity: .78;
+}
+
+/* The integrated terminal follows the light Codex dock in the light theme;
+   semantic tokens still allow the enclosing app theme to switch coherently. */
+.terminal-workspace-panel {
+  background: var(--color-surface);
+  color: var(--color-text);
+}
+
+.terminal-panel-tabbar {
+  display: flex;
+  min-width: 0;
+  align-items: stretch;
+  border-bottom: 1px solid var(--color-border);
+  background: var(--color-surface-muted);
+}
+
+.terminal-panel-tabbar .terminal-session-tabs {
+  min-width: 0;
+  flex: 1 1 auto;
+  border-bottom: 0;
+  background: transparent;
+}
+
+.terminal-panel-close {
+  align-self: center;
+  margin: 3px 8px 3px 4px;
+}
+
+.terminal-toolbar {
+  border-bottom-color: var(--color-border);
+  background: var(--color-surface);
+}
+
+.terminal-toolbar select,
+.terminal-toolbar button {
+  border-color: var(--color-border-strong);
+  background: var(--color-surface);
+  color: var(--color-text);
+}
+
+.terminal-toolbar button:disabled {
+  color: var(--color-text-disabled);
+}
+
+.terminal-session-tabs button {
+  color: var(--color-text-muted);
+}
+
+.terminal-session-tabs button[aria-selected="true"] {
+  border-bottom-color: var(--color-accent);
+  background: var(--color-surface);
+  color: var(--color-text);
+}
+
+.pty-terminal-viewport {
+  background: var(--color-surface);
+}
+
+.terminal-session-status {
+  border-top-color: var(--color-border);
+  background: var(--color-surface-muted);
+  color: var(--color-text-muted);
+}
+
+.terminal-empty-state {
+  color: var(--color-text-muted);
+}
+
+.terminal-empty-state strong {
+  color: var(--color-text);
+}
+
+@media (max-height: 640px) {
+  .task-surface.bottom-panel-open {
+    grid-template-rows: minmax(110px, 1fr) auto clamp(170px, 32vh, 210px);
+  }
+}
+
+@media (forced-colors: active) {
+  .workspace-bottom-panel,
+  .workspace-bottom-panel-heading,
+  .terminal-panel-tabbar,
+  .workspace-tool-launcher .inspector-tool-row[aria-pressed="true"] {
     border: 1px solid CanvasText;
     forced-color-adjust: auto;
   }

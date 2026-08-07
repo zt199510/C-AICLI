@@ -9,6 +9,7 @@ import { isCurrentWindowSender, registerDesktopIpc } from "./ipc-bridge";
 import { installSessionPolicy } from "./security";
 import { createDesktopWindow, focusDesktopWindow } from "./window";
 import { isRuntimeWindowAvailable, sendRuntimeStatus } from "./window-lifecycle";
+import { LocalSettingsStore } from "./local-settings-store";
 
 let mainWindow: BrowserWindow | null = null;
 let shutdownStarted = false;
@@ -67,6 +68,7 @@ if (hasInstanceLock) {
       ipcMain,
       runtime,
       dialog,
+      settingsStore: new LocalSettingsStore(app.getPath("userData") + "\\desktop-settings-v1.json"),
       getWindow: () => mainWindow,
       isAllowedSender: (event) => isCurrentWindowSender(event, mainWindow),
     });

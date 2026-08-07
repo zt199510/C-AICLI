@@ -708,6 +708,7 @@ public sealed class ThreadApplicationService
                 ThreadSourceKind.Report => HydrateReport(pointer, snapshot),
                 ThreadSourceKind.Artifact => new ArtifactApplicationService().Get(new ArtifactGetRequest(snapshot, pointer.SourceId), cancellationToken).Succeeded
                     ? ThreadSourceAvailability.Available : ThreadSourceAvailability.Missing,
+                ThreadSourceKind.ThreadMessage => HydrateThreadMessage(pointer, snapshot, cancellationToken),
                 _ => ThreadSourceAvailability.Unknown
             };
         }
@@ -739,6 +740,22 @@ public sealed class ThreadApplicationService
             ApplicationProjection.SafeOrNull(pointer.SourceRevision, 4_096),
             ApplicationProjection.SafeOrNull(pointer.SourceFingerprint, 4_096),
             availability);
+    }
+
+    private static string HydrateThreadMessage(ThreadSourcePointerRecord pointer, CliEnvironmentSnapshot snapshot, CancellationToken cancellationToken)
+    {
+        string[] parts = pointer.SourceId.Split('/', 2);
+        if (parts.Length != 2 || !ThreadIdentity.IsThreadId(parts[0]) || !ThreadIdentity.IsItemId(parts[1])) return ThreadSourceAvailability.Corrupt;
+        ThreadStore store = ThreadStore.Create(snapshot);
+        long cursor = 0;
+        while (true)
+        {
+            ThreadTimelinePageResult page = store.ReadTimelinePage(parts[0], cursor, 100, cancellationToken);
+            if (!page.Succeeded) return ThreadSourceAvailability.Missing;
+            if (page.Items.Any(item => item.ItemId == parts[1])) return ThreadSourceAvailability.Available;
+            if (!page.Truncated || page.NextSequence is null) return ThreadSourceAvailability.Missing;
+            cursor = page.NextSequence.Value;
+        }
     }
 
     private string HydrateSession(ThreadSourcePointerRecord pointer, CliEnvironmentSnapshot snapshot)

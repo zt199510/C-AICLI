@@ -94,6 +94,7 @@ public sealed record PendingComposerIntentRecord
     public string Prompt { get; init; } = string.Empty;
     public IReadOnlyList<ComposerContextReferenceRecord> Context { get; init; } = [];
     public IReadOnlyList<ComposerCatalogReferenceRecord> Catalog { get; init; } = [];
+    public ThreadSourcePointerRecord? SourcePointer { get; init; }
     public string EffectiveModel { get; init; } = string.Empty;
     public string ModelSource { get; init; } = string.Empty;
     public string ApprovalMode { get; init; } = string.Empty;
@@ -243,6 +244,10 @@ public static class ComposerIntentContractValidator
             }
             if (context.Kind == ComposerContextKind.File) totalFiles += context.ByteCount;
         }
+        if (intent.SourcePointer is ThreadSourcePointerRecord pointer &&
+            (!ThreadSourceKind.IsKnown(pointer.Kind) || !ThreadSourceAvailability.IsKnown(pointer.Availability) ||
+             string.IsNullOrWhiteSpace(pointer.SourceId) || Utf8(pointer.SourceId) > ThreadPersistenceLimits.MaxPointerValueBytes))
+            throw Invalid("Composer source pointer is invalid.");
         if (totalFiles > ComposerIntentLimits.MaxTotalFileBytes) throw Invalid("File context byte limit was exceeded.");
 
         var catalog = new HashSet<string>(StringComparer.Ordinal);

@@ -69,6 +69,57 @@ public sealed class DesktopApplicationSessionTests
             name.StartsWith(prefix, StringComparison.Ordinal)));
     }
 
+    [Fact]
+    public void Composer_next_turn_settings_are_authoritative_and_thread_scoped()
+    {
+        using TempDirectory temp = TempDirectory.Create();
+        DesktopApplicationSessionOpenResult opened = new DesktopApplicationSessionFactory().Open(temp.Path);
+        using DesktopApplicationSession session = Assert.IsType<DesktopApplicationSession>(opened.Session);
+        ThreadSummaryProjection thread = Assert.IsType<ThreadSummaryProjection>(session.CreateThread("settings turn").Data);
+        ComposerStateProjection initial = Assert.IsType<ComposerStateProjection>(session.GetComposer(thread.ThreadId).Data);
+
+        ApplicationResult<ComposerStateProjection> queued = session.EnqueueComposer(
+            thread.ThreadId, initial.ThreadRevision, initial.QueueRevision, "settings-enqueue", "inspect only", [], [],
+            modelOverride: "gpt-settings-test", approvalPreference: "read-only", disabledTools: ["workspace.run_shell"]);
+
+        Assert.True(queued.Succeeded);
+        Assert.Equal("gpt-settings-test", queued.Data!.EffectiveModel);
+        Assert.Equal("Never", queued.Data.ApprovalMode);
+        ComposerStateProjection refreshed = Assert.IsType<ComposerStateProjection>(session.GetComposer(thread.ThreadId).Data);
+        Assert.Equal("gpt-settings-test", refreshed.EffectiveModel);
+        Assert.Equal("Never", refreshed.ApprovalMode);
+    }
+
+    [Fact]
+    public void Message_branch_persists_and_hydrates_the_exact_source_item()
+    {
+        using TempDirectory temp = TempDirectory.Create();
+        DesktopApplicationSessionOpenResult opened = new DesktopApplicationSessionFactory().Open(temp.Path);
+        using DesktopApplicationSession session = Assert.IsType<DesktopApplicationSession>(opened.Session);
+
+        ThreadSummaryProjection source = Assert.IsType<ThreadSummaryProjection>(session.CreateThread("source").Data);
+        ComposerStateProjection sourceComposer = Assert.IsType<ComposerStateProjection>(session.GetComposer(source.ThreadId).Data);
+        ComposerStateProjection sourceQueued = Assert.IsType<ComposerStateProjection>(session.EnqueueComposer(
+            source.ThreadId, sourceComposer.ThreadRevision, sourceComposer.QueueRevision, "source-enqueue", "original prompt", [], []).Data);
+        Assert.True(session.StartTurn(source.ThreadId, sourceQueued.ThreadRevision, sourceQueued.QueueRevision, "source-start").Succeeded);
+        ThreadDetailProjection sourceDetail = Assert.IsType<ThreadDetailProjection>(session.GetThread(source.ThreadId, 0, 50).Data);
+        TimelineItemProjection sourceMessage = Assert.Single(sourceDetail.Timeline, item => item.Type == "user.message");
+
+        ThreadSummaryProjection branch = Assert.IsType<ThreadSummaryProjection>(session.CreateThread("branch").Data);
+        ComposerStateProjection branchComposer = Assert.IsType<ComposerStateProjection>(session.GetComposer(branch.ThreadId).Data);
+        ComposerStateProjection branchQueued = Assert.IsType<ComposerStateProjection>(session.EnqueueComposer(
+            branch.ThreadId, branchComposer.ThreadRevision, branchComposer.QueueRevision, "branch-enqueue", "edited prompt", [], [],
+            sourceThreadId: source.ThreadId, sourceItemId: sourceMessage.ItemId, sourceAction: "edit").Data);
+        Assert.True(session.StartTurn(branch.ThreadId, branchQueued.ThreadRevision, branchQueued.QueueRevision, "branch-start").Succeeded);
+
+        ThreadDetailProjection branchDetail = Assert.IsType<ThreadDetailProjection>(session.GetThread(branch.ThreadId, 0, 50).Data);
+        ThreadSourcePointerProjection pointer = Assert.Single(Assert.Single(branchDetail.Turns).SourcePointers);
+        Assert.Equal("thread-message", pointer.Kind);
+        Assert.Equal($"{source.ThreadId}/{sourceMessage.ItemId}", pointer.SourceId);
+        Assert.Equal("edit", pointer.SourceRevision);
+        Assert.Equal("available", pointer.Availability);
+    }
+
     private static IEnumerable<Type> Flatten(Type type)
     {
         yield return type;

@@ -1,5 +1,7 @@
 # 右侧 UI 重构与 Codex 式三面板布局实施验收记录
 
+> 2026-08-06 后续视觉基线说明：用户提供的 Windows Codex 实机截图已取代本文第 8 节的旧几何结论。PanelTop 继续浮动；PanelBottom 现为 Composer 下方的真实贴底 dock，不再绝对定位覆盖时间线；任务顶栏横跨对话区和 PanelRight，PanelRight 改为宽版白色工作区中的居中工具启动器。本文其余旧截图与数值仅作为历史证据。
+
 日期：2026-08-04
 
 范围：`apps/desktop` 右侧 Workspace Inspector

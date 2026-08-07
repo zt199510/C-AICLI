@@ -1,4 +1,5 @@
 using System.Collections.ObjectModel;
+using System.Collections.Concurrent;
 using CSharpAiCli.Core;
 
 namespace CSharpAiCli.Application;
@@ -150,6 +151,8 @@ public sealed class DesktopApplicationSession : IDisposable
     private readonly ControlledContextApplicationService contextService;
     private readonly ComposerApplicationService composerService;
     private readonly TurnExecutionApplicationService turnExecutionService = new();
+    private readonly ConcurrentDictionary<string, CliEnvironmentSnapshot> pendingTurnSnapshots = new(StringComparer.Ordinal);
+    private readonly ConcurrentDictionary<string, CliEnvironmentSnapshot> activeTurnSnapshots = new(StringComparer.Ordinal);
 
     internal DesktopApplicationSession(
         CliEnvironmentSnapshot snapshot,
@@ -242,13 +245,14 @@ public sealed class DesktopApplicationSession : IDisposable
     public ApplicationResult<ControlledContextDescriptor> ResolveContext(
         string nativePath,
         string expectedKind,
+        string? threadId = null,
         CancellationToken cancellationToken = default) => Execute(
-            token => contextService.ResolveNativePath(Workspace, nativePath, expectedKind, token), cancellationToken);
+            token => contextService.ResolveNativePath(Workspace, nativePath, expectedKind, threadId, token), cancellationToken);
 
     public ApplicationResult<ComposerStateProjection> GetComposer(
         string threadId,
         CancellationToken cancellationToken = default) => Execute(
-            token => composerService.Get(new ComposerGetRequest(snapshot, threadId), token), cancellationToken);
+            token => composerService.Get(new ComposerGetRequest(pendingTurnSnapshots.GetValueOrDefault(threadId, snapshot), threadId), token), cancellationToken);
 
     public ApplicationResult<ComposerStateProjection> EnqueueComposer(
         string threadId,
@@ -258,18 +262,42 @@ public sealed class DesktopApplicationSession : IDisposable
         string prompt,
         IReadOnlyList<string> contextSelectionIds,
         IReadOnlyList<ComposerCatalogSelection> catalogSelections,
+        string? modelOverride = null,
+        string? approvalPreference = null,
+        IReadOnlyList<string>? disabledTools = null,
+        string? sourceThreadId = null,
+        string? sourceItemId = null,
+        string? sourceAction = null,
         CancellationToken cancellationToken = default) => Execute(
-            token => composerService.Enqueue(new ComposerEnqueueRequest(
-                snapshot, threadId, expectedThreadRevision, expectedQueueRevision, clientMutationId,
-                prompt, contextSelectionIds, catalogSelections), token), cancellationToken);
+            token =>
+            {
+                CliEnvironmentSnapshot effective = OverrideSnapshot(modelOverride, approvalPreference, disabledTools);
+                bool hasSource = sourceThreadId is not null || sourceItemId is not null || sourceAction is not null;
+                if (hasSource && (!ThreadIdentity.IsThreadId(sourceThreadId) || !ThreadIdentity.IsItemId(sourceItemId) || sourceAction is not ("edit" or "branch")))
+                    return ApplicationResult<ComposerStateProjection>.Failure(new ApplicationError("message-source-invalid", ApplicationErrorCategory.Validation, "Message source pointer is invalid.", false));
+                ThreadSourcePointerRecord? source = hasSource
+                    ? new ThreadSourcePointerRecord { Kind = ThreadSourceKind.ThreadMessage, SourceId = $"{sourceThreadId}/{sourceItemId}", SourceRevision = sourceAction, Availability = ThreadSourceAvailability.Available }
+                    : null;
+                ApplicationResult<ComposerStateProjection> result = composerService.Enqueue(new ComposerEnqueueRequest(
+                    effective, threadId, expectedThreadRevision, expectedQueueRevision, clientMutationId,
+                    prompt, contextSelectionIds, catalogSelections, source), token);
+                if (result.Succeeded) pendingTurnSnapshots[threadId] = effective;
+                return result;
+            }, cancellationToken);
 
     public ApplicationResult<ComposerStateProjection> ClearComposer(
         string threadId,
         long expectedQueueRevision,
         string clientMutationId,
         CancellationToken cancellationToken = default) => Execute(
-            token => composerService.Clear(new ComposerClearRequest(
-                snapshot, threadId, expectedQueueRevision, clientMutationId), token), cancellationToken);
+            token =>
+            {
+                CliEnvironmentSnapshot effective = pendingTurnSnapshots.GetValueOrDefault(threadId, snapshot);
+                ApplicationResult<ComposerStateProjection> result = composerService.Clear(new ComposerClearRequest(
+                    effective, threadId, expectedQueueRevision, clientMutationId), token);
+                if (result.Succeeded) pendingTurnSnapshots.TryRemove(threadId, out _);
+                return result;
+            }, cancellationToken);
 
     public ApplicationResult<TurnExecutionStateProjection> StartTurn(
         string threadId,
@@ -277,8 +305,18 @@ public sealed class DesktopApplicationSession : IDisposable
         long expectedQueueRevision,
         string clientMutationId,
         CancellationToken cancellationToken = default) => Execute(
-            token => turnExecutionService.Start(new TurnStartRequest(snapshot, threadId, expectedThreadRevision,
-                expectedQueueRevision, clientMutationId), token), cancellationToken);
+            token =>
+            {
+                CliEnvironmentSnapshot effective = pendingTurnSnapshots.GetValueOrDefault(threadId, snapshot);
+                ApplicationResult<TurnExecutionStateProjection> result = turnExecutionService.Start(new TurnStartRequest(effective, threadId, expectedThreadRevision,
+                    expectedQueueRevision, clientMutationId), token);
+                if (result.Succeeded && result.Data is not null)
+                {
+                    activeTurnSnapshots[result.Data.TurnId] = effective;
+                    pendingTurnSnapshots.TryRemove(threadId, out _);
+                }
+                return result;
+            }, cancellationToken);
 
     public ApplicationResult<TurnExecutionStateProjection> CancelTurn(
         string threadId,
@@ -335,8 +373,29 @@ public sealed class DesktopApplicationSession : IDisposable
         CancellationToken cancellationToken = default)
     {
         using CancellationTokenSource linked = CancellationTokenSource.CreateLinkedTokenSource(lifetime.Token, cancellationToken);
-        return await turnExecutionService.ExecuteAsync(snapshot, threadId, turnId, runtime, approvalWaiter,
+        CliEnvironmentSnapshot effective = activeTurnSnapshots.GetValueOrDefault(turnId, snapshot);
+        return await turnExecutionService.ExecuteAsync(effective, threadId, turnId, runtime, approvalWaiter,
             committed, linked.Token).ConfigureAwait(false);
+    }
+
+    private CliEnvironmentSnapshot OverrideSnapshot(string? modelOverride, string? approvalPreference, IReadOnlyList<string>? disabledTools)
+    {
+        ApprovalMode mode = approvalPreference switch
+        {
+            "read-only" => ApprovalMode.Never,
+            "trusted-local" => ApprovalMode.OnFailure,
+            "on-request" => ApprovalMode.OnRequest,
+            _ => snapshot.Configuration.ApprovalMode
+        };
+        EffectiveConfiguration configuration = snapshot.Configuration with
+        {
+            Model = string.IsNullOrWhiteSpace(modelOverride) ? snapshot.Configuration.Model : modelOverride.Trim(),
+            ModelSource = string.IsNullOrWhiteSpace(modelOverride) ? snapshot.Configuration.ModelSource : "desktop-setting",
+            ApprovalMode = mode,
+            ApprovalModeSource = approvalPreference is null ? snapshot.Configuration.ApprovalModeSource : "desktop-setting",
+            DisabledTools = disabledTools is null ? snapshot.Configuration.DisabledTools : new HashSet<string>(disabledTools, StringComparer.Ordinal)
+        };
+        return snapshot with { Configuration = configuration };
     }
 
     public ApplicationResult<DesktopChangesProjection> GetChanges(

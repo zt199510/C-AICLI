@@ -22,7 +22,8 @@ internal sealed record ControlledContextAuthority(
     string WorkspaceId,
     string WorkspaceRoot,
     string FullPath,
-    ComposerContextReferenceRecord Reference);
+    ComposerContextReferenceRecord Reference,
+    bool ExternalSnapshot = false);
 
 public sealed class ControlledContextApplicationService
 {
@@ -36,6 +37,9 @@ public sealed class ControlledContextApplicationService
     };
 
     private readonly ConcurrentDictionary<string, ControlledContextAuthority> selections = new(StringComparer.Ordinal);
+    private readonly string? externalStorageRoot;
+
+    public ControlledContextApplicationService(string? externalStorageRoot = null) => this.externalStorageRoot = externalStorageRoot;
 
     public ApplicationResult<ControlledContextSearchProjection> Search(
         WorkspaceSnapshotProjection workspace,
@@ -93,11 +97,17 @@ public sealed class ControlledContextApplicationService
         WorkspaceSnapshotProjection workspace,
         string nativePath,
         string expectedKind,
+        string? threadId = null,
         CancellationToken cancellationToken = default)
     {
         if (!ComposerContextKind.IsKnown(expectedKind))
             return Failure<ControlledContextDescriptor>("context-kind-invalid", ApplicationErrorCategory.Validation, "Context kind is invalid.");
-        ApplicationResult<ControlledContextDescriptor> result = ResolveCore(workspace, nativePath, cancellationToken);
+        string root = Path.TrimEndingDirectorySeparator(Path.GetFullPath(workspace.RootPath));
+        string full = Path.GetFullPath(nativePath);
+        bool contained = string.Equals(root, Path.TrimEndingDirectorySeparator(full), PathComparison()) || full.StartsWith(root + Path.DirectorySeparatorChar, PathComparison());
+        ApplicationResult<ControlledContextDescriptor> result = contained
+            ? ResolveCore(workspace, nativePath, cancellationToken)
+            : ResolveExternal(workspace, nativePath, expectedKind, threadId, cancellationToken);
         if (result.Succeeded && result.Data?.Kind != expectedKind)
             return Failure<ControlledContextDescriptor>("context-kind-mismatch", ApplicationErrorCategory.Validation, "Selected context has the wrong kind.");
         return result;
@@ -114,7 +124,9 @@ public sealed class ControlledContextApplicationService
         {
             return Failure<ComposerContextReferenceRecord>("context-selection-stale", ApplicationErrorCategory.Conflict, "Context selection is stale; select it again.");
         }
-        ApplicationResult<ControlledContextDescriptor> resolved = ResolveCore(workspace, authority.FullPath, cancellationToken, selectionId);
+        ApplicationResult<ControlledContextDescriptor> resolved = authority.ExternalSnapshot
+            ? RevalidateExternal(workspace, authority, cancellationToken)
+            : ResolveCore(workspace, authority.FullPath, cancellationToken, selectionId);
         if (!resolved.Succeeded || resolved.Data is null)
             return Failure<ComposerContextReferenceRecord>(resolved.Error?.Code ?? "context-selection-stale", ApplicationErrorCategory.Conflict, "Context selection changed; select it again.");
         ControlledContextAuthority refreshed = selections[selectionId];
@@ -127,6 +139,47 @@ public sealed class ControlledContextApplicationService
     }
 
     public void Clear() => selections.Clear();
+
+    private ApplicationResult<ControlledContextDescriptor> ResolveExternal(WorkspaceSnapshotProjection workspace, string nativePath, string expectedKind, string? threadId, CancellationToken cancellationToken)
+    {
+        try
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            if (expectedKind != ComposerContextKind.File) throw new ContextException("context-external-folder-denied", ApplicationErrorCategory.Denied, "External folders cannot be attached.");
+            DesktopContextSnapshot snapshot = DesktopContextSnapshotStore.Create(workspace, threadId ?? "", nativePath, externalStorageRoot);
+            ValidateFileType(snapshot.FullPath, cancellationToken);
+            string selectionId = "ctx_" + Guid.NewGuid().ToString("N");
+            ComposerContextReferenceRecord reference = new() { SelectionId = selectionId, RelativePath = snapshot.RelativePath, Kind = ComposerContextKind.File, ByteCount = snapshot.ByteCount, FileCount = 1, ObservedIdentity = snapshot.ContentSha256 };
+            selections[selectionId] = new ControlledContextAuthority(workspace.WorkspaceId, Path.TrimEndingDirectorySeparator(Path.GetFullPath(workspace.RootPath)), snapshot.FullPath, reference, true);
+            return ApplicationResult<ControlledContextDescriptor>.Success(new ControlledContextDescriptor(selectionId, snapshot.RelativePath, ComposerContextKind.File, snapshot.ByteCount, 1, "available"));
+        }
+        catch (OperationCanceledException) { throw; }
+        catch (ContextException exception) { return Failure<ControlledContextDescriptor>(exception.Code, exception.Category, exception.Message); }
+        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or ArgumentException or NotSupportedException or InvalidDataException)
+        {
+            return Failure<ControlledContextDescriptor>("context-external-denied", ApplicationErrorCategory.Denied, exception.Message);
+        }
+    }
+
+    private ApplicationResult<ControlledContextDescriptor> RevalidateExternal(WorkspaceSnapshotProjection workspace, ControlledContextAuthority authority, CancellationToken cancellationToken)
+    {
+        try
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            string expected = DesktopContextSnapshotStore.Resolve(workspace, authority.Reference.RelativePath, externalStorageRoot);
+            if (!string.Equals(expected, authority.FullPath, PathComparison()) || !File.Exists(expected) || File.GetAttributes(expected).HasFlag(FileAttributes.ReparsePoint))
+                throw new ContextException("context-selection-stale", ApplicationErrorCategory.Conflict, "External attachment snapshot is unavailable.");
+            using FileStream stream = new(expected, FileMode.Open, FileAccess.Read, FileShare.Read);
+            string hash = Convert.ToHexStringLower(SHA256.HashData(stream));
+            if (!string.Equals(hash, authority.Reference.ObservedIdentity, StringComparison.Ordinal))
+                throw new ContextException("context-selection-stale", ApplicationErrorCategory.Conflict, "External attachment snapshot changed.");
+            return ApplicationResult<ControlledContextDescriptor>.Success(new ControlledContextDescriptor(authority.Reference.SelectionId, authority.Reference.RelativePath, authority.Reference.Kind, authority.Reference.ByteCount, authority.Reference.FileCount, "available"));
+        }
+        catch (OperationCanceledException) { throw; }
+        catch (ContextException exception) { return Failure<ControlledContextDescriptor>(exception.Code, exception.Category, exception.Message); }
+        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or ArgumentException or NotSupportedException)
+        { return Failure<ControlledContextDescriptor>("context-selection-stale", ApplicationErrorCategory.Conflict, "External attachment snapshot is unavailable."); }
+    }
 
     private ApplicationResult<ControlledContextDescriptor> ResolveCore(
         WorkspaceSnapshotProjection workspace,

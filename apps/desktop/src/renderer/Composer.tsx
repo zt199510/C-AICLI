@@ -46,6 +46,7 @@ interface ComposerProps {
   readonly stopping?: boolean;
   readonly onStop?: () => void;
   readonly onClear: () => void;
+  readonly onSlashCommand?: (command: string) => void;
 }
 
 type OpenMenu = "add" | "tools" | null;
@@ -84,6 +85,12 @@ export function Composer(props: ComposerProps) {
     ...props.composer.mentions.automations.map((item) => ({ id: `mention-automation-${item.id}`, select: () => selectCatalog("automation", item, props.composer.mentions.revisions.automations) })),
   ], [props.composer.mentions, props.onCatalog, props.onContext]);
   const mentionsOpen = openMenu === null && mentionsRequested && hasMentionContent(props.composer);
+  const slashMatch = /^\/([a-z-]*)$/i.exec(props.draft.text.trim());
+  const allSlashCommands: readonly (readonly [string, string])[] = [
+    ["new", "新建对话"], ["changes", "打开 Changes"], ["terminal", "打开 Terminal"], ["settings", "打开 Settings"], ["clear", "清空 Composer"],
+  ];
+  const slashCommands = allSlashCommands.filter(([command]) => !slashMatch?.[1] || command.startsWith(slashMatch[1].toLowerCase()));
+  const slashOpen = Boolean(props.onSlashCommand && slashMatch && slashCommands.length);
 
   const addItems: readonly MenuItem[] = useMemo(() => [
     {
@@ -198,6 +205,13 @@ export function Composer(props: ComposerProps) {
   }
 
   function keyDown(event: KeyboardEvent<HTMLTextAreaElement>) {
+    if (event.key === "Escape" && slashOpen) { event.preventDefault(); props.onText(""); return; }
+    if (event.key === "Enter" && slashOpen && !event.shiftKey) {
+      event.preventDefault();
+      const command = slashCommands[0]?.[0];
+      if (command) props.onSlashCommand?.(command);
+      return;
+    }
     if (mentionsOpen && ["ArrowDown", "ArrowUp", "Home", "End"].includes(event.key)) {
       event.preventDefault();
       if (mentionOptions.length === 0) return;
@@ -281,6 +295,9 @@ export function Composer(props: ComposerProps) {
             onClose={closeMentionsAndFocus}
           />
         ) : null}
+        {slashOpen ? <div className="slash-command-menu" role="listbox" aria-label="Slash commands">
+          {slashCommands.map(([command, description]) => <button type="button" role="option" aria-selected="false" key={command} onClick={() => props.onSlashCommand?.(command)}><code>/{command}</code><span>{description}</span></button>)}
+        </div> : null}
       </div>
 
       <div className="composer-footer">

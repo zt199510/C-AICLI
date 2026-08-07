@@ -3,7 +3,7 @@ import {
   isArtifactGetParams,
   isTerminalOpenParams, isTerminalInputParams, isTerminalResizeParams, isTerminalMutationParams, isTerminalGetParams,
   isArtifactReviewParams, isGerberReviewParams, isGerberDecisionParams,
-  isChangesGetParams,
+  isChangesGetParams, isChangesMutateParams,
   isCatalogListParams,
   isComposerClearParams,
   isComposerEnqueueParams,
@@ -13,6 +13,7 @@ import {
   isTurnStartParams,
   isTurnCancelParams,
   isApprovalResolveParams,
+  isSubagentListParams, isSubagentStartParams, isSubagentMutationParams, isSubagentApprovalResolveParams,
   isTurnResumeParams,
   isTurnRestartParams,
   isReportGetParams,
@@ -22,8 +23,8 @@ import {
   isThreadRenameParams,
   type ArtifactGetResult,
   type ArtifactListResult,
-  type TerminalStateResult, type ArtifactReviewResult, type ArtifactExportResult, type GerberReviewResult,
-  type ChangesGetResult,
+  type TerminalStateResult, type TerminalProfileListResult, type ArtifactReviewResult, type ArtifactExportResult, type GerberReviewResult,
+  type ChangesGetResult, type ChangesMutateParams, type ChangesMutateResult,
   type CatalogListResult,
   type ComposerCatalogSelectionData,
   type ComposerStateResult,
@@ -38,6 +39,7 @@ import {
   type WorkspaceOpenResult,
   type WorkspaceSnapshotData,
   type TurnExecutionStateResult,
+  type SubagentListParams, type SubagentStartParams, type SubagentMutationParams, type SubagentApprovalResolveParams, type SubagentResult,
 } from "../generated/desktop-contracts";
 
 export const IPC_CHANNELS = Object.freeze({
@@ -52,6 +54,7 @@ export const IPC_CHANNELS = Object.freeze({
   archiveThread: "thread:archive",
   threadChanged: "thread:changed",
   getChanges: "changes:get",
+  mutateChanges: "changes:mutate",
   listReports: "report:list",
   getReport: "report:get",
   listArtifacts: "artifact:list",
@@ -62,6 +65,7 @@ export const IPC_CHANNELS = Object.freeze({
   cancelTerminal: "terminal:cancel",
   closeTerminal: "terminal:close",
   getTerminal: "terminal:get",
+  listTerminalProfiles: "terminal:profiles:get",
   previewArtifact: "artifact:preview",
   exportArtifact: "artifact:export",
   verifyArtifact: "artifact:verify",
@@ -79,9 +83,16 @@ export const IPC_CHANNELS = Object.freeze({
   startTurn: "turn:start",
   cancelTurn: "turn:cancel",
   resolveApproval: "approval:resolve",
+  listSubagents: "subagent:list",
+  startSubagent: "subagent:start",
+  cancelSubagent: "subagent:cancel",
+  takeoverSubagent: "subagent:takeover",
+  resolveSubagentApproval: "subagent:approval:resolve",
   resumeTurn: "turn:resume",
   restartTurn: "turn:restart",
   runtimeStatus: "runtime:status",
+  getSettings: "settings:get",
+  setSettings: "settings:set",
 });
 
 export interface GetThreadCommand { readonly threadId: string; readonly afterSequence: number; }
@@ -89,9 +100,11 @@ export interface CreateThreadCommand { readonly title: string; }
 export interface RenameThreadCommand { readonly threadId: string; readonly expectedRevision: number; readonly title: string; }
 export interface ArchiveThreadCommand { readonly threadId: string; readonly expectedRevision: number; }
 export interface GetChangesCommand { readonly sessionName?: string; }
+export type MutateChangesCommand = Omit<ChangesMutateParams, "schemaVersion">;
 export interface GetReportCommand { readonly reportId: string; }
 export interface GetArtifactCommand { readonly artifactId: string; }
-export interface OpenTerminalCommand { readonly shellProfile: "system-default" | "powershell" | "cmd"; readonly clientMutationId: string; }
+export type TerminalProfileId = "system-default" | "powershell" | "cmd" | "wsl" | "git-bash";
+export interface OpenTerminalCommand { readonly shellProfile: TerminalProfileId; readonly clientMutationId: string; }
 export interface InputTerminalCommand { readonly sessionId: string; readonly text: string; readonly clientMutationId: string; }
 export interface ResizeTerminalCommand { readonly sessionId: string; readonly cols: number; readonly rows: number; readonly clientMutationId: string; }
 export interface TerminalMutationCommand { readonly sessionId: string; readonly clientMutationId: string; }
@@ -110,6 +123,12 @@ export interface EnqueueComposerCommand {
   readonly prompt: string;
   readonly contextSelectionIds: readonly string[];
   readonly catalogSelections: readonly ComposerCatalogSelectionData[];
+  readonly modelOverride?: string;
+  readonly approvalPreference?: ApprovalPreference;
+  readonly disabledTools?: readonly string[];
+  readonly sourceThreadId?: string;
+  readonly sourceItemId?: string;
+  readonly sourceAction?: "edit" | "branch";
 }
 export interface ClearComposerCommand {
   readonly threadId: string;
@@ -119,12 +138,46 @@ export interface ClearComposerCommand {
 export interface StartTurnCommand { readonly threadId: string; readonly expectedThreadRevision: number; readonly expectedQueueRevision: number; readonly clientMutationId: string; }
 export interface CancelTurnCommand { readonly threadId: string; readonly turnId: string; readonly expectedThreadRevision: number; readonly expectedTurnRevision: number; readonly clientMutationId: string; }
 export interface ResolveApprovalCommand { readonly threadId: string; readonly turnId: string; readonly requestId: string; readonly decision: "approve" | "deny"; readonly expectedThreadRevision: number; readonly expectedTurnRevision: number; readonly expectedApprovalRevision: number; readonly clientMutationId: string; }
+export type ListSubagentsCommand = Omit<SubagentListParams, "schemaVersion">;
+export type StartSubagentCommand = Omit<SubagentStartParams, "schemaVersion">;
+export type SubagentMutationCommand = Omit<SubagentMutationParams, "schemaVersion">;
+export type ResolveSubagentApprovalCommand = Omit<SubagentApprovalResolveParams, "schemaVersion">;
 export interface ResumeTurnCommand { readonly threadId: string; readonly turnId: string; readonly expectedThreadRevision: number; readonly expectedTurnRevision: number; readonly checkpointId: string; readonly clientMutationId: string; }
 export interface RestartTurnCommand { readonly threadId: string; readonly sourceTurnId: string; readonly expectedThreadRevision: number; readonly expectedSourceTurnRevision: number; readonly confirmed: boolean; readonly clientMutationId: string; }
 export interface ContextPickResult {
   readonly schemaVersion: 1;
   readonly canceled: boolean;
   readonly result: ContextResolveResult | null;
+}
+export interface ContextPickCommand { readonly threadId?: string; }
+
+export type ThemePreference = "system" | "light" | "dark";
+export type ApprovalPreference = "read-only" | "on-request" | "trusted-local";
+export interface DesktopLocalSettings {
+  readonly language: "zh-CN" | "en-US";
+  readonly theme: ThemePreference;
+  readonly defaultShell: TerminalProfileId;
+  readonly model: string;
+  readonly approval: ApprovalPreference;
+  readonly shortcuts: boolean;
+  readonly summaryDefault: boolean;
+  readonly bottomDefault: boolean;
+  readonly toolsDefault: boolean;
+  readonly gitBase: string;
+  readonly navigationWidth: number;
+  readonly inspectorWidth: number;
+  readonly disabledTools: readonly string[];
+}
+export interface DesktopSettingsSnapshot {
+  readonly schemaVersion: 1;
+  readonly user: DesktopLocalSettings;
+  readonly workspace: Partial<DesktopLocalSettings>;
+}
+export interface GetSettingsCommand { readonly workspaceId: string | null; }
+export interface SetSettingsCommand {
+  readonly scope: "user" | "workspace";
+  readonly workspaceId: string | null;
+  readonly value: DesktopLocalSettings | Partial<DesktopLocalSettings>;
 }
 
 export type RuntimeState =
@@ -166,6 +219,7 @@ export interface DesktopBridge {
   renameThread(command: RenameThreadCommand): Promise<ThreadSummaryResult>;
   archiveThread(command: ArchiveThreadCommand): Promise<ThreadSummaryResult>;
   getChanges(command?: GetChangesCommand): Promise<ChangesGetResult>;
+  mutateChanges(command: MutateChangesCommand): Promise<ChangesMutateResult>;
   listReports(): Promise<ReportListResult>;
   getReport(command: GetReportCommand): Promise<ReportGetResult>;
   listArtifacts(): Promise<ArtifactListResult>;
@@ -176,6 +230,7 @@ export interface DesktopBridge {
   cancelTerminal(command: TerminalMutationCommand): Promise<TerminalStateResult>;
   closeTerminal(command: TerminalMutationCommand): Promise<TerminalStateResult>;
   getTerminal(command: GetTerminalCommand): Promise<TerminalStateResult>;
+  listTerminalProfiles(): Promise<TerminalProfileListResult>;
   previewArtifact(command: ArtifactReviewCommand): Promise<ArtifactReviewResult>;
   exportArtifact(command: ArtifactReviewCommand): Promise<ArtifactExportResult | null>;
   verifyArtifact(command: ArtifactReviewCommand): Promise<ArtifactReviewResult>;
@@ -185,16 +240,23 @@ export interface DesktopBridge {
   rejectGerber(command: GerberDecisionCommand): Promise<GerberReviewResult>;
   listCatalog(command: ListCatalogCommand): Promise<CatalogListResult>;
   searchContext(command: SearchContextCommand): Promise<ContextSearchResult>;
-  pickFile(): Promise<ContextPickResult>;
-  pickFolder(): Promise<ContextPickResult>;
+  pickFile(command?: ContextPickCommand): Promise<ContextPickResult>;
+  pickFolder(command?: ContextPickCommand): Promise<ContextPickResult>;
   getComposer(command: GetComposerCommand): Promise<ComposerStateResult>;
   enqueueComposer(command: EnqueueComposerCommand): Promise<ComposerStateResult>;
   clearComposer(command: ClearComposerCommand): Promise<ComposerStateResult>;
   startTurn(command: StartTurnCommand): Promise<TurnExecutionStateResult>;
   cancelTurn(command: CancelTurnCommand): Promise<TurnExecutionStateResult>;
   resolveApproval(command: ResolveApprovalCommand): Promise<TurnExecutionStateResult>;
+  listSubagents(command: ListSubagentsCommand): Promise<SubagentResult>;
+  startSubagent(command: StartSubagentCommand): Promise<SubagentResult>;
+  cancelSubagent(command: SubagentMutationCommand): Promise<SubagentResult>;
+  takeoverSubagent(command: SubagentMutationCommand): Promise<SubagentResult>;
+  resolveSubagentApproval(command: ResolveSubagentApprovalCommand): Promise<SubagentResult>;
   resumeTurn(command: ResumeTurnCommand): Promise<TurnExecutionStateResult>;
   restartTurn(command: RestartTurnCommand): Promise<TurnExecutionStateResult>;
+  getSettings(command: GetSettingsCommand): Promise<DesktopSettingsSnapshot>;
+  setSettings(command: SetSettingsCommand): Promise<DesktopSettingsSnapshot>;
   onRuntimeStatus(listener: (status: RuntimeStatus) => void): () => void;
   onThreadChanged(listener: (event: ThreadChangedParams) => void): () => void;
 }
@@ -287,6 +349,10 @@ export function isGetChangesCommand(value: unknown): value is GetChangesCommand 
   return keys.every((key) => key === "sessionName") && isChangesGetParams({ schemaVersion: SCHEMA_VERSION, ...value });
 }
 
+export function isMutateChangesCommand(value: unknown): value is MutateChangesCommand {
+  return isRecord(value) && isChangesMutateParams({ schemaVersion: SCHEMA_VERSION, ...value });
+}
+
 export function isGetReportCommand(value: unknown): value is GetReportCommand {
   return hasExactKeys(value, ["reportId"]) && isReportGetParams({ schemaVersion: SCHEMA_VERSION, reportId: value.reportId });
 }
@@ -333,7 +399,10 @@ export function isGetComposerCommand(value: unknown): value is GetComposerComman
 }
 
 export function isEnqueueComposerCommand(value: unknown): value is EnqueueComposerCommand {
-  return hasExactKeys(value, ["threadId", "expectedThreadRevision", "expectedQueueRevision", "clientMutationId", "prompt", "contextSelectionIds", "catalogSelections"]) &&
+  if (!isRecord(value)) return false;
+  const required = ["threadId", "expectedThreadRevision", "expectedQueueRevision", "clientMutationId", "prompt", "contextSelectionIds", "catalogSelections"];
+  const allowed = [...required, "modelOverride", "approvalPreference", "disabledTools", "sourceThreadId", "sourceItemId", "sourceAction"];
+  return required.every((key) => Object.hasOwn(value, key)) && Object.keys(value).every((key) => allowed.includes(key)) &&
     isComposerEnqueueParams({ schemaVersion: SCHEMA_VERSION, ...value });
 }
 
@@ -366,6 +435,61 @@ export function isRestartTurnCommand(value: unknown): value is RestartTurnComman
 export function isContextPickResult(value: unknown): value is ContextPickResult {
   if (!hasExactKeys(value, ["schemaVersion", "canceled", "result"]) || value.schemaVersion !== 1 || typeof value.canceled !== "boolean") return false;
   return value.canceled ? value.result === null : isContextResolveResult(value.result);
+}
+export function isListSubagentsCommand(value: unknown): value is ListSubagentsCommand {
+  return isRecord(value) && hasExactKeys(value, ["parentThreadId"]) && isSubagentListParams({ schemaVersion: SCHEMA_VERSION, ...value });
+}
+export function isStartSubagentCommand(value: unknown): value is StartSubagentCommand {
+  return isRecord(value) && hasExactKeys(value, ["parentThreadId", "prompt", "mode", "confirmed", "clientMutationId"]) && isSubagentStartParams({ schemaVersion: SCHEMA_VERSION, ...value });
+}
+export function isSubagentMutationCommand(value: unknown): value is SubagentMutationCommand {
+  return isRecord(value) && hasExactKeys(value, ["agentId", "confirmed", "clientMutationId"]) && isSubagentMutationParams({ schemaVersion: SCHEMA_VERSION, ...value });
+}
+export function isResolveSubagentApprovalCommand(value: unknown): value is ResolveSubagentApprovalCommand {
+  return isRecord(value) && hasExactKeys(value, ["agentId", "decision", "clientMutationId"]) && isSubagentApprovalResolveParams({ schemaVersion: SCHEMA_VERSION, ...value });
+}
+export function isContextPickCommand(value: unknown): value is ContextPickCommand {
+  return isRecord(value) && Object.keys(value).every((key) => key === "threadId") &&
+    (!Object.hasOwn(value, "threadId") || isBoundedString(value.threadId, 64));
+}
+
+export function isGetSettingsCommand(value: unknown): value is GetSettingsCommand {
+  return hasExactKeys(value, ["workspaceId"]) && (value.workspaceId === null || isBoundedString(value.workspaceId, 128));
+}
+
+export function isSetSettingsCommand(value: unknown): value is SetSettingsCommand {
+  if (!hasExactKeys(value, ["scope", "workspaceId", "value"]) || (value.scope !== "user" && value.scope !== "workspace")) return false;
+  if (value.workspaceId !== null && !isBoundedString(value.workspaceId, 128)) return false;
+  return !(value.scope === "workspace" && value.workspaceId === null) && isLocalSettings(value.value, value.scope === "workspace");
+}
+
+export function isDesktopSettingsSnapshot(value: unknown): value is DesktopSettingsSnapshot {
+  return hasExactKeys(value, ["schemaVersion", "user", "workspace"]) && value.schemaVersion === 1 &&
+    isLocalSettings(value.user, false) && isLocalSettings(value.workspace, true);
+}
+
+export function isLocalSettings(value: unknown, partial: boolean): value is DesktopLocalSettings | Partial<DesktopLocalSettings> {
+  if (!isRecord(value)) return false;
+  const expected = ["language", "theme", "defaultShell", "model", "approval", "shortcuts", "summaryDefault", "bottomDefault", "toolsDefault", "gitBase", "navigationWidth", "inspectorWidth", "disabledTools"] as const;
+  if (Object.keys(value).some((key) => !expected.includes(key as typeof expected[number]))) return false;
+  if (!partial && Object.keys(value).length !== expected.length) return false;
+  const valid = (key: typeof expected[number], predicate: (candidate: unknown) => boolean) =>
+    (partial && !Object.hasOwn(value, key)) || predicate(value[key]);
+  return valid("language", (item) => item === "zh-CN" || item === "en-US") &&
+    valid("theme", (item) => item === "system" || item === "light" || item === "dark") &&
+    valid("defaultShell", (item) => typeof item === "string" && ["system-default", "powershell", "cmd", "wsl", "git-bash"].includes(item)) &&
+    valid("model", (item) => isBoundedString(item, 128)) &&
+    valid("approval", (item) => item === "read-only" || item === "on-request" || item === "trusted-local") &&
+    valid("shortcuts", (item) => typeof item === "boolean") && valid("summaryDefault", (item) => typeof item === "boolean") &&
+    valid("bottomDefault", (item) => typeof item === "boolean") && valid("toolsDefault", (item) => typeof item === "boolean") &&
+    valid("gitBase", (item) => isBoundedString(item, 200)) &&
+    valid("navigationWidth", (item) => typeof item === "number" && Number.isSafeInteger(item) && item >= 180 && item <= 520) &&
+    valid("inspectorWidth", (item) => typeof item === "number" && Number.isSafeInteger(item) && item >= 240 && item <= 720) &&
+    valid("disabledTools", (item) => Array.isArray(item) && item.length <= 128 && item.every((entry) => isBoundedString(entry, 256)));
+}
+
+function isBoundedString(value: unknown, maxBytes: number): value is string {
+  return typeof value === "string" && new TextEncoder().encode(value).length <= maxBytes;
 }
 
 function hasExactKeys(value: unknown, expected: readonly string[]): value is Record<string, unknown> {

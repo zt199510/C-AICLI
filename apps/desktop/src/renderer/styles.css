@@ -155,3 +155,72 @@ button:focus-visible { outline:2px solid #2176c7; outline-offset:2px; }
   .thread-row.selected,.review-tabs button[aria-selected=true] { border:1px solid Highlight; box-shadow:none; }
   .status-dot,.status-chip,.approval-panel,.recovery-actions,.restart-confirm,.inline-error,.capped-banner,.recovery-banner { border:1px solid CanvasText; forced-color-adjust:auto; }
 }
+
+.changes-workspace-panel { display:grid; gap:12px; min-height:0; }
+.changes-summary-bar,.changes-summary-bar>div,.changes-diff-viewer>header,.diff-action-bar,.git-action-bar>div,.git-confirmation>div,.diff-hunk header,.diff-hunk header>div { display:flex; align-items:center; gap:8px; }
+.changes-summary-bar { justify-content:space-between; }
+.changes-summary-bar h2,.changes-summary-bar p { margin:0; }
+.changes-branch-meta { color:#626a70; }
+.changes-review-layout { display:grid; grid-template-columns:minmax(180px,30%) minmax(0,1fr); border:1px solid #d8dadd; border-radius:10px; min-height:320px; overflow:hidden; }
+.changes-file-list { border-right:1px solid #d8dadd; overflow:auto; padding:8px; }
+.changes-file-list section { margin-bottom:12px; }
+.changes-file-list h3 { display:flex; justify-content:space-between; margin:4px 6px; color:#626a70; font-size:11px; text-transform:uppercase; }
+.changes-file-list button { display:flex; width:100%; gap:7px; align-items:center; padding:6px; border:0; background:transparent; text-align:left; }
+.changes-file-list button[aria-current="page"] { background:#eef4f8; }
+.changes-file-list .plain-path { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.changes-diff-viewer { min-width:0; overflow:auto; }
+.changes-diff-viewer>header { position:sticky; top:0; z-index:1; justify-content:space-between; padding:8px; background:#fff; border-bottom:1px solid #d8dadd; }
+.changes-diff-viewer>header>div:first-child { display:grid; gap:2px; min-width:0; }
+.changes-diff,.diff-hunk { margin:0; padding:10px; font:12px/1.45 Consolas,monospace; white-space:pre; overflow:auto; }
+.diff-hunk { border-top:1px solid #d8dadd; }
+.diff-hunk header { justify-content:space-between; }
+.git-action-bar { display:grid; grid-template-columns:minmax(0,1fr) auto; gap:10px; align-items:end; }
+.git-action-bar label { display:grid; gap:5px; }
+.git-action-bar textarea { min-height:56px; resize:vertical; }
+.git-confirmation { border:1px solid #d39c19; border-radius:10px; padding:12px; background:#fff9e8; }
+.git-confirmation h3,.git-confirmation p { margin-top:0; }
+.git-confirmation>div { justify-content:flex-end; }
+button.danger { color:#9e2f2f; }
+@media (max-width:760px) {
+  .changes-review-layout { grid-template-columns:1fr; }
+  .changes-file-list { max-height:160px; border-right:0; border-bottom:1px solid #d8dadd; }
+  .git-action-bar { grid-template-columns:1fr; }
+}
+.git-workspace-view { display:grid; gap:10px; }
+.git-workspace-view>label { display:grid; gap:5px; color:#626a70; font-size:12px; }
+.git-workspace-view input,.git-workspace-view textarea,.git-action-bar textarea { border:1px solid #c9cdd1; border-radius:6px; padding:7px 9px; background:#fff; color:#252a2e; }
+.git-workspace-view textarea { min-height:100px; resize:vertical; }
+.branch-list { display:flex; flex-wrap:wrap; gap:6px; }
+.git-workspace-view article { display:grid; gap:5px; padding:10px; border:1px solid #d8dadd; border-radius:8px; }
+.terminal-toolbar { position:relative; }
+.terminal-share-preview { position:absolute; z-index:5; top:38px; right:0; width:min(520px,90vw); display:grid; gap:8px; padding:12px; border:1px solid #d39c19; border-radius:9px; background:#fff; box-shadow:0 12px 30px #1b232a30; }
+.terminal-share-preview h3,.terminal-share-preview p { margin:0; }
+.terminal-share-preview textarea { min-height:160px; resize:vertical; font:12px/1.4 Consolas,monospace; }
+.terminal-share-preview>div { display:flex; justify-content:flex-end; gap:6px; }
+.settings-page { min-height:0; overflow:auto; padding:clamp(16px,4vw,44px); background:#f8f9fa; }
+.settings-page>header { display:flex; justify-content:space-between; align-items:center; margin-bottom:24px; }
+.settings-page h1,.settings-page h2,.settings-page p { margin-top:0; }
+.settings-page>header span { color:#626a70; font-size:12px; }
+.settings-columns { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:18px; }
+.settings-columns>section { display:grid; align-content:start; gap:12px; padding:18px; border:1px solid #d8dadd; border-radius:10px; background:#fff; }
+.settings-columns label { display:grid; gap:5px; font-size:12px; color:#555d62; }
+.settings-columns label:has(input[type="checkbox"]) { display:flex; align-items:center; }
+.settings-columns input:not([type="checkbox"]),.settings-columns select { min-height:34px; border:1px solid #c9cdd1; border-radius:6px; padding:6px 8px; }
+.settings-page>footer { margin-top:18px; color:#626a70; font-size:12px; }
+@media (max-width:760px) { .settings-columns { grid-template-columns:1fr; } }
+.slash-command-menu { position:absolute; z-index:5; left:0; right:0; bottom:100%; display:grid; max-height:240px; overflow:auto; padding:6px; border:1px solid #c9cdd1; border-radius:8px; background:#fff; box-shadow:0 10px 25px #1b232a20; }
+.slash-command-menu button { display:grid; grid-template-columns:100px minmax(0,1fr); gap:8px; padding:8px; border:0; border-radius:5px; background:transparent; text-align:left; }
+.slash-command-menu button:hover,.slash-command-menu button:focus { background:#eef4f8; }
+.message-actions { display:flex; justify-content:flex-end; opacity:0; transition:opacity .12s; }
+.conversation-message:hover .message-actions,.conversation-message:focus-within .message-actions { opacity:1; }
+.message-actions button { border:0; background:transparent; color:#626a70; font-size:11px; }
+.subagent-panel { display: grid; gap: 10px; }
+.subagent-panel > header, .subagent-create-row, .subagent-card > header, .subagent-actions, .subagent-approval { display: flex; align-items: center; gap: 8px; }
+.subagent-panel > header, .subagent-card > header { justify-content: space-between; }
+.subagent-panel textarea, .subagent-panel select { width: 100%; border: 1px solid var(--border-subtle); border-radius: 8px; background: var(--surface-raised); color: var(--text-primary); padding: 8px; }
+.subagent-create-row select { flex: 1; }
+.subagent-note { color: var(--text-secondary); margin: 0; }
+.subagent-list { display: grid; gap: 8px; }
+.subagent-card { display: grid; gap: 7px; border: 1px solid var(--border-subtle); border-radius: 9px; padding: 10px; background: var(--surface-raised); }
+.subagent-card p { margin: 0; }
+.subagent-card code { overflow-wrap: anywhere; }

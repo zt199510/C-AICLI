@@ -124,6 +124,7 @@ public sealed class ComposerApplicationService
             Prompt = prompt,
             Context = contexts,
             Catalog = catalogReferences,
+            SourcePointer = request.SourcePointer,
             EffectiveModel = ApplicationProjection.Safe(request.Snapshot.Configuration.Model, 256),
             ModelSource = ApplicationProjection.Safe(request.Snapshot.Configuration.ModelSource, 256),
             ApprovalMode = request.Snapshot.Configuration.ApprovalMode.ToString(),

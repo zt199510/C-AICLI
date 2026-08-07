@@ -13,6 +13,7 @@ const workspace = {
 };
 const types = ["user.message", "assistant.message", "plan.updated", "tool.started", "tool.completed", "command.started", "command.completed", "approval.requested", "approval.resolved", "changes.updated", "report.available", "artifact.available", "warning.raised", "turn.completed"];
 const runtimeListeners = new Set();
+const fixtureSettings = { language: "zh-CN", theme: "system", defaultShell: "system-default", model: "", approval: "on-request", shortcuts: true, summaryDefault: true, bottomDefault: true, toolsDefault: true, gitBase: "main", navigationWidth: 288, inspectorWidth: 640, disabledTools: [] };
 const chatFixtureConfig = () => {
   const base = {
     threadStatus: "completed",
@@ -321,8 +322,13 @@ contextBridge.exposeInMainWorld("caicli", Object.freeze({
   },
   createThread: async () => ok(currentThread()), renameThread: async () => ok(currentThread()), archiveThread: async () => ok(currentThread()),
   getChanges: async () => ({ ...ok({ status: "ready", exitCode: 0, gitStatusSummary: "M src/review.ts", gitStatusSucceeded: true, gitStatusErrorCode: null, dirty: true, diffStatSummary: longSession ? "240 files changed (bounded fixture)" : "1 file changed", diffSucceeded: true, diffErrorCode: null, diffTruncated: longSession, changedFiles: longSession ? Array.from({ length: 50 }, (_, index) => ({ path: `src/generated/file-${index + 1}.ts`, status: "M" })) : [{ path: "src/review.ts", status: "M" }], sessionSource: null, sessionName: null, warnings: longSession ? ["Diff projection was truncated at the existing bound."] : [] }), truncated: longSession }),
+  mutateChanges: async () => { throw new Error("Fixture Git mutations are disabled."); },
   listReports: async () => ok({ reports: [], truncated: false }), getReport: async () => { throw new Error("not used"); },
   listArtifacts: async () => ok({ artifacts: [artifact], truncated: false }), getArtifact: async () => ok(artifact),
+  listTerminalProfiles: async () => ok({ profiles: [
+    { profileId: "system-default", displayName: "PowerShell (default)", isDefault: true },
+    { profileId: "cmd", displayName: "Command Prompt", isDefault: false },
+  ] }),
   openTerminal: async () => { terminalStatus = "running"; terminalOutput = ""; terminalCursor = 0; terminalTruncated = false; return terminal(); },
   inputTerminal: async ({ text }) => {
     if (longSession && text.includes("long-output")) {
@@ -350,6 +356,8 @@ contextBridge.exposeInMainWorld("caicli", Object.freeze({
   getComposer: async (command) => ipcRenderer.invoke("fixture:composer-get", command),
   enqueueComposer: async (command) => ipcRenderer.invoke("fixture:composer-enqueue", command),
   clearComposer: async (command) => ipcRenderer.invoke("fixture:composer-clear", command),
+  getSettings: async () => ({ schemaVersion: 1, user: fixtureSettings, workspace: {} }),
+  setSettings: async ({ scope, value }) => ({ schemaVersion: 1, user: scope === "user" ? value : fixtureSettings, workspace: scope === "workspace" ? value : {} }),
   onRuntimeStatus: (listener) => {
     runtimeListeners.add(listener);
     return () => runtimeListeners.delete(listener);

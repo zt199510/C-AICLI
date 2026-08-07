@@ -70,12 +70,17 @@ test("packaged trust boundary and keyboard accessibility stay fail-closed", asyn
 
     const toolSidebar = page.getByRole("button", { name: "Toggle workspace tool sidebar" });
     if ((await toolSidebar.getAttribute("aria-pressed")) === "false") await toolSidebar.click();
-    const changes = page.getByRole("button", { name: "Changes", exact: true });
-    await changes.focus();
-    await page.keyboard.press("ArrowDown");
-    await expect(page.getByRole("button", { name: "Local", exact: true })).toBeFocused();
-    await page.getByRole("button", { name: "Terminal", exact: true }).click();
-    await expect(page.getByRole("region", { name: "Terminal", exact: true })).toBeVisible();
+    const reviewTab = page.getByRole("tab", { name: "审阅", exact: true });
+    await reviewTab.focus();
+    await expect(reviewTab).toBeFocused();
+    await reviewTab.click();
+    await expect(page.locator('#workspace-panel-host[data-panel="changes"]')).toBeVisible();
+
+    const bottomPanel = page.getByRole("button", { name: "Toggle workspace bottom panel" });
+    if ((await bottomPanel.getAttribute("aria-pressed")) === "false") await bottomPanel.click();
+    await expect(bottomPanel).toHaveAttribute("aria-pressed", "true");
+    await page.getByRole("button", { name: "新建终端", exact: true }).click();
+    await expect(page.getByRole("tab", { name: /Terminal 1/ })).toBeVisible();
 
     await page.setViewportSize({ width: 760, height: 560 });
     const showThreads = page.getByRole("button", { name: "显示会话侧栏" });

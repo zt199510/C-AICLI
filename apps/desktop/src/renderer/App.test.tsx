@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { ChangesData, WorkspaceSnapshotData } from "../generated/desktop-contracts";
@@ -8,6 +8,7 @@ import { App } from "./App";
 describe("desktop shell", () => {
   beforeEach(() => {
     Object.defineProperty(window, "innerWidth", { value: 1440, configurable: true, writable: true });
+    window.localStorage.clear();
     window.caicli = bridge();
   });
 
@@ -27,7 +28,9 @@ describe("desktop shell", () => {
     window.caicli = configured;
     render(<App />);
     await waitFor(() => expect(configured.getChanges).toHaveBeenCalledOnce());
-    await userEvent.click(screen.getByRole("button", { name: "Changes" }));
+    const sidebar = screen.getByRole("button", { name: "Toggle workspace tool sidebar" });
+    if (sidebar.getAttribute("aria-pressed") === "false") await userEvent.click(sidebar);
+    await userEvent.click(screen.getByRole("tab", { name: "审阅" }));
     expect(configured.getChanges).toHaveBeenCalledOnce();
   });
 
@@ -39,7 +42,7 @@ describe("desktop shell", () => {
     expect(window.caicli.restartRuntime).toHaveBeenCalledOnce();
   });
 
-  it("keeps three workspace panel toggles visible and independently switchable", async () => {
+  it("keeps three workspace panel toggles visible and prevents a cramped bottom-plus-right split", async () => {
     render(<App />);
     await userEvent.click(screen.getByRole("button", { name: "收起会话侧栏" }));
     expect(screen.getByRole("button", { name: "展开会话侧栏" })).toBeTruthy();
@@ -49,18 +52,45 @@ describe("desktop shell", () => {
     expect(summary.getAttribute("aria-controls")).toBe("workspace-summary-overlay");
     expect(bottom.getAttribute("aria-controls")).toBe("workspace-bottom-panel");
     expect(sidebar.getAttribute("aria-controls")).toBe("workspace-tool-sidebar");
-    expect(summary.getAttribute("aria-pressed")).toBe("false");
+    expect(summary.getAttribute("aria-pressed")).toBe("true");
     expect(bottom.getAttribute("aria-pressed")).toBe("false");
     expect(sidebar.getAttribute("aria-pressed")).toBe("true");
 
     await userEvent.click(summary);
+    expect(summary.getAttribute("aria-pressed")).toBe("false");
+    await userEvent.click(summary);
     await userEvent.click(bottom);
-    await userEvent.click(sidebar);
     expect(summary.getAttribute("aria-pressed")).toBe("true");
     expect(bottom.getAttribute("aria-pressed")).toBe("true");
     expect(sidebar.getAttribute("aria-pressed")).toBe("false");
     expect(document.querySelector("#workspace-summary-overlay")).toBeTruthy();
-    expect(document.querySelector("#workspace-bottom-panel")).toBeTruthy();
+    const dock = document.querySelector("#workspace-bottom-panel");
+    expect(dock).toBeTruthy();
+    expect(dock?.parentElement?.classList.contains("task-surface")).toBe(true);
+    expect(dock?.previousElementSibling?.classList.contains("composer")).toBe(true);
+    expect(document.querySelector(".timeline-overlay-layer #workspace-bottom-panel")).toBeNull();
+
+    await userEvent.click(sidebar);
+    expect(bottom.getAttribute("aria-pressed")).toBe("false");
+    expect(sidebar.getAttribute("aria-pressed")).toBe("true");
+    expect(document.querySelector("#workspace-bottom-panel")).toBeNull();
+  });
+
+  it("exposes and handles the three workspace panel keyboard shortcuts", () => {
+    render(<App />);
+    const summary = screen.getByRole("button", { name: "Toggle workspace summary" });
+    const bottom = screen.getByRole("button", { name: "Toggle workspace bottom panel" });
+    const sidebar = screen.getByRole("button", { name: "Toggle workspace tool sidebar" });
+    expect(summary.getAttribute("aria-keyshortcuts")).toBe("Control+Shift+1");
+    expect(bottom.getAttribute("aria-keyshortcuts")).toBe("Control+Shift+2");
+    expect(sidebar.getAttribute("aria-keyshortcuts")).toBe("Control+Shift+3");
+
+    fireEvent.keyDown(window, { code: "Digit1", ctrlKey: true, shiftKey: true });
+    fireEvent.keyDown(window, { code: "Digit2", ctrlKey: true, shiftKey: true });
+    fireEvent.keyDown(window, { code: "Digit3", ctrlKey: true, shiftKey: true });
+    expect(summary.getAttribute("aria-pressed")).toBe("false");
+    expect(bottom.getAttribute("aria-pressed")).toBe("false");
+    expect(sidebar.getAttribute("aria-pressed")).toBe("true");
   });
 
   it("opens the archived view from the collapsed conversation rail", async () => {
@@ -76,38 +106,43 @@ describe("desktop shell", () => {
     expect(screen.getByRole("button", { name: "筛选对话，当前：全部（不含已归档）" })).toBeTruthy();
   });
 
-  it("keeps terminal tools in the contextual inspector instead of the conversation surface", async () => {
+  it("uses a terminal-only bottom dock and a tabbed right workbench", async () => {
     render(<App />);
     expect(screen.queryByRole("region", { name: "User terminal" })).toBeNull();
-    const tools = screen.getByRole("navigation", { name: "Workspace tool groups" });
-    expect(tools).toBeTruthy();
-    for (const name of ["Changes", "Terminal", "Reports", "Artifacts", "Preview"]) {
-      expect(screen.getByRole("button", { name })).toBeTruthy();
-    }
-    await userEvent.click(screen.getByRole("button", { name: "Terminal" }));
+    expect(screen.getByRole("tab", { name: "审阅" })).toBeTruthy();
+    await userEvent.click(screen.getByRole("button", { name: "添加工作区工具" }));
+    expect(screen.getByRole("menu", { name: "添加工作区工具" })).toBeTruthy();
+    expect(screen.getByRole("menuitem", { name: "终端" })).toBeTruthy();
+    await userEvent.click(screen.getByRole("button", { name: "Toggle workspace bottom panel" }));
     expect(screen.getByRole("button", { name: "Toggle workspace bottom panel" }).getAttribute("aria-pressed")).toBe("true");
+    expect(document.activeElement).toBe(screen.getByRole("button", { name: "Toggle workspace bottom panel" }));
+    expect(screen.getByRole("region", { name: "终端控制台" })).toBeTruthy();
     expect(screen.getByRole("region", { name: "User terminal" })).toBeTruthy();
-    expect(screen.getByRole("region", { name: "Terminal" })).toBeTruthy();
+    expect(document.querySelector('#workspace-bottom-panel [data-panel="changes"]')).toBeNull();
   });
 
-  it("retains the selected tool while the bottom panel is closed", async () => {
+  it("switches cleanly between the right workbench and the full-width terminal dock", async () => {
     render(<App />);
-    await userEvent.click(screen.getByRole("button", { name: "Terminal" }));
+    const reviewTab = screen.getByRole("tab", { name: "审阅" });
     const bottom = screen.getByRole("button", { name: "Toggle workspace bottom panel" });
+    const sidebar = screen.getByRole("button", { name: "Toggle workspace tool sidebar" });
     await userEvent.click(bottom);
-    expect(screen.queryByRole("region", { name: "Terminal" })).toBeNull();
-    await userEvent.click(bottom);
-    expect(screen.getByRole("region", { name: "Terminal" })).toBeTruthy();
+    expect(screen.getByRole("region", { name: "终端控制台" })).toBeTruthy();
+    expect(sidebar.getAttribute("aria-pressed")).toBe("false");
+    expect(reviewTab.getAttribute("aria-selected")).toBe("true");
+    await userEvent.click(sidebar);
+    expect(screen.queryByRole("region", { name: "终端控制台" })).toBeNull();
+    expect(sidebar.getAttribute("aria-pressed")).toBe("true");
+    expect(reviewTab.getAttribute("aria-selected")).toBe("true");
   });
 
   it("closes non-modal surfaces in last-opened order and restores their triggers", async () => {
     render(<App />);
     const summary = screen.getByRole("button", { name: "Toggle workspace summary" });
     const bottom = screen.getByRole("button", { name: "Toggle workspace bottom panel" });
-    await userEvent.click(summary);
     await userEvent.click(bottom);
 
-    document.querySelector<HTMLElement>("#workspace-bottom-panel .inspector-detail-scroll")?.focus();
+    document.querySelector<HTMLElement>("#workspace-bottom-panel .terminal-panel-close")?.focus();
     await userEvent.keyboard("{Escape}");
     expect(bottom.getAttribute("aria-pressed")).toBe("false");
     expect(summary.getAttribute("aria-pressed")).toBe("true");
@@ -121,10 +156,10 @@ describe("desktop shell", () => {
   it("supports keyboard resizing for the wide workspace inspector", async () => {
     render(<App />);
     const separator = screen.getByRole("separator", { name: "Resize workspace inspector" });
-    expect(separator.getAttribute("aria-valuenow")).toBe("360");
+    expect(separator.getAttribute("aria-valuenow")).toBe("640");
     separator.focus();
     await userEvent.keyboard("{ArrowLeft}");
-    expect(separator.getAttribute("aria-valuenow")).toBe("376");
+    expect(separator.getAttribute("aria-valuenow")).toBe("656");
   });
 
   it("supports keyboard resizing for the conversation sidebar", async () => {
@@ -187,6 +222,7 @@ function bridge(status = createRuntimeStatus("runtime-ready")): DesktopBridge {
     renameThread: vi.fn(async () => { throw new Error("unused"); }),
     archiveThread: vi.fn(async () => { throw new Error("unused"); }),
     getChanges: vi.fn(async () => { throw new Error("unused"); }),
+    mutateChanges: vi.fn(async () => { throw new Error("unused"); }),
     listReports: vi.fn(async () => { throw new Error("unused"); }),
     getReport: vi.fn(async () => { throw new Error("unused"); }),
     listArtifacts: vi.fn(async () => { throw new Error("unused"); }),
@@ -197,6 +233,7 @@ function bridge(status = createRuntimeStatus("runtime-ready")): DesktopBridge {
     cancelTerminal: vi.fn(async () => { throw new Error("unused"); }),
     closeTerminal: vi.fn(async () => { throw new Error("unused"); }),
     getTerminal: vi.fn(async () => { throw new Error("unused"); }),
+    listTerminalProfiles: vi.fn(async () => { throw new Error("unused"); }),
     previewArtifact: vi.fn(async () => { throw new Error("unused"); }),
     exportArtifact: vi.fn(async () => { throw new Error("unused"); }),
     verifyArtifact: vi.fn(async () => { throw new Error("unused"); }),
@@ -214,8 +251,15 @@ function bridge(status = createRuntimeStatus("runtime-ready")): DesktopBridge {
     startTurn: vi.fn(async () => { throw new Error("unused"); }),
     cancelTurn: vi.fn(async () => { throw new Error("unused"); }),
     resolveApproval: vi.fn(async () => { throw new Error("unused"); }),
+    listSubagents: vi.fn(async () => { throw new Error("unused"); }),
+    startSubagent: vi.fn(async () => { throw new Error("unused"); }),
+    cancelSubagent: vi.fn(async () => { throw new Error("unused"); }),
+    takeoverSubagent: vi.fn(async () => { throw new Error("unused"); }),
+    resolveSubagentApproval: vi.fn(async () => { throw new Error("unused"); }),
     resumeTurn: vi.fn(async () => { throw new Error("unused"); }),
-    restartTurn: vi.fn(async () => { throw new Error("unused"); }),
+  restartTurn: vi.fn(async () => { throw new Error("unused"); }),
+  getSettings: vi.fn(async () => ({ schemaVersion: 1 as const, user: { language: "zh-CN" as const, theme: "system" as const, defaultShell: "system-default" as const, model: "", approval: "on-request" as const, shortcuts: true, summaryDefault: true, bottomDefault: true, toolsDefault: true, gitBase: "main", navigationWidth: 288, inspectorWidth: 640, disabledTools: [] }, workspace: {} })),
+  setSettings: vi.fn(async (command) => ({ schemaVersion: 1 as const, user: command.scope === "user" ? { language: "zh-CN" as const, theme: "system" as const, defaultShell: "system-default" as const, model: "", approval: "on-request" as const, shortcuts: true, summaryDefault: true, bottomDefault: true, toolsDefault: true, gitBase: "main", navigationWidth: 288, inspectorWidth: 640, disabledTools: [], ...command.value } : { language: "zh-CN" as const, theme: "system" as const, defaultShell: "system-default" as const, model: "", approval: "on-request" as const, shortcuts: true, summaryDefault: true, bottomDefault: true, toolsDefault: true, gitBase: "main", navigationWidth: 288, inspectorWidth: 640, disabledTools: [] }, workspace: command.scope === "workspace" ? command.value : {} })),
     onRuntimeStatus: vi.fn(() => () => undefined),
     onThreadChanged: vi.fn(() => () => undefined),
   };

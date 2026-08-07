@@ -2,17 +2,18 @@ import {
   SCHEMA_VERSION,
   type ArtifactGetResult,
   type ArtifactListResult,
-  type TerminalStateResult, type ArtifactReviewResult, type ArtifactExportResult, type GerberReviewResult,
+  type TerminalStateResult, type TerminalProfileListResult, type ArtifactReviewResult, type ArtifactExportResult, type GerberReviewResult,
   type TerminalOpenParams, type TerminalInputParams, type TerminalResizeParams, type TerminalMutationParams,
   type GerberDecisionParams,
-  type ChangesGetResult,
+  type ChangesGetResult, type ChangesMutateParams, type ChangesMutateResult,
   type CatalogListResult,
-  type ComposerCatalogSelectionData,
+  type ComposerEnqueueParams,
   type ComposerStateResult,
   type TurnExecutionStateResult,
   type TurnStartParams,
   type TurnCancelParams,
   type ApprovalResolveParams,
+  type SubagentStartParams, type SubagentMutationParams, type SubagentApprovalResolveParams, type SubagentResult,
   type TurnResumeParams,
   type TurnRestartParams,
   type ContextResolveResult,
@@ -33,10 +34,10 @@ import {
   ARTIFACT_GET_REQUEST,
   ARTIFACT_LIST_REQUEST,
   ARTIFACT_PREVIEW_REQUEST, ARTIFACT_EXPORT_REQUEST, ARTIFACT_VERIFY_REQUEST,
-  TERMINAL_OPEN_REQUEST, TERMINAL_INPUT_REQUEST, TERMINAL_RESIZE_REQUEST, TERMINAL_CANCEL_REQUEST, TERMINAL_CLOSE_REQUEST, TERMINAL_GET_REQUEST,
+  TERMINAL_OPEN_REQUEST, TERMINAL_INPUT_REQUEST, TERMINAL_RESIZE_REQUEST, TERMINAL_CANCEL_REQUEST, TERMINAL_CLOSE_REQUEST, TERMINAL_GET_REQUEST, TERMINAL_PROFILES_GET_REQUEST,
   GERBER_REVIEW_GET_REQUEST, GERBER_PREVIEW_REQUEST, GERBER_ACCEPT_REQUEST, GERBER_REJECT_REQUEST,
   CATALOG_LIST_REQUEST,
-  CHANGES_GET_REQUEST,
+  CHANGES_GET_REQUEST, CHANGES_MUTATE_REQUEST,
   COMPOSER_CLEAR_REQUEST,
   COMPOSER_ENQUEUE_REQUEST,
   COMPOSER_GET_REQUEST,
@@ -55,6 +56,7 @@ import {
   TURN_START_REQUEST,
   TURN_CANCEL_REQUEST,
   APPROVAL_RESOLVE_REQUEST,
+  SUBAGENT_LIST_REQUEST, SUBAGENT_START_REQUEST, SUBAGENT_CANCEL_REQUEST, SUBAGENT_TAKEOVER_REQUEST, SUBAGENT_APPROVAL_RESOLVE_REQUEST,
   TURN_RESUME_REQUEST,
   TURN_RESTART_REQUEST,
   type DesktopRequestDescriptor,
@@ -195,23 +197,15 @@ export class AppHostRuntime {
     return this.query(CONTEXT_SEARCH_REQUEST, { schemaVersion: SCHEMA_VERSION, query });
   }
 
-  resolveContext(nativePath: string, kind: "file" | "folder"): Promise<ContextResolveResult> {
-    return this.query(CONTEXT_RESOLVE_REQUEST, { schemaVersion: SCHEMA_VERSION, nativePath, kind });
+  resolveContext(nativePath: string, kind: "file" | "folder", threadId?: string): Promise<ContextResolveResult> {
+    return this.query(CONTEXT_RESOLVE_REQUEST, { schemaVersion: SCHEMA_VERSION, nativePath, kind, ...(threadId ? { threadId } : {}) });
   }
 
   getComposer(threadId: string): Promise<ComposerStateResult> {
     return this.query(COMPOSER_GET_REQUEST, { schemaVersion: SCHEMA_VERSION, threadId });
   }
 
-  enqueueComposer(command: {
-    threadId: string;
-    expectedThreadRevision: number;
-    expectedQueueRevision: number;
-    clientMutationId: string;
-    prompt: string;
-    contextSelectionIds: readonly string[];
-    catalogSelections: readonly ComposerCatalogSelectionData[];
-  }): Promise<ComposerStateResult> {
+  enqueueComposer(command: Omit<ComposerEnqueueParams, "schemaVersion">): Promise<ComposerStateResult> {
     return this.query(COMPOSER_ENQUEUE_REQUEST, { schemaVersion: SCHEMA_VERSION, ...command });
   }
 
@@ -278,6 +272,33 @@ export class AppHostRuntime {
   }
   getTerminal(sessionId: string, afterCursor: number): Promise<TerminalStateResult> {
     return this.query(TERMINAL_GET_REQUEST, { schemaVersion: SCHEMA_VERSION, sessionId, afterCursor });
+  }
+
+  listSubagents(parentThreadId: string): Promise<SubagentResult> {
+    return this.query(SUBAGENT_LIST_REQUEST, { schemaVersion: SCHEMA_VERSION, parentThreadId });
+  }
+
+  startSubagent(command: Omit<SubagentStartParams, "schemaVersion">): Promise<SubagentResult> {
+    return this.query(SUBAGENT_START_REQUEST, { schemaVersion: SCHEMA_VERSION, ...command });
+  }
+
+  cancelSubagent(command: Omit<SubagentMutationParams, "schemaVersion">): Promise<SubagentResult> {
+    return this.query(SUBAGENT_CANCEL_REQUEST, { schemaVersion: SCHEMA_VERSION, ...command });
+  }
+
+  takeoverSubagent(command: Omit<SubagentMutationParams, "schemaVersion">): Promise<SubagentResult> {
+    return this.query(SUBAGENT_TAKEOVER_REQUEST, { schemaVersion: SCHEMA_VERSION, ...command });
+  }
+
+  resolveSubagentApproval(command: Omit<SubagentApprovalResolveParams, "schemaVersion">): Promise<SubagentResult> {
+    return this.query(SUBAGENT_APPROVAL_RESOLVE_REQUEST, { schemaVersion: SCHEMA_VERSION, ...command });
+  }
+
+  mutateChanges(command: Omit<ChangesMutateParams, "schemaVersion">): Promise<ChangesMutateResult> {
+    return this.query(CHANGES_MUTATE_REQUEST, { schemaVersion: SCHEMA_VERSION, ...command });
+  }
+  listTerminalProfiles(): Promise<TerminalProfileListResult> {
+    return this.query(TERMINAL_PROFILES_GET_REQUEST, { schemaVersion: SCHEMA_VERSION });
   }
   previewArtifact(artifactId: string): Promise<ArtifactReviewResult> {
     return this.query(ARTIFACT_PREVIEW_REQUEST, { schemaVersion: SCHEMA_VERSION, artifactId });

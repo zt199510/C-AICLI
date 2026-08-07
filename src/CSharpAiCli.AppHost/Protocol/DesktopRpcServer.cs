@@ -27,6 +27,8 @@ public sealed class DesktopRpcServer : IDisposable
     private readonly ITurnExecutionRuntime turnExecutionRuntime;
     private readonly DesktopThreadNotificationSequencer notificationSequencer = new(TimeProvider.System);
     private readonly DesktopUserTerminalSupervisor terminalSupervisor = new();
+    private readonly DesktopGitChangesSupervisor gitChangesSupervisor = new();
+    private readonly DesktopSubagentSupervisor subagentSupervisor;
     private DesktopWriteExecutionSupervisor writeSupervisor;
     private DesktopRpcOutputQueue? liveOutput;
     private DesktopApplicationSession? applicationSession;
@@ -57,6 +59,7 @@ public sealed class DesktopRpcServer : IDisposable
         writeSupervisor = new DesktopWriteExecutionSupervisor(
             NotifyCommittedAsync,
             turnExecutionRuntime);
+        subagentSupervisor = new DesktopSubagentSupervisor(this.sessionFactory, turnExecutionRuntime, gitChangesSupervisor);
     }
 
     internal ITurnExecutionRuntime TurnExecutionRuntime => turnExecutionRuntime;
@@ -298,9 +301,15 @@ public sealed class DesktopRpcServer : IDisposable
                 DesktopProtocolDefinition.TurnStartMethod => StartTurn(id, parameters, requestCancellation),
                 DesktopProtocolDefinition.TurnCancelMethod => CancelTurn(id, parameters),
                 DesktopProtocolDefinition.ApprovalResolveMethod => ResolveApproval(id, parameters),
+                DesktopProtocolDefinition.SubagentListMethod => ListSubagents(id, parameters),
+                DesktopProtocolDefinition.SubagentStartMethod => StartSubagent(id, parameters),
+                DesktopProtocolDefinition.SubagentCancelMethod => CancelSubagent(id, parameters, false),
+                DesktopProtocolDefinition.SubagentTakeoverMethod => CancelSubagent(id, parameters, true),
+                DesktopProtocolDefinition.SubagentApprovalResolveMethod => ResolveSubagentApproval(id, parameters),
                 DesktopProtocolDefinition.TurnResumeMethod => ResumeTurn(id, parameters, requestCancellation),
                 DesktopProtocolDefinition.TurnRestartMethod => RestartTurn(id, parameters, requestCancellation),
                 DesktopProtocolDefinition.ChangesGetMethod => GetChanges(id, parameters, requestCancellation),
+                DesktopProtocolDefinition.ChangesMutateMethod => MutateChanges(id, parameters),
                 DesktopProtocolDefinition.ReportListMethod => ListReports(id, parameters, requestCancellation),
                 DesktopProtocolDefinition.ReportGetMethod => GetReport(id, parameters, requestCancellation),
                 DesktopProtocolDefinition.ArtifactListMethod => ListArtifacts(id, parameters, requestCancellation),
@@ -311,6 +320,7 @@ public sealed class DesktopRpcServer : IDisposable
                 DesktopProtocolDefinition.TerminalCancelMethod => CancelTerminal(id, parameters),
                 DesktopProtocolDefinition.TerminalCloseMethod => CloseTerminal(id, parameters),
                 DesktopProtocolDefinition.TerminalGetMethod => GetTerminal(id, parameters),
+                DesktopProtocolDefinition.TerminalProfilesGetMethod => GetTerminalProfiles(id, parameters),
                 DesktopProtocolDefinition.ArtifactPreviewMethod => PreviewArtifact(id, parameters, requestCancellation),
                 DesktopProtocolDefinition.ArtifactExportMethod => ExportArtifact(id, parameters, requestCancellation),
                 DesktopProtocolDefinition.ArtifactVerifyMethod => VerifyArtifact(id, parameters, requestCancellation),
@@ -439,11 +449,14 @@ public sealed class DesktopRpcServer : IDisposable
         DesktopApplicationSession? previous = applicationSession;
         writeSupervisor.Stop();
         writeSupervisor.Dispose();
+        subagentSupervisor.Reset();
         terminalSupervisor.Reset();
+        gitChangesSupervisor.Reset();
         writeSupervisor = new DesktopWriteExecutionSupervisor(
             NotifyCommittedAsync,
             turnExecutionRuntime);
         applicationSession = opened.Session;
+        gitChangesSupervisor.Reset(opened.Session.Workspace.WorkspaceId, opened.Session.Workspace.RootPath);
         state = SessionState.WorkspaceReady;
         previous?.Dispose();
         return Success(id, new WorkspaceOpenResult
@@ -581,9 +594,51 @@ public sealed class DesktopRpcServer : IDisposable
             return InvalidParams(id, "Changes parameters are invalid.");
         }
 
-        return Success(id, DesktopProtocolMapper.Map(applicationSession!.GetChanges(
-            request.SessionName,
-            cancellationToken)));
+        return Success(id, string.IsNullOrWhiteSpace(request.SessionName)
+            ? gitChangesSupervisor.Query(cancellationToken)
+            : DesktopProtocolMapper.Map(applicationSession!.GetChanges(request.SessionName, cancellationToken)));
+    }
+
+    private byte[] ListSubagents(long? id, JsonElement parameters)
+    {
+        if (!TryDeserialize(parameters, out SubagentListParams? request) || request is null ||
+            !DesktopProtocolValidation.TryValidate(request, out _))
+            return InvalidParams(id, "Sub-agent list parameters are invalid.");
+        return Success(id, subagentSupervisor.List(request.ParentThreadId));
+    }
+
+    private byte[] StartSubagent(long? id, JsonElement parameters)
+    {
+        if (!TryDeserialize(parameters, out SubagentStartParams? request) || request is null ||
+            !DesktopProtocolValidation.TryValidate(request, out _))
+            return InvalidParams(id, "Sub-agent start parameters are invalid.");
+        return Success(id, subagentSupervisor.Start(applicationSession!, request));
+    }
+
+    private byte[] CancelSubagent(long? id, JsonElement parameters, bool takeover)
+    {
+        if (!TryDeserialize(parameters, out SubagentMutationParams? request) || request is null ||
+            !DesktopProtocolValidation.TryValidate(request, out _))
+            return InvalidParams(id, "Sub-agent mutation parameters are invalid.");
+        return Success(id, subagentSupervisor.Cancel(request, takeover));
+    }
+
+    private byte[] ResolveSubagentApproval(long? id, JsonElement parameters)
+    {
+        if (!TryDeserialize(parameters, out SubagentApprovalResolveParams? request) || request is null ||
+            !DesktopProtocolValidation.TryValidate(request, out _))
+            return InvalidParams(id, "Sub-agent approval parameters are invalid.");
+        return Success(id, subagentSupervisor.ResolveApproval(request));
+    }
+
+    private byte[] MutateChanges(long? id, JsonElement parameters)
+    {
+        if (!TryDeserialize(parameters, out ChangesMutateParams? request) || request is null ||
+            !DesktopProtocolValidation.TryValidate(request, out _))
+        {
+            return InvalidParams(id, "Changes mutation parameters are invalid.");
+        }
+        return Success(id, gitChangesSupervisor.Mutate(request));
     }
 
     private byte[] SearchContext(long? id, JsonElement parameters, CancellationToken cancellationToken)
@@ -600,7 +655,7 @@ public sealed class DesktopRpcServer : IDisposable
             !DesktopProtocolValidation.TryValidate(request, out _))
             return InvalidParams(id, "Context resolve parameters are invalid.");
         return Success(id, DesktopProtocolMapper.Map(applicationSession!.ResolveContext(
-            request.NativePath, request.Kind, cancellationToken)));
+            request.NativePath, request.Kind, request.ThreadId, cancellationToken)));
     }
 
     private byte[] GetComposer(long? id, JsonElement parameters, CancellationToken cancellationToken)
@@ -620,7 +675,9 @@ public sealed class DesktopRpcServer : IDisposable
             request.ThreadId, request.ExpectedThreadRevision, request.ExpectedQueueRevision,
             request.ClientMutationId, request.Prompt, request.ContextSelectionIds,
             request.CatalogSelections.Select(item => new ComposerCatalogSelection(
-                item.Kind, item.Id, item.CatalogRevision)).ToArray(), cancellationToken)));
+                item.Kind, item.Id, item.CatalogRevision)).ToArray(), request.ModelOverride,
+            request.ApprovalPreference, request.DisabledTools, request.SourceThreadId,
+            request.SourceItemId, request.SourceAction, cancellationToken)));
     }
 
     private byte[] ClearComposer(long? id, JsonElement parameters, CancellationToken cancellationToken)
@@ -785,6 +842,13 @@ public sealed class DesktopRpcServer : IDisposable
         if (!TryDeserialize(parameters, out TerminalGetParams? request) || request is null ||
             !DesktopProtocolValidation.TryValidate(request, out _)) return InvalidParams(id, "Terminal get parameters are invalid.");
         return Success(id, terminalSupervisor.Get(request.SessionId, request.AfterCursor));
+    }
+
+    private byte[] GetTerminalProfiles(long? id, JsonElement parameters)
+    {
+        if (!TryDeserialize(parameters, out TerminalProfilesGetParams? request) || request is null ||
+            !DesktopProtocolValidation.TryValidate(request, out _)) return InvalidParams(id, "Terminal profile parameters are invalid.");
+        return Success(id, DesktopUserTerminalSupervisor.GetProfiles());
     }
 
     private byte[] PreviewArtifact(long? id, JsonElement parameters, CancellationToken cancellationToken)
@@ -1001,13 +1065,19 @@ public sealed class DesktopRpcServer : IDisposable
         DesktopProtocolDefinition.TurnStartMethod or
         DesktopProtocolDefinition.TurnCancelMethod or
         DesktopProtocolDefinition.ApprovalResolveMethod or
+        DesktopProtocolDefinition.SubagentListMethod or
+        DesktopProtocolDefinition.SubagentStartMethod or
+        DesktopProtocolDefinition.SubagentCancelMethod or
+        DesktopProtocolDefinition.SubagentTakeoverMethod or
+        DesktopProtocolDefinition.SubagentApprovalResolveMethod or
         DesktopProtocolDefinition.TurnResumeMethod or
         DesktopProtocolDefinition.TurnRestartMethod;
 
     private static bool IsTerminalMethod(string method) => method is
         DesktopProtocolDefinition.TerminalOpenMethod or DesktopProtocolDefinition.TerminalInputMethod or
         DesktopProtocolDefinition.TerminalResizeMethod or DesktopProtocolDefinition.TerminalCancelMethod or
-        DesktopProtocolDefinition.TerminalCloseMethod or DesktopProtocolDefinition.TerminalGetMethod;
+        DesktopProtocolDefinition.TerminalCloseMethod or DesktopProtocolDefinition.TerminalGetMethod or
+        DesktopProtocolDefinition.TerminalProfilesGetMethod;
 
     private static bool IsArtifactReviewMethod(string method) => method is
         DesktopProtocolDefinition.ArtifactPreviewMethod or DesktopProtocolDefinition.ArtifactExportMethod or
@@ -1239,6 +1309,8 @@ public sealed class DesktopRpcServer : IDisposable
         artifactReviewNegotiated = false;
         gerberReviewNegotiated = false;
         terminalSupervisor.Dispose();
+        gitChangesSupervisor.Reset();
+        subagentSupervisor.Dispose();
         writeSupervisor.Dispose();
         DesktopApplicationSession? session = applicationSession;
         applicationSession = null;

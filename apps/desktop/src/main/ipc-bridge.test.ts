@@ -3,7 +3,7 @@ import { createRuntimeStatus, IPC_CHANNELS } from "../shared/bridge-contract";
 import { registerDesktopIpc } from "./ipc-bridge";
 
 describe("desktop IPC registry", () => {
-  it("registers exactly thirty-nine invoke handlers and disposes them", () => {
+  it("registers exactly forty-eight invoke handlers and disposes them", () => {
     const handlers = new Map<string, (...args: unknown[]) => unknown>();
     const removeHandler = vi.fn((channel: string) => handlers.delete(channel));
     const ipcMain = {
@@ -52,11 +52,16 @@ describe("desktop IPC registry", () => {
       IPC_CHANNELS.getArtifact,
       IPC_CHANNELS.openTerminal, IPC_CHANNELS.inputTerminal, IPC_CHANNELS.resizeTerminal,
       IPC_CHANNELS.cancelTerminal, IPC_CHANNELS.closeTerminal, IPC_CHANNELS.getTerminal,
+      IPC_CHANNELS.listSubagents, IPC_CHANNELS.startSubagent, IPC_CHANNELS.cancelSubagent,
+      IPC_CHANNELS.takeoverSubagent, IPC_CHANNELS.resolveSubagentApproval,
+      IPC_CHANNELS.getSettings, IPC_CHANNELS.setSettings,
+      IPC_CHANNELS.mutateChanges,
+      IPC_CHANNELS.listTerminalProfiles,
       IPC_CHANNELS.previewArtifact, IPC_CHANNELS.verifyArtifact, IPC_CHANNELS.exportArtifact,
       IPC_CHANNELS.getGerberReview, IPC_CHANNELS.getGerberPreview, IPC_CHANNELS.acceptGerber, IPC_CHANNELS.rejectGerber,
     ]);
     dispose();
-    expect(removeHandler).toHaveBeenCalledTimes(39);
+    expect(removeHandler).toHaveBeenCalledTimes(48);
   });
 
   it("rejects untrusted senders and unexpected arguments", async () => {
@@ -98,6 +103,7 @@ function readOnlyRuntime() {
     renameThread: unused,
     archiveThread: unused,
     getChanges: unused,
+    mutateChanges: unused,
     listReports: unused,
     getReport: unused,
     listArtifacts: unused,
@@ -111,10 +117,16 @@ function readOnlyRuntime() {
     startTurn: unused,
     cancelTurn: unused,
     resolveApproval: unused,
+    listSubagents: unused,
+    startSubagent: unused,
+    cancelSubagent: unused,
+    takeoverSubagent: unused,
+    resolveSubagentApproval: unused,
     resumeTurn: unused,
     restartTurn: unused,
     openTerminal: unused, inputTerminal: unused, resizeTerminal: unused,
     cancelTerminal: unused, closeTerminal: unused, getTerminal: unused,
+    listTerminalProfiles: unused,
     previewArtifact: unused, exportArtifact: unused, verifyArtifact: unused,
     getGerberReview: unused, getGerberPreview: unused, acceptGerber: unused, rejectGerber: unused,
   };

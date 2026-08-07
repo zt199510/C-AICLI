@@ -1,4 +1,4 @@
-import { render, screen } from "@testing-library/react";
+import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { ReviewState } from "./desktop-state";
@@ -18,38 +18,36 @@ afterEach(() => {
 });
 
 describe("workspace inspector", () => {
-  it("renders grouped vertical tools and supports roving keyboard navigation", async () => {
+  it("renders a tabbed workbench and adds tools from the Codex-style plus menu", async () => {
     const onPanel = vi.fn();
     renderInspector("changes", onPanel);
 
-    expect(screen.getByRole("heading", { name: "Environment" })).toBeTruthy();
-    expect(screen.getByRole("heading", { name: "Results and evidence" })).toBeTruthy();
-    expect(screen.getByRole("heading", { name: "Sub-agents" })).toBeTruthy();
-
-    const changes = screen.getByRole("button", { name: "Changes" });
-    changes.focus();
-    await userEvent.keyboard("{ArrowDown}");
-
+    const reviewTab = screen.getByRole("tab", { name: "审阅" });
+    expect(reviewTab.getAttribute("aria-controls")).toBe("workspace-panel-host");
+    await userEvent.click(screen.getByRole("button", { name: "添加工作区工具" }));
+    expect(screen.getByRole("menu", { name: "添加工作区工具" })).toBeTruthy();
+    expect((screen.getByRole("menuitem", { name: "浏览器" }) as HTMLButtonElement).disabled).toBe(true);
+    await userEvent.click(screen.getByRole("menuitem", { name: "更多 C-AICLI 工具" }));
+    await userEvent.click(screen.getByRole("menuitem", { name: "Local" }));
     expect(onPanel).toHaveBeenCalledWith("local");
-    expect(document.activeElement).toBe(screen.getByRole("button", { name: "Local" }));
-    expect(changes.getAttribute("aria-controls")).toBe("workspace-bottom-panel");
-    expect(screen.getByRole("region", { name: "Changes" })).toBeTruthy();
+    expect(document.querySelector('#workspace-panel-host[data-panel="changes"]')).toBeTruthy();
   });
 
-  it("keeps Git write navigation disabled and non-mutating", async () => {
+  it("opens Git write guidance without performing a mutation", async () => {
     const onPanel = vi.fn();
     renderInspector("changes", onPanel);
 
-    const gitActions = screen.getByRole("button", { name: "Commit or push" });
-    expect((gitActions as HTMLButtonElement).disabled).toBe(true);
+    await userEvent.click(screen.getByRole("button", { name: "添加工作区工具" }));
+    await userEvent.click(screen.getByRole("menuitem", { name: "更多 C-AICLI 工具" }));
+    const gitActions = screen.getByRole("menuitem", { name: "Commit or push" });
+    expect((gitActions as HTMLButtonElement).disabled).toBe(false);
     await userEvent.click(gitActions);
-    expect(onPanel).not.toHaveBeenCalled();
+    expect(onPanel).toHaveBeenCalledWith("git-actions");
   });
 
-  it("distinguishes unavailable pull request data from an empty result", () => {
+  it("asks for an authoritative Git refresh before showing pull request actions", () => {
     renderInspector("pull-request", vi.fn());
-    expect(screen.getByText("Pull request status unavailable")).toBeTruthy();
-    expect(screen.getByText(/does not expose pull request status/)).toBeTruthy();
+    expect(screen.getByText(/Refresh Changes to load authoritative Git identity/)).toBeTruthy();
   });
 
   it("routes terminal actions through the supplied controller boundary", async () => {
@@ -65,7 +63,7 @@ describe("workspace inspector", () => {
     await userEvent.click(screen.getByRole("button", { name: "Open terminal" }));
 
     expect(openTerminal).toHaveBeenCalledOnce();
-    expect(screen.getByRole("region", { name: "Terminal" })).toBeTruthy();
+    expect(screen.getByRole("region", { name: "User terminal" })).toBeTruthy();
   });
 
   it("moves focus into a newly opened sidebar drawer and traps Tab within its tools", async () => {
@@ -75,11 +73,7 @@ describe("workspace inspector", () => {
     const view = render(<WorkspaceToolSidebar {...props} onPanel={onPanel} visible={false} />);
     view.rerender(<WorkspaceToolSidebar {...props} onPanel={onPanel} visible />);
 
-    expect(document.activeElement).toBe(screen.getByRole("button", { name: "Changes" }));
-    const activity = screen.getByRole("button", { name: "Activity" });
-    activity.focus();
-    await userEvent.keyboard("{Tab}");
-    expect(document.activeElement).toBe(screen.getByRole("button", { name: "Changes" }));
+    await waitFor(() => expect(document.activeElement).toBe(screen.getByRole("tab", { name: "审阅" })));
   });
 
   it("keeps the summary and bottom detail surfaces non-modal", () => {
@@ -90,11 +84,21 @@ describe("workspace inspector", () => {
     </>);
 
     const summary = document.querySelector("#workspace-summary-overlay")!;
-    const bottom = screen.getByRole("region", { name: "Changes" });
+    const bottom = document.querySelector("#workspace-bottom-panel")!;
     expect(summary.getAttribute("role")).not.toBe("dialog");
     expect(summary.getAttribute("aria-modal")).toBeNull();
     expect(bottom.getAttribute("role")).not.toBe("dialog");
     expect(bottom.getAttribute("aria-modal")).toBeNull();
+  });
+
+  it("exposes an explicit dock close control without changing the selected tool", async () => {
+    const onClose = vi.fn();
+    render(<WorkspaceBottomPanel {...surfaceProps("changes")} onClose={onClose} />);
+
+    await userEvent.click(screen.getByRole("button", { name: "关闭底部面板" }));
+
+    expect(onClose).toHaveBeenCalledOnce();
+    expect(screen.getByRole("region", { name: "终端控制台" })).toBeTruthy();
   });
 });
 
@@ -104,10 +108,7 @@ function renderInspector(
   terminalCommands?: TerminalCommands,
 ) {
   const props = surfaceProps(activePanel, terminalCommands);
-  return render(<>
-    <WorkspaceToolSidebar {...props} onPanel={onPanel} />
-    <WorkspaceBottomPanel {...props} />
-  </>);
+  return render(<WorkspaceToolSidebar {...props} onPanel={onPanel} />);
 }
 
 function surfaceProps(
@@ -126,6 +127,8 @@ function surfaceProps(
     terminalCommands,
     onReport: vi.fn(),
     onArtifact: vi.fn(),
+    openPanels: [activePanel],
+    onClosePanel: vi.fn(),
   };
 }
 

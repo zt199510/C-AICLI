@@ -1,5 +1,5 @@
 import { Bot, UserRound } from "lucide-react";
-import type { ThreadDetailData } from "../generated/desktop-contracts";
+import type { ThreadDetailData, TimelineItemData } from "../generated/desktop-contracts";
 import { ApprovalCard } from "./ApprovalCard";
 import { AssistantMessage } from "./AssistantMessage";
 import { assistantAnnouncement } from "./AssistantStatusLine";
@@ -22,6 +22,7 @@ export interface ConversationMutationProps {
   ) => Promise<string | null>;
   readonly onResume?: (turnId: string, turnRevision: number) => Promise<string | null>;
   readonly onRestart?: (turnId: string, turnRevision: number) => Promise<string | null>;
+  readonly onMessageAction?: (item: TimelineItemData, action: "edit" | "branch") => void;
 }
 
 export function ConversationStream({
@@ -31,6 +32,7 @@ export function ConversationStream({
   onApproval,
   onResume,
   onRestart,
+  onMessageAction,
 }: {
   readonly detail: ThreadDetailData;
   readonly optimisticExchanges: readonly OptimisticExchange[];
@@ -52,7 +54,7 @@ export function ConversationStream({
           : ""}
       </div>
       <div className="timeline-items">
-        {blocks.map((block) => renderBlock(block, { onApproval, onResume, onRestart }))}
+        {blocks.map((block) => renderBlock(block, { onApproval, onResume, onRestart, onMessageAction }))}
         <OptimisticProjection items={local} onRestore={onRestoreOptimistic} />
       </div>
     </div>
@@ -61,10 +63,10 @@ export function ConversationStream({
 
 function renderBlock(block: ConversationBlock, mutations: ConversationMutationProps) {
   if (block.kind === "user-message") {
-    return <TimelineItem key={block.key} item={block.item} projectionKind="message" />;
+    return <TimelineItem key={block.key} item={block.item} projectionKind="message" onMessageAction={mutations.onMessageAction} />;
   }
   if (block.kind === "assistant-message") {
-    return <AssistantMessage key={block.key} block={block} onRestart={mutations.onRestart} />;
+    return <AssistantMessage key={block.key} block={block} onRestart={mutations.onRestart} onMessageAction={mutations.onMessageAction} />;
   }
   if (block.kind === "tool-group") {
     return <ToolActivityGroup key={block.key} block={block} />;

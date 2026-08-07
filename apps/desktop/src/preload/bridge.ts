@@ -1,11 +1,12 @@
 import {
   isArtifactGetResult,
   isArtifactListResult,
-  isTerminalStateResult, isArtifactReviewResult, isArtifactExportResult, isGerberReviewResult,
-  isChangesGetResult,
+  isTerminalStateResult, isTerminalProfileListResult, isArtifactReviewResult, isArtifactExportResult, isGerberReviewResult,
+  isChangesGetResult, isChangesMutateResult,
   isCatalogListResult,
   isComposerStateResult,
   isTurnExecutionStateResult,
+  isSubagentResult,
   isContextSearchResult,
   isReportGetResult,
   isReportListResult,
@@ -29,7 +30,7 @@ import {
   isArchiveThreadCommand,
   isCreateThreadCommand,
   isGetArtifactCommand,
-  isGetChangesCommand,
+  isGetChangesCommand, isMutateChangesCommand,
   isGetReportCommand,
   isGetThreadCommand,
   isRenameThreadCommand,
@@ -37,8 +38,11 @@ import {
   isStartTurnCommand,
   isCancelTurnCommand,
   isResolveApprovalCommand,
+  isListSubagentsCommand, isStartSubagentCommand, isSubagentMutationCommand, isResolveSubagentApprovalCommand,
   isResumeTurnCommand,
   isRestartTurnCommand,
+  isGetSettingsCommand, isSetSettingsCommand, isDesktopSettingsSnapshot,
+  isContextPickCommand,
   isOpenTerminalCommand, isInputTerminalCommand, isResizeTerminalCommand, isTerminalMutationCommand,
   isGetTerminalCommand, isArtifactReviewCommand, isGerberReviewCommand, isGerberDecisionCommand,
   type ArchiveThreadCommand,
@@ -46,6 +50,7 @@ import {
   type DesktopBridge,
   type GetArtifactCommand,
   type GetChangesCommand,
+  type MutateChangesCommand,
   type GetReportCommand,
   type GetThreadCommand,
   type ClearComposerCommand,
@@ -58,8 +63,10 @@ import {
   type StartTurnCommand,
   type CancelTurnCommand,
   type ResolveApprovalCommand,
+  type ListSubagentsCommand, type StartSubagentCommand, type SubagentMutationCommand, type ResolveSubagentApprovalCommand,
   type ResumeTurnCommand,
   type RestartTurnCommand,
+  type GetSettingsCommand, type SetSettingsCommand,
   type OpenTerminalCommand, type InputTerminalCommand, type ResizeTerminalCommand, type TerminalMutationCommand,
   type GetTerminalCommand, type ArtifactReviewCommand, type GerberReviewCommand, type GerberDecisionCommand,
 } from "../shared/bridge-contract";
@@ -149,6 +156,11 @@ export function createDesktopBridge(ipc: IpcRendererAdapter): DesktopBridge {
       if (!isGetTerminalCommand(command)) return Promise.reject(new Error("Invalid terminal get command."));
       return validated(IPC_CHANNELS.getTerminal, isTerminalStateResult, command);
     },
+    mutateChanges(command: MutateChangesCommand) {
+      if (!isMutateChangesCommand(command)) return Promise.reject(new Error("Invalid changes mutation command."));
+      return validated(IPC_CHANNELS.mutateChanges, isChangesMutateResult, command);
+    },
+    listTerminalProfiles: () => validated(IPC_CHANNELS.listTerminalProfiles, isTerminalProfileListResult),
     previewArtifact(command: ArtifactReviewCommand) {
       if (!isArtifactReviewCommand(command)) return Promise.reject(new Error("Invalid artifact preview command."));
       return validated(IPC_CHANNELS.previewArtifact, isArtifactReviewResult, command);
@@ -188,8 +200,14 @@ export function createDesktopBridge(ipc: IpcRendererAdapter): DesktopBridge {
       if (!isSearchContextCommand(command)) return Promise.reject(new Error("Invalid context search command."));
       return validated(IPC_CHANNELS.searchContext, isContextSearchResult, command);
     },
-    pickFile: () => validated(IPC_CHANNELS.pickFile, isContextPickResult),
-    pickFolder: () => validated(IPC_CHANNELS.pickFolder, isContextPickResult),
+    pickFile(command = {}) {
+      if (!isContextPickCommand(command)) return Promise.reject(new Error("Invalid context picker command."));
+      return validated(IPC_CHANNELS.pickFile, isContextPickResult, command);
+    },
+    pickFolder(command = {}) {
+      if (!isContextPickCommand(command)) return Promise.reject(new Error("Invalid context picker command."));
+      return validated(IPC_CHANNELS.pickFolder, isContextPickResult, command);
+    },
     getComposer(command: GetComposerCommand) {
       if (!isGetComposerCommand(command)) return Promise.reject(new Error("Invalid composer command."));
       return validated(IPC_CHANNELS.getComposer, isComposerStateResult, command);
@@ -214,6 +232,26 @@ export function createDesktopBridge(ipc: IpcRendererAdapter): DesktopBridge {
       if (!isResolveApprovalCommand(command)) return Promise.reject(new Error("Invalid approval command."));
       return validated(IPC_CHANNELS.resolveApproval, isTurnExecutionStateResult, command);
     },
+    listSubagents(command: ListSubagentsCommand) {
+      if (!isListSubagentsCommand(command)) return Promise.reject(new Error("Invalid Sub-agent list command."));
+      return validated(IPC_CHANNELS.listSubagents, isSubagentResult, command);
+    },
+    startSubagent(command: StartSubagentCommand) {
+      if (!isStartSubagentCommand(command)) return Promise.reject(new Error("Invalid Sub-agent start command."));
+      return validated(IPC_CHANNELS.startSubagent, isSubagentResult, command);
+    },
+    cancelSubagent(command: SubagentMutationCommand) {
+      if (!isSubagentMutationCommand(command)) return Promise.reject(new Error("Invalid Sub-agent cancel command."));
+      return validated(IPC_CHANNELS.cancelSubagent, isSubagentResult, command);
+    },
+    takeoverSubagent(command: SubagentMutationCommand) {
+      if (!isSubagentMutationCommand(command)) return Promise.reject(new Error("Invalid Sub-agent takeover command."));
+      return validated(IPC_CHANNELS.takeoverSubagent, isSubagentResult, command);
+    },
+    resolveSubagentApproval(command: ResolveSubagentApprovalCommand) {
+      if (!isResolveSubagentApprovalCommand(command)) return Promise.reject(new Error("Invalid Sub-agent approval command."));
+      return validated(IPC_CHANNELS.resolveSubagentApproval, isSubagentResult, command);
+    },
     resumeTurn(command: ResumeTurnCommand) {
       if (!isResumeTurnCommand(command)) return Promise.reject(new Error("Invalid turn resume command."));
       return validated(IPC_CHANNELS.resumeTurn, isTurnExecutionStateResult, command);
@@ -221,6 +259,14 @@ export function createDesktopBridge(ipc: IpcRendererAdapter): DesktopBridge {
     restartTurn(command: RestartTurnCommand) {
       if (!isRestartTurnCommand(command)) return Promise.reject(new Error("Invalid turn restart command."));
       return validated(IPC_CHANNELS.restartTurn, isTurnExecutionStateResult, command);
+    },
+    getSettings(command: GetSettingsCommand) {
+      if (!isGetSettingsCommand(command)) return Promise.reject(new Error("Invalid settings command."));
+      return validated(IPC_CHANNELS.getSettings, isDesktopSettingsSnapshot, command);
+    },
+    setSettings(command: SetSettingsCommand) {
+      if (!isSetSettingsCommand(command)) return Promise.reject(new Error("Invalid settings command."));
+      return validated(IPC_CHANNELS.setSettings, isDesktopSettingsSnapshot, command);
     },
     onRuntimeStatus(listener: (status: RuntimeStatus) => void) {
       const wrapped = (_event: unknown, value: unknown) => {

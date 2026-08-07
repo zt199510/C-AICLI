@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from "react";
-import type { CatalogItemData, ContextDescriptorData, ThreadChangedParams, ThreadDetailData, WorkspaceSnapshotData } from "../generated/desktop-contracts";
+import type { CatalogItemData, ContextDescriptorData, ThreadChangedParams, ThreadDetailData, TimelineItemData, WorkspaceSnapshotData } from "../generated/desktop-contracts";
 import { createRuntimeStatus, type DesktopBridge } from "../shared/bridge-contract";
 import { desktopReducer, initialDesktopState, threadEventIdentity, type ReviewState } from "./desktop-state";
 import { composerReducer, currentDraft, draftKey, initialComposerUiState, type ComposerCatalogKind, type SelectedCatalogItem } from "./composer-state";
@@ -40,12 +40,19 @@ export function useDesktopController(bridge: DesktopBridge | undefined, options?
   const resyncRunning = useRef(false);
   const resyncDirty = useRef(false);
   const lastThreadEvent = useRef<ThreadChangedParams | null>(null);
+  const messageSources = useRef(new Map<string, {
+    readonly sourceThreadId: string;
+    readonly sourceItemId: string;
+    readonly sourceAction: "edit" | "branch";
+  }>());
   const terminalCommands = useMemo(() => bridge ? {
     openTerminal: (command: Parameters<DesktopBridge["openTerminal"]>[0]) => bridge.openTerminal(command),
     inputTerminal: (command: Parameters<DesktopBridge["inputTerminal"]>[0]) => bridge.inputTerminal(command),
+    resizeTerminal: (command: Parameters<DesktopBridge["resizeTerminal"]>[0]) => bridge.resizeTerminal(command),
     cancelTerminal: (command: Parameters<DesktopBridge["cancelTerminal"]>[0]) => bridge.cancelTerminal(command),
     closeTerminal: (command: Parameters<DesktopBridge["closeTerminal"]>[0]) => bridge.closeTerminal(command),
     getTerminal: (command: Parameters<DesktopBridge["getTerminal"]>[0]) => bridge.getTerminal(command),
+    listTerminalProfiles: () => bridge.listTerminalProfiles(),
   } : undefined, [bridge]);
 
   const refreshThreads = useCallback(async (epoch = stateRef.current.contextEpoch) => {
@@ -397,6 +404,15 @@ export function useDesktopController(bridge: DesktopBridge | undefined, options?
     return result.data.safeMessage;
   }, [bridge]);
 
+  const mutateChanges = useCallback(async (command: Parameters<DesktopBridge["mutateChanges"]>[0]) => {
+    if (!bridge) throw new Error("Desktop bridge unavailable.");
+    const epoch = stateRef.current.contextEpoch;
+    const result = await bridge.mutateChanges(command);
+    if (!result.succeeded || !result.data) throw new Error(safeFailure(result.error?.safeMessage));
+    dispatch({ type: "changes-ready", epoch, value: result.data.changes, truncated: result.data.changes.diffTruncated || result.truncated });
+    return result.data.summary || `${result.data.action} completed.`;
+  }, [bridge]);
+
   const exportArtifact = useCallback(async (artifactId: string) => {
     if (!bridge) throw new Error("Desktop bridge unavailable.");
     const result = await bridge.exportArtifact({ artifactId });
@@ -481,7 +497,8 @@ export function useDesktopController(bridge: DesktopBridge | undefined, options?
     if (!snapshot.workspace) return;
     const key = composerDraftKey(snapshot.workspace.workspaceId, snapshot.selectedThreadId);
     try {
-      const picked = kind === "file" ? await bridge.pickFile() : await bridge.pickFolder();
+      const command = stateRef.current.selectedThreadId ? { threadId: stateRef.current.selectedThreadId } : {};
+      const picked = kind === "file" ? await bridge.pickFile(command) : await bridge.pickFolder(command);
       const current = stateRef.current;
       if (current.contextEpoch !== snapshot.contextEpoch || current.selectionEpoch !== snapshot.selectionEpoch) return;
       if (picked.canceled) return;
@@ -493,7 +510,7 @@ export function useDesktopController(bridge: DesktopBridge | undefined, options?
     } catch { dispatchComposer({ type: "status", key, status: "error", error: "Context picker failed." }); }
   }, [bridge]);
 
-  const enqueueComposer = useCallback(async () => {
+  const enqueueComposer = useCallback(async (turnPreferences?: { readonly modelOverride?: string; readonly approvalPreference?: "read-only" | "on-request" | "trusted-local"; readonly disabledTools?: readonly string[] }) => {
     if (!bridge) return;
     const snapshot = stateRef.current;
     if (!snapshot.workspace) return;
@@ -554,6 +571,7 @@ export function useDesktopController(bridge: DesktopBridge | undefined, options?
         return;
       }
       dispatchComposer({ type: "status", key, status: "enqueueing" });
+      const messageSource = messageSources.current.get(key);
       const result = await bridge.enqueueComposer({
         threadId,
         expectedThreadRevision: threadRevision,
@@ -562,6 +580,10 @@ export function useDesktopController(bridge: DesktopBridge | undefined, options?
         prompt: draft.text,
         contextSelectionIds: draft.contextSelections.map(item => item.selectionId),
         catalogSelections: draft.catalogSelections.map(item => ({ kind: item.kind, id: item.id, catalogRevision: item.catalogRevision })),
+        ...(turnPreferences?.modelOverride ? { modelOverride: turnPreferences.modelOverride } : {}),
+        ...(turnPreferences?.approvalPreference ? { approvalPreference: turnPreferences.approvalPreference } : {}),
+        ...(turnPreferences?.disabledTools ? { disabledTools: turnPreferences.disabledTools } : {}),
+        ...(messageSource ?? {}),
       });
       if (!result.succeeded || !result.data) {
         failOptimistic(safeFailure(result.error?.safeMessage));
@@ -582,6 +604,7 @@ export function useDesktopController(bridge: DesktopBridge | undefined, options?
         return;
       }
       dispatchComposer({ type: "snapshot", snapshot: authoritative.data });
+      messageSources.current.delete(key);
       const started = await bridge.startTurn({
         threadId,
         expectedThreadRevision: authoritative.data.threadRevision,
@@ -659,6 +682,29 @@ export function useDesktopController(bridge: DesktopBridge | undefined, options?
       return "Turn could not be canceled.";
     }
   }, [bridge, fetchThread, refreshThreads]);
+
+  const branchFromMessage = useCallback(async (item: TimelineItemData, action: "edit" | "branch") => {
+    if (!bridge || item.redacted) return;
+    const snapshot = stateRef.current;
+    const sourceThreadId = snapshot.selectedThreadId;
+    const workspaceId = snapshot.workspace?.workspaceId;
+    const text = (item.payload.text ?? item.summary).trim();
+    if (!sourceThreadId || !workspaceId || !text) return;
+
+    const created = await bridge.createThread({
+      title: `${action === "edit" ? "编辑" : "分支"}: ${conversationTitle(text)}`,
+    });
+    if (!created.succeeded || !created.data) return;
+
+    const key = composerDraftKey(workspaceId, created.data.threadId);
+    messageSources.current.set(key, {
+      sourceThreadId,
+      sourceItemId: item.itemId,
+      sourceAction: action,
+    });
+    dispatchComposer({ type: "text", key, text });
+    selectThread(created.data.threadId);
+  }, [bridge, selectThread]);
 
   const resolveApproval = useCallback(async (turnId: string, requestId: string, approvalRevision: number, turnRevision: number, decision: "approve" | "deny") => {
     if (!bridge) return "Desktop bridge unavailable.";
@@ -745,6 +791,7 @@ export function useDesktopController(bridge: DesktopBridge | undefined, options?
     selectReport,
     selectArtifact,
     reviewCommands: {
+      mutateChanges,
       previewArtifact,
       verifyArtifact,
       exportArtifact,
@@ -770,6 +817,7 @@ export function useDesktopController(bridge: DesktopBridge | undefined, options?
     pickComposerFile: () => pickContext("file"),
     pickComposerFolder: () => pickContext("folder"),
     enqueueComposer,
+    branchFromMessage,
     clearComposer,
     cancelTurn,
     resolveApproval,

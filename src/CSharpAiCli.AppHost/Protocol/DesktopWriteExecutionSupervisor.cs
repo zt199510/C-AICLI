@@ -59,21 +59,34 @@ internal sealed class DesktopWriteExecutionSupervisor : IDisposable
     public ApplicationResult<TurnExecutionStateProjection> ResolveApproval(
         DesktopApplicationSession session,
         ApprovalResolveRequest request)
+        => ResolveApproval(session, request.ThreadId, request.TurnId, request.RequestId, request.Decision,
+            request.ExpectedThreadRevision, request.ExpectedTurnRevision, request.ExpectedApprovalRevision, request.ClientMutationId);
+
+    public ApplicationResult<TurnExecutionStateProjection> ResolveApproval(
+        DesktopApplicationSession session,
+        string requestThreadId,
+        string requestTurnId,
+        string requestId,
+        string decision,
+        long expectedThreadRevision,
+        long expectedTurnRevision,
+        long expectedApprovalRevision,
+        string clientMutationId)
     {
         lock (sync)
         {
-            if (decisions.TryGetValue(request.ClientMutationId, out ApplicationResult<TurnExecutionStateProjection>? prior)) return prior;
-            if (threadId != request.ThreadId || turnId != request.TurnId || approvalWaiter?.Matches(request.RequestId) != true)
+            if (decisions.TryGetValue(clientMutationId, out ApplicationResult<TurnExecutionStateProjection>? prior)) return prior;
+            if (threadId != requestThreadId || turnId != requestTurnId || approvalWaiter?.Matches(requestId) != true)
                 return Failure("approval-stale", "Approval request is not attached to the active execution.");
             ApplicationResult<TurnExecutionStateProjection> resolved = session.ResolveApproval(
-                request.ThreadId, request.TurnId, request.RequestId, request.Decision,
-                request.ExpectedThreadRevision, request.ExpectedTurnRevision, request.ExpectedApprovalRevision,
-                request.ClientMutationId);
+                requestThreadId, requestTurnId, requestId, decision,
+                expectedThreadRevision, expectedTurnRevision, expectedApprovalRevision,
+                clientMutationId);
             if (!resolved.Succeeded) return resolved;
-            if (!approvalWaiter.TryResolve(new InteractiveApprovalDecision(request.Decision, request.ClientMutationId,
-                    request.ExpectedTurnRevision, request.ExpectedApprovalRevision)))
+            if (!approvalWaiter.TryResolve(new InteractiveApprovalDecision(decision, clientMutationId,
+                    expectedTurnRevision, expectedApprovalRevision)))
                 return Failure("approval-stale", "Approval request was already resolved.");
-            decisions[request.ClientMutationId] = resolved;
+            decisions[clientMutationId] = resolved;
             return resolved;
         }
     }
@@ -81,14 +94,24 @@ internal sealed class DesktopWriteExecutionSupervisor : IDisposable
     public ApplicationResult<TurnExecutionStateProjection> Cancel(
         DesktopApplicationSession session,
         TurnCancelRequest request)
+        => Cancel(session, request.ThreadId, request.TurnId, request.ExpectedThreadRevision,
+            request.ExpectedTurnRevision, request.ClientMutationId);
+
+    public ApplicationResult<TurnExecutionStateProjection> Cancel(
+        DesktopApplicationSession session,
+        string requestThreadId,
+        string requestTurnId,
+        long expectedThreadRevision,
+        long expectedTurnRevision,
+        string clientMutationId)
     {
         lock (sync)
         {
-            if (threadId != request.ThreadId || turnId != request.TurnId || cancellation is null)
+            if (threadId != requestThreadId || turnId != requestTurnId || cancellation is null)
                 return Failure("turn-not-active", "Turn is not the active write execution.");
             ApplicationResult<TurnExecutionStateProjection> persisted = session.CancelTurn(
-                request.ThreadId, request.TurnId, request.ExpectedThreadRevision, request.ExpectedTurnRevision,
-                request.ClientMutationId);
+                requestThreadId, requestTurnId, expectedThreadRevision, expectedTurnRevision,
+                clientMutationId);
             if (!persisted.Succeeded) return persisted;
             approvalWaiter?.Cancel();
             cancellation.Cancel();

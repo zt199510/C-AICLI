@@ -3,10 +3,11 @@ import type { BrowserWindow, IpcMain, IpcMainInvokeEvent, OpenDialogOptions, Sav
 import {
   isArtifactGetResult,
   isArtifactListResult,
-  isChangesGetResult,
+  isChangesGetResult, isChangesMutateResult,
   isCatalogListResult,
   isComposerStateResult,
   isTurnExecutionStateResult,
+  isSubagentResult,
   isContextResolveResult,
   isContextSearchResult,
   isReportGetResult,
@@ -16,7 +17,7 @@ import {
   isThreadSummaryResult,
   isWorkspaceOpenResult,
   isWorkspaceSnapshotData,
-  isTerminalStateResult, isArtifactReviewResult, isArtifactExportResult, isGerberReviewResult,
+  isTerminalStateResult, isTerminalProfileListResult, isArtifactReviewResult, isArtifactExportResult, isGerberReviewResult,
 } from "../generated/desktop-contracts";
 import {
   IPC_CHANNELS,
@@ -26,7 +27,7 @@ import {
   isEnqueueComposerCommand,
   isGetComposerCommand,
   isGetArtifactCommand,
-  isGetChangesCommand,
+  isGetChangesCommand, isMutateChangesCommand,
   isGetReportCommand,
   isGetThreadCommand,
   isRenameThreadCommand,
@@ -36,12 +37,16 @@ import {
   isStartTurnCommand,
   isCancelTurnCommand,
   isResolveApprovalCommand,
+  isListSubagentsCommand, isStartSubagentCommand, isSubagentMutationCommand, isResolveSubagentApprovalCommand,
   isResumeTurnCommand,
   isRestartTurnCommand,
   isOpenTerminalCommand, isInputTerminalCommand, isResizeTerminalCommand, isTerminalMutationCommand,
   isGetTerminalCommand, isArtifactReviewCommand, isGerberReviewCommand, isGerberDecisionCommand,
+  isGetSettingsCommand, isSetSettingsCommand, isDesktopSettingsSnapshot,
+  isContextPickCommand,
 } from "../shared/bridge-contract";
 import type { AppHostRuntime } from "./apphost-runtime";
+import { LocalSettingsStore } from "./local-settings-store";
 import { isRuntimeWindowAvailable } from "./window-lifecycle";
 
 export interface DialogAdapter {
@@ -57,17 +62,20 @@ export interface DesktopIpcOptions {
   runtime: Pick<AppHostRuntime,
     "getStatus" | "restart" | "openWorkspace" | "getWorkspaceSnapshot" |
     "listThreads" | "getThread" | "createThread" | "renameThread" | "archiveThread" |
-    "getChanges" | "listReports" | "getReport" | "listArtifacts" | "getArtifact" |
+    "getChanges" | "mutateChanges" | "listReports" | "getReport" | "listArtifacts" | "getArtifact" |
     "listCatalog" | "searchContext" | "resolveContext" | "getComposer" | "enqueueComposer" | "clearComposer" |
     "startTurn" | "cancelTurn" | "resolveApproval" | "resumeTurn" | "restartTurn" |
-    "openTerminal" | "inputTerminal" | "resizeTerminal" | "cancelTerminal" | "closeTerminal" | "getTerminal" |
+    "listSubagents" | "startSubagent" | "cancelSubagent" | "takeoverSubagent" | "resolveSubagentApproval" |
+    "openTerminal" | "inputTerminal" | "resizeTerminal" | "cancelTerminal" | "closeTerminal" | "getTerminal" | "listTerminalProfiles" |
     "previewArtifact" | "exportArtifact" | "verifyArtifact" | "getGerberReview" | "getGerberPreview" | "acceptGerber" | "rejectGerber">;
   dialog: DialogAdapter;
+  settingsStore?: Pick<LocalSettingsStore, "get" | "set">;
   getWindow(): BrowserWindow | null;
   isAllowedSender(event: IpcMainInvokeEvent): boolean;
 }
 
 export function registerDesktopIpc(options: DesktopIpcOptions): () => void {
+  const settingsStore = options.settingsStore ?? new LocalSettingsStore(null);
   const assertCall = (event: IpcMainInvokeEvent, args: unknown[]) => {
     if (!options.isAllowedSender(event)) throw new Error("Untrusted IPC sender.");
     if (args.length !== 0) throw new Error("Unexpected IPC arguments.");
@@ -158,7 +166,7 @@ export function registerDesktopIpc(options: DesktopIpcOptions): () => void {
     return value;
   });
   const pickContext = async (event: IpcMainInvokeEvent, args: unknown[], kind: "file" | "folder") => {
-    assertCall(event, args);
+    const command = assertOne(event, args, isContextPickCommand);
     const window = options.getWindow();
     if (!isRuntimeWindowAvailable(window)) throw new Error("Desktop window is unavailable.");
     if (options.runtime.getStatus().state !== "ready") throw new Error("AppHost is not ready.");
@@ -169,7 +177,7 @@ export function registerDesktopIpc(options: DesktopIpcOptions): () => void {
     if (selection.canceled) return { schemaVersion: 1 as const, canceled: true, result: null };
     if (selection.filePaths.length !== 1 || !selection.filePaths[0]) throw new Error("Invalid context selection.");
     if (options.getWindow() !== window || !isRuntimeWindowAvailable(window)) throw new Error("Desktop window is unavailable.");
-    const result = await options.runtime.resolveContext(selection.filePaths[0], kind);
+    const result = await options.runtime.resolveContext(selection.filePaths[0], kind, command.threadId);
     if (!isContextResolveResult(result)) throw new Error("Invalid context resolve result.");
     return { schemaVersion: 1 as const, canceled: false, result };
   };
@@ -289,6 +297,60 @@ export function registerDesktopIpc(options: DesktopIpcOptions): () => void {
     if (!isTerminalStateResult(value)) throw new Error("Invalid terminal result.");
     return value;
   });
+  options.ipcMain.handle(IPC_CHANNELS.listSubagents, async (event, ...args) => {
+    const command = assertOne(event, args, isListSubagentsCommand);
+    const value = await options.runtime.listSubagents(command.parentThreadId);
+    if (!isSubagentResult(value)) throw new Error("Invalid Sub-agent result.");
+    return value;
+  });
+  options.ipcMain.handle(IPC_CHANNELS.startSubagent, async (event, ...args) => {
+    const command = assertOne(event, args, isStartSubagentCommand);
+    const value = await options.runtime.startSubagent(command);
+    if (!isSubagentResult(value)) throw new Error("Invalid Sub-agent result.");
+    return value;
+  });
+  options.ipcMain.handle(IPC_CHANNELS.cancelSubagent, async (event, ...args) => {
+    const command = assertOne(event, args, isSubagentMutationCommand);
+    const value = await options.runtime.cancelSubagent(command);
+    if (!isSubagentResult(value)) throw new Error("Invalid Sub-agent result.");
+    return value;
+  });
+  options.ipcMain.handle(IPC_CHANNELS.takeoverSubagent, async (event, ...args) => {
+    const command = assertOne(event, args, isSubagentMutationCommand);
+    const value = await options.runtime.takeoverSubagent(command);
+    if (!isSubagentResult(value)) throw new Error("Invalid Sub-agent result.");
+    return value;
+  });
+  options.ipcMain.handle(IPC_CHANNELS.resolveSubagentApproval, async (event, ...args) => {
+    const command = assertOne(event, args, isResolveSubagentApprovalCommand);
+    const value = await options.runtime.resolveSubagentApproval(command);
+    if (!isSubagentResult(value)) throw new Error("Invalid Sub-agent result.");
+    return value;
+  });
+  options.ipcMain.handle(IPC_CHANNELS.getSettings, (event, ...args) => {
+    const command = assertOne(event, args, isGetSettingsCommand);
+    const value = settingsStore.get(command.workspaceId);
+    if (!isDesktopSettingsSnapshot(value)) throw new Error("Invalid settings result.");
+    return value;
+  });
+  options.ipcMain.handle(IPC_CHANNELS.setSettings, (event, ...args) => {
+    const command = assertOne(event, args, isSetSettingsCommand);
+    const value = settingsStore.set(command);
+    if (!isDesktopSettingsSnapshot(value)) throw new Error("Invalid settings result.");
+    return value;
+  });
+  options.ipcMain.handle(IPC_CHANNELS.mutateChanges, async (event, ...args) => {
+    const command = assertOne(event, args, isMutateChangesCommand);
+    const value = await options.runtime.mutateChanges(command);
+    if (!isChangesMutateResult(value)) throw new Error("Invalid changes mutation result.");
+    return value;
+  });
+  options.ipcMain.handle(IPC_CHANNELS.listTerminalProfiles, async (event, ...args) => {
+    assertCall(event, args);
+    const value = await options.runtime.listTerminalProfiles();
+    if (!isTerminalProfileListResult(value)) throw new Error("Invalid terminal profile result.");
+    return value;
+  });
   options.ipcMain.handle(IPC_CHANNELS.previewArtifact, async (event, ...args) => {
     const command = assertOne(event, args, isArtifactReviewCommand);
     const value = await options.runtime.previewArtifact(command.artifactId);
@@ -359,15 +421,19 @@ export function registerDesktopIpc(options: DesktopIpcOptions): () => void {
       IPC_CHANNELS.startTurn,
       IPC_CHANNELS.cancelTurn,
       IPC_CHANNELS.resolveApproval,
+      IPC_CHANNELS.listSubagents, IPC_CHANNELS.startSubagent, IPC_CHANNELS.cancelSubagent,
+      IPC_CHANNELS.takeoverSubagent, IPC_CHANNELS.resolveSubagentApproval,
       IPC_CHANNELS.resumeTurn,
       IPC_CHANNELS.restartTurn,
       IPC_CHANNELS.getChanges,
+      IPC_CHANNELS.mutateChanges,
       IPC_CHANNELS.listReports,
       IPC_CHANNELS.getReport,
       IPC_CHANNELS.listArtifacts,
       IPC_CHANNELS.getArtifact,
       IPC_CHANNELS.openTerminal, IPC_CHANNELS.inputTerminal, IPC_CHANNELS.resizeTerminal,
-      IPC_CHANNELS.cancelTerminal, IPC_CHANNELS.closeTerminal, IPC_CHANNELS.getTerminal,
+      IPC_CHANNELS.cancelTerminal, IPC_CHANNELS.closeTerminal, IPC_CHANNELS.getTerminal, IPC_CHANNELS.listTerminalProfiles,
+      IPC_CHANNELS.getSettings, IPC_CHANNELS.setSettings,
       IPC_CHANNELS.previewArtifact, IPC_CHANNELS.exportArtifact, IPC_CHANNELS.verifyArtifact,
       IPC_CHANNELS.getGerberReview, IPC_CHANNELS.getGerberPreview, IPC_CHANNELS.acceptGerber, IPC_CHANNELS.rejectGerber,
     ]) options.ipcMain.removeHandler(channel);

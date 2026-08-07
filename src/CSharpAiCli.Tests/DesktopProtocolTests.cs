@@ -189,6 +189,12 @@ public sealed class DesktopProtocolTests
                 DesktopProtocolDefinition.TurnResumeMethod,
                 DesktopProtocolDefinition.TurnRestartMethod,
                 DesktopProtocolDefinition.ChangesGetMethod,
+                DesktopProtocolDefinition.ChangesMutateMethod,
+                DesktopProtocolDefinition.SubagentListMethod,
+                DesktopProtocolDefinition.SubagentStartMethod,
+                DesktopProtocolDefinition.SubagentCancelMethod,
+                DesktopProtocolDefinition.SubagentTakeoverMethod,
+                DesktopProtocolDefinition.SubagentApprovalResolveMethod,
                 DesktopProtocolDefinition.ReportListMethod,
                 DesktopProtocolDefinition.ReportGetMethod,
                 DesktopProtocolDefinition.ArtifactListMethod,
@@ -199,6 +205,7 @@ public sealed class DesktopProtocolTests
                 DesktopProtocolDefinition.TerminalCancelMethod,
                 DesktopProtocolDefinition.TerminalCloseMethod,
                 DesktopProtocolDefinition.TerminalGetMethod,
+                DesktopProtocolDefinition.TerminalProfilesGetMethod,
                 DesktopProtocolDefinition.ArtifactPreviewMethod,
                 DesktopProtocolDefinition.ArtifactExportMethod,
                 DesktopProtocolDefinition.ArtifactVerifyMethod,
@@ -487,7 +494,8 @@ public sealed class DesktopProtocolTests
 
         using JsonDocument changes = HandleRequest(server, 4, DesktopProtocolDefinition.ChangesGetMethod,
             new { schemaVersion = 1 });
-        Assert.True(changes.RootElement.GetProperty("result").GetProperty("succeeded").GetBoolean());
+        Assert.False(changes.RootElement.GetProperty("result").GetProperty("succeeded").GetBoolean());
+        Assert.Equal("git-command-failed", changes.RootElement.GetProperty("result").GetProperty("error").GetProperty("code").GetString());
 
         using JsonDocument reports = HandleRequest(server, 5, DesktopProtocolDefinition.ReportListMethod,
             new { schemaVersion = 1, pageSize = 50 });

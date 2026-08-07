@@ -14,7 +14,8 @@ public sealed record ComposerEnqueueRequest(
     string ClientMutationId,
     string Prompt,
     IReadOnlyList<string> ContextSelectionIds,
-    IReadOnlyList<ComposerCatalogSelection> CatalogSelections);
+    IReadOnlyList<ComposerCatalogSelection> CatalogSelections,
+    ThreadSourcePointerRecord? SourcePointer = null);
 
 public sealed record ComposerClearRequest(
     CliEnvironmentSnapshot Snapshot,

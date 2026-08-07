@@ -37,9 +37,11 @@ const presentations: Record<string, { label: string; icon: ComponentType<{ size?
 export function TimelineItem({
   item,
   projectionKind,
+  onMessageAction,
 }: {
   item: TimelineItemData;
   projectionKind?: string;
+  onMessageAction?: (item: TimelineItemData, action: "edit" | "branch") => void;
 }) {
   const presentation = presentations[item.type] ?? { label: "Unrecognized audit event", icon: MessageSquare };
   const Icon = presentation.icon;
@@ -63,6 +65,11 @@ export function TimelineItem({
             <time dateTime={item.timestampUtc}>{formatTime(item.timestampUtc)}</time>
           </header>
           <div className="conversation-message-content">{visibleText || "Details withheld"}</div>
+          {!item.redacted && visibleText ? <div className="message-actions">
+            <button type="button" aria-label="Copy message" onClick={() => void navigator.clipboard.writeText(visibleText)}>复制</button>
+            {user && onMessageAction ? <button type="button" onClick={() => onMessageAction(item, "edit")}>编辑到新对话</button> : null}
+            {onMessageAction ? <button type="button" onClick={() => onMessageAction(item, "branch")}>从此分支</button> : null}
+          </div> : null}
           {item.redacted && <span className="sr-only">Original sensitive details were redacted; this is the safe conversation preview.</span>}
           {item.source && <div className="source-pointer">Source: {item.source.kind} · {item.source.sourceId} · {item.source.availability}</div>}
         </div>

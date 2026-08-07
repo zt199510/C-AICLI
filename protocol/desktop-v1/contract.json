@@ -292,6 +292,60 @@
       "timeout": "query"
     },
     {
+      "constant": "ChangesMutateMethod",
+      "name": "changes.mutate",
+      "params": "ChangesMutateParams",
+      "result": "ChangesMutateResult",
+      "requiresWorkspace": true,
+      "mutation": true,
+      "timeout": "mutation"
+    },
+    {
+      "constant": "SubagentListMethod",
+      "name": "subagent.list",
+      "params": "SubagentListParams",
+      "result": "SubagentResult",
+      "requiresWorkspace": true,
+      "mutation": false,
+      "timeout": "query"
+    },
+    {
+      "constant": "SubagentStartMethod",
+      "name": "subagent.start",
+      "params": "SubagentStartParams",
+      "result": "SubagentResult",
+      "requiresWorkspace": true,
+      "mutation": true,
+      "timeout": "mutation"
+    },
+    {
+      "constant": "SubagentCancelMethod",
+      "name": "subagent.cancel",
+      "params": "SubagentMutationParams",
+      "result": "SubagentResult",
+      "requiresWorkspace": true,
+      "mutation": true,
+      "timeout": "mutation"
+    },
+    {
+      "constant": "SubagentTakeoverMethod",
+      "name": "subagent.takeover",
+      "params": "SubagentMutationParams",
+      "result": "SubagentResult",
+      "requiresWorkspace": true,
+      "mutation": true,
+      "timeout": "mutation"
+    },
+    {
+      "constant": "SubagentApprovalResolveMethod",
+      "name": "subagent.approval.resolve",
+      "params": "SubagentApprovalResolveParams",
+      "result": "SubagentResult",
+      "requiresWorkspace": true,
+      "mutation": true,
+      "timeout": "mutation"
+    },
+    {
       "constant": "ReportListMethod",
       "name": "report.list",
       "params": "ReportListParams",
@@ -377,6 +431,15 @@
       "name": "terminal.get",
       "params": "TerminalGetParams",
       "result": "TerminalStateResult",
+      "requiresWorkspace": true,
+      "mutation": false,
+      "timeout": "query"
+    },
+    {
+      "constant": "TerminalProfilesGetMethod",
+      "name": "terminal.profiles.get",
+      "params": "TerminalProfilesGetParams",
+      "result": "TerminalProfileListResult",
       "requiresWorkspace": true,
       "mutation": false,
       "timeout": "query"
@@ -929,7 +992,8 @@
       "properties": [
         { "jsonName": "schemaVersion", "type": "int32", "min": 1, "max": 1 },
         { "jsonName": "nativePath", "type": "string", "maxUtf8Bytes": 4096 },
-        { "jsonName": "kind", "type": "string", "maxUtf8Bytes": 16, "enum": ["file", "folder"] }
+        { "jsonName": "kind", "type": "string", "maxUtf8Bytes": 16, "enum": ["file", "folder"] },
+        { "jsonName": "threadId", "type": "string", "maxUtf8Bytes": 64, "optional": true }
       ]
     },
     {
@@ -998,7 +1062,13 @@
         { "jsonName": "clientMutationId", "type": "string", "maxUtf8Bytes": 128 },
         { "jsonName": "prompt", "type": "string", "maxUtf8Bytes": 65536 },
         { "jsonName": "contextSelectionIds", "type": "array", "items": "string", "maxItems": 32, "maxUtf8Bytes": 96 },
-        { "jsonName": "catalogSelections", "type": "array", "items": "ComposerCatalogSelectionData", "maxItems": 16 }
+        { "jsonName": "catalogSelections", "type": "array", "items": "ComposerCatalogSelectionData", "maxItems": 16 },
+        { "jsonName": "modelOverride", "type": "string", "maxUtf8Bytes": 256, "optional": true },
+        { "jsonName": "approvalPreference", "type": "string", "maxUtf8Bytes": 32, "enum": ["read-only", "on-request", "trusted-local"], "optional": true },
+        { "jsonName": "disabledTools", "type": "array", "items": "string", "maxItems": 128, "maxUtf8Bytes": 256, "optional": true }
+        ,{ "jsonName": "sourceThreadId", "type": "string", "maxUtf8Bytes": 64, "optional": true }
+        ,{ "jsonName": "sourceItemId", "type": "string", "maxUtf8Bytes": 64, "optional": true }
+        ,{ "jsonName": "sourceAction", "type": "string", "maxUtf8Bytes": 16, "enum": ["edit", "branch"], "optional": true }
       ]
     },
     {
@@ -1165,6 +1235,48 @@
       ]
     },
     {
+      "name": "DiffHunkData",
+      "properties": [
+        { "jsonName": "hunkId", "type": "string", "maxUtf8Bytes": 128 },
+        { "jsonName": "header", "type": "string", "maxUtf8Bytes": 1024 },
+        { "jsonName": "patch", "type": "string", "maxUtf8Bytes": 131072 }
+      ]
+    },
+    {
+      "name": "ChangesFileData",
+      "properties": [
+        { "jsonName": "path", "type": "string", "maxUtf8Bytes": 4096 },
+        { "jsonName": "status", "type": "string", "maxUtf8Bytes": 64 },
+        { "jsonName": "area", "type": "string", "maxUtf8Bytes": 32, "enum": ["staged", "unstaged", "untracked", "conflicted"] },
+        { "jsonName": "diff", "type": "string", "maxUtf8Bytes": 262144 },
+        { "jsonName": "diffIdentity", "type": "string", "maxUtf8Bytes": 128 },
+        { "jsonName": "hunks", "type": "array", "items": "DiffHunkData", "maxItems": 200 },
+        { "jsonName": "truncated", "type": "boolean" }
+      ]
+    },
+    {
+      "name": "ManagedWorktreeData",
+      "properties": [
+        { "jsonName": "worktreeId", "type": "string", "maxUtf8Bytes": 128 },
+        { "jsonName": "path", "type": "string", "maxUtf8Bytes": 4096 },
+        { "jsonName": "branch", "type": "string", "maxUtf8Bytes": 512 },
+        { "jsonName": "threadId", "type": "string", "maxUtf8Bytes": 512 },
+        { "jsonName": "dirty", "type": "boolean" },
+        { "jsonName": "merged", "type": "boolean" }
+      ]
+    },
+    {
+      "name": "PullRequestData",
+      "properties": [
+        { "jsonName": "provider", "type": "string", "maxUtf8Bytes": 32, "enum": ["github"] },
+        { "jsonName": "number", "type": "int32", "min": 1, "max": 2147483647 },
+        { "jsonName": "title", "type": "string", "maxUtf8Bytes": 2048 },
+        { "jsonName": "url", "type": "string", "maxUtf8Bytes": 4096 },
+        { "jsonName": "state", "type": "string", "maxUtf8Bytes": 64 },
+        { "jsonName": "draft", "type": "boolean" }
+      ]
+    },
+    {
       "name": "ChangesData",
       "properties": [
         { "jsonName": "status", "type": "string", "maxUtf8Bytes": 64 },
@@ -1180,7 +1292,21 @@
         { "jsonName": "changedFiles", "type": "array", "items": "ChangedFileData", "maxItems": 500 },
         { "jsonName": "sessionSource", "type": "string", "maxUtf8Bytes": 64, "nullable": true },
         { "jsonName": "sessionName", "type": "string", "maxUtf8Bytes": 256, "nullable": true },
-        { "jsonName": "warnings", "type": "array", "items": "string", "maxItems": 100, "maxUtf8Bytes": 4096 }
+        { "jsonName": "warnings", "type": "array", "items": "string", "maxItems": 100, "maxUtf8Bytes": 4096 },
+        { "jsonName": "workspaceId", "type": "string", "maxUtf8Bytes": 128, "optional": true },
+        { "jsonName": "repositoryId", "type": "string", "maxUtf8Bytes": 128, "optional": true },
+        { "jsonName": "revision", "type": "string", "maxUtf8Bytes": 128, "optional": true },
+        { "jsonName": "head", "type": "string", "maxUtf8Bytes": 128, "optional": true },
+        { "jsonName": "branch", "type": "string", "maxUtf8Bytes": 512, "nullable": true, "optional": true },
+        { "jsonName": "remote", "type": "string", "maxUtf8Bytes": 512, "nullable": true, "optional": true },
+        { "jsonName": "upstream", "type": "string", "maxUtf8Bytes": 1024, "nullable": true, "optional": true },
+        { "jsonName": "files", "type": "array", "items": "ChangesFileData", "maxItems": 500, "optional": true },
+        { "jsonName": "branches", "type": "array", "items": "string", "maxItems": 500, "maxUtf8Bytes": 512, "optional": true },
+        { "jsonName": "compareBase", "type": "string", "maxUtf8Bytes": 512, "nullable": true, "optional": true },
+        { "jsonName": "compareDiff", "type": "string", "maxUtf8Bytes": 262144, "optional": true },
+        { "jsonName": "worktrees", "type": "array", "items": "ManagedWorktreeData", "maxItems": 100, "optional": true },
+        { "jsonName": "pullRequest", "type": "PullRequestData", "nullable": true, "optional": true },
+        { "jsonName": "ghAvailable", "type": "boolean", "optional": true }
       ]
     },
     {
@@ -1353,7 +1479,7 @@
       "name": "TerminalOpenParams",
       "properties": [
         { "jsonName": "schemaVersion", "type": "int32", "min": 1, "max": 1 },
-        { "jsonName": "shellProfile", "type": "string", "maxUtf8Bytes": 32, "enum": ["system-default", "powershell", "cmd"] },
+        { "jsonName": "shellProfile", "type": "string", "maxUtf8Bytes": 32, "enum": ["system-default", "powershell", "cmd", "wsl", "git-bash"] },
         { "jsonName": "clientMutationId", "type": "string", "maxUtf8Bytes": 128 }
       ]
     },
@@ -1412,6 +1538,80 @@
         { "jsonName": "schemaVersion", "type": "int32", "min": 1, "max": 1 },
         { "jsonName": "succeeded", "type": "boolean" },
         { "jsonName": "data", "type": "TerminalStateData", "nullable": true },
+        { "jsonName": "error", "type": "ApplicationErrorData", "nullable": true },
+        { "jsonName": "diagnostics", "type": "array", "items": "ApplicationDiagnosticData", "maxItems": 100 },
+        { "jsonName": "truncated", "type": "boolean" }
+      ]
+    },
+    {
+      "name": "ChangesMutateParams",
+      "properties": [
+        { "jsonName": "schemaVersion", "type": "int32", "min": 1, "max": 1 },
+        { "jsonName": "workspaceId", "type": "string", "maxUtf8Bytes": 128 },
+        { "jsonName": "repositoryId", "type": "string", "maxUtf8Bytes": 128 },
+        { "jsonName": "expectedRevision", "type": "string", "maxUtf8Bytes": 128 },
+        { "jsonName": "action", "type": "string", "maxUtf8Bytes": 32, "enum": ["stage", "unstage", "revert", "commit", "push", "create-branch", "switch-branch", "create-worktree", "remove-worktree", "remove-branch", "create-pr", "update-pr", "open-pr"] },
+        { "jsonName": "path", "type": "string", "maxUtf8Bytes": 4096, "nullable": true },
+        { "jsonName": "area", "type": "string", "maxUtf8Bytes": 32, "nullable": true },
+        { "jsonName": "hunkId", "type": "string", "maxUtf8Bytes": 128, "nullable": true },
+        { "jsonName": "message", "type": "string", "maxUtf8Bytes": 8192, "nullable": true },
+        { "jsonName": "setUpstream", "type": "boolean" },
+        { "jsonName": "confirmed", "type": "boolean" },
+        { "jsonName": "clientMutationId", "type": "string", "maxUtf8Bytes": 128 }
+        ,{ "jsonName": "targetBranch", "type": "string", "maxUtf8Bytes": 512, "nullable": true, "optional": true }
+        ,{ "jsonName": "baseBranch", "type": "string", "maxUtf8Bytes": 512, "nullable": true, "optional": true }
+        ,{ "jsonName": "title", "type": "string", "maxUtf8Bytes": 2048, "nullable": true, "optional": true }
+        ,{ "jsonName": "body", "type": "string", "maxUtf8Bytes": 16384, "nullable": true, "optional": true }
+        ,{ "jsonName": "threadId", "type": "string", "maxUtf8Bytes": 512, "nullable": true, "optional": true }
+        ,{ "jsonName": "worktreeId", "type": "string", "maxUtf8Bytes": 128, "nullable": true, "optional": true }
+      ]
+    },
+    {
+      "name": "ChangesMutationData",
+      "properties": [
+        { "jsonName": "action", "type": "string", "maxUtf8Bytes": 32 },
+        { "jsonName": "summary", "type": "string", "maxUtf8Bytes": 8192 },
+        { "jsonName": "commitHash", "type": "string", "maxUtf8Bytes": 128, "nullable": true },
+        { "jsonName": "changes", "type": "ChangesData" }
+      ]
+    },
+    {
+      "name": "ChangesMutateResult",
+      "properties": [
+        { "jsonName": "schemaVersion", "type": "int32", "min": 1, "max": 1 },
+        { "jsonName": "succeeded", "type": "boolean" },
+        { "jsonName": "data", "type": "ChangesMutationData", "nullable": true },
+        { "jsonName": "error", "type": "ApplicationErrorData", "nullable": true },
+        { "jsonName": "diagnostics", "type": "array", "items": "ApplicationDiagnosticData", "maxItems": 100 },
+        { "jsonName": "truncated", "type": "boolean" }
+      ]
+    },
+    {
+      "name": "TerminalProfilesGetParams",
+      "properties": [
+        { "jsonName": "schemaVersion", "type": "int32", "min": 1, "max": 1 }
+      ]
+    },
+    {
+      "name": "TerminalProfileData",
+      "properties": [
+        { "jsonName": "profileId", "type": "string", "maxUtf8Bytes": 32, "enum": ["system-default", "powershell", "cmd", "wsl", "git-bash"] },
+        { "jsonName": "displayName", "type": "string", "maxUtf8Bytes": 64 },
+        { "jsonName": "isDefault", "type": "boolean" }
+      ]
+    },
+    {
+      "name": "TerminalProfileListData",
+      "properties": [
+        { "jsonName": "profiles", "type": "array", "items": "TerminalProfileData", "maxItems": 8 }
+      ]
+    },
+    {
+      "name": "TerminalProfileListResult",
+      "properties": [
+        { "jsonName": "schemaVersion", "type": "int32", "min": 1, "max": 1 },
+        { "jsonName": "succeeded", "type": "boolean" },
+        { "jsonName": "data", "type": "TerminalProfileListData", "nullable": true },
         { "jsonName": "error", "type": "ApplicationErrorData", "nullable": true },
         { "jsonName": "diagnostics", "type": "array", "items": "ApplicationDiagnosticData", "maxItems": 100 },
         { "jsonName": "truncated", "type": "boolean" }
@@ -1517,6 +1717,78 @@
         { "jsonName": "schemaVersion", "type": "int32", "min": 1, "max": 1 },
         { "jsonName": "succeeded", "type": "boolean" },
         { "jsonName": "data", "type": "GerberReviewData", "nullable": true },
+        { "jsonName": "error", "type": "ApplicationErrorData", "nullable": true },
+        { "jsonName": "diagnostics", "type": "array", "items": "ApplicationDiagnosticData", "maxItems": 100 },
+        { "jsonName": "truncated", "type": "boolean" }
+      ]
+    },
+    {
+      "name": "SubagentListParams",
+      "properties": [
+        { "jsonName": "schemaVersion", "type": "int32", "min": 1, "max": 1 },
+        { "jsonName": "parentThreadId", "type": "string", "maxUtf8Bytes": 64 }
+      ]
+    },
+    {
+      "name": "SubagentStartParams",
+      "properties": [
+        { "jsonName": "schemaVersion", "type": "int32", "min": 1, "max": 1 },
+        { "jsonName": "parentThreadId", "type": "string", "maxUtf8Bytes": 64 },
+        { "jsonName": "prompt", "type": "string", "maxUtf8Bytes": 65536 },
+        { "jsonName": "mode", "type": "string", "maxUtf8Bytes": 16, "enum": ["read-only", "write"] },
+        { "jsonName": "confirmed", "type": "boolean" },
+        { "jsonName": "clientMutationId", "type": "string", "maxUtf8Bytes": 128 }
+      ]
+    },
+    {
+      "name": "SubagentMutationParams",
+      "properties": [
+        { "jsonName": "schemaVersion", "type": "int32", "min": 1, "max": 1 },
+        { "jsonName": "agentId", "type": "string", "maxUtf8Bytes": 64 },
+        { "jsonName": "confirmed", "type": "boolean" },
+        { "jsonName": "clientMutationId", "type": "string", "maxUtf8Bytes": 128 }
+      ]
+    },
+    {
+      "name": "SubagentApprovalResolveParams",
+      "properties": [
+        { "jsonName": "schemaVersion", "type": "int32", "min": 1, "max": 1 },
+        { "jsonName": "agentId", "type": "string", "maxUtf8Bytes": 64 },
+        { "jsonName": "decision", "type": "string", "maxUtf8Bytes": 16, "enum": ["approve", "deny"] },
+        { "jsonName": "clientMutationId", "type": "string", "maxUtf8Bytes": 128 }
+      ]
+    },
+    {
+      "name": "SubagentData",
+      "properties": [
+        { "jsonName": "agentId", "type": "string", "maxUtf8Bytes": 64 },
+        { "jsonName": "parentThreadId", "type": "string", "maxUtf8Bytes": 64 },
+        { "jsonName": "threadId", "type": "string", "maxUtf8Bytes": 64 },
+        { "jsonName": "mode", "type": "string", "maxUtf8Bytes": 16, "enum": ["read-only", "write"] },
+        { "jsonName": "status", "type": "string", "maxUtf8Bytes": 32, "enum": ["starting", "running", "waiting-approval", "completed", "failed", "canceled", "taken-over"] },
+        { "jsonName": "workspacePath", "type": "string", "maxUtf8Bytes": 4096 },
+        { "jsonName": "worktreeId", "type": "string", "maxUtf8Bytes": 128, "nullable": true },
+        { "jsonName": "branch", "type": "string", "maxUtf8Bytes": 512, "nullable": true },
+        { "jsonName": "resultSummary", "type": "string", "maxUtf8Bytes": 16384, "nullable": true },
+        { "jsonName": "approval", "type": "ApprovalRequestData", "nullable": true },
+        { "jsonName": "createdAtUtc", "type": "datetime" },
+        { "jsonName": "updatedAtUtc", "type": "datetime" }
+      ]
+    },
+    {
+      "name": "SubagentListData",
+      "properties": [
+        { "jsonName": "parentThreadId", "type": "string", "maxUtf8Bytes": 64 },
+        { "jsonName": "maxAgents", "type": "int32", "min": 1, "max": 3 },
+        { "jsonName": "agents", "type": "array", "items": "SubagentData", "maxItems": 3 }
+      ]
+    },
+    {
+      "name": "SubagentResult",
+      "properties": [
+        { "jsonName": "schemaVersion", "type": "int32", "min": 1, "max": 1 },
+        { "jsonName": "succeeded", "type": "boolean" },
+        { "jsonName": "data", "type": "SubagentListData", "nullable": true },
         { "jsonName": "error", "type": "ApplicationErrorData", "nullable": true },
         { "jsonName": "diagnostics", "type": "array", "items": "ApplicationDiagnosticData", "maxItems": 100 },
         { "jsonName": "truncated", "type": "boolean" }

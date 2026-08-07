@@ -53,7 +53,7 @@ export async function auditDesktopPackage(packageRoot) {
     schemaVersion: 1,
     packageFileCount: relativeFiles.length,
     asarEntryCount: entries.length,
-    reviewedInvokeChannels: 39,
+    reviewedInvokeChannels: 48,
     reviewedEventChannels: 2,
     requiredPayload: required,
     forbiddenPayloadCount: 0,

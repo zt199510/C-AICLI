@@ -1,11 +1,12 @@
 import { act, renderHook } from "@testing-library/react";
 import { afterEach, describe, expect, it } from "vitest";
-import { useShellPanels } from "./use-shell-panels";
+import { useShellPanels, useWorkspacePanels } from "./use-shell-panels";
 
 const originalViewportWidth = window.innerWidth;
 
 afterEach(() => {
   setViewportWidth(originalViewportWidth);
+  window.localStorage.clear();
 });
 
 describe("useShellPanels navigation width", () => {
@@ -52,14 +53,20 @@ describe("useShellPanels navigation width", () => {
 });
 
 describe("useShellPanels responsive panel behavior", () => {
-  it("opens an inline inspector on wide viewports and keeps overlays closed initially", () => {
+  it("opens PanelTop and the inline inspector by default on wide viewports", () => {
     setViewportWidth(1440);
     const wide = renderHook(() => useShellPanels());
     expect(wide.result.current.toolSidebarOpen).toBe(true);
-    expect(wide.result.current.summaryOpen).toBe(false);
+    expect(wide.result.current.summaryOpen).toBe(true);
     expect(wide.result.current.bottomPanelOpen).toBe(false);
     expect(wide.result.current.overlayInspector).toBe(false);
     wide.unmount();
+
+    setViewportWidth(1228);
+    const codexReference = renderHook(() => useShellPanels());
+    expect(codexReference.result.current.toolSidebarOpen).toBe(true);
+    expect(codexReference.result.current.overlayInspector).toBe(false);
+    codexReference.unmount();
 
     setViewportWidth(1024);
     const compact = renderHook(() => useShellPanels());
@@ -107,9 +114,13 @@ describe("useShellPanels responsive panel behavior", () => {
     expect(result.current.toolSidebarOpen).toBe(false);
   });
 
-  it("keeps the three workspace surfaces independently switchable", () => {
+  it("keeps summary independent while bottom and right remain mutually exclusive", () => {
     setViewportWidth(1440);
     const { result } = renderHook(() => useShellPanels());
+
+    act(() => result.current.toggleSummary());
+    expect(result.current.summaryOpen).toBe(false);
+    expect(result.current.toolSidebarOpen).toBe(true);
 
     act(() => result.current.toggleSummary());
     expect(result.current.summaryOpen).toBe(true);
@@ -119,16 +130,18 @@ describe("useShellPanels responsive panel behavior", () => {
     act(() => result.current.showBottomPanel());
     expect(result.current.summaryOpen).toBe(true);
     expect(result.current.bottomPanelOpen).toBe(true);
-    expect(result.current.toolSidebarOpen).toBe(true);
+    expect(result.current.toolSidebarOpen).toBe(false);
 
     act(() => result.current.toggleToolSidebar());
     expect(result.current.summaryOpen).toBe(true);
-    expect(result.current.bottomPanelOpen).toBe(true);
-    expect(result.current.toolSidebarOpen).toBe(false);
+    expect(result.current.bottomPanelOpen).toBe(false);
+    expect(result.current.toolSidebarOpen).toBe(true);
   });
 
   it("closes the last opened non-modal surface first", () => {
+    setViewportWidth(1440);
     const { result } = renderHook(() => useShellPanels());
+    act(() => result.current.closeSummary(false));
     act(() => {
       result.current.toggleSummary();
       result.current.showBottomPanel();
@@ -146,19 +159,68 @@ describe("useShellPanels responsive panel behavior", () => {
     setViewportWidth(1440);
     const { result } = renderHook(() => useShellPanels());
     act(() => result.current.nudgeInspectorWidth(72));
-    expect(result.current.inspectorWidth).toBe(432);
+    expect(result.current.inspectorWidth).toBe(712);
 
     act(() => {
       setViewportWidth(1024);
       window.dispatchEvent(new Event("resize"));
     });
-    expect(result.current.inspectorWidth).toBe(432);
+    expect(result.current.inspectorWidth).toBe(712);
 
     act(() => {
       setViewportWidth(1440);
       window.dispatchEvent(new Event("resize"));
     });
-    expect(result.current.inspectorWidth).toBe(432);
+    expect(result.current.inspectorWidth).toBe(712);
+  });
+
+  it("keeps summary independent while the bottom dock yields to the compact right drawer", () => {
+    setViewportWidth(1024);
+    const { result } = renderHook(() => useShellPanels());
+
+    act(() => result.current.toggleSummary());
+    expect(result.current.summaryOpen).toBe(true);
+    act(() => result.current.showBottomPanel());
+    expect(result.current.summaryOpen).toBe(true);
+    expect(result.current.bottomPanelOpen).toBe(true);
+    act(() => result.current.showToolSidebar());
+    expect(result.current.summaryOpen).toBe(true);
+    expect(result.current.bottomPanelOpen).toBe(false);
+    expect(result.current.toolSidebarOpen).toBe(true);
+  });
+
+  it("does not reopen the right workbench when a bottom dock crosses into wide mode", () => {
+    setViewportWidth(1024);
+    const { result } = renderHook(() => useShellPanels());
+    act(() => result.current.showBottomPanel());
+
+    act(() => {
+      setViewportWidth(1228);
+      window.dispatchEvent(new Event("resize"));
+    });
+
+    expect(result.current.bottomPanelOpen).toBe(true);
+    expect(result.current.toolSidebarOpen).toBe(false);
+    expect(result.current.overlayInspector).toBe(false);
+  });
+
+  it("restores panel state and sizes only for the matching workspace", () => {
+    setViewportWidth(1440);
+    const first = renderHook(() => useWorkspacePanels("workspace-a"));
+    act(() => {
+      first.result.current.showBottomPanel();
+      first.result.current.nudgeInspectorWidth(40);
+    });
+    first.unmount();
+
+    const restored = renderHook(() => useWorkspacePanels("workspace-a"));
+    expect(restored.result.current.bottomPanelOpen).toBe(true);
+    expect(restored.result.current.inspectorWidth).toBe(680);
+    restored.unmount();
+
+    const isolated = renderHook(() => useWorkspacePanels("workspace-b"));
+    expect(isolated.result.current.bottomPanelOpen).toBe(false);
+    expect(isolated.result.current.inspectorWidth).toBe(640);
   });
 });
 

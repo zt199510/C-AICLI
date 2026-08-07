@@ -150,9 +150,19 @@ export async function cleanupDesktopCase(value: DesktopCase, testInfo: TestInfo)
       try { await closeDesktop(application); } catch (error) { failures.push(String(error)); }
     }
   }
-  for (const pid of value.ownedPids) {
-    if (isProcessAlive(pid) && !await waitForProcessExit(pid, 2_000)) failures.push(`owned process ${pid} remained alive`);
+  const gracefulDeadline = Date.now() + 2_000;
+  while ([...value.ownedPids].some(isProcessAlive) && Date.now() < gracefulDeadline) {
+    await new Promise((resolve) => setTimeout(resolve, 50));
   }
+  for (const pid of value.ownedPids) {
+    if (!isProcessAlive(pid)) continue;
+    try { process.kill(pid); } catch { /* exited between the probe and termination */ }
+  }
+  const forcedDeadline = Date.now() + 2_000;
+  while ([...value.ownedPids].some(isProcessAlive) && Date.now() < forcedDeadline) {
+    await new Promise((resolve) => setTimeout(resolve, 50));
+  }
+  for (const pid of value.ownedPids) if (isProcessAlive(pid)) failures.push(`owned process ${pid} remained alive after bounded cleanup`);
   const inventory = {
     caseId: value.id,
     packaged: value.packaged,

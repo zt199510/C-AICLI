@@ -216,6 +216,24 @@ public sealed class Week79ProductionRuntimeTests
     }
 
     [Fact]
+    public async Task Runtime_includes_explicit_text_context_in_the_model_prompt()
+    {
+        using TestWorkspace workspace = new();
+        File.WriteAllText(Path.Combine(workspace.Root, "attached.txt"), "context-sentinel-42");
+        CliEnvironmentSnapshot snapshot = workspace.CreateSnapshot(model: "gpt-test", apiKey: "sk-test-value", apiKeySource: "OPENAI_API_KEY");
+        PromptCapturingGateway gateway = new();
+        DesktopAgentTurnExecutionRuntime runtime = new(new OpenAiAgentRunnerFactory((_, _) => gateway));
+        TurnExecutionInput input = CreateInput(snapshot);
+        input = input with { Intent = input.Intent with { Context = [new ComposerContextReferenceRecord { SelectionId = "ctx_test", RelativePath = "attached.txt", Kind = ComposerContextKind.File, ByteCount = 19, FileCount = 1, ObservedIdentity = "test" }] } };
+
+        TurnRuntimeResult result = await runtime.ExecuteAsync(input, new CollectingSink(), new RejectingApprovalGateway(), CancellationToken.None);
+
+        Assert.Equal("completed", result.Status);
+        Assert.Contains("context-sentinel-42", gateway.Prompt, StringComparison.Ordinal);
+        Assert.Contains("attachment: attached.txt", gateway.Prompt, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void Desktop_approval_policy_is_per_action_stable_and_redacted()
     {
         using TestWorkspace workspace = new();
@@ -295,6 +313,23 @@ public sealed class Week79ProductionRuntimeTests
         Assert.False(dangerous.Approved);
         Assert.Equal("dangerous-shell-denied", dangerous.Status);
         Assert.Empty(gateway.Actions);
+    }
+
+    [Fact]
+    public void Desktop_approval_policy_enforces_read_only_and_trusted_local_modes_without_reusing_decisions()
+    {
+        using TestWorkspace workspace = new();
+        CliEnvironmentSnapshot baseline = workspace.CreateSnapshot();
+        ApprovalRequest write = new("workspace.apply_patch", "Edit a guarded file.", null, false, RiskLevel: ToolRiskLevel.Write);
+        CapturingApprovalGateway readOnlyGateway = new("approve");
+        DesktopApprovalPolicy readOnly = new(CreateInput(baseline with { Configuration = baseline.Configuration with { ApprovalMode = ApprovalMode.Never } }), readOnlyGateway, CancellationToken.None);
+        CapturingApprovalGateway trustedGateway = new("deny");
+        DesktopApprovalPolicy trusted = new(CreateInput(baseline with { Configuration = baseline.Configuration with { ApprovalMode = ApprovalMode.OnFailure } }), trustedGateway, CancellationToken.None);
+
+        Assert.False(readOnly.RequestApproval(write).Approved);
+        Assert.True(trusted.RequestApproval(write).Approved);
+        Assert.Empty(readOnlyGateway.Actions);
+        Assert.Empty(trustedGateway.Actions);
     }
 
     [Fact]
@@ -447,6 +482,18 @@ public sealed class Week79ProductionRuntimeTests
             string? instructions = null,
             CancellationToken cancellationToken = default) =>
             throw new NotSupportedException();
+    }
+
+    private sealed class PromptCapturingGateway : IOpenAiResponsesGateway
+    {
+        public string Prompt { get; private set; } = string.Empty;
+        public OpenAiResponseEnvelope CreateAgentResponse(OpenAiAgentRequest request, CancellationToken cancellationToken = default)
+        {
+            Prompt = request.Prompt ?? string.Empty;
+            return new OpenAiResponseEnvelope("response-context", "gpt-test", "Context received.");
+        }
+        public OpenAiResponseEnvelope CreateResponse(string model, string prompt, string? instructions = null, CancellationToken cancellationToken = default) => throw new NotSupportedException();
+        public IEnumerable<OpenAiStreamingResponseUpdate> CreateResponseStreaming(string model, string prompt, string? instructions = null, CancellationToken cancellationToken = default) => throw new NotSupportedException();
     }
 
     private sealed class RepeatingPlanGateway : IOpenAiResponsesGateway

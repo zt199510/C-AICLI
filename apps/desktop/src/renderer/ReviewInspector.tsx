@@ -1,10 +1,12 @@
 import { useRef, useState, type KeyboardEvent } from "react";
 import type { ArtifactMetadataData, GerberReviewData } from "../generated/desktop-contracts";
 import type { ReviewState } from "./desktop-state";
+import type { DesktopBridge } from "../shared/bridge-contract";
 
 const tabs = ["changes", "reports", "artifacts", "preview"] as const;
 
 export interface ReviewCommands {
+  mutateChanges(command: Parameters<DesktopBridge["mutateChanges"]>[0]): Promise<string>;
   previewArtifact(artifactId: string): Promise<string>;
   verifyArtifact(artifactId: string): Promise<string>;
   exportArtifact(artifactId: string): Promise<string>;
@@ -58,24 +60,109 @@ export function ReviewPanel({
     {workspaceReady && review.status === "loading" ? <div className="empty-list">Loading review data…</div> : null}
     {workspaceReady && review.status === "error" ? <div className="inline-error" role="alert">{review.error}</div> : null}
     {workspaceReady && review.truncated ? <div className="capped-banner">Showing a bounded result set.</div> : null}
-    {workspaceReady && review.activeTab === "changes" ? <ChangesPanel review={review} /> : null}
+    {workspaceReady && review.activeTab === "changes" ? <ChangesPanel review={review} commands={commands} /> : null}
     {workspaceReady && review.activeTab === "reports" ? <ReportsPanel review={review} onReport={onReport} /> : null}
     {workspaceReady && review.activeTab === "artifacts" ? <ArtifactsPanel review={review} onArtifact={onArtifact} commands={commands} /> : null}
     {workspaceReady && review.activeTab === "preview" ? <GerberPanel artifacts={review.artifacts} selected={review.selectedArtifact} onArtifact={onArtifact} commands={commands} /> : null}
   </>;
 }
 
-function ChangesPanel({ review }: { review: ReviewState }) {
+function ChangesPanel({ review, commands }: { review: ReviewState; commands?: ReviewCommands }) {
   const value = review.changes;
+  const [selectedKey, setSelectedKey] = useState<string | null>(null);
+  const [confirmation, setConfirmation] = useState<{ action: "revert" | "commit" | "push"; path?: string; area?: string; hunkId?: string } | null>(null);
+  const [commitMessage, setCommitMessage] = useState("");
+  const [setUpstream, setSetUpstream] = useState(false);
+  const [message, setMessage] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
   if (!value && review.status === "ready") return <div className="empty-list">No change summary is available.</div>;
   if (!value) return null;
-  return <div className="review-section">
-    <h2>Workspace changes</h2>
-    <dl><dt>Status</dt><dd>{value.status}</dd><dt>Dirty</dt><dd>{value.dirty ? "Yes" : "No"}</dd><dt>Session</dt><dd>{value.sessionName ?? "Current workspace"}</dd></dl>
-    <h3>Git status summary</h3><pre>{value.gitStatusSummary || "No status output"}</pre>
-    <h3>Diff statistics</h3><pre>{value.diffStatSummary || "No diff statistics"}</pre>
-    <h3>Changed files</h3>
-    {value.changedFiles.length ? <ul>{value.changedFiles.map((file) => <li key={`${file.status}:${file.path}`}><span className="status-chip">{file.status}</span> <span className="plain-path">{file.path}</span></li>)}</ul> : <p>No changed files.</p>}
+  const snapshot = value;
+  const files = value.files ?? [];
+  const selected = files.find((file) => `${file.area}:${file.path}` === selectedKey) ?? files[0] ?? null;
+  const writable = Boolean(commands && value.workspaceId && value.repositoryId && value.revision);
+
+  async function mutate(action: "stage" | "unstage" | "revert" | "commit" | "push", target?: { path?: string; area?: string; hunkId?: string }, confirmed = false) {
+    if (!commands || !snapshot.workspaceId || !snapshot.repositoryId || !snapshot.revision) return;
+    setBusy(true); setMessage(null);
+    try {
+      const result = await commands.mutateChanges({
+        workspaceId: snapshot.workspaceId,
+        repositoryId: snapshot.repositoryId,
+        expectedRevision: snapshot.revision,
+        action,
+        path: target?.path ?? null,
+        area: target?.area ?? null,
+        hunkId: target?.hunkId ?? null,
+        message: action === "commit" ? commitMessage : null,
+        setUpstream: action === "push" && setUpstream,
+        confirmed,
+        clientMutationId: `changes-${action}-${Date.now()}-${crypto.randomUUID()}`,
+      });
+      setMessage(result);
+      setConfirmation(null);
+      if (action === "commit") setCommitMessage("");
+    } catch (error) { setMessage(error instanceof Error ? error.message : "Git action failed safely."); }
+    finally { setBusy(false); }
+  }
+
+  function requestRevert(target: { path: string; area: string; hunkId?: string }) {
+    setConfirmation({ action: "revert", ...target });
+  }
+
+  return <div className="changes-workspace-panel review-section" aria-label="Changes">
+    <div className="changes-summary-bar">
+      <div><h2>Changes</h2><p>{value.diffStatSummary || "No changes"}</p></div>
+      <div className="changes-branch-meta"><span>{value.branch ?? "detached HEAD"}</span><code>{value.head?.slice(0, 8) ?? "unknown"}</code></div>
+    </div>
+    {!writable ? <p className="capped-banner">当前投影是旧版只读 Changes；刷新真实工作区以启用 Git 操作。</p> : null}
+    <div className="changes-review-layout">
+      <nav className="changes-file-list" aria-label="Changed files">
+        {(["conflicted", "staged", "unstaged", "untracked"] as const).map((area) => {
+          const areaFiles = files.filter((file) => file.area === area);
+          if (!areaFiles.length) return null;
+          return <section key={area} aria-labelledby={`changes-area-${area}`}><h3 id={`changes-area-${area}`}>{area} <span>{areaFiles.length}</span></h3>
+            {areaFiles.map((file) => <button type="button" key={`${area}:${file.path}`} aria-current={selected === file ? "page" : undefined} onClick={() => setSelectedKey(`${area}:${file.path}`)}>
+              <span className="status-chip">{file.status}</span><span className="plain-path">{file.path}</span>
+            </button>)}
+          </section>;
+        })}
+        {!files.length ? <p>No changed files.</p> : null}
+      </nav>
+      <section className="changes-diff-viewer" aria-label="Diff viewer">
+        {selected ? <>
+          <header><div><strong className="plain-path">{selected.path}</strong><span>{selected.area}</span></div>
+            <div className="diff-action-bar">
+              {selected.area !== "staged" ? <button type="button" disabled={!writable || busy} onClick={() => void mutate("stage", selected)}>Stage file</button> : null}
+              {selected.area === "staged" ? <button type="button" disabled={!writable || busy} onClick={() => void mutate("unstage", selected)}>Unstage file</button> : null}
+              {selected.area !== "untracked" ? <button type="button" className="danger" disabled={!writable || busy} onClick={() => requestRevert(selected)}>Revert file</button> : null}
+            </div>
+          </header>
+          <pre className="changes-diff" tabIndex={0}>{selected.diff || "No textual diff is available."}</pre>
+          {selected.hunks.map((hunk) => <article className="diff-hunk" key={hunk.hunkId}>
+            <header><code>{hunk.header}</code><div>
+              {selected.area === "unstaged" ? <button type="button" disabled={!writable || busy} onClick={() => void mutate("stage", { ...selected, hunkId: hunk.hunkId })}>Stage hunk</button> : null}
+              {selected.area === "staged" ? <button type="button" disabled={!writable || busy} onClick={() => void mutate("unstage", { ...selected, hunkId: hunk.hunkId })}>Unstage hunk</button> : null}
+              {selected.area === "unstaged" ? <button type="button" className="danger" disabled={!writable || busy} onClick={() => requestRevert({ ...selected, hunkId: hunk.hunkId })}>Revert hunk</button> : null}
+            </div></header>
+          </article>)}
+        </> : <p>Select a changed file to review its diff.</p>}
+      </section>
+    </div>
+    <section className="git-action-bar" aria-label="Commit and push">
+      <label><span>Commit message</span><textarea value={commitMessage} maxLength={8192} onChange={(event) => setCommitMessage(event.target.value)} placeholder="Describe the staged changes" /></label>
+      <div><button type="button" disabled={!writable || busy || !commitMessage.trim() || !files.some((file) => file.area === "staged")} onClick={() => setConfirmation({ action: "commit" })}>Review commit</button>
+        <button type="button" disabled={!writable || busy || value.head === "0000000000000000000000000000000000000000"} onClick={() => setConfirmation({ action: "push" })}>Review push</button></div>
+    </section>
+    {confirmation ? <section className="git-confirmation" role="alertdialog" aria-modal="false" aria-label={`Confirm ${confirmation.action}`}>
+      <h3>Confirm {confirmation.action}</h3>
+      {confirmation.action === "revert" ? <p>This permanently discards the selected tracked {confirmation.hunkId ? "hunk" : "file"}. Untracked files cannot be deleted here.</p> : null}
+      {confirmation.action === "commit" ? <><p>Commit staged changes only. Hooks remain enabled; amend and no-verify are unavailable.</p><pre>{commitMessage}</pre></> : null}
+      {confirmation.action === "push" ? <><dl><dt>Remote</dt><dd>{value.remote ?? "Not configured"}</dd><dt>Branch</dt><dd>{value.branch ?? "Detached"}</dd><dt>Upstream</dt><dd>{value.upstream ?? "Not set"}</dd></dl>
+        {!value.upstream ? <label><input type="checkbox" checked={setUpstream} onChange={(event) => setSetUpstream(event.target.checked)} /> Set upstream on first push</label> : null}<p>Force push is permanently unavailable.</p></> : null}
+      <div><button type="button" onClick={() => setConfirmation(null)}>Cancel</button><button type="button" className={confirmation.action === "revert" ? "danger" : ""} disabled={busy || (confirmation.action === "push" && !value.upstream && !setUpstream)} onClick={() => void mutate(confirmation.action, confirmation, true)}>Confirm {confirmation.action}</button></div>
+    </section> : null}
+    {message ? <p className="review-status" role="status" aria-live="polite">{message}</p> : null}
     {value.warnings.length ? <div className="warning-list">{value.warnings.map((warning) => <p key={warning}>{warning}</p>)}</div> : null}
   </div>;
 }

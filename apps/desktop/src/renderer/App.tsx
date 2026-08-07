@@ -1,11 +1,16 @@
-import { Archive, FolderOpen, PanelBottom, PanelLeft, PanelRight, PanelTop, RefreshCw, SquarePen } from "lucide-react";
+import { Archive, FolderOpen, PanelLeft, RefreshCw, Settings, SquarePen } from "lucide-react";
 import { useEffect, useState, type CSSProperties } from "react";
-import { useShellPanels } from "./app/use-shell-panels";
+import { useWorkspacePanels } from "./app/use-shell-panels";
 import { Composer } from "./Composer";
 import { ThreadSidebar } from "./ThreadSidebar";
 import type { ThreadFilter } from "./thread-sidebar-model";
 import { TimelineView } from "./TimelineView";
+import { useTerminalSessions } from "./terminal/useTerminalSessions";
 import { useDesktopController } from "./use-desktop-controller";
+import { useLocalSettings } from "./settings/local-settings";
+import { SettingsPage } from "./settings/SettingsPage";
+import { WorkspacePanelToggleGroup } from "./workspace/WorkspacePanelToggleGroup";
+import { isReviewWorkspacePanel } from "./workspace/WorkspaceToolRegistry";
 import {
   WorkspaceBottomPanel,
   type WorkspacePanel,
@@ -20,13 +25,38 @@ export function App() {
   const [opening, setOpening] = useState(false);
   const [workspaceError, setWorkspaceError] = useState<string | null>(null);
   const [workspacePanel, setWorkspacePanel] = useState<WorkspacePanel>("changes");
+  const [workspaceTabs, setWorkspaceTabs] = useState<WorkspacePanel[]>(["changes"]);
   const [stopping, setStopping] = useState(false);
   const [threadFilter, setThreadFilter] = useState<ThreadFilter>("all");
-  const panels = useShellPanels();
+  const [settingsOpen, setSettingsOpen] = useState(false);
+  const settings = useLocalSettings(state.workspace?.workspaceId ?? null);
+  const panels = useWorkspacePanels(state.workspace?.workspaceId);
+  const terminalSessions = useTerminalSessions(
+    controller.terminalCommands,
+    state.workspace?.workspaceId ?? null,
+    state.selectedThreadId,
+  );
   const { leftOpen, toolSidebarOpen, showThreadsTrigger } = panels;
 
   useEffect(() => {
+    const onPanelShortcut = (event: KeyboardEvent) => {
+      if (!event.ctrlKey || !event.shiftKey || event.altKey || event.metaKey) return;
+      const action = event.code === "Digit1" ? panels.toggleSummary
+        : event.code === "Digit2" ? toggleTerminalDock
+          : event.code === "Digit3" ? toggleWorkspaceWorkbench
+            : event.code === "KeyG" ? () => selectWorkspacePanel("changes")
+              : null;
+      if (!action) return;
+      event.preventDefault();
+      action();
+    };
+    window.addEventListener("keydown", onPanelShortcut);
+    return () => window.removeEventListener("keydown", onPanelShortcut);
+  }, [panels.toggleSummary, panels.bottomPanelOpen, panels.toolSidebarOpen, workspacePanel, workspaceTabs]);
+
+  useEffect(() => {
     setWorkspacePanel("changes");
+    setWorkspaceTabs(["changes"]);
     if (state.workspace) controller.setReviewTab("changes");
   }, [state.workspace?.workspaceId]);
 
@@ -35,22 +65,63 @@ export function App() {
     setWorkspaceError(null);
     try {
       const result = await controller.openWorkspace();
-      if (result && !result.succeeded) setWorkspaceError(result.error?.safeMessage ?? "Workspace could not be opened.");
-    } catch { setWorkspaceError("Workspace could not be opened."); }
+      if (result && !result.succeeded) setWorkspaceError(result.error?.safeMessage ?? "无法打开工作区。");
+    } catch { setWorkspaceError("无法打开工作区。"); }
     finally { setOpening(false); }
   }
 
   function selectWorkspacePanel(panel: WorkspacePanel) {
+    setWorkspaceTabs((tabs) => tabs.includes(panel) ? tabs : [...tabs, panel]);
     setWorkspacePanel(panel);
     if (isReviewWorkspacePanel(panel)) controller.setReviewTab(panel);
-    panels.showBottomPanel();
+    if (panels.bottomPanelOpen) panels.closeBottomPanel(false);
+    panels.showToolSidebar();
+  }
+
+  function closeWorkspacePanel(panel: WorkspacePanel) {
+    const index = workspaceTabs.indexOf(panel);
+    const nextTabs = workspaceTabs.filter((candidate) => candidate !== panel);
+    setWorkspaceTabs(nextTabs);
+    if (workspacePanel !== panel) return;
+    const nextPanel = nextTabs[Math.min(Math.max(index, 0), nextTabs.length - 1)];
+    if (nextPanel) {
+      setWorkspacePanel(nextPanel);
+      if (isReviewWorkspacePanel(nextPanel)) controller.setReviewTab(nextPanel);
+    } else {
+      panels.closeToolSidebar();
+    }
+  }
+
+  function toggleTerminalDock() {
+    if (!panels.bottomPanelOpen) {
+      if (workspacePanel === "terminal") {
+        const fallback = workspaceTabs.find((panel) => panel !== "terminal") ?? "changes";
+        setWorkspaceTabs((tabs) => tabs.includes(fallback) ? tabs : [fallback, ...tabs]);
+        setWorkspacePanel(fallback);
+        if (isReviewWorkspacePanel(fallback)) controller.setReviewTab(fallback);
+      }
+      if (panels.toolSidebarOpen) panels.closeToolSidebar(false);
+    }
+    panels.toggleBottomPanel();
+  }
+
+  function toggleWorkspaceWorkbench() {
+    if (!panels.toolSidebarOpen) {
+      if (workspaceTabs.length === 0) {
+        setWorkspaceTabs(["changes"]);
+        setWorkspacePanel("changes");
+        controller.setReviewTab("changes");
+      }
+      if (panels.bottomPanelOpen) panels.closeBottomPanel(false);
+    }
+    panels.toggleToolSidebar();
   }
 
   const workspacePath = state.workspace?.rootPath ?? null;
   const bridgeUnavailable = !bridge;
   const statusMessage = bridgeUnavailable ? "Desktop bridge unavailable" : state.runtime.message;
-  const threadLabel = state.detail?.thread.title ?? "No active thread";
-  const turnLabel = state.detail?.turns.at(-1)?.taskSummary ?? "No active turn";
+  const threadLabel = state.detail?.thread.title ?? "没有活动对话";
+  const turnLabel = state.detail?.turns.at(-1)?.taskSummary ?? "没有活动任务";
   const stopTurn = state.runtime.state === "ready" && controller.activeTurn && !controller.activeTurn.approval &&
     !["completed", "failed", "canceled", "canceling"].includes(controller.activeTurn.status)
     ? controller.activeTurn
@@ -76,13 +147,22 @@ export function App() {
     controller.beginConversation();
   }
 
+  function toggleSettings() {
+    if (!settingsOpen) {
+      if (panels.summaryOpen) panels.closeSummary(false);
+      if (panels.bottomPanelOpen) panels.closeBottomPanel(false);
+    }
+    setSettingsOpen((open) => !open);
+  }
+
   return (
     <div
       className={`app-shell ${leftOpen ? "" : "left-collapsed"} ${toolSidebarOpen ? "" : "inspector-collapsed"}`}
       data-runtime-state={state.runtime.state}
       style={{ "--navigation-width": `${panels.navigationWidth}px`, "--inspector-width": `${panels.inspectorWidth}px` } as CSSProperties}
       onKeyDown={(event) => {
-        if (event.key === "Escape" && !event.defaultPrevented && (panels.summaryOpen || panels.bottomPanelOpen)) {
+        const insideDrawer = event.target instanceof Element && Boolean(event.target.closest("#threads-panel, #workspace-tool-sidebar"));
+        if (event.key === "Escape" && !event.defaultPrevented && !insideDrawer && (panels.summaryOpen || panels.bottomPanelOpen)) {
           event.preventDefault();
           panels.closeLastSurface();
         }
@@ -144,29 +224,39 @@ export function App() {
           />
         </aside>
 
-        <main className="task-surface">
+        <div className="workspace-content">
+          <div className="workspace-main-layout">
+          <div className="task-column">
           <div className="task-toolbar">
             <div className="toolbar-group">{!leftOpen && panels.narrowViewport ? <button ref={showThreadsTrigger} className="icon-button" type="button" title="显示会话侧栏" aria-label="显示会话侧栏" aria-controls="threads-panel" aria-expanded={leftOpen} onClick={panels.showThreads}><PanelLeft size={17} aria-hidden="true" /></button> : null}<span className="thread-heading"><span className="thread-eyebrow">对话</span><span className="task-label">{state.detail?.thread.title ?? (state.workspace ? "新建对话" : "工作区概览")}</span></span><span className="refreshing" role="status" aria-live="polite" hidden={!state.refreshing}>正在刷新…</span></div>
             <div className="toolbar-group">
-              <button className="command-button" type="button" onClick={() => void openWorkspace()} disabled={opening || state.runtime.state !== "ready"}>{opening ? <RefreshCw className="spin" size={16} aria-hidden="true" /> : <FolderOpen size={16} aria-hidden="true" />}{opening ? "Opening" : "Open workspace"}</button>
-              <div className="panel-toggle-group" aria-label="Workspace panels">
-                <button ref={panels.summaryTrigger} className="icon-button panel-toggle" type="button" title="Show or hide workspace summary" aria-label="Toggle workspace summary" aria-controls="workspace-summary-overlay" aria-pressed={panels.summaryOpen} onClick={panels.toggleSummary}><PanelTop size={17} aria-hidden="true" /></button>
-                <button ref={panels.bottomPanelTrigger} className="icon-button panel-toggle" type="button" title="Show or hide bottom panel" aria-label="Toggle workspace bottom panel" aria-controls="workspace-bottom-panel" aria-pressed={panels.bottomPanelOpen} onClick={panels.toggleBottomPanel}><PanelBottom size={17} aria-hidden="true" /></button>
-                <button ref={panels.toolSidebarTrigger} className="icon-button panel-toggle" type="button" title="Show or hide workspace tool sidebar" aria-label="Toggle workspace tool sidebar" aria-controls="workspace-tool-sidebar" aria-pressed={panels.toolSidebarOpen} onClick={panels.toggleToolSidebar}><PanelRight size={17} aria-hidden="true" /></button>
-              </div>
+              <button className="command-button" type="button" aria-label="Open workspace" onClick={() => void openWorkspace()} disabled={opening || state.runtime.state !== "ready"}>{opening ? <RefreshCw className="spin" size={16} aria-hidden="true" /> : <FolderOpen size={16} aria-hidden="true" />}{opening ? "正在打开" : "打开工作区"}</button>
+              <button className="icon-button" type="button" aria-label="Settings" aria-pressed={settingsOpen} onClick={toggleSettings}><Settings size={17} aria-hidden="true" /></button>
+              <WorkspacePanelToggleGroup
+                summaryOpen={panels.summaryOpen}
+                bottomPanelOpen={panels.bottomPanelOpen}
+                toolSidebarOpen={panels.toolSidebarOpen}
+                summaryTrigger={panels.summaryTrigger}
+                bottomPanelTrigger={panels.bottomPanelTrigger}
+                toolSidebarTrigger={panels.toolSidebarTrigger}
+                onSummary={panels.toggleSummary}
+                onBottomPanel={toggleTerminalDock}
+                onToolSidebar={toggleWorkspaceWorkbench}
+              />
             </div>
           </div>
 
-          <div className="timeline-stage">
-            <section className="timeline" aria-label="Workspace timeline">
+          <main className={`task-surface ${!settingsOpen && panels.bottomPanelOpen ? "bottom-panel-open" : ""}`}>
+          {settingsOpen ? <SettingsPage user={settings.user} workspace={settings.workspace} onUser={settings.setUser} onWorkspace={settings.setWorkspace} onClose={() => setSettingsOpen(false)} /> : <><div className="timeline-stage">
+            <section className="timeline" aria-label="工作区时间线">
               {!workspacePath ? (
                 <div className="state-card workspace-empty">
-                  <div className="state-kicker">Local AI workspace</div>
-                  <h1>{state.runtime.state === "ready" ? "What should we build?" : state.runtime.message}</h1>
-                  <p>Open a project to start a focused conversation with auditable tools, approvals, and results.</p>
+                  <div className="state-kicker">本地 AI 工作区</div>
+                  <h1>{state.runtime.state === "ready" ? "今天要构建什么？" : state.runtime.message}</h1>
+                  <p>打开项目，开始一段具备工具审计、审批和结果追踪的专注对话。</p>
                   {workspaceError && <p role="alert">{workspaceError}</p>}
                   {state.runtime.state !== "failed" ? (
-                    <button className="primary-action" type="button" onClick={() => void openWorkspace()} disabled={opening || state.runtime.state !== "ready"}><FolderOpen size={17} aria-hidden="true" /> Open workspace</button>
+                    <button className="primary-action" type="button" aria-label="Open workspace" onClick={() => void openWorkspace()} disabled={opening || state.runtime.state !== "ready"}><FolderOpen size={17} aria-hidden="true" /> 打开工作区</button>
                   ) : null}
                 </div>
               ) : (
@@ -180,6 +270,7 @@ export function App() {
                   onApproval={controller.resolveApproval}
                   onResume={controller.resumeTurn}
                   onRestart={controller.restartTurn}
+                  onMessageAction={(item, action) => void controller.branchFromMessage(item, action)}
                   runtimeBanner={state.runtime.state === "ready" ? null : (
                     <section className={`runtime-banner runtime-banner-${state.runtime.state}`} role="status" aria-live="polite">
                       <div>
@@ -191,27 +282,14 @@ export function App() {
                 />
               )}
             </section>
-            {panels.summaryOpen || panels.bottomPanelOpen ? <div className="timeline-overlay-layer">
+            {panels.summaryOpen ? <div className="timeline-overlay-layer">
               {panels.summaryOpen ? <WorkspaceSummaryOverlay
                 review={state.review}
                 workspaceReady={Boolean(state.workspace)}
-                workspaceLabel={workspacePath ?? "No workspace"}
+                workspaceLabel={workspacePath ?? "未打开工作区"}
                 threadLabel={threadLabel}
                 turnLabel={turnLabel}
                 runtimeLabel={statusMessage}
-              /> : null}
-              {panels.bottomPanelOpen ? <WorkspaceBottomPanel
-                activePanel={workspacePanel}
-                visible={panels.bottomPanelOpen}
-                review={state.review}
-                workspaceReady={Boolean(state.workspace)}
-                workspaceLabel={workspacePath ?? "No workspace"}
-                threadLabel={threadLabel}
-                turnLabel={turnLabel}
-                commands={controller.reviewCommands}
-                terminalCommands={controller.terminalCommands}
-                onReport={(id) => void controller.selectReport(id)}
-                onArtifact={(id) => void controller.selectArtifact(id)}
               /> : null}
             </div> : null}
           </div>
@@ -247,12 +325,43 @@ export function App() {
             onRemoveCatalog={controller.removeComposerCatalog}
             onPickFile={() => void controller.pickComposerFile()}
             onPickFolder={() => void controller.pickComposerFolder()}
-            onSend={() => void controller.enqueueComposer()}
+            onSend={() => void controller.enqueueComposer({
+              modelOverride: settings.effective.model || undefined,
+              approvalPreference: settings.effective.approval,
+              disabledTools: settings.effective.disabledTools,
+            })}
             stopping={stopping}
             onStop={stopTurn ? () => void stopResponse() : undefined}
             onClear={() => void controller.clearComposer()}
+            onSlashCommand={(command) => {
+              controller.setComposerText("");
+              if (command === "new") beginConversation();
+              else if (command === "changes") selectWorkspacePanel("changes");
+              else if (command === "terminal") selectWorkspacePanel("terminal");
+              else if (command === "settings") setSettingsOpen(true);
+            }}
           />
+          {panels.bottomPanelOpen ? <WorkspaceBottomPanel
+            activePanel="terminal"
+            visible={panels.bottomPanelOpen}
+            review={state.review}
+            workspaceReady={Boolean(state.workspace)}
+            workspaceLabel={workspacePath ?? "未打开工作区"}
+            threadLabel={threadLabel}
+            threadId={state.selectedThreadId}
+            turnLabel={turnLabel}
+            commands={controller.reviewCommands}
+            terminalCommands={controller.terminalCommands}
+            terminalController={terminalSessions}
+            defaultShell={settings.effective.defaultShell}
+            onClose={() => panels.closeBottomPanel()}
+            onReport={(id) => void controller.selectReport(id)}
+            onArtifact={(id) => void controller.selectArtifact(id)}
+            onShareTerminalSelection={(text) => controller.setComposerText(`${controller.composerDraft.text}${controller.composerDraft.text ? "\n\n" : ""}Terminal selection (explicitly shared):\n\`\`\`text\n${text}\n\`\`\``)}
+          /> : null}
+          </>}
         </main>
+        </div>
 
         {toolSidebarOpen && panels.overlayInspector ? <div className="drawer-backdrop inspector-backdrop" aria-hidden="true" onClick={() => panels.closeToolSidebar()} /> : null}
         <aside
@@ -260,17 +369,18 @@ export function App() {
           className={`inspector drawer ${toolSidebarOpen ? "drawer-open" : ""}`}
           aria-label="Workspace tool sidebar"
           aria-hidden={!toolSidebarOpen}
+          inert={!toolSidebarOpen}
           aria-modal={panels.overlayInspector && toolSidebarOpen ? true : undefined}
           role={panels.overlayInspector ? "dialog" : undefined}
-          onKeyDown={(event) => { if (event.key === "Escape" && !event.defaultPrevented) { event.preventDefault(); panels.closeToolSidebar(); } }}
+          onKeyDown={(event) => { if (event.key === "Escape" && !event.defaultPrevented) { event.preventDefault(); event.stopPropagation(); panels.closeToolSidebar(false); window.requestAnimationFrame(() => document.getElementById("workspace-tool-sidebar-toggle")?.focus()); } }}
         >
           <div
             className="inspector-resize-handle"
             role="separator"
             aria-label="Resize workspace inspector"
             aria-orientation="vertical"
-            aria-valuemin={320}
-            aria-valuemax={480}
+            aria-valuemin={480}
+            aria-valuemax={720}
             aria-valuenow={panels.inspectorWidth}
             tabIndex={0}
             onPointerDown={(event) => event.currentTarget.setPointerCapture(event.pointerId)}
@@ -283,21 +393,28 @@ export function App() {
           />
           <WorkspaceToolSidebar
             activePanel={workspacePanel}
+            openPanels={workspaceTabs}
             visible={toolSidebarOpen}
             review={state.review}
             workspaceReady={Boolean(state.workspace)}
-            workspaceLabel={workspacePath ?? "No workspace"}
+            workspaceLabel={workspacePath ?? "未打开工作区"}
             threadLabel={threadLabel}
+            threadId={state.selectedThreadId}
             turnLabel={turnLabel}
+            commands={controller.reviewCommands}
             terminalCommands={controller.terminalCommands}
+            terminalController={terminalSessions}
+            defaultShell={settings.effective.defaultShell}
+            onReport={(id) => void controller.selectReport(id)}
+            onArtifact={(id) => void controller.selectArtifact(id)}
+            onShareTerminalSelection={(text) => controller.setComposerText(`${controller.composerDraft.text}${controller.composerDraft.text ? "\n\n" : ""}Terminal selection (explicitly shared):\n\`\`\`text\n${text}\n\`\`\``)}
             onPanel={selectWorkspacePanel}
+            onClosePanel={closeWorkspacePanel}
           />
         </aside>
+          </div>
+        </div>
       </div>
     </div>
   );
-}
-
-function isReviewWorkspacePanel(panel: WorkspacePanel): panel is "changes" | "reports" | "artifacts" | "preview" {
-  return panel === "changes" || panel === "reports" || panel === "artifacts" || panel === "preview";
 }
